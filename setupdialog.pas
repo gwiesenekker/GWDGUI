@@ -39,6 +39,7 @@ type
     FSideToMoveCombo: TComboBox;
     procedure BoardPaintBoxClick(Sender: TObject);
     procedure BoardPaintBoxPaint(Sender: TObject);
+    procedure ButtonClick(Sender: TObject);
     procedure ClearButtonClick(Sender: TObject);
     procedure DrawBoard(ACanvas: TCanvas; const ARect: TRect);
     procedure DrawPiece(ACanvas: TCanvas; const ARect: TRect; APiece: TPiece;
@@ -123,14 +124,25 @@ begin
   FCancelButton.Parent := FButtonPanel;
   FCancelButton.Align := alBottom;
   FCancelButton.Kind := bkCancel;
+  FCancelButton.OnClick := @ButtonClick;
 
   FOKButton := TBitBtn.Create(FButtonPanel);
   FOKButton.Parent := FButtonPanel;
   FOKButton.Align := alBottom;
   FOKButton.Kind := bkOK;
   FOKButton.BorderSpacing.Bottom := 8;
+  FOKButton.OnClick := @ButtonClick;
 
   SetupPieceFont;
+end;
+
+procedure TSetupPositionDialog.ButtonClick(Sender: TObject);
+begin
+  if Sender is TBitBtn then
+    ModalResult := TBitBtn(Sender).ModalResult
+  else
+    ModalResult := mrCancel;
+  Hide;
 end;
 
 destructor TSetupPositionDialog.Destroy;

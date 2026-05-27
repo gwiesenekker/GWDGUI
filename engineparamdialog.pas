@@ -29,7 +29,7 @@ type
     procedure BrowseDirButtonClick(Sender: TObject);
     procedure CancelButtonClick(Sender: TObject);
     procedure CloseWithResult(AResult: Integer);
-    procedure GridMouseDown(Sender: TObject; Button: TMouseButton;
+    procedure GridMouseUp(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     procedure HideInlineBoolCombo(Sender: TObject);
     procedure InlineBoolComboSelect(Sender: TObject);
@@ -125,7 +125,7 @@ begin
   FGrid.ColCount := 3;
   FGrid.FixedRows := 1;
   FGrid.Options := FGrid.Options + [goEditing, goColSizing];
-  FGrid.OnMouseDown := @GridMouseDown;
+  FGrid.OnMouseUp := @GridMouseUp;
   FGrid.OnSelectCell := @SelectCell;
   FGrid.Cells[0, 0] := 'name';
   FGrid.Cells[1, 0] := 'type';
@@ -181,7 +181,7 @@ begin
   Hide;
 end;
 
-procedure TEngineParamDialog.GridMouseDown(Sender: TObject; Button: TMouseButton;
+procedure TEngineParamDialog.GridMouseUp(Sender: TObject; Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 var
   Col: LongInt;
@@ -301,9 +301,17 @@ begin
 end;
 
 function TEngineParamDialog.IsDirRow(ARow: Integer): Boolean;
+var
+  ParamName: String;
 begin
-  Result := (ARow > 0) and (ARow < FGrid.RowCount) and
-    (Pos('dir', LowerCase(FGrid.Cells[0, ARow])) > 0);
+  Result := False;
+  if (ARow <= 0) or (ARow >= FGrid.RowCount) then
+    Exit;
+
+  ParamName := LowerCase(FGrid.Cells[0, ARow]);
+  Result := (Pos('dir', ParamName) > 0) or
+    (Copy(ParamName, Length(ParamName) - 3, 4) = '-dir') or
+    (Copy(ParamName, Length(ParamName) - 4, 5) = '-path');
 end;
 
 procedure TEngineParamDialog.StoreGrid;

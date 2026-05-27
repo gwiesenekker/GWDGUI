@@ -21,7 +21,9 @@ uses
   LazFreeTypeIntfDrawer,
   LazFreeTypeFontCollection,
   Menus,
+  PDNSaveDialog,
   Process,
+  SetupDialog,
   Spin,
   StdCtrls,
   LCLType
@@ -113,6 +115,7 @@ type
     FMctsButton: TButton;
     FFileMenu: TMenuItem;
     FGameBlackName: String;
+    FGameDirty: Boolean;
     FGameResult: String;
     FGameWhiteName: String;
     FBlackClockSeconds: Double;
@@ -188,7 +191,12 @@ type
     FSaveEngineLogMenuItem: TMenuItem;
     FSavePdnDialog: TSaveDialog;
     FSavePdnMenuItem: TMenuItem;
+    FSavePdnOptionsDialog: TPDNSaveDialog;
     FSelectedSquare: Integer;
+    FSetupPositionDialog: TSetupPositionDialog;
+    FShutdownAfterPdnSave: Boolean;
+    FShutdownConfirmed: Boolean;
+    FUnsavedGamePromptDialog: TForm;
     FAmbiguousTargetSquares: array[1..50] of Boolean;
     FTargetSquares: array[1..50] of Boolean;
     FSetupPositionMenuItem: TMenuItem;
@@ -259,6 +267,7 @@ type
     procedure ResetHistoryFromCurrentPosition;
     procedure NavigateHistoryToPly(APly: Integer);
     procedure MainWindowCloseQuery(Sender: TObject; var CanClose: Boolean);
+    procedure MarkGameDirty;
     procedure QuitMenuItemClick(Sender: TObject);
     procedure SelectHistoryPly(APly: Integer);
     procedure SelectBoardSquare(ASquare: Integer);
@@ -273,7 +282,12 @@ type
     procedure SetupMoveList;
     procedure SetupPieceFont;
     procedure SetupPositionMenuItemClick(Sender: TObject);
+    procedure SetupPositionDialogHide(Sender: TObject);
     procedure ShutdownApplication;
+    procedure FinalizeShutdown;
+    procedure ShowUnsavedGamePrompt;
+    procedure UnsavedGamePromptButtonClick(Sender: TObject);
+    procedure UnsavedGamePromptHide(Sender: TObject);
     procedure ShowPlayGameDialog;
     procedure StartGameClocks(AGameMinutes: Double);
     procedure StartPlayGameFromOptions(AHumanSide: TSide; AGameMinutes: Double;
@@ -290,6 +304,7 @@ type
     procedure SendPositionMenuItemClick(Sender: TObject);
     procedure SendPositionToEngine;
     procedure SavePdnMenuItemClick(Sender: TObject);
+    procedure SavePdnOptionsDialogHide(Sender: TObject);
     procedure SaveEngineLogMenuItemClick(Sender: TObject);
     procedure SavePdnFile(const AFileName, AWhiteName, ABlackName, AResult: String);
     procedure StopButtonClick(Sender: TObject);
@@ -319,8 +334,6 @@ uses
   EngineParamDialog,
   FileUtil,
   Math,
-  PDNSaveDialog,
-  SetupDialog,
   StrUtils,
   SysUtils;
 
@@ -419,6 +432,9 @@ begin
   FGameWhiteName := 'White';
   FGameBlackName := 'Black';
   FGameResult := '*';
+  FGameDirty := False;
+  FShutdownAfterPdnSave := False;
+  FShutdownConfirmed := False;
   ClearBoardSelection;
 
   ClearBoard;
@@ -1325,6 +1341,11 @@ begin
   SetLength(FHistoryClockSnapshots, 0);
 end;
 
+procedure TMainWindow.MarkGameDirty;
+begin
+  FGameDirty := True;
+end;
+
 procedure TMainWindow.RecordPlayedMove(const AMove: TMove; const AAnnotation: String);
 var
   MoveIndex: Integer;
@@ -1351,6 +1372,7 @@ begin
     FHistoryClockSnapshots[MoveIndex].BlackSeconds := FBlackClockSeconds;
   end;
   FCurrentPly := Length(FHistoryMoves);
+  MarkGameDirty;
   UpdateHistoryList;
 end;
 
@@ -1668,6 +1690,7 @@ begin
     if FWhiteClockSeconds = 0 then
     begin
       FGameResult := '0-2';
+      MarkGameDirty;
       LeavePlayGameMode;
       AppendEngineLog('[white clock expired]' + LineEnding);
       UpdateHistoryList;
@@ -1680,6 +1703,7 @@ begin
     if FBlackClockSeconds = 0 then
     begin
       FGameResult := '2-0';
+      MarkGameDirty;
       LeavePlayGameMode;
       AppendEngineLog('[black clock expired]' + LineEnding);
       UpdateHistoryList;
@@ -2462,6 +2486,7 @@ end;
 
 procedure TMainWindow.ProcessEngineOutput(const AText: String);
 var
+  ErrorText: String;
   Line: String;
   LineEnd: Integer;
   MoveText: String;
@@ -2519,6 +2544,23 @@ begin
     begin
       FLastEngineInfoAnnotation := EngineInfoAnnotation(Line);
       UpdatePonderBestMoveFromInfo(Line);
+    end
+    else if StartsText('error ', Line) then
+    begin
+      ErrorText := ExtractHubArgument(Line, 'message');
+      if ErrorText = '' then
+        ErrorText := Line;
+      AppendEngineLog('[engine error: ' + ErrorText + ']' + LineEnding);
+      FPendingAutoPlayStart := False;
+      FPendingPonderStart := False;
+      FPendingMctsStart := False;
+      FPendingPlayGameStart := False;
+      FPendingThinkStart := False;
+      FIgnoreNextDoneMove := False;
+      FEngineSearching := False;
+      FEngineStopRequested := False;
+      FEngineSearchMode := esmIdle;
+      SetEngineState(esIdle);
     end
     else if StartsText('done ', Line) or (Line = 'done') then
     begin
@@ -2758,6 +2800,7 @@ begin
   if not AStartFromCurrent then
     ParseFen('W:W31-50:B1-20');
   ResetHistoryFromCurrentPosition;
+  MarkGameDirty;
   StartGameClocks(AGameMinutes);
   UpdateMoveList;
   UpdateHistoryList;
@@ -3091,7 +3134,7 @@ end;
 
 procedure TMainWindow.UpdatePonderBestMoveFromInfo(const ALine: String);
 begin
-  if not (FEngineSearchMode in [esmPonder, esmMcts, esmPlayGamePonder]) then
+  if FEngineSearchMode = esmIdle then
     Exit;
 
   UpdatePonderBestMoveFromMoveText(ExtractHubArgument(ALine, 'pv'));
@@ -3294,10 +3337,124 @@ begin
   if FShuttingDown then
     Exit;
 
+  if FGameDirty and (not FShutdownConfirmed) then
+  begin
+    ShowUnsavedGamePrompt;
+    Exit;
+  end;
+
+  FinalizeShutdown;
+end;
+
+procedure TMainWindow.FinalizeShutdown;
+begin
+  if FShuttingDown then
+    Exit;
+
   FShuttingDown := True;
   CloseEngine;
   Application.Terminate;
   Halt(0);
+end;
+
+procedure TMainWindow.ShowUnsavedGamePrompt;
+var
+  Button: TButton;
+  Dialog: TForm;
+  PromptLabel: TLabel;
+begin
+  if FUnsavedGamePromptDialog <> nil then
+  begin
+    FUnsavedGamePromptDialog.BringToFront;
+    Exit;
+  end;
+
+  Dialog := TForm.Create(Self);
+  FUnsavedGamePromptDialog := Dialog;
+  Dialog.BorderStyle := bsDialog;
+  Dialog.Caption := 'Unsaved game';
+  Dialog.ClientWidth := 360;
+  Dialog.ClientHeight := 150;
+  Dialog.Color := clBtnFace;
+  Dialog.Position := poOwnerFormCenter;
+  Dialog.ModalResult := mrCancel;
+  Dialog.OnHide := @UnsavedGamePromptHide;
+
+  PromptLabel := TLabel.Create(Dialog);
+  PromptLabel.Parent := Dialog;
+  PromptLabel.SetBounds(16, 26, 328, 52);
+  PromptLabel.WordWrap := True;
+  PromptLabel.Caption := 'The current game has unsaved PDN changes.' +
+    LineEnding + 'Save it before quitting?';
+
+  Button := TButton.Create(Dialog);
+  Button.Parent := Dialog;
+  Button.Caption := 'Save';
+  Button.ModalResult := mrYes;
+  Button.SetBounds(80, 104, 80, 28);
+  Button.OnClick := @UnsavedGamePromptButtonClick;
+  Dialog.DefaultControl := Button;
+
+  Button := TButton.Create(Dialog);
+  Button.Parent := Dialog;
+  Button.Caption := 'Don''t Save';
+  Button.ModalResult := mrNo;
+  Button.SetBounds(166, 104, 88, 28);
+  Button.OnClick := @UnsavedGamePromptButtonClick;
+
+  Button := TButton.Create(Dialog);
+  Button.Parent := Dialog;
+  Button.Caption := 'Cancel';
+  Button.ModalResult := mrCancel;
+  Button.SetBounds(260, 104, 80, 28);
+  Button.OnClick := @UnsavedGamePromptButtonClick;
+  Dialog.CancelControl := Button;
+
+  Dialog.Show;
+end;
+
+procedure TMainWindow.UnsavedGamePromptButtonClick(Sender: TObject);
+begin
+  if FUnsavedGamePromptDialog = nil then
+    Exit;
+  if Sender is TButton then
+    FUnsavedGamePromptDialog.ModalResult := TButton(Sender).ModalResult
+  else
+    FUnsavedGamePromptDialog.ModalResult := mrCancel;
+  FUnsavedGamePromptDialog.Hide;
+end;
+
+procedure TMainWindow.UnsavedGamePromptHide(Sender: TObject);
+var
+  Dialog: TForm;
+  PromptResult: Integer;
+begin
+  if Sender is TForm then
+    Dialog := TForm(Sender)
+  else
+    Dialog := FUnsavedGamePromptDialog;
+
+  if Dialog <> nil then
+    PromptResult := Dialog.ModalResult
+  else
+    PromptResult := mrCancel;
+
+  FUnsavedGamePromptDialog := nil;
+  if Dialog <> nil then
+    Dialog.Release;
+
+  case PromptResult of
+    mrYes:
+    begin
+      FShutdownAfterPdnSave := True;
+      SavePdnMenuItemClick(nil);
+    end;
+    mrNo:
+    begin
+      FShutdownConfirmed := True;
+      FinalizeShutdown;
+    end;
+  end;
 end;
 
 procedure TMainWindow.SendPositionMenuItemClick(Sender: TObject);
@@ -3536,21 +3693,70 @@ procedure TMainWindow.SavePdnMenuItemClick(Sender: TObject);
 var
   Dialog: TPDNSaveDialog;
 begin
-  Dialog := TPDNSaveDialog.Create(Self);
-  try
-    Dialog.SetDefaults(FGameWhiteName, FGameBlackName, GuessResultFromFinalPosition);
-    if Dialog.ShowModal <> mrOK then
-      Exit;
+  if FSavePdnOptionsDialog <> nil then
+  begin
+    FSavePdnOptionsDialog.BringToFront;
+    Exit;
+  end;
 
-    FGameWhiteName := Dialog.WhiteName;
-    FGameBlackName := Dialog.BlackName;
-    FGameResult := Dialog.ResultText;
-    UpdateHistoryList;
-    if FSavePdnDialog.Execute then
-      SavePdnFile(FSavePdnDialog.FileName, Dialog.WhiteName, Dialog.BlackName,
-        Dialog.ResultText);
-  finally
-    Dialog.Free;
+  Dialog := TPDNSaveDialog.Create(Self);
+  FSavePdnOptionsDialog := Dialog;
+  Dialog.SetDefaults(FGameWhiteName, FGameBlackName, GuessResultFromFinalPosition);
+  Dialog.ModalResult := mrCancel;
+  Dialog.OnHide := @SavePdnOptionsDialogHide;
+  Dialog.Show;
+end;
+
+procedure TMainWindow.SavePdnOptionsDialogHide(Sender: TObject);
+var
+  Accepted: Boolean;
+  BlackName: String;
+  Dialog: TPDNSaveDialog;
+  ResultText: String;
+  WhiteName: String;
+begin
+  if Sender is TPDNSaveDialog then
+    Dialog := TPDNSaveDialog(Sender)
+  else
+    Dialog := FSavePdnOptionsDialog;
+
+  Accepted := (Dialog <> nil) and (Dialog.ModalResult = mrOK);
+  if Accepted then
+  begin
+    WhiteName := Dialog.WhiteName;
+    BlackName := Dialog.BlackName;
+    ResultText := Dialog.ResultText;
+  end
+  else
+  begin
+    WhiteName := '';
+    BlackName := '';
+    ResultText := '';
+  end;
+
+  FSavePdnOptionsDialog := nil;
+  if Dialog <> nil then
+    Dialog.Release;
+
+  if not Accepted then
+  begin
+    FShutdownAfterPdnSave := False;
+    Exit;
+  end;
+
+  FGameWhiteName := WhiteName;
+  FGameBlackName := BlackName;
+  FGameResult := ResultText;
+  MarkGameDirty;
+  UpdateHistoryList;
+  if FSavePdnDialog.Execute then
+    SavePdnFile(FSavePdnDialog.FileName, WhiteName, BlackName, ResultText);
+
+  if FShutdownAfterPdnSave then
+  begin
+    FShutdownAfterPdnSave := False;
+    if not FGameDirty then
+      FinalizeShutdown;
   end;
 end;
 
@@ -3585,6 +3791,7 @@ begin
     Lines.Add('');
     Lines.Add(BuildPdnMoveText(AResult, False));
     Lines.SaveToFile(AFileName);
+    FGameDirty := False;
     AppendEngineLog('[saved PDN ' + AFileName + ']' + LineEnding);
   finally
     Lines.Free;
@@ -3595,26 +3802,58 @@ procedure TMainWindow.SetupPositionMenuItemClick(Sender: TObject);
 var
   Dialog: TSetupPositionDialog;
 begin
-  Dialog := TSetupPositionDialog.Create(Self);
-  try
-    Dialog.SetPosition(FBoard, FSideToMove);
-    if Dialog.ShowModal = mrOK then
-    begin
-      FBoard := Dialog.Board;
-      FSideToMove := Dialog.SideToMove;
-      FGameWhiteName := 'White';
-      FGameBlackName := 'Black';
-      FGameResult := '*';
-      LeavePlayGameMode;
-      ResetHistoryFromCurrentPosition;
-      UpdateMoveList;
-      UpdateHistoryList;
-      InvalidateBoard;
-      RestartEnginePonder;
-    end;
-  finally
-    Dialog.Free;
+  if FSetupPositionDialog <> nil then
+  begin
+    FSetupPositionDialog.BringToFront;
+    Exit;
   end;
+
+  Dialog := TSetupPositionDialog.Create(Self);
+  FSetupPositionDialog := Dialog;
+  Dialog.SetPosition(FBoard, FSideToMove);
+  Dialog.ModalResult := mrCancel;
+  Dialog.OnHide := @SetupPositionDialogHide;
+  Dialog.Show;
+end;
+
+procedure TMainWindow.SetupPositionDialogHide(Sender: TObject);
+var
+  Board: TBoard;
+  Dialog: TSetupPositionDialog;
+  Accepted: Boolean;
+  SideToMove: TSide;
+begin
+  if Sender is TSetupPositionDialog then
+    Dialog := TSetupPositionDialog(Sender)
+  else
+    Dialog := FSetupPositionDialog;
+
+  Accepted := (Dialog <> nil) and (Dialog.ModalResult = mrOK);
+  if Accepted then
+  begin
+    Board := Dialog.Board;
+    SideToMove := Dialog.SideToMove;
+  end;
+
+  FSetupPositionDialog := nil;
+  if Dialog <> nil then
+    Dialog.Release;
+
+  if not Accepted then
+    Exit;
+
+  FBoard := Board;
+  FSideToMove := SideToMove;
+  FGameWhiteName := 'White';
+  FGameBlackName := 'Black';
+  FGameResult := '*';
+  LeavePlayGameMode;
+  ResetHistoryFromCurrentPosition;
+  MarkGameDirty;
+  UpdateMoveList;
+  UpdateHistoryList;
+  InvalidateBoard;
+  RestartEnginePonder;
 end;
 
 procedure TMainWindow.LoadFenFile(const AFileName: String);
@@ -3647,6 +3886,7 @@ begin
     FGameResult := '*';
     LeavePlayGameMode;
     ResetHistoryFromCurrentPosition;
+    FGameDirty := True;
     UpdateMoveList;
     UpdateHistoryList;
     Caption := 'International Draughts - ' + ExtractFileName(AFileName);
@@ -3818,6 +4058,7 @@ begin
     UpdateMoveList;
     UpdateHistoryList;
     Caption := 'International Draughts - ' + ExtractFileName(AFileName);
+    FGameDirty := False;
     InvalidateBoard;
     RestartEnginePonder;
   finally

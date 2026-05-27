@@ -23,6 +23,7 @@ type
     FResultLabel: TLabel;
     FWhiteEdit: TEdit;
     FWhiteLabel: TLabel;
+    procedure ButtonClick(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
     function GetBlackName: String;
@@ -108,12 +109,23 @@ begin
   FOKButton.Align := alRight;
   FOKButton.Kind := bkOK;
   FOKButton.BorderSpacing.Around := 8;
+  FOKButton.OnClick := @ButtonClick;
 
   FCancelButton := TBitBtn.Create(ButtonPanel);
   FCancelButton.Parent := ButtonPanel;
   FCancelButton.Align := alRight;
   FCancelButton.Kind := bkCancel;
   FCancelButton.BorderSpacing.Around := 8;
+  FCancelButton.OnClick := @ButtonClick;
+end;
+
+procedure TPDNSaveDialog.ButtonClick(Sender: TObject);
+begin
+  if Sender is TBitBtn then
+    ModalResult := TBitBtn(Sender).ModalResult
+  else
+    ModalResult := mrCancel;
+  Hide;
 end;
 
 procedure TPDNSaveDialog.SetDefaults(const AWhiteName, ABlackName, AResult: String);
