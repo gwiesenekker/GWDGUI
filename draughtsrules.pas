@@ -22,6 +22,7 @@ type
 
 procedure GenerateLegalMoves(const ABoard: TBoard; ASide: TSide; out AMoves: TMoveArray);
 function MoveToString(const AMove: TMove): String;
+function MoveToHubString(const AMove: TMove): String;
 function PieceBelongsToSide(APiece: TPiece; ASide: TSide): Boolean;
 
 implementation
@@ -407,8 +408,11 @@ begin
       Result += 'x' + IntToStr(AMove.Captures[I]);
   end;
 
-  if AMove.Promotes then
-    Result += 'K';
+end;
+
+function MoveToHubString(const AMove: TMove): String;
+begin
+  Result := MoveToString(AMove);
 end;
 
 end.
