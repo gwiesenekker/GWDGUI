@@ -280,9 +280,11 @@ type
     procedure SyncHubLaunchArgumentParam(AEngineIndex: Integer);
     procedure SyncSendStartingPositionParam(AEngineIndex: Integer);
     procedure SyncSingleCapturesIncludeCapturedSquareParam(AEngineIndex: Integer);
+    procedure SyncPonderSendsInfoParam(AEngineIndex: Integer);
     procedure LoadHubLaunchArgumentFromParams(AEngineIndex: Integer);
     function EngineSendStartingPosition(AEngineIndex: Integer): Boolean;
     function EngineSingleCapturesIncludeCapturedSquare(AEngineIndex: Integer): Boolean;
+    function EnginePonderSendsInfo(AEngineIndex: Integer): Boolean;
     procedure AutoPlayButtonClick(Sender: TObject);
     procedure GoButtonClick(Sender: TObject);
     function PlayEngineMove(const AEngineMove: String;
@@ -335,6 +337,7 @@ type
       AActorEngineIndex: Integer);
     procedure RestoreClockSnapshot(APly: Integer);
     procedure ResetClocks;
+    procedure ActivateGameClocks;
     procedure ResetHistoryFromCurrentPosition;
     procedure NavigateHistoryToPly(APly: Integer);
     procedure MainWindowCloseQuery(Sender: TObject; var CanClose: Boolean);
@@ -455,6 +458,7 @@ const
     'gui-single-captures-include-captured-square';
   OldSingleCapturesIncludeCapturedSquareParamName =
     'single-captures-include-captured-square';
+  PonderSendsInfoParamName = 'gui-ponder-sends-info';
 
 function EngineLogTimestamp: String; forward;
 function CommandLineQuote(const AText: String): String; forward;
@@ -2436,6 +2440,8 @@ begin
   FClockLastTick := ClockTimestampSeconds;
   if ElapsedSeconds <= 0 then
     Exit;
+  if ElapsedSeconds > 10 then
+    ElapsedSeconds := 0;
 
   if FSideToMove = sideWhite then
   begin
@@ -2499,6 +2505,22 @@ begin
   FBlackClockSeconds := Max(0, AGameMinutes * 60);
   FInitialWhiteClockSeconds := FWhiteClockSeconds;
   FInitialBlackClockSeconds := FBlackClockSeconds;
+  FClockLastTick := ClockTimestampSeconds;
+  FClocksActive := False;
+  if FClockTimer <> nil then
+    {$IFDEF MSWINDOWS}
+    FClockTimer.Enabled := False;
+    {$ELSE}
+    FClockTimer.Enabled := False;
+    {$ENDIF}
+  UpdateClockLabels;
+end;
+
+procedure TMainWindow.ActivateGameClocks;
+begin
+  if not FPlayGameActive then
+    Exit;
+
   FClockLastTick := ClockTimestampSeconds;
   FClocksActive := (FWhiteClockSeconds > 0) and (FBlackClockSeconds > 0);
   if FClockTimer <> nil then
@@ -2729,6 +2751,12 @@ end;
 
 procedure TMainWindow.CloseEngineMenuItemClick(Sender: TObject);
 begin
+  if SecondEngineIsRunning then
+  begin
+    AppendEngineLog('[please close engine 2 first]' + LineEnding);
+    Exit;
+  end;
+
   CloseEngine;
   AppendEngineLog('[' + EngineLogName(1) + ' closed]' + LineEnding);
 end;
@@ -2776,6 +2804,12 @@ end;
 
 procedure TMainWindow.OpenSecondEngineMenuItemClick(Sender: TObject);
 begin
+  if not EngineIsRunning then
+  begin
+    AppendEngine2Log('[please load engine 1 first]' + LineEnding);
+    Exit;
+  end;
+
   if FEngineOpenDialog.Execute then
   begin
     try
@@ -2800,6 +2834,7 @@ begin
   SyncHubLaunchArgumentParam(1);
   SyncSendStartingPositionParam(1);
   SyncSingleCapturesIncludeCapturedSquareParam(1);
+  SyncPonderSendsInfoParam(1);
   Dialog.SetParams(FEngines[1].Params);
   Dialog.OnHide := @EngineParamsDialogHide;
   CenterDialogOnMainWindow(Dialog);
@@ -2814,6 +2849,7 @@ begin
   SyncHubLaunchArgumentParam(2);
   SyncSendStartingPositionParam(2);
   SyncSingleCapturesIncludeCapturedSquareParam(2);
+  SyncPonderSendsInfoParam(2);
   Dialog.SetParams(FEngines[2].Params);
   Dialog.OnHide := @Engine2ParamsDialogHide;
   CenterDialogOnMainWindow(Dialog);
@@ -2839,6 +2875,7 @@ begin
     SyncHubLaunchArgumentParam(1);
     SyncSendStartingPositionParam(1);
     SyncSingleCapturesIncludeCapturedSquareParam(1);
+    SyncPonderSendsInfoParam(1);
     if FEngines[1].ParamsFileName = '' then
       FEngines[1].ParamsFileName :=
         EngineParamsFileNameForDisplayName(FEngines[1].DisplayName);
@@ -2873,6 +2910,7 @@ begin
     SyncHubLaunchArgumentParam(2);
     SyncSendStartingPositionParam(2);
     SyncSingleCapturesIncludeCapturedSquareParam(2);
+    SyncPonderSendsInfoParam(2);
     if FEngines[2].ParamsFileName = '' then
       FEngines[2].ParamsFileName :=
         EngineParamsFileNameForDisplayName(FEngines[2].DisplayName, FEngines[2].FileName);
@@ -2917,6 +2955,7 @@ begin
     LoadHubLaunchArgumentFromParams(1);
     SyncSendStartingPositionParam(1);
     SyncSingleCapturesIncludeCapturedSquareParam(1);
+    SyncPonderSendsInfoParam(1);
     AppendEngineLog('[' + EngineLogName(1) + ' name: ' + FEngines[1].DisplayName + ']' + LineEnding);
     if Length(FEngines[1].Params) > 0 then
       AppendEngineLog('[loaded engine parameters from ' + FEngines[1].ParamsFileName +
@@ -2954,6 +2993,7 @@ begin
     LoadHubLaunchArgumentFromParams(2);
     SyncSendStartingPositionParam(2);
     SyncSingleCapturesIncludeCapturedSquareParam(2);
+    SyncPonderSendsInfoParam(2);
     AppendEngine2Log('[' + EngineLogName(2) + ' name: ' + FEngines[2].DisplayName + ']' + LineEnding);
     if Length(FEngines[2].Params) > 0 then
       AppendEngine2Log('[loaded engine parameters from ' + FEngines[2].ParamsFileName +
@@ -2987,6 +3027,7 @@ begin
   LoadHubLaunchArgumentFromParams(1);
   SyncSendStartingPositionParam(1);
   SyncSingleCapturesIncludeCapturedSquareParam(1);
+  SyncPonderSendsInfoParam(1);
   if Length(FEngines[1].Params) > 0 then
     FEngines[1].LogMemo.Lines.Add('Loaded parameters: ' + FEngines[1].ParamsFileName);
   FEngines[1].Ready := False;
@@ -3126,6 +3167,7 @@ begin
   LoadHubLaunchArgumentFromParams(2);
   SyncSendStartingPositionParam(2);
   SyncSingleCapturesIncludeCapturedSquareParam(2);
+  SyncPonderSendsInfoParam(2);
   if Length(FEngines[2].Params) > 0 then
     FEngines[2].LogMemo.Lines.Add('Loaded parameters: ' + FEngines[2].ParamsFileName);
   FEngines[2].Ready := False;
@@ -3388,6 +3430,14 @@ begin
     SingleCapturesIncludeCapturedSquareParamName, 'bool', 'true', True);
 end;
 
+procedure TMainWindow.SyncPonderSendsInfoParam(AEngineIndex: Integer);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+  AddOrUpdateParam(FEngines[AEngineIndex].Params, PonderSendsInfoParamName,
+    'bool', 'true', True);
+end;
+
 procedure TMainWindow.LoadHubLaunchArgumentFromParams(AEngineIndex: Integer);
 var
   I: Integer;
@@ -3459,6 +3509,23 @@ begin
   for I := 0 to High(FEngines[AEngineIndex].Params) do
     if SameText(FEngines[AEngineIndex].Params[I].Name,
       SingleCapturesIncludeCapturedSquareParamName) then
+    begin
+      Result := not SameText(FEngines[AEngineIndex].Params[I].Value, 'false');
+      Exit;
+    end;
+end;
+
+function TMainWindow.EnginePonderSendsInfo(AEngineIndex: Integer): Boolean;
+var
+  I: Integer;
+begin
+  Result := True;
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
+    if SameText(FEngines[AEngineIndex].Params[I].Name,
+      PonderSendsInfoParamName) then
     begin
       Result := not SameText(FEngines[AEngineIndex].Params[I].Value, 'false');
       Exit;
@@ -3541,6 +3608,8 @@ begin
     if SameText(FEngines[1].Params[I].Name,
       OldSingleCapturesIncludeCapturedSquareParamName) then
       Continue;
+    if SameText(FEngines[1].Params[I].Name, PonderSendsInfoParamName) then
+      Continue;
     Command := 'set-param name=' + HubQuote(FEngines[1].Params[I].Name) +
       ' value=' + HubQuote(FEngines[1].Params[I].Value);
     AppendEngineLog('> ' + Command + LineEnding);
@@ -3572,6 +3641,8 @@ begin
       Continue;
     if SameText(FEngines[2].Params[I].Name,
       OldSingleCapturesIncludeCapturedSquareParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name, PonderSendsInfoParamName) then
       Continue;
     Command := 'set-param name=' + HubQuote(FEngines[2].Params[I].Name) +
       ' value=' + HubQuote(FEngines[2].Params[I].Value);
@@ -4425,11 +4496,16 @@ begin
       AGameMinutes, AStartFromCurrent, False);
     FAutoPlayActive := False;
     if FPlayGameActive and IsPlayGameSecondEngineTurn then
-      FEngines[2].PendingThinkStart := True;
+      FEngines[2].PendingThinkStart := EnginePonderSendsInfo(2);
     AppendEngine2Log('[stopping previous search before starting game]' +
       LineEnding);
     SendStopToSecondEngine;
-    if not (FPlayGameActive and IsPlayGameSecondEngineTurn) then
+    if FPlayGameActive and IsPlayGameSecondEngineTurn then
+    begin
+      if not EnginePonderSendsInfo(2) then
+        SendGoThinkToSecondEngine;
+    end
+    else
       ContinuePlayGameSearch;
     Exit;
   end;
@@ -4481,6 +4557,17 @@ begin
     if EngineStateNeedsStop(FEngines[2].State) then
       SendStopToSecondEngine;
     SendStopToEngine;
+    if FPlayGameActive and IsPlayGameEngineTurn and
+      (not IsPlayGameSecondEngineTurn) then
+    begin
+      if EnginePonderSendsInfo(1) then
+        FPendingThinkStart := True
+      else
+      begin
+        FPendingThinkStart := False;
+        SendGoThinkToEngine(esmPlayGameThink);
+      end;
+    end;
     Exit;
   end;
 
@@ -4906,10 +4993,11 @@ begin
         AppendEngine2Log('[synchronizing previous search before engine think]' +
           LineEnding);
         SendStopToSecondEngine;
-        FEngines[2].PendingThinkStart := False;
+        FEngines[2].PendingThinkStart := EnginePonderSendsInfo(2);
         if EngineStateNeedsStop(FEngines[1].State) then
           SendStopToEngine;
-        SendGoThinkToSecondEngine;
+        if not EnginePonderSendsInfo(2) then
+          SendGoThinkToSecondEngine;
       end
       else
         SendGoThinkToSecondEngine;
@@ -4923,10 +5011,12 @@ begin
       FPendingMctsStart := False;
       FPendingPlayGameStart := False;
       FPendingThinkMode := esmPlayGameThink;
-      FPendingThinkStart := True;
+      FPendingThinkStart := EnginePonderSendsInfo(1);
       AppendEngineLog('[stopping previous search before engine think]' +
         LineEnding);
       SendStopToEngine;
+      if not EnginePonderSendsInfo(1) then
+        SendGoThinkToEngine(esmPlayGameThink);
     end
     else
       SendGoThinkToEngine(esmPlayGameThink);
@@ -5410,6 +5500,7 @@ begin
     Exit;
   end;
 
+  ActivateGameClocks;
   if EngineStateNeedsStop(FEngines[1].State) then
   begin
     FPendingAutoPlayStart := False;
@@ -5623,8 +5714,11 @@ begin
   FormatSettings := DefaultFormatSettings;
   FormatSettings.DecimalSeparator := '.';
   if AMode = esmPlayGameThink then
+  begin
+    ActivateGameClocks;
     LevelCommand := Format('level time=%.3f', [CurrentEngineRemainingTimeSeconds],
       FormatSettings)
+  end
   else
     LevelCommand := Format('level move-time=%.3f', [FEngineMoveTimeSpin.Value],
       FormatSettings);
@@ -5670,6 +5764,7 @@ begin
 
   FormatSettings := DefaultFormatSettings;
   FormatSettings.DecimalSeparator := '.';
+  ActivateGameClocks;
   LevelCommand := Format('level time=%.3f', [CurrentEngineRemainingTimeSeconds],
     FormatSettings);
   AppendEngine2Log('> ' + LevelCommand + LineEnding);

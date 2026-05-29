@@ -165,7 +165,6 @@ begin
     FoundCapture := True;
     BoardAfter := ABoard;
     BoardAfter[ASquare] := pcNone;
-    BoardAfter[CaptureSquare] := pcNone;
     BoardAfter[LandingSquare] := Piece;
 
     CapturedSetAfter := ACapturedSet;
@@ -245,7 +244,6 @@ begin
       FoundCapture := True;
       BoardAfter := ABoard;
       BoardAfter[ASquare] := pcNone;
-      BoardAfter[CaptureSquare] := pcNone;
       BoardAfter[LandingSquare] := Piece;
 
       CapturedSetAfter := ACapturedSet;
