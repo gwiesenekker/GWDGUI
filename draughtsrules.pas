@@ -22,7 +22,8 @@ type
 
 procedure GenerateLegalMoves(const ABoard: TBoard; ASide: TSide; out AMoves: TMoveArray);
 function MoveToString(const AMove: TMove): String;
-function MoveToHubString(const AMove: TMove): String;
+function MoveToHubString(const AMove: TMove;
+  ASingleCapturesIncludeCapturedSquare: Boolean = True): String;
 function PieceBelongsToSide(APiece: TPiece; ASide: TSide): Boolean;
 
 implementation
@@ -410,9 +411,27 @@ begin
 
 end;
 
-function MoveToHubString(const AMove: TMove): String;
+function MoveToHubString(const AMove: TMove;
+  ASingleCapturesIncludeCapturedSquare: Boolean): String;
+var
+  I: Integer;
 begin
-  Result := MoveToString(AMove);
+  Result := '';
+  if Length(AMove.Squares) = 0 then
+    Exit;
+
+  if Length(AMove.Captures) = 0 then
+    Exit(MoveToString(AMove));
+
+  Result := IntToStr(AMove.Squares[0]) + 'x' +
+    IntToStr(AMove.Squares[High(AMove.Squares)]);
+
+  if (Length(AMove.Captures) = 1) and
+    (not ASingleCapturesIncludeCapturedSquare) then
+    Exit;
+
+  for I := 0 to High(AMove.Captures) do
+    Result += 'x' + IntToStr(AMove.Captures[I]);
 end;
 
 end.

@@ -99,6 +99,7 @@ type
     TextBuffer: String;
     WaitingForInit: Boolean;
     FirstReadSeen: Boolean;
+    HubLaunchArgument: String;
     LogPopupMenu: TPopupMenu;
     CloseMenuItem: TMenuItem;
     OpenMenuItem: TMenuItem;
@@ -276,6 +277,12 @@ type
       const AEngineFileName: String = ''): String;
     function EngineStateCaption(AState: TEngineState): String;
     function SecondEngineIsRunning: Boolean;
+    procedure SyncHubLaunchArgumentParam(AEngineIndex: Integer);
+    procedure SyncSendStartingPositionParam(AEngineIndex: Integer);
+    procedure SyncSingleCapturesIncludeCapturedSquareParam(AEngineIndex: Integer);
+    procedure LoadHubLaunchArgumentFromParams(AEngineIndex: Integer);
+    function EngineSendStartingPosition(AEngineIndex: Integer): Boolean;
+    function EngineSingleCapturesIncludeCapturedSquare(AEngineIndex: Integer): Boolean;
     procedure AutoPlayButtonClick(Sender: TObject);
     procedure GoButtonClick(Sender: TObject);
     function PlayEngineMove(const AEngineMove: String;
@@ -283,7 +290,7 @@ type
     function CurrentPositionRepetitionCount: Integer;
     function HubPositionString: String;
     function HubPositionStringFor(const ABoard: TBoard; ASide: TSide): String;
-    function HubPositionCommand: String;
+    function HubPositionCommand(AEngineIndex: Integer): String;
     function PositionKeyFor(const ABoard: TBoard; ASide: TSide): String;
     function CurrentEngineRemainingTimeSeconds: Double;
     function HasPlayGameEnginePlayer: Boolean;
@@ -312,6 +319,7 @@ type
     procedure MovesMemoDblClick(Sender: TObject);
     procedure OpenEngineMenuItemClick(Sender: TObject);
     procedure OpenSecondEngineMenuItemClick(Sender: TObject);
+    procedure EnginePopupMenuPopup(Sender: TObject);
     procedure OpenFenMenuItemClick(Sender: TObject);
     procedure OpenPdnMenuItemClick(Sender: TObject);
     procedure PasteFenMenuItemClick(Sender: TObject);
@@ -363,8 +371,9 @@ type
     procedure StartPlayGameFromOptions(AWhiteIsEngine, ABlackIsEngine: Boolean;
       const AWhiteName, ABlackName: String; AGameMinutes: Double;
       AStartFromCurrent: Boolean);
-    procedure StartEngine(const AFileName: String);
-    procedure StartSecondEngine(const AFileName: String);
+    procedure StartEngine(const AFileName: String; AUseCurrentParams: Boolean = False);
+    procedure StartSecondEngine(const AFileName: String;
+      AUseCurrentParams: Boolean = False);
     procedure SendEngineCommand(const ACommand: String);
     procedure SendSecondEngineCommand(const ACommand: String);
     procedure SetEngineState(AState: TEngineState);
@@ -380,6 +389,7 @@ type
     procedure RestartEnginePonder;
     procedure SendStopToEngine;
     procedure SendStopToSecondEngine;
+    procedure SendStopToAllEngines;
     procedure SendPositionMenuItemClick(Sender: TObject);
     procedure SendPositionToEngine;
     procedure SavePdnMenuItemClick(Sender: TObject);
@@ -389,6 +399,7 @@ type
     procedure PonderMenuItemClick(Sender: TObject);
     procedure ShowTimestampsMenuItemClick(Sender: TObject);
     procedure SavePdnFile(const AFileName, AWhiteName, ABlackName, AResult: String);
+    procedure SetTerminalResult;
     procedure StopButtonClick(Sender: TObject);
     procedure StopGameClocks;
     procedure ExecuteMoveFromList(AMoveIndex: Integer; AContinueEngine: Boolean);
@@ -398,6 +409,7 @@ type
     procedure UpdateHistoryList;
     procedure UpdateMovePanelWidth;
     procedure UpdateMoveList;
+    procedure UpdateEnginePopupMenuItems;
     procedure UpdatePonderMenuItems;
     procedure UpdatePonderBestMoveFromMoveText(const AMoveText: String);
     procedure UpdatePonderBestMoveFromInfo(const ALine: String);
@@ -434,8 +446,18 @@ const
   BoardMargin = 32;
   WoodSquareColor = TColor($00305E8B);
   PonderBestSourceColor = TColor($0000A5FF);
+  HubLaunchArgumentParamName = 'gui-hub-launch-argument';
+  OldHubLaunchArgumentParamName = 'hub-launch-argument';
+  OldLaunchWithHubArgumentParamName = 'launch-with-hub-argument';
+  SendStartingPositionParamName = 'gui-send-starting-position';
+  OldSendStartingPositionParamName = 'send-starting-position';
+  SingleCapturesIncludeCapturedSquareParamName =
+    'gui-single-captures-include-captured-square';
+  OldSingleCapturesIncludeCapturedSquareParamName =
+    'single-captures-include-captured-square';
 
 function EngineLogTimestamp: String; forward;
+function CommandLineQuote(const AText: String): String; forward;
 
 constructor TEngineSlot.Create(AIndex: Integer);
 begin
@@ -445,6 +467,7 @@ begin
     DisplayName := 'Engine'
   else
     DisplayName := 'Engine ' + IntToStr(AIndex);
+  HubLaunchArgument := '';
   SearchMode := esmIdle;
   State := esIdle;
 end;
@@ -871,6 +894,7 @@ begin
   FEngines[1].LogMemo.TabStop := False;
 
   FEngines[1].LogPopupMenu := TPopupMenu.Create(Self);
+  FEngines[1].LogPopupMenu.OnPopup := @EnginePopupMenuPopup;
   FEngines[1].OpenMenuItem := TMenuItem.Create(FEngines[1].LogPopupMenu);
   FEngines[1].OpenMenuItem.Caption := 'Open Engine...';
   FEngines[1].OpenMenuItem.OnClick := @OpenEngineMenuItemClick;
@@ -947,6 +971,7 @@ begin
   FEngines[2].LogMemo.TabStop := False;
 
   FEngines[2].LogPopupMenu := TPopupMenu.Create(Self);
+  FEngines[2].LogPopupMenu.OnPopup := @EnginePopupMenuPopup;
   FEngines[2].OpenMenuItem := TMenuItem.Create(FEngines[2].LogPopupMenu);
   FEngines[2].OpenMenuItem.Caption := 'Open Engine...';
   FEngines[2].OpenMenuItem.OnClick := @OpenSecondEngineMenuItemClick;
@@ -1732,6 +1757,47 @@ begin
   ADest.Promotes := ASource.Promotes;
 end;
 
+procedure ApplyMoveToBoard(var ABoard: TBoard; var ASide: TSide; const AMove: TMove);
+var
+  CaptureIndex: Integer;
+  FromSquare: Integer;
+  Piece: TPiece;
+  ToSquare: Integer;
+begin
+  if Length(AMove.Squares) < 2 then
+    Exit;
+
+  FromSquare := AMove.Squares[0];
+  ToSquare := AMove.Squares[High(AMove.Squares)];
+  Piece := ABoard[FromSquare];
+  ABoard[FromSquare] := pcNone;
+  for CaptureIndex := 0 to High(AMove.Captures) do
+    ABoard[AMove.Captures[CaptureIndex]] := pcNone;
+  if AMove.Promotes then
+    case Piece of
+      pcWhiteMan: Piece := pcWhiteKing;
+      pcBlackMan: Piece := pcBlackKing;
+    end;
+  ABoard[ToSquare] := Piece;
+  if ASide = sideWhite then
+    ASide := sideBlack
+  else
+    ASide := sideWhite;
+end;
+
+function MoveIsReversibleOnBoard(const ABoard: TBoard; const AMove: TMove): Boolean;
+var
+  FromSquare: Integer;
+begin
+  Result := False;
+  if Length(AMove.Squares) < 2 then
+    Exit;
+
+  FromSquare := AMove.Squares[0];
+  Result := (Length(AMove.Captures) = 0) and (not AMove.Promotes) and
+    (ABoard[FromSquare] in [pcWhiteKing, pcBlackKing]);
+end;
+
 procedure TMainWindow.ResetHistoryFromCurrentPosition;
 begin
   FHistoryBaseBoard := FBoard;
@@ -1900,7 +1966,20 @@ begin
     AppendEngine2Log('[game drawn by repetition]' + LineEnding);
   LeavePlayGameMode;
   UpdateHistoryList;
-  SendStopToEngine;
+  SendStopToAllEngines;
+end;
+
+procedure TMainWindow.SetTerminalResult;
+begin
+  if Length(FMoves) <> 0 then
+    Exit;
+
+  if FSideToMove = sideWhite then
+    FGameResult := '0-2'
+  else
+    FGameResult := '2-0';
+  MarkGameDirty;
+  UpdateHistoryList;
 end;
 
 procedure TMainWindow.RebuildPositionToPly(APly: Integer);
@@ -2583,6 +2662,7 @@ begin
   FEngineSearching := False;
   FEngines[1].SearchMode := esmIdle;
   SetEngineState(esIdle);
+  UpdateEnginePopupMenuItems;
 end;
 
 procedure TMainWindow.CloseSecondEngine;
@@ -2707,11 +2787,19 @@ begin
   end;
 end;
 
+procedure TMainWindow.EnginePopupMenuPopup(Sender: TObject);
+begin
+  UpdateEnginePopupMenuItems;
+end;
+
 procedure TMainWindow.EditEngineParamsMenuItemClick(Sender: TObject);
 var
   Dialog: TEngineParamDialog;
 begin
   Dialog := TEngineParamDialog.Create(Self);
+  SyncHubLaunchArgumentParam(1);
+  SyncSendStartingPositionParam(1);
+  SyncSingleCapturesIncludeCapturedSquareParam(1);
   Dialog.SetParams(FEngines[1].Params);
   Dialog.OnHide := @EngineParamsDialogHide;
   CenterDialogOnMainWindow(Dialog);
@@ -2723,6 +2811,9 @@ var
   Dialog: TEngineParamDialog;
 begin
   Dialog := TEngineParamDialog.Create(Self);
+  SyncHubLaunchArgumentParam(2);
+  SyncSendStartingPositionParam(2);
+  SyncSingleCapturesIncludeCapturedSquareParam(2);
   Dialog.SetParams(FEngines[2].Params);
   Dialog.OnHide := @Engine2ParamsDialogHide;
   CenterDialogOnMainWindow(Dialog);
@@ -2732,6 +2823,8 @@ end;
 procedure TMainWindow.EngineParamsDialogHide(Sender: TObject);
 var
   Dialog: TEngineParamDialog;
+  RestartAfterSave: Boolean;
+  RestartFileName: String;
 begin
   if not (Sender is TEngineParamDialog) then
     Exit;
@@ -2739,13 +2832,24 @@ begin
   Dialog := TEngineParamDialog(Sender);
   if Dialog.ModalResult = mrOK then
   begin
+    RestartAfterSave := EngineIsRunning and (FEngines[1].FileName <> '');
+    RestartFileName := FEngines[1].FileName;
     FEngines[1].Params := Dialog.Params;
+    LoadHubLaunchArgumentFromParams(1);
+    SyncHubLaunchArgumentParam(1);
+    SyncSendStartingPositionParam(1);
+    SyncSingleCapturesIncludeCapturedSquareParam(1);
     if FEngines[1].ParamsFileName = '' then
       FEngines[1].ParamsFileName :=
         EngineParamsFileNameForDisplayName(FEngines[1].DisplayName);
     SaveParamsToJson(FEngines[1].ParamsFileName, FEngines[1].Params);
     AppendEngineLog('[saved engine parameters to ' + FEngines[1].ParamsFileName + ']' +
       LineEnding);
+    if RestartAfterSave then
+    begin
+      AppendEngineLog('[restarting engine after parameter change]' + LineEnding);
+      StartEngine(RestartFileName, True);
+    end;
   end;
   Dialog.Release;
 end;
@@ -2753,6 +2857,8 @@ end;
 procedure TMainWindow.Engine2ParamsDialogHide(Sender: TObject);
 var
   Dialog: TEngineParamDialog;
+  RestartAfterSave: Boolean;
+  RestartFileName: String;
 begin
   if not (Sender is TEngineParamDialog) then
     Exit;
@@ -2760,13 +2866,24 @@ begin
   Dialog := TEngineParamDialog(Sender);
   if Dialog.ModalResult = mrOK then
   begin
+    RestartAfterSave := SecondEngineIsRunning and (FEngines[2].FileName <> '');
+    RestartFileName := FEngines[2].FileName;
     FEngines[2].Params := Dialog.Params;
+    LoadHubLaunchArgumentFromParams(2);
+    SyncHubLaunchArgumentParam(2);
+    SyncSendStartingPositionParam(2);
+    SyncSingleCapturesIncludeCapturedSquareParam(2);
     if FEngines[2].ParamsFileName = '' then
       FEngines[2].ParamsFileName :=
         EngineParamsFileNameForDisplayName(FEngines[2].DisplayName, FEngines[2].FileName);
     SaveParamsToJson(FEngines[2].ParamsFileName, FEngines[2].Params);
     AppendEngine2Log('[saved engine parameters to ' + FEngines[2].ParamsFileName + ']' +
       LineEnding);
+    if RestartAfterSave then
+    begin
+      AppendEngine2Log('[restarting engine after parameter change]' + LineEnding);
+      StartSecondEngine(RestartFileName, True);
+    end;
   end;
   Dialog.Release;
 end;
@@ -2797,6 +2914,9 @@ begin
   begin
     FEngines[1].ParamsFileName := NewParamsFileName;
     LoadParamsFromJson(FEngines[1].ParamsFileName, FEngines[1].Params);
+    LoadHubLaunchArgumentFromParams(1);
+    SyncSendStartingPositionParam(1);
+    SyncSingleCapturesIncludeCapturedSquareParam(1);
     AppendEngineLog('[' + EngineLogName(1) + ' name: ' + FEngines[1].DisplayName + ']' + LineEnding);
     if Length(FEngines[1].Params) > 0 then
       AppendEngineLog('[loaded engine parameters from ' + FEngines[1].ParamsFileName +
@@ -2831,6 +2951,9 @@ begin
   begin
     FEngines[2].ParamsFileName := NewParamsFileName;
     LoadParamsFromJson(FEngines[2].ParamsFileName, FEngines[2].Params);
+    LoadHubLaunchArgumentFromParams(2);
+    SyncSendStartingPositionParam(2);
+    SyncSingleCapturesIncludeCapturedSquareParam(2);
     AppendEngine2Log('[' + EngineLogName(2) + ' name: ' + FEngines[2].DisplayName + ']' + LineEnding);
     if Length(FEngines[2].Params) > 0 then
       AppendEngine2Log('[loaded engine parameters from ' + FEngines[2].ParamsFileName +
@@ -2838,7 +2961,7 @@ begin
   end;
 end;
 
-procedure TMainWindow.StartEngine(const AFileName: String);
+procedure TMainWindow.StartEngine(const AFileName: String; AUseCurrentParams: Boolean);
 {$IFDEF MSWINDOWS}
 var
   Child2ParentRead: THandle;
@@ -2855,9 +2978,15 @@ begin
   FEngines[1].LogMemo.Clear;
   FEngines[1].LogMemo.Lines.Add('Engine: ' + AFileName);
   FEngines[1].FileName := AFileName;
-  FEngines[1].DisplayName := ChangeFileExt(ExtractFileName(AFileName), '');
-  FEngines[1].ParamsFileName := EngineParamsFileNameForDisplayName(FEngines[1].DisplayName);
-  LoadParamsFromJson(FEngines[1].ParamsFileName, FEngines[1].Params);
+  if not AUseCurrentParams then
+  begin
+    FEngines[1].DisplayName := ChangeFileExt(ExtractFileName(AFileName), '');
+    FEngines[1].ParamsFileName := EngineParamsFileNameForDisplayName(FEngines[1].DisplayName);
+    LoadParamsFromJson(FEngines[1].ParamsFileName, FEngines[1].Params);
+  end;
+  LoadHubLaunchArgumentFromParams(1);
+  SyncSendStartingPositionParam(1);
+  SyncSingleCapturesIncludeCapturedSquareParam(1);
   if Length(FEngines[1].Params) > 0 then
     FEngines[1].LogMemo.Lines.Add('Loaded parameters: ' + FEngines[1].ParamsFileName);
   FEngines[1].Ready := False;
@@ -2917,6 +3046,8 @@ begin
   StartupInfo.dwFlags := STARTF_USESTDHANDLES;
 
   CommandLine := '"' + AFileName + '"';
+  if FEngines[1].HubLaunchArgument <> '' then
+    CommandLine += ' ' + CommandLineQuote(FEngines[1].HubLaunchArgument);
   CurrentDir := ExtractFilePath(AFileName);
   AppendEngineLog('[' + EngineLogName(1) + ' execute begin]' +
     LineEnding);
@@ -2937,6 +3068,8 @@ begin
   {$ELSE}
   FEngines[1].Process := TProcess.Create(Self);
   FEngines[1].Process.Executable := AFileName;
+  if FEngines[1].HubLaunchArgument <> '' then
+    FEngines[1].Process.Parameters.Add(FEngines[1].HubLaunchArgument);
   FEngines[1].Process.CurrentDirectory := ExtractFilePath(AFileName);
   FEngines[1].Process.Options := [poUsePipes, poStderrToOutput];
   FEngines[1].Process.ShowWindow := swoHIDE;
@@ -2951,6 +3084,9 @@ begin
   AppendEngineLog('[' + EngineLogName(1) + ' execute returned' +
     ' running=' + BoolToStr(EngineIsRunning, True) + ']' + LineEnding);
 
+  if FEngines[1].HubLaunchArgument <> '' then
+    AppendEngineLog('[hub launch argument: ' + FEngines[1].HubLaunchArgument +
+      ']' + LineEnding);
   AppendEngineLog('> hub' + LineEnding);
   SendEngineCommand('hub');
   {$IFDEF MSWINDOWS}
@@ -2959,9 +3095,11 @@ begin
   if Child2ParentWrite <> 0 then
     CloseHandle(Child2ParentWrite);
   {$ENDIF}
+  UpdateEnginePopupMenuItems;
 end;
 
-procedure TMainWindow.StartSecondEngine(const AFileName: String);
+procedure TMainWindow.StartSecondEngine(const AFileName: String;
+  AUseCurrentParams: Boolean);
 {$IFDEF MSWINDOWS}
 var
   Child2ParentRead: THandle;
@@ -2978,10 +3116,16 @@ begin
   FEngines[2].LogMemo.Clear;
   FEngines[2].LogMemo.Lines.Add('Engine 2: ' + AFileName);
   FEngines[2].FileName := AFileName;
-  FEngines[2].DisplayName := ChangeFileExt(ExtractFileName(AFileName), '');
-  FEngines[2].ParamsFileName := EngineParamsFileNameForDisplayName(FEngines[2].DisplayName,
-    FEngines[2].FileName);
-  LoadParamsFromJson(FEngines[2].ParamsFileName, FEngines[2].Params);
+  if not AUseCurrentParams then
+  begin
+    FEngines[2].DisplayName := ChangeFileExt(ExtractFileName(AFileName), '');
+    FEngines[2].ParamsFileName := EngineParamsFileNameForDisplayName(FEngines[2].DisplayName,
+      FEngines[2].FileName);
+    LoadParamsFromJson(FEngines[2].ParamsFileName, FEngines[2].Params);
+  end;
+  LoadHubLaunchArgumentFromParams(2);
+  SyncSendStartingPositionParam(2);
+  SyncSingleCapturesIncludeCapturedSquareParam(2);
   if Length(FEngines[2].Params) > 0 then
     FEngines[2].LogMemo.Lines.Add('Loaded parameters: ' + FEngines[2].ParamsFileName);
   FEngines[2].Ready := False;
@@ -3021,6 +3165,8 @@ begin
   StartupInfo.dwFlags := STARTF_USESTDHANDLES;
 
   CommandLine := '"' + AFileName + '"';
+  if FEngines[2].HubLaunchArgument <> '' then
+    CommandLine += ' ' + CommandLineQuote(FEngines[2].HubLaunchArgument);
   CurrentDir := ExtractFilePath(AFileName);
   AppendEngine2Log('[' + EngineLogName(2) + ' execute begin]' +
     LineEnding);
@@ -3041,6 +3187,8 @@ begin
   {$ELSE}
   FEngines[2].Process := TProcess.Create(Self);
   FEngines[2].Process.Executable := AFileName;
+  if FEngines[2].HubLaunchArgument <> '' then
+    FEngines[2].Process.Parameters.Add(FEngines[2].HubLaunchArgument);
   FEngines[2].Process.CurrentDirectory := ExtractFilePath(AFileName);
   FEngines[2].Process.Options := [poUsePipes, poStderrToOutput];
   FEngines[2].Process.ShowWindow := swoHIDE;
@@ -3055,6 +3203,9 @@ begin
   AppendEngine2Log('[' + EngineLogName(2) + ' execute returned' +
     ' running=' + BoolToStr(SecondEngineIsRunning, True) + ']' + LineEnding);
 
+  if FEngines[2].HubLaunchArgument <> '' then
+    AppendEngine2Log('[hub launch argument: ' + FEngines[2].HubLaunchArgument +
+      ']' + LineEnding);
   AppendEngine2Log('> hub' + LineEnding);
   SendSecondEngineCommand('hub');
   {$IFDEF MSWINDOWS}
@@ -3063,6 +3214,7 @@ begin
   if Child2ParentWrite <> 0 then
     CloseHandle(Child2ParentWrite);
   {$ENDIF}
+  UpdateEnginePopupMenuItems;
 end;
 
 procedure TMainWindow.SendEngineCommand(const ACommand: String);
@@ -3144,6 +3296,175 @@ begin
   Result := AState in [esPondering, esMcts, esThinking];
 end;
 
+function CommandLineQuote(const AText: String): String;
+var
+  I: Integer;
+  NeedsQuotes: Boolean;
+begin
+  NeedsQuotes := AText = '';
+  for I := 1 to Length(AText) do
+    if AText[I] in [' ', #9, '"'] then
+      NeedsQuotes := True;
+
+  if not NeedsQuotes then
+    Exit(AText);
+
+  Result := '"';
+  for I := 1 to Length(AText) do
+  begin
+    if AText[I] = '"' then
+      Result += '\"'
+    else
+      Result += AText[I];
+  end;
+  Result += '"';
+end;
+
+procedure RemoveEngineParam(var AParams: TEngineParamArray; const AName: String);
+var
+  I: Integer;
+  J: Integer;
+begin
+  for I := 0 to High(AParams) do
+    if SameText(AParams[I].Name, AName) then
+    begin
+      for J := I to High(AParams) - 1 do
+        AParams[J] := AParams[J + 1];
+      SetLength(AParams, Length(AParams) - 1);
+      Exit;
+    end;
+end;
+
+procedure TMainWindow.SyncHubLaunchArgumentParam(AEngineIndex: Integer);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+  AddOrUpdateParam(FEngines[AEngineIndex].Params, HubLaunchArgumentParamName,
+    'string', FEngines[AEngineIndex].HubLaunchArgument, False);
+  RemoveEngineParam(FEngines[AEngineIndex].Params, OldHubLaunchArgumentParamName);
+  RemoveEngineParam(FEngines[AEngineIndex].Params, OldLaunchWithHubArgumentParamName);
+end;
+
+procedure TMainWindow.SyncSendStartingPositionParam(AEngineIndex: Integer);
+var
+  I: Integer;
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
+    if SameText(FEngines[AEngineIndex].Params[I].Name,
+      OldSendStartingPositionParamName) then
+    begin
+      AddOrUpdateParam(FEngines[AEngineIndex].Params,
+        SendStartingPositionParamName, 'bool',
+        FEngines[AEngineIndex].Params[I].Value, False);
+      RemoveEngineParam(FEngines[AEngineIndex].Params,
+        OldSendStartingPositionParamName);
+      Exit;
+    end;
+  AddOrUpdateParam(FEngines[AEngineIndex].Params, SendStartingPositionParamName,
+    'bool', 'true', True);
+end;
+
+procedure TMainWindow.SyncSingleCapturesIncludeCapturedSquareParam(
+  AEngineIndex: Integer);
+var
+  I: Integer;
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
+    if SameText(FEngines[AEngineIndex].Params[I].Name,
+      OldSingleCapturesIncludeCapturedSquareParamName) then
+    begin
+      AddOrUpdateParam(FEngines[AEngineIndex].Params,
+        SingleCapturesIncludeCapturedSquareParamName, 'bool',
+        FEngines[AEngineIndex].Params[I].Value, False);
+      RemoveEngineParam(FEngines[AEngineIndex].Params,
+        OldSingleCapturesIncludeCapturedSquareParamName);
+      Exit;
+    end;
+  AddOrUpdateParam(FEngines[AEngineIndex].Params,
+    SingleCapturesIncludeCapturedSquareParamName, 'bool', 'true', True);
+end;
+
+procedure TMainWindow.LoadHubLaunchArgumentFromParams(AEngineIndex: Integer);
+var
+  I: Integer;
+  OldBoolValue: String;
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
+    if SameText(FEngines[AEngineIndex].Params[I].Name,
+      HubLaunchArgumentParamName) then
+    begin
+      FEngines[AEngineIndex].HubLaunchArgument := FEngines[AEngineIndex].Params[I].Value;
+      SyncHubLaunchArgumentParam(AEngineIndex);
+      Exit;
+    end;
+
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
+    if SameText(FEngines[AEngineIndex].Params[I].Name,
+      OldHubLaunchArgumentParamName) then
+    begin
+      FEngines[AEngineIndex].HubLaunchArgument := FEngines[AEngineIndex].Params[I].Value;
+      SyncHubLaunchArgumentParam(AEngineIndex);
+      Exit;
+    end;
+
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
+    if SameText(FEngines[AEngineIndex].Params[I].Name,
+      OldLaunchWithHubArgumentParamName) then
+    begin
+      OldBoolValue := FEngines[AEngineIndex].Params[I].Value;
+      if SameText(OldBoolValue, 'true') then
+        FEngines[AEngineIndex].HubLaunchArgument := 'hub'
+      else
+        FEngines[AEngineIndex].HubLaunchArgument := '';
+      SyncHubLaunchArgumentParam(AEngineIndex);
+      Exit;
+    end;
+
+  SyncHubLaunchArgumentParam(AEngineIndex);
+end;
+
+function TMainWindow.EngineSendStartingPosition(AEngineIndex: Integer): Boolean;
+var
+  I: Integer;
+begin
+  Result := True;
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
+    if SameText(FEngines[AEngineIndex].Params[I].Name,
+      SendStartingPositionParamName) then
+    begin
+      Result := not SameText(FEngines[AEngineIndex].Params[I].Value, 'false');
+      Exit;
+    end;
+end;
+
+function TMainWindow.EngineSingleCapturesIncludeCapturedSquare(
+  AEngineIndex: Integer): Boolean;
+var
+  I: Integer;
+begin
+  Result := True;
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
+    if SameText(FEngines[AEngineIndex].Params[I].Name,
+      SingleCapturesIncludeCapturedSquareParamName) then
+    begin
+      Result := not SameText(FEngines[AEngineIndex].Params[I].Value, 'false');
+      Exit;
+    end;
+end;
+
 function TMainWindow.EngineLogName(AEngineIndex: Integer): String;
 begin
   if AEngineIndex = 2 then
@@ -3204,6 +3525,22 @@ begin
   begin
     if FEngines[1].Params[I].Name = '' then
       Continue;
+    if SameText(FEngines[1].Params[I].Name, HubLaunchArgumentParamName) then
+      Continue;
+    if SameText(FEngines[1].Params[I].Name, OldHubLaunchArgumentParamName) then
+      Continue;
+    if SameText(FEngines[1].Params[I].Name, OldLaunchWithHubArgumentParamName) then
+      Continue;
+    if SameText(FEngines[1].Params[I].Name, SendStartingPositionParamName) then
+      Continue;
+    if SameText(FEngines[1].Params[I].Name, OldSendStartingPositionParamName) then
+      Continue;
+    if SameText(FEngines[1].Params[I].Name,
+      SingleCapturesIncludeCapturedSquareParamName) then
+      Continue;
+    if SameText(FEngines[1].Params[I].Name,
+      OldSingleCapturesIncludeCapturedSquareParamName) then
+      Continue;
     Command := 'set-param name=' + HubQuote(FEngines[1].Params[I].Name) +
       ' value=' + HubQuote(FEngines[1].Params[I].Value);
     AppendEngineLog('> ' + Command + LineEnding);
@@ -3219,6 +3556,22 @@ begin
   for I := 0 to High(FEngines[2].Params) do
   begin
     if FEngines[2].Params[I].Name = '' then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name, HubLaunchArgumentParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name, OldHubLaunchArgumentParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name, OldLaunchWithHubArgumentParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name, SendStartingPositionParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name, OldSendStartingPositionParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name,
+      SingleCapturesIncludeCapturedSquareParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name,
+      OldSingleCapturesIncludeCapturedSquareParamName) then
       Continue;
     Command := 'set-param name=' + HubQuote(FEngines[2].Params[I].Name) +
       ' value=' + HubQuote(FEngines[2].Params[I].Value);
@@ -3465,6 +3818,7 @@ var
   I: Integer;
   IsCapture: Boolean;
   Numbers: TIntegerArray;
+  PathMatches: Boolean;
 begin
   if (not ParseMoveNumbers(AEngineMove, Numbers, IsCapture)) or
     (Length(ALegalMove.Squares) < 2) then
@@ -3473,14 +3827,34 @@ begin
   if Numbers[0] <> ALegalMove.Squares[0] then
     Exit(False);
 
-  if Numbers[1] <> ALegalMove.Squares[High(ALegalMove.Squares)] then
-    Exit(False);
-
   if IsCapture <> (Length(ALegalMove.Captures) > 0) then
     Exit(False);
 
   if not IsCapture then
+  begin
+    Result := Numbers[1] = ALegalMove.Squares[High(ALegalMove.Squares)];
+    Exit;
+  end;
+
+  PathMatches := Length(Numbers) = Length(ALegalMove.Squares);
+  if PathMatches then
+    for I := 0 to High(Numbers) do
+      if Numbers[I] <> ALegalMove.Squares[I] then
+      begin
+        PathMatches := False;
+        Break;
+      end;
+  if PathMatches then
     Exit(True);
+
+  if Numbers[1] <> ALegalMove.Squares[High(ALegalMove.Squares)] then
+    Exit(False);
+
+  if Length(Numbers) = 2 then
+  begin
+    Result := Length(ALegalMove.Captures) = 1;
+    Exit;
+  end;
 
   SetLength(CapturedByEngine, Length(Numbers) - 2);
   for I := 2 to High(Numbers) do
@@ -3554,6 +3928,7 @@ begin
       if Length(FMoves) = 0 then
       begin
         FAutoPlayActive := False;
+        SetTerminalResult;
         AppendEngineLog('[auto-play stopped: terminal position]' + LineEnding);
       end
       else if FAutoPlayPlyCount >= 255 then
@@ -3580,6 +3955,7 @@ begin
         Exit;
       if Length(FMoves) = 0 then
       begin
+        SetTerminalResult;
         LeavePlayGameMode;
         AppendEngineLog('[play game stopped: terminal position]' + LineEnding);
       end
@@ -3877,6 +4253,7 @@ begin
       MoveText := ExtractHubArgument(Line, 'move');
       if FEngines[2].PendingThinkStart then
       begin
+        FEngines[2].IgnoreNextDoneMove := False;
         FEngines[2].PendingThinkStart := False;
         FEngines[2].SearchMode := esmIdle;
         SetSecondEngineState(esIdle);
@@ -3912,6 +4289,7 @@ begin
             Exit;
           if Length(FMoves) = 0 then
           begin
+            SetTerminalResult;
             LeavePlayGameMode;
             AppendEngine2Log('[play game stopped: terminal position]' + LineEnding);
           end
@@ -3960,7 +4338,7 @@ begin
   begin
     FPendingPonderStart := False;
     if EngineStateNeedsStop(FEngines[2].State) then
-      SendStopToEngine;
+      SendStopToSecondEngine;
     AppendEngineLog('[manual GO: starting ponder]' + LineEnding);
     SendGoPonderToEngine(esmPonder);
   end;
@@ -4100,6 +4478,8 @@ begin
     end;
     FAutoPlayActive := False;
     AppendEngineLog('[stopping previous search before starting game]' + LineEnding);
+    if EngineStateNeedsStop(FEngines[2].State) then
+      SendStopToSecondEngine;
     SendStopToEngine;
     Exit;
   end;
@@ -4381,7 +4761,7 @@ begin
   FPendingThinkStart := False;
   AppendEngineLog('[manual STOP]' + LineEnding);
   LeavePlayGameMode;
-  SendStopToEngine;
+  SendStopToAllEngines;
 end;
 
 function TMainWindow.HubPositionString: String;
@@ -4409,18 +4789,50 @@ begin
     end;
 end;
 
-function TMainWindow.HubPositionCommand: String;
+function TMainWindow.HubPositionCommand(AEngineIndex: Integer): String;
 var
+  Board: TBoard;
   I: Integer;
+  IncludeSingleCaptureSquare: Boolean;
   MoveText: String;
+  MoveStart: Integer;
+  Reversible: Boolean;
+  RootBoard: TBoard;
+  RootSide: TSide;
+  Side: TSide;
 begin
-  Result := 'pos pos=' + HubPositionStringFor(FHistoryBaseBoard, FHistoryBaseSide);
+  Board := FHistoryBaseBoard;
+  Side := FHistoryBaseSide;
+  RootBoard := Board;
+  RootSide := Side;
+  MoveStart := 0;
+
+  if not EngineSendStartingPosition(AEngineIndex) then
+    for I := 0 to Min(FCurrentPly, Length(FHistoryMoves)) - 1 do
+    begin
+      Reversible := MoveIsReversibleOnBoard(Board, FHistoryMoves[I]);
+      ApplyMoveToBoard(Board, Side, FHistoryMoves[I]);
+      if not Reversible then
+      begin
+        MoveStart := I + 1;
+        RootBoard := Board;
+        RootSide := Side;
+      end;
+    end
+  else
+  begin
+    RootBoard := FHistoryBaseBoard;
+    RootSide := FHistoryBaseSide;
+  end;
+
+  Result := 'pos pos=' + HubPositionStringFor(RootBoard, RootSide);
+  IncludeSingleCaptureSquare := EngineSingleCapturesIncludeCapturedSquare(AEngineIndex);
   MoveText := '';
-  for I := 0 to Min(FCurrentPly, Length(FHistoryMoves)) - 1 do
+  for I := MoveStart to Min(FCurrentPly, Length(FHistoryMoves)) - 1 do
   begin
     if MoveText <> '' then
       MoveText += ' ';
-    MoveText += MoveToHubString(FHistoryMoves[I]);
+    MoveText += MoveToHubString(FHistoryMoves[I], IncludeSingleCaptureSquare);
   end;
   if MoveText <> '' then
     Result += ' moves=' + HubQuote(MoveText);
@@ -4491,13 +4903,13 @@ begin
       AppendEngine2Log('[' + EngineLogName(2) + ' to move; starting think]' + LineEnding);
       if EngineStateNeedsStop(FEngines[2].State) then
       begin
-        FEngines[2].PendingThinkStart := True;
         AppendEngine2Log('[synchronizing previous search before engine think]' +
           LineEnding);
+        SendStopToSecondEngine;
+        FEngines[2].PendingThinkStart := False;
         if EngineStateNeedsStop(FEngines[1].State) then
-          SendStopToEngine
-        else
-          SendStopToSecondEngine;
+          SendStopToEngine;
+        SendGoThinkToSecondEngine;
       end
       else
         SendGoThinkToSecondEngine;
@@ -4979,7 +5391,7 @@ begin
     Exit;
   end;
 
-  Command := HubPositionCommand;
+  Command := HubPositionCommand(1);
   AppendEngineLog('> ' + Command + LineEnding);
   SendEngineCommand(Command);
 end;
@@ -4992,6 +5404,7 @@ begin
     Exit;
   if Length(FMoves) = 0 then
   begin
+    SetTerminalResult;
     LeavePlayGameMode;
     AppendEngineLog('[play game stopped: terminal position]' + LineEnding);
     Exit;
@@ -5025,6 +5438,14 @@ begin
   CanUseSecondEngine := SecondEngineIsRunning and FEngines[2].Ready;
   if not CanUseFirstEngine and not CanUseSecondEngine then
     Exit;
+  if FPlayGameActive and IsPlayGameEngineTurn then
+  begin
+    if CanUseFirstEngine then
+      AppendEngineLog('[not starting ponder: engine to move]' + LineEnding);
+    if CanUseSecondEngine then
+      AppendEngine2Log('[not starting ponder: engine to move]' + LineEnding);
+    Exit;
+  end;
   if not FEnginePonderEnabled then
   begin
     if CanUseFirstEngine then
@@ -5046,13 +5467,14 @@ begin
     if CanUseSecondEngine then
     begin
       AppendEngine2Log('[' + EngineLogName(2) + ' not starting search: terminal position]' + LineEnding);
-      FEngines[2].SearchMode := esmIdle;
-      SetSecondEngineState(esIdle);
-    end;
+  FEngines[2].SearchMode := esmIdle;
+  SetSecondEngineState(esIdle);
+  UpdateEnginePopupMenuItems;
+end;
     Exit;
   end;
 
-  PositionCommand := HubPositionCommand;
+  PositionCommand := HubPositionCommand(1);
   FormatSettings := DefaultFormatSettings;
   FormatSettings.DecimalSeparator := '.';
   LevelCommand := Format('level move-time=%.3f', [FEngineMoveTimeSpin.Value],
@@ -5077,6 +5499,7 @@ begin
 
   if CanUseSecondEngine then
   begin
+    PositionCommand := HubPositionCommand(2);
     AppendEngine2Log('> ' + PositionCommand + LineEnding);
     SendSecondEngineCommand(PositionCommand);
     AppendEngine2Log('> ' + LevelCommand + LineEnding);
@@ -5098,6 +5521,11 @@ begin
     Exit;
   if not FEngines[2].Ready then
     Exit;
+  if FPlayGameActive and IsPlayGameEngineTurn then
+  begin
+    AppendEngine2Log('[not starting ponder: engine to move]' + LineEnding);
+    Exit;
+  end;
   if not FEnginePonderEnabled then
   begin
     AppendEngine2Log('[ponder disabled: not starting ponder]' + LineEnding);
@@ -5111,7 +5539,7 @@ begin
     Exit;
   end;
 
-  PositionCommand := HubPositionCommand;
+  PositionCommand := HubPositionCommand(2);
   AppendEngine2Log('> ' + PositionCommand + LineEnding);
   SendSecondEngineCommand(PositionCommand);
 
@@ -5146,7 +5574,7 @@ begin
     Exit;
   end;
 
-  PositionCommand := HubPositionCommand;
+  PositionCommand := HubPositionCommand(1);
   AppendEngineLog('> ' + PositionCommand + LineEnding);
   SendEngineCommand(PositionCommand);
 
@@ -5188,7 +5616,7 @@ begin
     Exit;
   end;
 
-  PositionCommand := HubPositionCommand;
+  PositionCommand := HubPositionCommand(1);
   AppendEngineLog('> ' + PositionCommand + LineEnding);
   SendEngineCommand(PositionCommand);
 
@@ -5204,6 +5632,7 @@ begin
   SendEngineCommand(LevelCommand);
   AppendEngineLog('> go think' + LineEnding);
   FLastEngineInfoAnnotation := '';
+  FIgnoreNextDoneMove := False;
   if FPonderBestSourceSquare <> 0 then
   begin
     FPonderBestSourceSquare := 0;
@@ -5235,7 +5664,7 @@ begin
     Exit;
   end;
 
-  PositionCommand := HubPositionCommand;
+  PositionCommand := HubPositionCommand(2);
   AppendEngine2Log('> ' + PositionCommand + LineEnding);
   SendSecondEngineCommand(PositionCommand);
 
@@ -5246,6 +5675,7 @@ begin
   AppendEngine2Log('> ' + LevelCommand + LineEnding);
   SendSecondEngineCommand(LevelCommand);
   AppendEngine2Log('> go think' + LineEnding);
+  FEngines[2].IgnoreNextDoneMove := False;
   SendSecondEngineCommand('go think');
   FEngines[2].SearchMode := esmPlayGameThink;
   SetSecondEngineState(esThinking);
@@ -5275,7 +5705,7 @@ begin
   else
   begin
     if EngineStateNeedsStop(FEngines[2].State) then
-      SendStopToEngine;
+      SendStopToSecondEngine;
     SendGoPonderToEngine;
   end;
 end;
@@ -5284,8 +5714,6 @@ procedure TMainWindow.SendStopToEngine;
 var
   PreviousState: TEngineState;
 begin
-  SendStopToSecondEngine;
-
   if not EngineIsRunning then
     Exit;
 
@@ -5307,6 +5735,12 @@ begin
   else
     SetEngineState(esIdle);
   SendEngineCommand('stop');
+end;
+
+procedure TMainWindow.SendStopToAllEngines;
+begin
+  SendStopToSecondEngine;
+  SendStopToEngine;
 end;
 
 procedure TMainWindow.SendStopToSecondEngine;
@@ -5454,6 +5888,30 @@ begin
     FEngines[2].PonderMenuItem.Checked := FEnginePonderEnabled;
     FEngines[2].PonderMenuItem.Enabled := not DisablePonderToggle;
   end;
+  UpdateEnginePopupMenuItems;
+end;
+
+procedure TMainWindow.UpdateEnginePopupMenuItems;
+var
+  Engine1Loaded: Boolean;
+  Engine2Loaded: Boolean;
+begin
+  Engine1Loaded := EngineIsRunning;
+  Engine2Loaded := SecondEngineIsRunning;
+
+  if FEngines[1].OpenMenuItem <> nil then
+    FEngines[1].OpenMenuItem.Enabled := not Engine1Loaded;
+  if FEngines[1].CloseMenuItem <> nil then
+    FEngines[1].CloseMenuItem.Enabled := Engine1Loaded;
+  if FEngines[1].ParamsMenuItem <> nil then
+    FEngines[1].ParamsMenuItem.Enabled := Engine1Loaded;
+
+  if FEngines[2].OpenMenuItem <> nil then
+    FEngines[2].OpenMenuItem.Enabled := not Engine2Loaded;
+  if FEngines[2].CloseMenuItem <> nil then
+    FEngines[2].CloseMenuItem.Enabled := Engine2Loaded;
+  if FEngines[2].ParamsMenuItem <> nil then
+    FEngines[2].ParamsMenuItem.Enabled := Engine2Loaded;
 end;
 
 procedure TMainWindow.PonderMenuItemClick(Sender: TObject);
@@ -5481,7 +5939,7 @@ begin
     AppendEngineLog('[ponder disabled]' + LineEnding);
     FPendingPonderStart := False;
     if (FEngines[1].State = esPondering) or (FEngines[2].State = esPondering) then
-      SendStopToEngine;
+      SendStopToAllEngines;
   end;
 end;
 
