@@ -69,10 +69,10 @@ type
     BlackSeconds: Double;
   end;
   TClockSnapshotArray = array of TClockSnapshot;
-  TEngineState = (esIdle, esPondering, esMcts, esThinking,
+  TEngineState = (esIdle, esAnalyzing, esMcts, esThinking,
     esWaitingForOtherEngine);
-  TEngineSearchMode = (esmIdle, esmPonder, esmMcts, esmAutoPlay,
-    esmPlayGameThink, esmPlayGamePonder);
+  TEngineSearchMode = (esmIdle, esmAnalyze, esmMcts, esmAutoPlay,
+    esmPlayGameThink, esmPlayGameAnalyze);
   TEngineSlot = class
   public
     Index: Integer;
@@ -104,7 +104,7 @@ type
     CloseMenuItem: TMenuItem;
     OpenMenuItem: TMenuItem;
     ParamsMenuItem: TMenuItem;
-    PonderMenuItem: TMenuItem;
+    AnalyzeMenuItem: TMenuItem;
     SaveLogMenuItem: TMenuItem;
     ShowTimestampsMenuItem: TMenuItem;
     constructor Create(AIndex: Integer);
@@ -124,8 +124,11 @@ type
     FEnginePanel: TPanel;
     FEnginePollTimer: TTimer;
     FEngineSearching: Boolean;
-    FEnginePonderAutoDisabled: Boolean;
-    FEnginePonderEnabled: Boolean;
+    FEngineEvalScoreWhite: Double;
+    FEvalBarRect: TRect;
+    FLastEvalBarWhitePixels: Integer;
+    FEngineAnalyzeAutoDisabled: Boolean;
+    FEngineAnalyzeEnabled: Boolean;
     FEngineLogShowTimestamps: Boolean;
     FEngineStartAfterReady: Boolean;
     FEngineStopRequested: Boolean;
@@ -134,6 +137,7 @@ type
     FIgnoreNextDoneMove: Boolean;
     FLastEngineDoneLine: String;
     FLastEngineInfoAnnotation: String;
+    FLastEngineInfoLine: String;
     FGoButton: TButton;
     FMctsButton: TButton;
     FFileMenu: TMenuItem;
@@ -162,6 +166,7 @@ type
     FHistoryBlackLabel: TLabel;
     FHistoryFenLabel: TLabel;
     FHistoryFenMemo: TMemo;
+    FHistoryEvalPaintBox: TPaintBox;
     FHistoryMemo: TMemo;
     FHistoryClockSnapshots: TClockSnapshotArray;
     FHistoryMoveAnnotations: TTextArray;
@@ -177,7 +182,7 @@ type
     FInitialWhiteClockSeconds: Double;
     FLastMoveTargetSquare: Integer;
     FOnlyMoveSourceSquare: Integer;
-    FPonderBestSourceSquare: Integer;
+    FAnalyzeBestSourceSquare: Integer;
     FCurrentPly: Integer;
     FCopyFenMenuItem: TMenuItem;
     FMainMenu: TMainMenu;
@@ -194,8 +199,8 @@ type
     FPieceFont: TFreeTypeFont;
     FPieceImage: TLazIntfImage;
     FPendingAutoPlayStart: Boolean;
-    FPendingPonderMode: TEngineSearchMode;
-    FPendingPonderStart: Boolean;
+    FPendingAnalyzeMode: TEngineSearchMode;
+    FPendingAnalyzeStart: Boolean;
     FPendingMctsStart: Boolean;
     FPendingPlayGameFromCurrent: Boolean;
     FPendingPlayGameMinutes: Double;
@@ -246,6 +251,7 @@ type
     procedure BoardPaintBoxMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     procedure BoardPaintBoxPaint(Sender: TObject);
+    procedure HistoryEvalPaintBoxPaint(Sender: TObject);
     procedure ClockTimerTimer(Sender: TObject);
     procedure ClearBoardSelection;
     procedure ClearBoard;
@@ -257,6 +263,7 @@ type
     procedure CenterDialogOnMainWindow(ADialog: TCustomForm);
     procedure DrawBoard(ACanvas: TCanvas);
     procedure DrawBoardClockLabels(const ABoardRect: TRect);
+    procedure DrawEngineEvalBar(ACanvas: TCanvas; const ABoardRect: TRect);
     procedure DrawBoardSideToMoveLabel(const ABoardRect: TRect);
     procedure DrawBoardSideToMoveMarker(ACanvas: TCanvas; const ABoardRect: TRect;
       ACellSize: Integer);
@@ -280,11 +287,19 @@ type
     procedure SyncHubLaunchArgumentParam(AEngineIndex: Integer);
     procedure SyncSendStartingPositionParam(AEngineIndex: Integer);
     procedure SyncSingleCapturesIncludeCapturedSquareParam(AEngineIndex: Integer);
-    procedure SyncPonderSendsInfoParam(AEngineIndex: Integer);
+    procedure SyncEngineSupportsMctsParam(AEngineIndex: Integer);
+    procedure SyncScorePerspectiveParam(AEngineIndex: Integer);
+    procedure SyncEvaluationDepthMinParam(AEngineIndex: Integer);
+    procedure SyncEvaluationBarMaxParam(AEngineIndex: Integer);
     procedure LoadHubLaunchArgumentFromParams(AEngineIndex: Integer);
     function EngineSendStartingPosition(AEngineIndex: Integer): Boolean;
     function EngineSingleCapturesIncludeCapturedSquare(AEngineIndex: Integer): Boolean;
-    function EnginePonderSendsInfo(AEngineIndex: Integer): Boolean;
+    procedure RemoveAnalyzeSendsInfoParam(AEngineIndex: Integer);
+    function EngineSupportsMcts(AEngineIndex: Integer): Boolean;
+    function EngineScorePerspective(AEngineIndex: Integer): String;
+    function EngineEvaluationDepthMin(AEngineIndex: Integer): Double;
+    function EngineEvaluationBarMax(AEngineIndex: Integer): Double;
+    function EvalBarWhitePixels(const ABarRect: TRect; AScore: Double): Integer;
     procedure AutoPlayButtonClick(Sender: TObject);
     procedure GoButtonClick(Sender: TObject);
     function PlayEngineMove(const AEngineMove: String;
@@ -304,10 +319,14 @@ type
     function EngineStateLogText(AState: TEngineState): String;
     function PlayerNameToMove: String;
     procedure InvalidateBoard;
+    procedure InvalidateBoardSquare(ASquare: Integer);
+    procedure InvalidateEngineEvalBar;
+    procedure RepaintEngineEvalBarDelta(AOldScore, ANewScore: Double);
     function BoardToFen(const ABoard: TBoard; ASide: TSide): String;
     function BuildPdnMoveText(const AResult: String; AStoreRanges: Boolean): String;
     function ClockAnnotation(APly: Integer): String;
     function EngineInfoAnnotation(const ALine: String): String;
+    function HistoryAnnotationScoreWhite(APly: Integer; out AScore: Double): Boolean;
     function GuessResultFromFinalPosition: String;
     procedure HistoryMemoClick(Sender: TObject);
     procedure HistoryMemoKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -382,14 +401,14 @@ type
     procedure SetEngineState(AState: TEngineState);
     procedure SetSecondEngineState(AState: TEngineState);
     procedure UpdateEngineStateLabels;
-    procedure SendPlayGameHumanTurnPonder;
+    procedure SendPlayGameHumanTurnAnalyze;
     procedure ContinuePlayGameSearch;
-    procedure SendGoPonderToEngine(AMode: TEngineSearchMode = esmPonder);
-    procedure SendGoPonderToSecondEngine(AMode: TEngineSearchMode = esmPonder);
+    procedure SendGoAnalyzeToEngine(AMode: TEngineSearchMode = esmAnalyze);
+    procedure SendGoAnalyzeToSecondEngine(AMode: TEngineSearchMode = esmAnalyze);
     procedure SendGoMctsToEngine;
     procedure SendGoThinkToEngine(AMode: TEngineSearchMode = esmAutoPlay);
     procedure SendGoThinkToSecondEngine;
-    procedure RestartEnginePonder;
+    procedure RestartEngineAnalyze;
     procedure SendStopToEngine;
     procedure SendStopToSecondEngine;
     procedure SendStopToAllEngines;
@@ -399,7 +418,7 @@ type
     procedure SavePdnOptionsDialogHide(Sender: TObject);
     procedure SaveEngineLogMenuItemClick(Sender: TObject);
     procedure SaveSecondEngineLogMenuItemClick(Sender: TObject);
-    procedure PonderMenuItemClick(Sender: TObject);
+    procedure AnalyzeMenuItemClick(Sender: TObject);
     procedure ShowTimestampsMenuItemClick(Sender: TObject);
     procedure SavePdnFile(const AFileName, AWhiteName, ABlackName, AResult: String);
     procedure SetTerminalResult;
@@ -413,9 +432,10 @@ type
     procedure UpdateMovePanelWidth;
     procedure UpdateMoveList;
     procedure UpdateEnginePopupMenuItems;
-    procedure UpdatePonderMenuItems;
-    procedure UpdatePonderBestMoveFromMoveText(const AMoveText: String);
-    procedure UpdatePonderBestMoveFromInfo(const ALine: String);
+    procedure UpdateAnalyzeMenuItems;
+    procedure UpdateAnalyzeBestMoveFromMoveText(const AMoveText: String);
+    procedure UpdateAnalyzeBestMoveFromInfo(const ALine: String);
+    procedure UpdateEngineEvalFromInfo(const ALine: String; AForce: Boolean = False);
   protected
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Resize; override;
@@ -432,6 +452,7 @@ implementation
 uses
   EngineParamDialog,
   FileUtil,
+  LCLIntf,
   Math,
   StrUtils,
   SysUtils;
@@ -444,11 +465,14 @@ const
   MovePanelBaseWidth = 420;
   LegalMovesPanelWidth = 180;
   LegalMovesGap = 10;
+  EvalBarWidth = 18;
+  EvalBarGap = 8;
+  EvalBarDefaultMaxScore = 1000.0;
   BoardSideMarkerGap = 10;
   BoardSideMarkerWidth = 104;
   BoardMargin = 32;
   WoodSquareColor = TColor($00305E8B);
-  PonderBestSourceColor = TColor($0000A5FF);
+  AnalyzeBestSourceColor = TColor($0000A5FF);
   HubLaunchArgumentParamName = 'gui-hub-launch-argument';
   OldHubLaunchArgumentParamName = 'hub-launch-argument';
   OldLaunchWithHubArgumentParamName = 'launch-with-hub-argument';
@@ -458,7 +482,14 @@ const
     'gui-single-captures-include-captured-square';
   OldSingleCapturesIncludeCapturedSquareParamName =
     'single-captures-include-captured-square';
-  PonderSendsInfoParamName = 'gui-ponder-sends-info';
+  AnalyzeSendsInfoParamName = 'gui-analyze-sends-info';
+  OldAnalyzeSendsInfoParamName = 'gui-ponder-sends-info';
+  EngineSupportsMctsParamName = 'gui-engine-supports-mcts';
+  ScorePerspectiveParamName = 'gui-score-perspective';
+  EvaluationDepthMinParamName = 'gui-evaluation-bar-depth-min';
+  OldEvaluationDepthMinParamName = 'gui-evaluation-depth-min';
+  EvaluationBarMaxParamName = 'gui-evaluation-bar-score-max';
+  OldEvaluationBarMaxParamName = 'gui-evaluation-bar-max';
 
 function EngineLogTimestamp: String; forward;
 function CommandLineQuote(const AText: String): String; forward;
@@ -581,13 +612,16 @@ begin
   OnCloseQuery := @MainWindowCloseQuery;
   OnResize := @FormResize;
   FBoardFlipped := False;
+  FEngineEvalScoreWhite := 0.0;
+  FEvalBarRect := Types.Rect(0, 0, 0, 0);
+  FLastEvalBarWhitePixels := -1;
   FShuttingDown := False;
   FSideToMove := sideWhite;
   FEngines[1].FileName := '';
   FEngines[2].FileName := '';
   FEngines[2].IgnoreNextDoneMove := False;
-  FEnginePonderAutoDisabled := False;
-  FEnginePonderEnabled := True;
+  FEngineAnalyzeAutoDisabled := False;
+  FEngineAnalyzeEnabled := True;
   FEngineLogShowTimestamps := False;
   FGameWhiteName := 'Human';
   FGameBlackName := 'Human';
@@ -667,7 +701,7 @@ begin
   FSelectedSquare := 0;
   FillChar(FTargetSquares, SizeOf(FTargetSquares), 0);
   FillChar(FAmbiguousTargetSquares, SizeOf(FAmbiguousTargetSquares), 0);
-  FPonderBestSourceSquare := 0;
+  FAnalyzeBestSourceSquare := 0;
 end;
 
 procedure TMainWindow.SetupMoveList;
@@ -803,6 +837,13 @@ begin
   FHistoryFenMemo.ScrollBars := ssHorizontal;
   FHistoryFenMemo.WordWrap := False;
 
+  FHistoryEvalPaintBox := TPaintBox.Create(HistoryPanel);
+  FHistoryEvalPaintBox.Parent := HistoryPanel;
+  FHistoryEvalPaintBox.Align := alBottom;
+  FHistoryEvalPaintBox.Height := 110;
+  FHistoryEvalPaintBox.BorderSpacing.Top := 4;
+  FHistoryEvalPaintBox.OnPaint := @HistoryEvalPaintBoxPaint;
+
   FHistoryMemo := TMemo.Create(Self);
   FHistoryMemo.Parent := HistoryPanel;
   FHistoryMemo.Align := alClient;
@@ -916,12 +957,12 @@ begin
 
   FEngines[1].LogPopupMenu.Items.AddSeparator;
 
-  FEngines[1].PonderMenuItem := TMenuItem.Create(FEngines[1].LogPopupMenu);
-  FEngines[1].PonderMenuItem.Caption := 'Ponder';
-  FEngines[1].PonderMenuItem.AutoCheck := False;
-  FEngines[1].PonderMenuItem.Checked := FEnginePonderEnabled;
-  FEngines[1].PonderMenuItem.OnClick := @PonderMenuItemClick;
-  FEngines[1].LogPopupMenu.Items.Add(FEngines[1].PonderMenuItem);
+  FEngines[1].AnalyzeMenuItem := TMenuItem.Create(FEngines[1].LogPopupMenu);
+  FEngines[1].AnalyzeMenuItem.Caption := 'Analyze';
+  FEngines[1].AnalyzeMenuItem.AutoCheck := False;
+  FEngines[1].AnalyzeMenuItem.Checked := FEngineAnalyzeEnabled;
+  FEngines[1].AnalyzeMenuItem.OnClick := @AnalyzeMenuItemClick;
+  FEngines[1].LogPopupMenu.Items.Add(FEngines[1].AnalyzeMenuItem);
 
   FEngines[1].ShowTimestampsMenuItem := TMenuItem.Create(FEngines[1].LogPopupMenu);
   FEngines[1].ShowTimestampsMenuItem.Caption := 'Show timestamps';
@@ -993,12 +1034,12 @@ begin
 
   FEngines[2].LogPopupMenu.Items.AddSeparator;
 
-  FEngines[2].PonderMenuItem := TMenuItem.Create(FEngines[2].LogPopupMenu);
-  FEngines[2].PonderMenuItem.Caption := 'Ponder';
-  FEngines[2].PonderMenuItem.AutoCheck := False;
-  FEngines[2].PonderMenuItem.Checked := FEnginePonderEnabled;
-  FEngines[2].PonderMenuItem.OnClick := @PonderMenuItemClick;
-  FEngines[2].LogPopupMenu.Items.Add(FEngines[2].PonderMenuItem);
+  FEngines[2].AnalyzeMenuItem := TMenuItem.Create(FEngines[2].LogPopupMenu);
+  FEngines[2].AnalyzeMenuItem.Caption := 'Analyze';
+  FEngines[2].AnalyzeMenuItem.AutoCheck := False;
+  FEngines[2].AnalyzeMenuItem.Checked := FEngineAnalyzeEnabled;
+  FEngines[2].AnalyzeMenuItem.OnClick := @AnalyzeMenuItemClick;
+  FEngines[2].LogPopupMenu.Items.Add(FEngines[2].AnalyzeMenuItem);
 
   FEngines[2].ShowTimestampsMenuItem := TMenuItem.Create(FEngines[2].LogPopupMenu);
   FEngines[2].ShowTimestampsMenuItem.Caption := 'Show timestamps';
@@ -1014,7 +1055,7 @@ begin
   FEngines[2].LogMemo.PopupMenu := FEngines[2].LogPopupMenu;
 
   FEngines[2].LogMemo.Lines.Add('Engine 2 output');
-  UpdatePonderMenuItems;
+  UpdateAnalyzeMenuItems;
   UpdateEngineStateLabels;
 end;
 
@@ -1099,7 +1140,7 @@ begin
   FGoButton.Parent := ButtonPanel;
   FGoButton.SetBounds(384, 4, 70, 26);
   FGoButton.Anchors := [akLeft, akTop];
-  FGoButton.Caption := 'Ponder';
+  FGoButton.Caption := 'Analyze';
   FGoButton.OnClick := @GoButtonClick;
   FGoButton.Enabled := False;
 
@@ -1292,6 +1333,122 @@ begin
     Invalidate;
 end;
 
+procedure TMainWindow.InvalidateBoardSquare(ASquare: Integer);
+var
+  CellSize: Integer;
+  DisplayCol: Integer;
+  DisplayRow: Integer;
+  InvalidateArea: TRect;
+  LogicalCol: Integer;
+  LogicalRow: Integer;
+begin
+  if ASquare = 0 then
+    Exit;
+  if (FBoardPaintBox = nil) or (FBoardPaintBox.Parent = nil) or
+    (FBoardRect.Right <= FBoardRect.Left) or
+    (FBoardRect.Bottom <= FBoardRect.Top) then
+  begin
+    InvalidateBoard;
+    Exit;
+  end;
+
+  LogicalRow := (ASquare - 1) div 5;
+  LogicalCol := ((ASquare - 1) mod 5) * 2;
+  if not Odd(LogicalRow) then
+    Inc(LogicalCol);
+
+  if FBoardFlipped then
+  begin
+    DisplayRow := BoardSize - 1 - LogicalRow;
+    DisplayCol := BoardSize - 1 - LogicalCol;
+  end
+  else
+  begin
+    DisplayRow := LogicalRow;
+    DisplayCol := LogicalCol;
+  end;
+
+  CellSize := (FBoardRect.Right - FBoardRect.Left) div BoardSize;
+  InvalidateArea := Types.Rect(FBoardRect.Left + (DisplayCol * CellSize),
+    FBoardRect.Top + (DisplayRow * CellSize),
+    FBoardRect.Left + ((DisplayCol + 1) * CellSize),
+    FBoardRect.Top + ((DisplayRow + 1) * CellSize));
+  InflateRect(InvalidateArea, 3, 3);
+  Types.OffsetRect(InvalidateArea, FBoardPaintBox.Left, FBoardPaintBox.Top);
+  LCLIntf.InvalidateRect(FBoardPaintBox.Parent.Handle, @InvalidateArea, False);
+end;
+
+procedure TMainWindow.InvalidateEngineEvalBar;
+var
+  InvalidateArea: TRect;
+begin
+  if (FBoardPaintBox = nil) or (FBoardPaintBox.Parent = nil) or
+    (FEvalBarRect.Right <= FEvalBarRect.Left) or
+    (FEvalBarRect.Bottom <= FEvalBarRect.Top) then
+  begin
+    InvalidateBoard;
+    Exit;
+  end;
+
+  InvalidateArea := FEvalBarRect;
+  InflateRect(InvalidateArea, 2, 2);
+  Types.OffsetRect(InvalidateArea, FBoardPaintBox.Left, FBoardPaintBox.Top);
+  LCLIntf.InvalidateRect(FBoardPaintBox.Parent.Handle, @InvalidateArea, False);
+end;
+
+procedure TMainWindow.RepaintEngineEvalBarDelta(AOldScore, ANewScore: Double);
+var
+  BarRect: TRect;
+  BlackRect: TRect;
+  PaintCanvas: TCanvas;
+  NewPixels: Integer;
+  OldPixels: Integer;
+  WhiteRect: TRect;
+begin
+  if (FBoardPaintBox = nil) or (FEvalBarRect.Right <= FEvalBarRect.Left) or
+    (FEvalBarRect.Bottom <= FEvalBarRect.Top) then
+  begin
+    InvalidateEngineEvalBar;
+    Exit;
+  end;
+
+  BarRect := FEvalBarRect;
+  InflateRect(BarRect, -1, -1);
+  if (BarRect.Right <= BarRect.Left) or (BarRect.Bottom <= BarRect.Top) then
+    Exit;
+
+  OldPixels := EvalBarWhitePixels(BarRect, AOldScore);
+  NewPixels := EvalBarWhitePixels(BarRect, ANewScore);
+  if NewPixels = OldPixels then
+    Exit;
+
+  PaintCanvas := FBoardPaintBox.Canvas;
+  if NewPixels > OldPixels then
+  begin
+    PaintCanvas.Brush.Color := clWhite;
+    if FBoardFlipped then
+      WhiteRect := Types.Rect(BarRect.Left, BarRect.Top + OldPixels,
+        BarRect.Right, BarRect.Top + NewPixels)
+    else
+      WhiteRect := Types.Rect(BarRect.Left, BarRect.Bottom - NewPixels,
+        BarRect.Right, BarRect.Bottom - OldPixels);
+    PaintCanvas.FillRect(WhiteRect);
+  end
+  else
+  begin
+    PaintCanvas.Brush.Color := clBlack;
+    if FBoardFlipped then
+      BlackRect := Types.Rect(BarRect.Left, BarRect.Top + NewPixels,
+        BarRect.Right, BarRect.Top + OldPixels)
+    else
+      BlackRect := Types.Rect(BarRect.Left, BarRect.Bottom - OldPixels,
+        BarRect.Right, BarRect.Bottom - NewPixels);
+    PaintCanvas.FillRect(BlackRect);
+  end;
+
+  FLastEvalBarWhitePixels := NewPixels;
+end;
+
 procedure TMainWindow.BoardPaintBoxMouseDown(Sender: TObject; Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 var
@@ -1332,6 +1489,105 @@ begin
     DrawBoard(FBoardPaintBox.Canvas);
 end;
 
+procedure TMainWindow.HistoryEvalPaintBoxPaint(Sender: TObject);
+var
+  BarHalfWidth: Integer;
+  BarRect: TRect;
+  ChartRect: TRect;
+  Client: TRect;
+  I: Integer;
+  MaxScore: Double;
+  MidY: Integer;
+  PlotLeft: Integer;
+  PlotRight: Integer;
+  Score: Double;
+  X: Integer;
+  Y: Integer;
+begin
+  if FHistoryEvalPaintBox = nil then
+    Exit;
+
+  Client := FHistoryEvalPaintBox.ClientRect;
+  FHistoryEvalPaintBox.Canvas.Brush.Color := clWhite;
+  FHistoryEvalPaintBox.Canvas.FillRect(Client);
+
+  if (Client.Right - Client.Left < 32) or (Client.Bottom - Client.Top < 24) then
+    Exit;
+
+  ChartRect := Types.Rect(Client.Left + 8, Client.Top + 8,
+    Client.Right - 8, Client.Bottom - 8);
+  MidY := (ChartRect.Top + ChartRect.Bottom) div 2;
+
+  FHistoryEvalPaintBox.Canvas.Pen.Color := clSilver;
+  FHistoryEvalPaintBox.Canvas.Pen.Width := 1;
+  FHistoryEvalPaintBox.Canvas.Rectangle(ChartRect);
+  FHistoryEvalPaintBox.Canvas.Line(ChartRect.Left, MidY, ChartRect.Right, MidY);
+
+  if Length(FHistoryMoves) = 0 then
+    Exit;
+
+  MaxScore := EngineEvaluationBarMax(1);
+  BarHalfWidth := Max(1, ((ChartRect.Right - ChartRect.Left) div
+    Max(Length(FHistoryMoves), 1)) div 3);
+  PlotLeft := ChartRect.Left + BarHalfWidth + 1;
+  PlotRight := ChartRect.Right - BarHalfWidth - 1;
+
+  for I := 1 to Length(FHistoryMoves) do
+  begin
+    if Length(FHistoryMoves) = 1 then
+      X := (PlotLeft + PlotRight) div 2
+    else
+      X := PlotLeft + Round(((I - 1) / (Length(FHistoryMoves) - 1)) *
+        (PlotRight - PlotLeft));
+
+    if HistoryAnnotationScoreWhite(I, Score) then
+    begin
+      Score := Max(-MaxScore, Min(MaxScore, Score));
+      Y := MidY - Round((Score / MaxScore) *
+        ((ChartRect.Bottom - ChartRect.Top) / 2));
+
+      if Score >= 0.0 then
+      begin
+        FHistoryEvalPaintBox.Canvas.Brush.Color := clGreen;
+        FHistoryEvalPaintBox.Canvas.Pen.Color := clGreen;
+        BarRect := Types.Rect(X - BarHalfWidth, Y, X + BarHalfWidth + 1, MidY);
+      end
+      else
+      begin
+        FHistoryEvalPaintBox.Canvas.Brush.Color := clRed;
+        FHistoryEvalPaintBox.Canvas.Pen.Color := clRed;
+        BarRect := Types.Rect(X - BarHalfWidth, MidY, X + BarHalfWidth + 1, Y);
+      end;
+      if BarRect.Bottom = BarRect.Top then
+      begin
+        Dec(BarRect.Top);
+        Inc(BarRect.Bottom);
+      end;
+      FHistoryEvalPaintBox.Canvas.Rectangle(BarRect);
+    end
+    else
+    begin
+      FHistoryEvalPaintBox.Canvas.Brush.Color := clBlue;
+      FHistoryEvalPaintBox.Canvas.Pen.Color := clBlue;
+      BarRect := Types.Rect(X - BarHalfWidth, MidY,
+        X + BarHalfWidth + 1, MidY);
+      Dec(BarRect.Top);
+      Inc(BarRect.Bottom);
+      FHistoryEvalPaintBox.Canvas.Rectangle(BarRect);
+    end;
+  end;
+
+  if (FCurrentPly > 0) and (FCurrentPly < Length(FHistoryMoves)) and
+    (Length(FHistoryMoves) > 1) then
+  begin
+    X := PlotLeft + Round(((FCurrentPly - 1) / (Length(FHistoryMoves) - 1)) *
+      (PlotRight - PlotLeft));
+    FHistoryEvalPaintBox.Canvas.Pen.Color := clGray;
+    FHistoryEvalPaintBox.Canvas.Pen.Width := 1;
+    FHistoryEvalPaintBox.Canvas.Line(X, ChartRect.Top, X, ChartRect.Bottom);
+  end;
+end;
+
 function TMainWindow.BoardSquareAtCell(ARow, ACol: Integer): Integer;
 var
   LogicalCol: Integer;
@@ -1362,6 +1618,8 @@ var
   BoardArea: TRect;
   CellSize: Integer;
   Col: Integer;
+  EvalGap: Integer;
+  EvalWidth: Integer;
   LegalGap: Integer;
   LegalLeft: Integer;
   LegalWidth: Integer;
@@ -1395,6 +1653,8 @@ begin
   end;
 
   LegalGap := LegalMovesGap;
+  EvalGap := EvalBarGap;
+  EvalWidth := EvalBarWidth;
   LegalWidth := LegalMovesPanelWidth;
   if FLegalMovesPanel <> nil then
     LegalWidth := FLegalMovesPanel.Width;
@@ -1402,7 +1662,7 @@ begin
   SideWidth := BoardSideMarkerWidth;
 
   BoardPixels := Min((BoardArea.Right - BoardArea.Left) - (2 * LayoutMargin) -
-    LegalWidth - LegalGap - SideGap - SideWidth,
+    LegalWidth - LegalGap - EvalWidth - EvalGap - SideGap - SideWidth,
     (BoardArea.Bottom - BoardArea.Top) - (2 * BoardMargin));
   if BoardPixels < BoardSize then
   begin
@@ -1422,7 +1682,7 @@ begin
   BoardPixels := CellSize * BoardSize;
   UnitLeft := BoardArea.Left + LayoutMargin;
   LegalLeft := UnitLeft;
-  LeftPos := UnitLeft + LegalWidth + LegalGap;
+  LeftPos := UnitLeft + LegalWidth + LegalGap + EvalWidth + EvalGap;
   TopPos := BoardArea.Top + ((BoardArea.Bottom - BoardArea.Top - BoardPixels) div 2);
   FBoardRect := Types.Rect(LeftPos, TopPos, LeftPos + BoardPixels, TopPos + BoardPixels);
   if FButtonPanel <> nil then
@@ -1441,6 +1701,7 @@ begin
   DrawBoardClockLabels(FBoardRect);
   DrawBoardSideToMoveLabel(FBoardRect);
   DrawBoardSideToMoveMarker(ACanvas, FBoardRect, CellSize);
+  DrawEngineEvalBar(ACanvas, FBoardRect);
 
   for Row := 0 to BoardSize - 1 do
     for Col := 0 to BoardSize - 1 do
@@ -1498,10 +1759,10 @@ begin
             SquareRect.Right - 2, SquareRect.Bottom - 2);
           ACanvas.Brush.Style := bsSolid;
         end;
-        if PiecePosition = FPonderBestSourceSquare then
+        if PiecePosition = FAnalyzeBestSourceSquare then
         begin
           ACanvas.Brush.Style := bsClear;
-          ACanvas.Pen.Color := PonderBestSourceColor;
+          ACanvas.Pen.Color := AnalyzeBestSourceColor;
           ACanvas.Pen.Width := Max(3, CellSize div 12);
           ACanvas.Rectangle(SquareRect.Left + (CellSize div 10),
             SquareRect.Top + (CellSize div 10), SquareRect.Right - (CellSize div 10),
@@ -1524,6 +1785,54 @@ begin
   ACanvas.Pen.Width := 2;
   ACanvas.Brush.Style := bsClear;
   ACanvas.Rectangle(FBoardRect);
+  ACanvas.Brush.Style := bsSolid;
+end;
+
+function TMainWindow.EvalBarWhitePixels(const ABarRect: TRect; AScore: Double): Integer;
+var
+  ClampedScore: Double;
+  MaxScore: Double;
+begin
+  MaxScore := EngineEvaluationBarMax(1);
+  ClampedScore := Max(-MaxScore, Min(MaxScore, AScore));
+  Result := Round(((ClampedScore + MaxScore) / (2.0 * MaxScore)) *
+    (ABarRect.Bottom - ABarRect.Top));
+end;
+
+procedure TMainWindow.DrawEngineEvalBar(ACanvas: TCanvas; const ABoardRect: TRect);
+var
+  BarRect: TRect;
+  FillRect: TRect;
+  WhitePixels: Integer;
+  WhiteRect: TRect;
+begin
+  if (ABoardRect.Right <= ABoardRect.Left) or
+    (ABoardRect.Bottom <= ABoardRect.Top) then
+    Exit;
+
+  BarRect := Types.Rect(ABoardRect.Left - EvalBarGap - EvalBarWidth,
+    ABoardRect.Top, ABoardRect.Left - EvalBarGap, ABoardRect.Bottom);
+  FEvalBarRect := BarRect;
+  FillRect := BarRect;
+  InflateRect(FillRect, -1, -1);
+  WhitePixels := EvalBarWhitePixels(FillRect, FEngineEvalScoreWhite);
+  FLastEvalBarWhitePixels := WhitePixels;
+
+  ACanvas.Brush.Color := clBlack;
+  ACanvas.FillRect(FillRect);
+  ACanvas.Brush.Color := clWhite;
+  if FBoardFlipped then
+    WhiteRect := Types.Rect(FillRect.Left, FillRect.Top, FillRect.Right,
+      FillRect.Top + WhitePixels)
+  else
+    WhiteRect := Types.Rect(FillRect.Left, FillRect.Bottom - WhitePixels,
+      FillRect.Right, FillRect.Bottom);
+  ACanvas.FillRect(WhiteRect);
+
+  ACanvas.Brush.Style := bsClear;
+  ACanvas.Pen.Color := clGray;
+  ACanvas.Pen.Width := 1;
+  ACanvas.Rectangle(BarRect);
   ACanvas.Brush.Style := bsSolid;
 end;
 
@@ -2080,7 +2389,7 @@ begin
   if FPlayGameActive then
     RestoreClockSnapshot(APly);
   SelectHistoryPly(APly);
-  RestartEnginePonder;
+  RestartEngineAnalyze;
 end;
 
 procedure TMainWindow.SelectHistoryPly(APly: Integer);
@@ -2231,8 +2540,8 @@ begin
     FEngines[1].Ready then
   begin
     AppendEngineLog('[played move ' + MoveToString(PlayedMove) +
-      '; restarting ponder]' + LineEnding);
-    RestartEnginePonder;
+      '; restarting analysis]' + LineEnding);
+    RestartEngineAnalyze;
   end;
 end;
 
@@ -2453,7 +2762,7 @@ begin
       LeavePlayGameMode;
       AppendEngineLog('[white clock expired]' + LineEnding);
       UpdateHistoryList;
-      RestartEnginePonder;
+      RestartEngineAnalyze;
     end;
   end
   else
@@ -2466,7 +2775,7 @@ begin
       LeavePlayGameMode;
       AppendEngineLog('[black clock expired]' + LineEnding);
       UpdateHistoryList;
-      RestartEnginePonder;
+      RestartEngineAnalyze;
     end;
   end;
 
@@ -2544,12 +2853,12 @@ procedure TMainWindow.LeavePlayGameMode;
 begin
   FPlayGameActive := False;
   ResetClocks;
-  if FEnginePonderAutoDisabled then
+  if FEngineAnalyzeAutoDisabled then
   begin
-    FEnginePonderAutoDisabled := False;
-    FEnginePonderEnabled := True;
+    FEngineAnalyzeAutoDisabled := False;
+    FEngineAnalyzeEnabled := True;
   end;
-  UpdatePonderMenuItems;
+  UpdateAnalyzeMenuItems;
 end;
 
 procedure TMainWindow.RestoreClockSnapshot(APly: Integer);
@@ -2665,8 +2974,9 @@ begin
   {$ENDIF}
   FAutoPlayActive := False;
   FAutoPlayPlyCount := 0;
+  FEngineEvalScoreWhite := 0.0;
   FPendingAutoPlayStart := False;
-  FPendingPonderStart := False;
+  FPendingAnalyzeStart := False;
   FPendingMctsStart := False;
   FPendingPlayGameStart := False;
   FPendingPlayGameWhiteIsEngine := False;
@@ -2834,7 +3144,11 @@ begin
   SyncHubLaunchArgumentParam(1);
   SyncSendStartingPositionParam(1);
   SyncSingleCapturesIncludeCapturedSquareParam(1);
-  SyncPonderSendsInfoParam(1);
+  RemoveAnalyzeSendsInfoParam(1);
+  SyncEngineSupportsMctsParam(1);
+  SyncScorePerspectiveParam(1);
+  SyncEvaluationDepthMinParam(1);
+  SyncEvaluationBarMaxParam(1);
   Dialog.SetParams(FEngines[1].Params);
   Dialog.OnHide := @EngineParamsDialogHide;
   CenterDialogOnMainWindow(Dialog);
@@ -2849,7 +3163,11 @@ begin
   SyncHubLaunchArgumentParam(2);
   SyncSendStartingPositionParam(2);
   SyncSingleCapturesIncludeCapturedSquareParam(2);
-  SyncPonderSendsInfoParam(2);
+  RemoveAnalyzeSendsInfoParam(2);
+  SyncEngineSupportsMctsParam(2);
+  SyncScorePerspectiveParam(2);
+  SyncEvaluationDepthMinParam(2);
+  SyncEvaluationBarMaxParam(2);
   Dialog.SetParams(FEngines[2].Params);
   Dialog.OnHide := @Engine2ParamsDialogHide;
   CenterDialogOnMainWindow(Dialog);
@@ -2875,7 +3193,11 @@ begin
     SyncHubLaunchArgumentParam(1);
     SyncSendStartingPositionParam(1);
     SyncSingleCapturesIncludeCapturedSquareParam(1);
-    SyncPonderSendsInfoParam(1);
+    RemoveAnalyzeSendsInfoParam(1);
+    SyncEngineSupportsMctsParam(1);
+    SyncScorePerspectiveParam(1);
+    SyncEvaluationDepthMinParam(1);
+    SyncEvaluationBarMaxParam(1);
     if FEngines[1].ParamsFileName = '' then
       FEngines[1].ParamsFileName :=
         EngineParamsFileNameForDisplayName(FEngines[1].DisplayName);
@@ -2910,7 +3232,11 @@ begin
     SyncHubLaunchArgumentParam(2);
     SyncSendStartingPositionParam(2);
     SyncSingleCapturesIncludeCapturedSquareParam(2);
-    SyncPonderSendsInfoParam(2);
+    RemoveAnalyzeSendsInfoParam(2);
+    SyncEngineSupportsMctsParam(2);
+    SyncScorePerspectiveParam(2);
+    SyncEvaluationDepthMinParam(2);
+    SyncEvaluationBarMaxParam(2);
     if FEngines[2].ParamsFileName = '' then
       FEngines[2].ParamsFileName :=
         EngineParamsFileNameForDisplayName(FEngines[2].DisplayName, FEngines[2].FileName);
@@ -2955,7 +3281,11 @@ begin
     LoadHubLaunchArgumentFromParams(1);
     SyncSendStartingPositionParam(1);
     SyncSingleCapturesIncludeCapturedSquareParam(1);
-    SyncPonderSendsInfoParam(1);
+    RemoveAnalyzeSendsInfoParam(1);
+    SyncEngineSupportsMctsParam(1);
+    SyncScorePerspectiveParam(1);
+    SyncEvaluationDepthMinParam(1);
+    SyncEvaluationBarMaxParam(1);
     AppendEngineLog('[' + EngineLogName(1) + ' name: ' + FEngines[1].DisplayName + ']' + LineEnding);
     if Length(FEngines[1].Params) > 0 then
       AppendEngineLog('[loaded engine parameters from ' + FEngines[1].ParamsFileName +
@@ -2993,7 +3323,11 @@ begin
     LoadHubLaunchArgumentFromParams(2);
     SyncSendStartingPositionParam(2);
     SyncSingleCapturesIncludeCapturedSquareParam(2);
-    SyncPonderSendsInfoParam(2);
+    RemoveAnalyzeSendsInfoParam(2);
+    SyncEngineSupportsMctsParam(2);
+    SyncScorePerspectiveParam(2);
+    SyncEvaluationDepthMinParam(2);
+    SyncEvaluationBarMaxParam(2);
     AppendEngine2Log('[' + EngineLogName(2) + ' name: ' + FEngines[2].DisplayName + ']' + LineEnding);
     if Length(FEngines[2].Params) > 0 then
       AppendEngine2Log('[loaded engine parameters from ' + FEngines[2].ParamsFileName +
@@ -3027,7 +3361,11 @@ begin
   LoadHubLaunchArgumentFromParams(1);
   SyncSendStartingPositionParam(1);
   SyncSingleCapturesIncludeCapturedSquareParam(1);
-  SyncPonderSendsInfoParam(1);
+  RemoveAnalyzeSendsInfoParam(1);
+  SyncEngineSupportsMctsParam(1);
+  SyncScorePerspectiveParam(1);
+  SyncEvaluationDepthMinParam(1);
+  SyncEvaluationBarMaxParam(1);
   if Length(FEngines[1].Params) > 0 then
     FEngines[1].LogMemo.Lines.Add('Loaded parameters: ' + FEngines[1].ParamsFileName);
   FEngines[1].Ready := False;
@@ -3042,7 +3380,7 @@ begin
   FAutoPlayActive := False;
   FAutoPlayPlyCount := 0;
   FPendingAutoPlayStart := False;
-  FPendingPonderStart := False;
+  FPendingAnalyzeStart := False;
   FPendingMctsStart := False;
   FPendingPlayGameStart := False;
   FPendingThinkStart := False;
@@ -3167,7 +3505,11 @@ begin
   LoadHubLaunchArgumentFromParams(2);
   SyncSendStartingPositionParam(2);
   SyncSingleCapturesIncludeCapturedSquareParam(2);
-  SyncPonderSendsInfoParam(2);
+  RemoveAnalyzeSendsInfoParam(2);
+  SyncEngineSupportsMctsParam(2);
+  SyncScorePerspectiveParam(2);
+  SyncEvaluationDepthMinParam(2);
+  SyncEvaluationBarMaxParam(2);
   if Length(FEngines[2].Params) > 0 then
     FEngines[2].LogMemo.Lines.Add('Loaded parameters: ' + FEngines[2].ParamsFileName);
   FEngines[2].Ready := False;
@@ -3311,7 +3653,7 @@ function EngineStateText(AState: TEngineState): String;
 begin
   case AState of
     esIdle: Result := 'idle';
-    esPondering: Result := 'pondering';
+    esAnalyzing: Result := 'analyzing';
     esMcts: Result := 'mcts';
     esThinking: Result := 'thinking';
     esWaitingForOtherEngine: Result := 'waiting for other engine';
@@ -3324,7 +3666,7 @@ function TMainWindow.EngineStateCaption(AState: TEngineState): String;
 begin
   case AState of
     esIdle: Result := 'Idle';
-    esPondering: Result := 'Pondering';
+    esAnalyzing: Result := 'Analyzing';
     esMcts: Result := 'MCTS';
     esThinking: Result := 'Thinking';
     esWaitingForOtherEngine: Result := 'Waiting';
@@ -3335,7 +3677,7 @@ end;
 
 function EngineStateNeedsStop(AState: TEngineState): Boolean;
 begin
-  Result := AState in [esPondering, esMcts, esThinking];
+  Result := AState in [esAnalyzing, esMcts, esThinking];
 end;
 
 function CommandLineQuote(const AText: String): String;
@@ -3430,12 +3772,70 @@ begin
     SingleCapturesIncludeCapturedSquareParamName, 'bool', 'true', True);
 end;
 
-procedure TMainWindow.SyncPonderSendsInfoParam(AEngineIndex: Integer);
+procedure TMainWindow.RemoveAnalyzeSendsInfoParam(AEngineIndex: Integer);
 begin
   if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
     Exit;
-  AddOrUpdateParam(FEngines[AEngineIndex].Params, PonderSendsInfoParamName,
-    'bool', 'true', True);
+  RemoveEngineParam(FEngines[AEngineIndex].Params, AnalyzeSendsInfoParamName);
+  RemoveEngineParam(FEngines[AEngineIndex].Params, OldAnalyzeSendsInfoParamName);
+end;
+
+procedure TMainWindow.SyncEngineSupportsMctsParam(AEngineIndex: Integer);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+  AddOrUpdateParam(FEngines[AEngineIndex].Params, EngineSupportsMctsParamName,
+    'bool', 'false', True);
+end;
+
+procedure TMainWindow.SyncScorePerspectiveParam(AEngineIndex: Integer);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+  AddOrUpdateParam(FEngines[AEngineIndex].Params, ScorePerspectiveParamName,
+    'string', 'side-to-move', True);
+end;
+
+procedure TMainWindow.SyncEvaluationDepthMinParam(AEngineIndex: Integer);
+var
+  I: Integer;
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
+    if SameText(FEngines[AEngineIndex].Params[I].Name,
+      OldEvaluationDepthMinParamName) then
+    begin
+      AddOrUpdateParam(FEngines[AEngineIndex].Params,
+        EvaluationDepthMinParamName, 'int',
+        FEngines[AEngineIndex].Params[I].Value, False);
+      RemoveEngineParam(FEngines[AEngineIndex].Params,
+        OldEvaluationDepthMinParamName);
+      Exit;
+    end;
+  AddOrUpdateParam(FEngines[AEngineIndex].Params, EvaluationDepthMinParamName,
+    'int', '4', True);
+end;
+
+procedure TMainWindow.SyncEvaluationBarMaxParam(AEngineIndex: Integer);
+var
+  I: Integer;
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
+    if SameText(FEngines[AEngineIndex].Params[I].Name,
+      OldEvaluationBarMaxParamName) then
+    begin
+      AddOrUpdateParam(FEngines[AEngineIndex].Params,
+        EvaluationBarMaxParamName, 'int',
+        FEngines[AEngineIndex].Params[I].Value, False);
+      RemoveEngineParam(FEngines[AEngineIndex].Params,
+        OldEvaluationBarMaxParamName);
+      Exit;
+    end;
+  AddOrUpdateParam(FEngines[AEngineIndex].Params, EvaluationBarMaxParamName,
+    'int', '1000', True);
 end;
 
 procedure TMainWindow.LoadHubLaunchArgumentFromParams(AEngineIndex: Integer);
@@ -3515,19 +3915,84 @@ begin
     end;
 end;
 
-function TMainWindow.EnginePonderSendsInfo(AEngineIndex: Integer): Boolean;
+function TMainWindow.EngineSupportsMcts(AEngineIndex: Integer): Boolean;
 var
   I: Integer;
 begin
-  Result := True;
+  Result := False;
   if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
     Exit;
 
   for I := 0 to High(FEngines[AEngineIndex].Params) do
     if SameText(FEngines[AEngineIndex].Params[I].Name,
-      PonderSendsInfoParamName) then
+      EngineSupportsMctsParamName) then
     begin
-      Result := not SameText(FEngines[AEngineIndex].Params[I].Value, 'false');
+      Result := SameText(FEngines[AEngineIndex].Params[I].Value, 'true');
+      Exit;
+    end;
+end;
+
+function TMainWindow.EngineScorePerspective(AEngineIndex: Integer): String;
+var
+  I: Integer;
+begin
+  Result := 'side-to-move';
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
+    if SameText(FEngines[AEngineIndex].Params[I].Name,
+      ScorePerspectiveParamName) then
+    begin
+      Result := LowerCase(Trim(FEngines[AEngineIndex].Params[I].Value));
+      if Result = '' then
+        Result := 'side-to-move';
+      Exit;
+    end;
+end;
+
+function TMainWindow.EngineEvaluationDepthMin(AEngineIndex: Integer): Double;
+var
+  FormatSettings: TFormatSettings;
+  I: Integer;
+  Value: Double;
+begin
+  Result := 4.0;
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  FormatSettings := DefaultFormatSettings;
+  FormatSettings.DecimalSeparator := '.';
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
+    if SameText(FEngines[AEngineIndex].Params[I].Name,
+      EvaluationDepthMinParamName) then
+    begin
+      if TryStrToFloat(FEngines[AEngineIndex].Params[I].Value, Value,
+        FormatSettings) and (Value >= 0.0) then
+        Result := Value;
+      Exit;
+    end;
+end;
+
+function TMainWindow.EngineEvaluationBarMax(AEngineIndex: Integer): Double;
+var
+  FormatSettings: TFormatSettings;
+  I: Integer;
+  Value: Double;
+begin
+  Result := EvalBarDefaultMaxScore;
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  FormatSettings := DefaultFormatSettings;
+  FormatSettings.DecimalSeparator := '.';
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
+    if SameText(FEngines[AEngineIndex].Params[I].Name,
+      EvaluationBarMaxParamName) then
+    begin
+      if TryStrToFloat(FEngines[AEngineIndex].Params[I].Value, Value,
+        FormatSettings) and (Value > 0.0) then
+        Result := Value;
       Exit;
     end;
 end;
@@ -3608,7 +4073,21 @@ begin
     if SameText(FEngines[1].Params[I].Name,
       OldSingleCapturesIncludeCapturedSquareParamName) then
       Continue;
-    if SameText(FEngines[1].Params[I].Name, PonderSendsInfoParamName) then
+    if SameText(FEngines[1].Params[I].Name, AnalyzeSendsInfoParamName) then
+      Continue;
+    if SameText(FEngines[1].Params[I].Name, OldAnalyzeSendsInfoParamName) then
+      Continue;
+    if SameText(FEngines[1].Params[I].Name, EngineSupportsMctsParamName) then
+      Continue;
+    if SameText(FEngines[1].Params[I].Name, ScorePerspectiveParamName) then
+      Continue;
+    if SameText(FEngines[1].Params[I].Name, EvaluationDepthMinParamName) then
+      Continue;
+    if SameText(FEngines[1].Params[I].Name, OldEvaluationDepthMinParamName) then
+      Continue;
+    if SameText(FEngines[1].Params[I].Name, EvaluationBarMaxParamName) then
+      Continue;
+    if SameText(FEngines[1].Params[I].Name, OldEvaluationBarMaxParamName) then
       Continue;
     Command := 'set-param name=' + HubQuote(FEngines[1].Params[I].Name) +
       ' value=' + HubQuote(FEngines[1].Params[I].Value);
@@ -3642,7 +4121,21 @@ begin
     if SameText(FEngines[2].Params[I].Name,
       OldSingleCapturesIncludeCapturedSquareParamName) then
       Continue;
-    if SameText(FEngines[2].Params[I].Name, PonderSendsInfoParamName) then
+    if SameText(FEngines[2].Params[I].Name, AnalyzeSendsInfoParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name, OldAnalyzeSendsInfoParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name, EngineSupportsMctsParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name, ScorePerspectiveParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name, EvaluationDepthMinParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name, OldEvaluationDepthMinParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name, EvaluationBarMaxParamName) then
+      Continue;
+    if SameText(FEngines[2].Params[I].Name, OldEvaluationBarMaxParamName) then
       Continue;
     Command := 'set-param name=' + HubQuote(FEngines[2].Params[I].Name) +
       ' value=' + HubQuote(FEngines[2].Params[I].Value);
@@ -3801,7 +4294,7 @@ begin
   FAutoPlayActive := False;
   FPendingAutoPlayStart := False;
   FPendingMctsStart := False;
-  FPendingPonderStart := False;
+  FPendingAnalyzeStart := False;
   FPendingPlayGameStart := False;
   FPendingThinkStart := False;
   LeavePlayGameMode;
@@ -3965,6 +4458,7 @@ begin
     UpdateGameClock;
     Annotation := FLastEngineInfoAnnotation;
     FLastEngineInfoAnnotation := '';
+    FLastEngineInfoLine := '';
     CopyMove(FMoves[MoveIndex], MoveToPlay);
     ApplyMove(MoveToPlay);
     RecordPlayedMove(MoveToPlay, Annotation);
@@ -4044,16 +4538,16 @@ begin
         LineEnding);
     end;
   end;
-  esmPonder, esmPlayGamePonder:
+  esmAnalyze, esmPlayGameAnalyze:
   begin
     FEngines[1].SearchMode := esmIdle;
     if AMoveText <> '' then
     begin
-      UpdatePonderBestMoveFromMoveText(AMoveText);
-      AppendEngineLog('[ponder move ignored: ' + AMoveText + ']' + LineEnding)
+      UpdateAnalyzeBestMoveFromMoveText(AMoveText);
+      AppendEngineLog('[analysis move ignored: ' + AMoveText + ']' + LineEnding)
     end
     else
-      AppendEngineLog('[ponder done]' + LineEnding);
+      AppendEngineLog('[analysis done]' + LineEnding);
   end;
   esmMcts:
   begin
@@ -4134,7 +4628,7 @@ begin
         if FPlayGameActive then
           ContinuePlayGameSearch
         else
-          SendGoPonderToEngine;
+          SendGoAnalyzeToEngine;
       end;
     end
     else if StartsText('param ', Line) then
@@ -4144,8 +4638,10 @@ begin
       HandleEngineIdLine(Line)
     else if StartsText('info ', Line) then
     begin
+      FLastEngineInfoLine := Line;
       FLastEngineInfoAnnotation := EngineInfoAnnotation(Line);
-      UpdatePonderBestMoveFromInfo(Line);
+      UpdateEngineEvalFromInfo(Line);
+      UpdateAnalyzeBestMoveFromInfo(Line);
     end
     else if StartsText('error ', Line) then
     begin
@@ -4158,6 +4654,8 @@ begin
     begin
       FLastEngineDoneLine := Line;
       MoveText := ExtractHubArgument(Line, 'move');
+      if FLastEngineInfoLine <> '' then
+        UpdateEngineEvalFromInfo(FLastEngineInfoLine, True);
       if FPendingAutoPlayStart then
       begin
         FIgnoreNextDoneMove := False;
@@ -4172,7 +4670,7 @@ begin
           AppendEngineLog('[previous search stopped]' + LineEnding);
         BeginAutoPlay;
       end
-      else if FPendingPonderStart then
+      else if FPendingAnalyzeStart then
       begin
         FIgnoreNextDoneMove := False;
         FEngineSearching := False;
@@ -4184,8 +4682,8 @@ begin
             LineEnding)
         else
           AppendEngineLog('[previous search stopped]' + LineEnding);
-        FPendingPonderStart := False;
-        SendGoPonderToEngine(FPendingPonderMode);
+        FPendingAnalyzeStart := False;
+        SendGoAnalyzeToEngine(FPendingAnalyzeMode);
       end
       else if FPendingMctsStart then
       begin
@@ -4237,10 +4735,12 @@ begin
       else if FIgnoreNextDoneMove then
       begin
         FIgnoreNextDoneMove := False;
-        FEngineSearching := False;
         FEngineStopRequested := False;
-        FEngines[1].SearchMode := esmIdle;
-        SetEngineState(esIdle);
+        if FEngines[1].SearchMode = esmIdle then
+        begin
+          FEngineSearching := False;
+          SetEngineState(esIdle);
+        end;
         if MoveText <> '' then
           AppendEngineLog('[ignored stopped-search move ' + MoveText + ']' + LineEnding)
         else
@@ -4300,11 +4800,11 @@ begin
         SendGoThinkToSecondEngine;
         Continue;
       end;
-      if FEnginePonderEnabled and (FEngines[1].State = esPondering) and
-        (FEngines[1].SearchMode in [esmPonder, esmPlayGamePonder]) then
+      if FEngineAnalyzeEnabled and (FEngines[1].State = esAnalyzing) and
+        (FEngines[1].SearchMode in [esmAnalyze, esmPlayGameAnalyze]) then
       begin
-        AppendEngine2Log('[' + EngineLogName(2) + ' catching up to current ponder]' + LineEnding);
-        SendGoPonderToSecondEngine(FEngines[1].SearchMode);
+        AppendEngine2Log('[' + EngineLogName(2) + ' catching up to current analysis]' + LineEnding);
+        SendGoAnalyzeToSecondEngine(FEngines[1].SearchMode);
       end;
     end
     else if StartsText('param ', Line) then
@@ -4339,8 +4839,8 @@ begin
       if FEngines[2].IgnoreNextDoneMove then
       begin
         FEngines[2].IgnoreNextDoneMove := False;
-        FEngines[2].SearchMode := esmIdle;
-        SetSecondEngineState(esIdle);
+        if FEngines[2].SearchMode = esmIdle then
+          SetSecondEngineState(esIdle);
         if MoveText <> '' then
           AppendEngine2Log('[ignored stopped-search move ' +
             MoveText + ']' + LineEnding)
@@ -4381,7 +4881,7 @@ begin
       else
       begin
         if MoveText <> '' then
-          AppendEngine2Log('[ponder move ignored: ' +
+          AppendEngine2Log('[analysis move ignored: ' +
             MoveText + ']' + LineEnding)
         else
           AppendEngine2Log('[' + EngineLogName(2) + ' done]' + LineEnding);
@@ -4398,21 +4898,10 @@ begin
   FPendingPlayGameStart := False;
   FPendingThinkStart := False;
   LeavePlayGameMode;
-  if EngineStateNeedsStop(FEngines[1].State) then
-  begin
-    FPendingPonderMode := esmPonder;
-    FPendingPonderStart := True;
-    AppendEngineLog('[stopping previous search before manual GO]' + LineEnding);
-    SendStopToEngine;
-  end
-  else
-  begin
-    FPendingPonderStart := False;
-    if EngineStateNeedsStop(FEngines[2].State) then
-      SendStopToSecondEngine;
-    AppendEngineLog('[manual GO: starting ponder]' + LineEnding);
-    SendGoPonderToEngine(esmPonder);
-  end;
+  FPendingAnalyzeStart := False;
+  AppendEngineLog('[manual Analyze: starting analysis]' + LineEnding);
+  SendStopToAllEngines;
+  SendGoAnalyzeToEngine(esmAnalyze);
 end;
 
 procedure TMainWindow.MctsButtonClick(Sender: TObject);
@@ -4423,20 +4912,11 @@ begin
   FPendingPlayGameStart := False;
   FPendingThinkStart := False;
   LeavePlayGameMode;
-  if EngineStateNeedsStop(FEngines[1].State) then
-  begin
-    FPendingPonderStart := False;
-    FPendingMctsStart := True;
-    AppendEngineLog('[stopping previous search before manual MCTS]' + LineEnding);
-    SendStopToEngine;
-  end
-  else
-  begin
-    FPendingPonderStart := False;
-    FPendingMctsStart := False;
-    AppendEngineLog('[manual MCTS: starting mcts]' + LineEnding);
-    SendGoMctsToEngine;
-  end;
+  FPendingAnalyzeStart := False;
+  FPendingMctsStart := False;
+  AppendEngineLog('[manual MCTS: starting mcts]' + LineEnding);
+  SendStopToAllEngines;
+  SendGoMctsToEngine;
 end;
 
 procedure TMainWindow.AutoPlayButtonClick(Sender: TObject);
@@ -4456,7 +4936,7 @@ begin
   begin
     FPendingAutoPlayStart := True;
     FPendingMctsStart := False;
-    FPendingPonderStart := False;
+    FPendingAnalyzeStart := False;
     FPendingPlayGameStart := False;
     LeavePlayGameMode;
     FAutoPlayActive := False;
@@ -4472,7 +4952,7 @@ end;
 procedure TMainWindow.BeginAutoPlay;
 begin
   FPendingAutoPlayStart := False;
-  FPendingPonderStart := False;
+  FPendingAnalyzeStart := False;
   FPendingMctsStart := False;
   FPendingPlayGameStart := False;
   FIgnoreNextDoneMove := False;
@@ -4496,16 +4976,11 @@ begin
       AGameMinutes, AStartFromCurrent, False);
     FAutoPlayActive := False;
     if FPlayGameActive and IsPlayGameSecondEngineTurn then
-      FEngines[2].PendingThinkStart := EnginePonderSendsInfo(2);
+      FEngines[2].PendingThinkStart := True;
     AppendEngine2Log('[stopping previous search before starting game]' +
       LineEnding);
     SendStopToSecondEngine;
-    if FPlayGameActive and IsPlayGameSecondEngineTurn then
-    begin
-      if not EnginePonderSendsInfo(2) then
-        SendGoThinkToSecondEngine;
-    end
-    else
+    if not (FPlayGameActive and IsPlayGameSecondEngineTurn) then
       ContinuePlayGameSearch;
     Exit;
   end;
@@ -4525,30 +5000,30 @@ begin
     begin
       if AWhiteIsEngine and ABlackIsEngine then
       begin
-        FPendingPonderStart := False;
+        FPendingAnalyzeStart := False;
         FPendingThinkStart := False;
       end
-      else if (AWhiteIsEngine or ABlackIsEngine) and FEnginePonderEnabled then
+      else if (AWhiteIsEngine or ABlackIsEngine) and FEngineAnalyzeEnabled then
       begin
-        FPendingPonderMode := esmPlayGamePonder;
-        FPendingPonderStart := True;
+        FPendingAnalyzeMode := esmPlayGameAnalyze;
+        FPendingAnalyzeStart := True;
         FPendingThinkStart := False;
       end
-      else if FEnginePonderEnabled then
+      else if FEngineAnalyzeEnabled then
       begin
-        FPendingPonderMode := esmPonder;
-        FPendingPonderStart := True;
+        FPendingAnalyzeMode := esmAnalyze;
+        FPendingAnalyzeStart := True;
         FPendingThinkStart := False;
       end
       else
       begin
-        FPendingPonderStart := False;
+        FPendingAnalyzeStart := False;
         FPendingThinkStart := False;
       end;
     end
     else
     begin
-      FPendingPonderStart := False;
+      FPendingAnalyzeStart := False;
       FPendingThinkMode := esmPlayGameThink;
       FPendingThinkStart := True;
     end;
@@ -4559,15 +5034,7 @@ begin
     SendStopToEngine;
     if FPlayGameActive and IsPlayGameEngineTurn and
       (not IsPlayGameSecondEngineTurn) then
-    begin
-      if EnginePonderSendsInfo(1) then
-        FPendingThinkStart := True
-      else
-      begin
-        FPendingThinkStart := False;
-        SendGoThinkToEngine(esmPlayGameThink);
-      end;
-    end;
+      FPendingThinkStart := True;
     Exit;
   end;
 
@@ -4580,7 +5047,7 @@ procedure TMainWindow.BeginPlayGame(AWhiteIsEngine, ABlackIsEngine: Boolean;
   AStartFromCurrent: Boolean; AStartSearch: Boolean);
 begin
   FPendingAutoPlayStart := False;
-  FPendingPonderStart := False;
+  FPendingAnalyzeStart := False;
   FPendingMctsStart := False;
   FPendingPlayGameStart := False;
   FPendingThinkStart := False;
@@ -4594,17 +5061,17 @@ begin
   FPlayGameActive := True;
   if FPlayGameWhiteIsEngine and FPlayGameBlackIsEngine then
   begin
-    FEnginePonderAutoDisabled := FEnginePonderEnabled;
-    FEnginePonderEnabled := False;
-    FPendingPonderStart := False;
-    AppendEngineLog('[ponder disabled for engine-vs-engine game]' + LineEnding);
+    FEngineAnalyzeAutoDisabled := FEngineAnalyzeEnabled;
+    FEngineAnalyzeEnabled := False;
+    FPendingAnalyzeStart := False;
+    AppendEngineLog('[analysis disabled for engine-vs-engine game]' + LineEnding);
   end
-  else if FEnginePonderAutoDisabled then
+  else if FEngineAnalyzeAutoDisabled then
   begin
-    FEnginePonderAutoDisabled := False;
-    FEnginePonderEnabled := True;
+    FEngineAnalyzeAutoDisabled := False;
+    FEngineAnalyzeEnabled := True;
   end;
-  UpdatePonderMenuItems;
+  UpdateAnalyzeMenuItems;
   if FPlayGameWhiteIsEngine then
     FGameWhiteName := FPlayGameWhiteName
   else
@@ -4842,7 +5309,7 @@ procedure TMainWindow.StopButtonClick(Sender: TObject);
 begin
   FAutoPlayActive := False;
   FPendingAutoPlayStart := False;
-  FPendingPonderStart := False;
+  FPendingAnalyzeStart := False;
   FPendingMctsStart := False;
   FPendingPlayGameStart := False;
   FPendingThinkStart := False;
@@ -4993,11 +5460,9 @@ begin
         AppendEngine2Log('[synchronizing previous search before engine think]' +
           LineEnding);
         SendStopToSecondEngine;
-        FEngines[2].PendingThinkStart := EnginePonderSendsInfo(2);
+        FEngines[2].PendingThinkStart := True;
         if EngineStateNeedsStop(FEngines[1].State) then
           SendStopToEngine;
-        if not EnginePonderSendsInfo(2) then
-          SendGoThinkToSecondEngine;
       end
       else
         SendGoThinkToSecondEngine;
@@ -5007,38 +5472,36 @@ begin
     if EngineStateNeedsStop(FEngines[1].State) then
     begin
       FPendingAutoPlayStart := False;
-      FPendingPonderStart := False;
+      FPendingAnalyzeStart := False;
       FPendingMctsStart := False;
       FPendingPlayGameStart := False;
       FPendingThinkMode := esmPlayGameThink;
-      FPendingThinkStart := EnginePonderSendsInfo(1);
+      FPendingThinkStart := True;
       AppendEngineLog('[stopping previous search before engine think]' +
         LineEnding);
       SendStopToEngine;
-      if not EnginePonderSendsInfo(1) then
-        SendGoThinkToEngine(esmPlayGameThink);
     end
     else
       SendGoThinkToEngine(esmPlayGameThink);
   end
   else if HasPlayGameEnginePlayer and HasPlayGameHumanPlayer then
-    SendPlayGameHumanTurnPonder
+    SendPlayGameHumanTurnAnalyze
   else if HasPlayGameHumanPlayer and EngineIsRunning and FEngines[1].Ready then
   begin
     if EngineStateNeedsStop(FEngines[1].State) then
     begin
       FPendingAutoPlayStart := False;
       FPendingMctsStart := False;
-      FPendingPonderMode := esmPonder;
-      FPendingPonderStart := True;
+      FPendingAnalyzeMode := esmAnalyze;
+      FPendingAnalyzeStart := True;
       FPendingPlayGameStart := False;
       FPendingThinkStart := False;
-      AppendEngineLog('[stopping previous search before human-vs-human ponder]' +
+      AppendEngineLog('[stopping previous search before human-vs-human analysis]' +
         LineEnding);
       SendStopToEngine;
     end
     else
-      SendGoPonderToEngine(esmPonder);
+      SendGoAnalyzeToEngine(esmAnalyze);
   end;
 end;
 
@@ -5103,19 +5566,106 @@ begin
   end;
 end;
 
-procedure TMainWindow.UpdatePonderBestMoveFromInfo(const ALine: String);
+function TMainWindow.HistoryAnnotationScoreWhite(APly: Integer;
+  out AScore: Double): Boolean;
+var
+  Annotation: String;
+  FormatSettings: TFormatSettings;
+  Perspective: String;
+  ScoreText: String;
+  SideBeforeMove: TSide;
+begin
+  Result := False;
+  AScore := 0.0;
+  if (APly <= 0) or (APly > Length(FHistoryMoveAnnotations)) then
+    Exit;
+
+  Annotation := FHistoryMoveAnnotations[APly - 1];
+  ScoreText := ExtractHubArgument(Annotation, 'score');
+  if ScoreText = '' then
+    Exit;
+
+  FormatSettings := DefaultFormatSettings;
+  FormatSettings.DecimalSeparator := '.';
+  if not TryStrToFloat(ScoreText, AScore, FormatSettings) then
+    Exit;
+
+  Perspective := EngineScorePerspective(1);
+  if (Perspective = 'black') or (Perspective = 'b') then
+    AScore := -AScore
+  else if (Perspective = 'side-to-move') or (Perspective = 'stm') or
+    (Perspective = 'side') then
+  begin
+    SideBeforeMove := FHistoryBaseSide;
+    if Odd(APly - 1) then
+      if SideBeforeMove = sideWhite then
+        SideBeforeMove := sideBlack
+      else
+        SideBeforeMove := sideWhite;
+    if SideBeforeMove = sideBlack then
+      AScore := -AScore;
+  end;
+
+  Result := True;
+end;
+
+procedure TMainWindow.UpdateEngineEvalFromInfo(const ALine: String; AForce: Boolean);
+var
+  DepthText: String;
+  DepthValue: Double;
+  FormatSettings: TFormatSettings;
+  Perspective: String;
+  ScoreText: String;
+  OldScoreValue: Double;
+  ScoreValue: Double;
+begin
+  ScoreText := ExtractHubArgument(ALine, 'score');
+  if ScoreText = '' then
+    Exit;
+
+  FormatSettings := DefaultFormatSettings;
+  FormatSettings.DecimalSeparator := '.';
+
+  if not AForce then
+  begin
+    DepthText := ExtractHubArgument(ALine, 'depth');
+    if (DepthText = '') or (not TryStrToFloat(DepthText, DepthValue,
+      FormatSettings)) or (DepthValue < EngineEvaluationDepthMin(1)) then
+      Exit;
+  end;
+
+  if not TryStrToFloat(ScoreText, ScoreValue, FormatSettings) then
+    Exit;
+
+  Perspective := EngineScorePerspective(1);
+  if (Perspective = 'black') or (Perspective = 'b') then
+    ScoreValue := -ScoreValue
+  else if (Perspective = 'side-to-move') or (Perspective = 'stm') or
+    (Perspective = 'side') then
+  begin
+    if FSideToMove = sideBlack then
+      ScoreValue := -ScoreValue;
+  end;
+
+  OldScoreValue := FEngineEvalScoreWhite;
+  FEngineEvalScoreWhite := ScoreValue;
+  RepaintEngineEvalBarDelta(OldScoreValue, ScoreValue);
+end;
+
+procedure TMainWindow.UpdateAnalyzeBestMoveFromInfo(const ALine: String);
 begin
   if FEngines[1].SearchMode = esmIdle then
     Exit;
 
-  UpdatePonderBestMoveFromMoveText(ExtractHubArgument(ALine, 'pv'));
+  UpdateAnalyzeBestMoveFromMoveText(ExtractHubArgument(ALine, 'pv'));
 end;
 
-procedure TMainWindow.UpdatePonderBestMoveFromMoveText(const AMoveText: String);
+procedure TMainWindow.UpdateAnalyzeBestMoveFromMoveText(const AMoveText: String);
 var
   MoveIndex: Integer;
   MoveText: String;
   NewSourceSquare: Integer;
+  OldSourceSquare: Integer;
 begin
   MoveText := AMoveText;
   if MoveText = '' then
@@ -5129,11 +5679,13 @@ begin
   else
     NewSourceSquare := 0;
 
-  if FPonderBestSourceSquare = NewSourceSquare then
+  if FAnalyzeBestSourceSquare = NewSourceSquare then
     Exit;
 
-  FPonderBestSourceSquare := NewSourceSquare;
-  InvalidateBoard;
+  OldSourceSquare := FAnalyzeBestSourceSquare;
+  FAnalyzeBestSourceSquare := NewSourceSquare;
+  InvalidateBoardSquare(OldSourceSquare);
+  InvalidateBoardSquare(NewSourceSquare);
 end;
 
 function TMainWindow.ClockAnnotation(APly: Integer): String;
@@ -5291,7 +5843,7 @@ begin
     Caption := 'International Draughts';
     InvalidateBoard;
     AppendEngineLog('[pasted FEN ' + Fen + ']' + LineEnding);
-    RestartEnginePonder;
+    RestartEngineAnalyze;
   except
     on E: Exception do
       MessageDlg('Paste Position', E.Message, mtError, [mbOK], 0);
@@ -5486,7 +6038,7 @@ begin
   SendEngineCommand(Command);
 end;
 
-procedure TMainWindow.SendPlayGameHumanTurnPonder;
+procedure TMainWindow.SendPlayGameHumanTurnAnalyze;
 begin
   if not FPlayGameActive then
     Exit;
@@ -5505,19 +6057,24 @@ begin
   begin
     FPendingAutoPlayStart := False;
     FPendingMctsStart := False;
-    FPendingPonderMode := esmPlayGamePonder;
-    FPendingPonderStart := True;
+    FPendingAnalyzeMode := esmPlayGameAnalyze;
+    FPendingAnalyzeStart := True;
     FPendingPlayGameStart := False;
     FPendingThinkStart := False;
-    AppendEngineLog('[stopping previous search before play-game ponder]' +
+    AppendEngineLog('[stopping previous search before play-game analysis]' +
       LineEnding);
+    if FAnalyzeBestSourceSquare <> 0 then
+    begin
+      FAnalyzeBestSourceSquare := 0;
+      InvalidateBoard;
+    end;
     SendStopToEngine;
   end
   else
-    SendGoPonderToEngine(esmPlayGamePonder);
+    SendGoAnalyzeToEngine(esmPlayGameAnalyze);
 end;
 
-procedure TMainWindow.SendGoPonderToEngine(AMode: TEngineSearchMode);
+procedure TMainWindow.SendGoAnalyzeToEngine(AMode: TEngineSearchMode);
 var
   CanUseFirstEngine: Boolean;
   CanUseSecondEngine: Boolean;
@@ -5527,22 +6084,27 @@ var
 begin
   CanUseFirstEngine := EngineIsRunning and FEngines[1].Ready;
   CanUseSecondEngine := SecondEngineIsRunning and FEngines[2].Ready;
+  if FAnalyzeBestSourceSquare <> 0 then
+  begin
+    FAnalyzeBestSourceSquare := 0;
+    InvalidateBoard;
+  end;
   if not CanUseFirstEngine and not CanUseSecondEngine then
     Exit;
   if FPlayGameActive and IsPlayGameEngineTurn then
   begin
     if CanUseFirstEngine then
-      AppendEngineLog('[not starting ponder: engine to move]' + LineEnding);
+      AppendEngineLog('[not starting analysis: engine to move]' + LineEnding);
     if CanUseSecondEngine then
-      AppendEngine2Log('[not starting ponder: engine to move]' + LineEnding);
+      AppendEngine2Log('[not starting analysis: engine to move]' + LineEnding);
     Exit;
   end;
-  if not FEnginePonderEnabled then
+  if not FEngineAnalyzeEnabled then
   begin
     if CanUseFirstEngine then
-      AppendEngineLog('[ponder disabled: not starting ponder]' + LineEnding);
+      AppendEngineLog('[analysis disabled: not starting analysis]' + LineEnding);
     if CanUseSecondEngine then
-      AppendEngine2Log('[ponder disabled: not starting ponder]' + LineEnding);
+      AppendEngine2Log('[analysis disabled: not starting analysis]' + LineEnding);
     Exit;
   end;
 
@@ -5572,7 +6134,8 @@ end;
     FormatSettings);
 
   FLastEngineInfoAnnotation := '';
-  FPonderBestSourceSquare := 0;
+  FLastEngineInfoLine := '';
+  FAnalyzeBestSourceSquare := 0;
   InvalidateBoard;
 
   if CanUseFirstEngine then
@@ -5581,11 +6144,11 @@ end;
     SendEngineCommand(PositionCommand);
     AppendEngineLog('> ' + LevelCommand + LineEnding);
     SendEngineCommand(LevelCommand);
-    AppendEngineLog('> go ponder' + LineEnding);
-    SendEngineCommand('go ponder');
+    AppendEngineLog('> go analyze' + LineEnding);
+    SendEngineCommand('go analyze');
     FEngineSearching := True;
     FEngines[1].SearchMode := AMode;
-    SetEngineState(esPondering);
+    SetEngineState(esAnalyzing);
   end;
 
   if CanUseSecondEngine then
@@ -5595,14 +6158,14 @@ end;
     SendSecondEngineCommand(PositionCommand);
     AppendEngine2Log('> ' + LevelCommand + LineEnding);
     SendSecondEngineCommand(LevelCommand);
-    AppendEngine2Log('> go ponder' + LineEnding);
-    SendSecondEngineCommand('go ponder');
+    AppendEngine2Log('> go analyze' + LineEnding);
+    SendSecondEngineCommand('go analyze');
     FEngines[2].SearchMode := AMode;
-    SetSecondEngineState(esPondering);
+    SetSecondEngineState(esAnalyzing);
   end;
 end;
 
-procedure TMainWindow.SendGoPonderToSecondEngine(AMode: TEngineSearchMode);
+procedure TMainWindow.SendGoAnalyzeToSecondEngine(AMode: TEngineSearchMode);
 var
   FormatSettings: TFormatSettings;
   LevelCommand: String;
@@ -5614,12 +6177,12 @@ begin
     Exit;
   if FPlayGameActive and IsPlayGameEngineTurn then
   begin
-    AppendEngine2Log('[not starting ponder: engine to move]' + LineEnding);
+    AppendEngine2Log('[not starting analysis: engine to move]' + LineEnding);
     Exit;
   end;
-  if not FEnginePonderEnabled then
+  if not FEngineAnalyzeEnabled then
   begin
-    AppendEngine2Log('[ponder disabled: not starting ponder]' + LineEnding);
+    AppendEngine2Log('[analysis disabled: not starting analysis]' + LineEnding);
     Exit;
   end;
   if Length(FMoves) = 0 then
@@ -5640,49 +6203,91 @@ begin
     FormatSettings);
   AppendEngine2Log('> ' + LevelCommand + LineEnding);
   SendSecondEngineCommand(LevelCommand);
-  AppendEngine2Log('> go ponder' + LineEnding);
-  SendSecondEngineCommand('go ponder');
+  AppendEngine2Log('> go analyze' + LineEnding);
+  SendSecondEngineCommand('go analyze');
   FEngines[2].SearchMode := AMode;
-  SetSecondEngineState(esPondering);
+  SetSecondEngineState(esAnalyzing);
 end;
 
 procedure TMainWindow.SendGoMctsToEngine;
 var
+  CanUseFirstEngine: Boolean;
+  CanUseSecondEngine: Boolean;
   FormatSettings: TFormatSettings;
   LevelCommand: String;
   PositionCommand: String;
 begin
-  if not EngineIsRunning then
+  CanUseFirstEngine := EngineIsRunning and FEngines[1].Ready;
+  CanUseSecondEngine := SecondEngineIsRunning and FEngines[2].Ready;
+  if not CanUseFirstEngine and not CanUseSecondEngine then
     Exit;
-  if not FEngines[1].Ready then
-    Exit;
+
   if Length(FMoves) = 0 then
   begin
-    AppendEngineLog('[' + EngineLogName(1) + ' not starting search: terminal position]' + LineEnding);
-    FEngineSearching := False;
-    FEngines[1].SearchMode := esmIdle;
-    SetEngineState(esIdle);
+    if CanUseFirstEngine then
+    begin
+      AppendEngineLog('[' + EngineLogName(1) + ' not starting search: terminal position]' + LineEnding);
+      FEngineSearching := False;
+      FEngines[1].SearchMode := esmIdle;
+      SetEngineState(esIdle);
+    end;
+    if CanUseSecondEngine then
+    begin
+      AppendEngine2Log('[' + EngineLogName(2) + ' not starting search: terminal position]' + LineEnding);
+      FEngines[2].SearchMode := esmIdle;
+      SetSecondEngineState(esIdle);
+    end;
     Exit;
   end;
-
-  PositionCommand := HubPositionCommand(1);
-  AppendEngineLog('> ' + PositionCommand + LineEnding);
-  SendEngineCommand(PositionCommand);
 
   FormatSettings := DefaultFormatSettings;
   FormatSettings.DecimalSeparator := '.';
   LevelCommand := Format('level move-time=%.3f', [FEngineMoveTimeSpin.Value],
     FormatSettings);
-  AppendEngineLog('> ' + LevelCommand + LineEnding);
-  SendEngineCommand(LevelCommand);
-  AppendEngineLog('> go mcts' + LineEnding);
+
   FLastEngineInfoAnnotation := '';
-  FPonderBestSourceSquare := 0;
+  FLastEngineInfoLine := '';
+  FAnalyzeBestSourceSquare := 0;
   InvalidateBoard;
-  SendEngineCommand('go mcts');
-  FEngineSearching := True;
-  FEngines[1].SearchMode := esmMcts;
-  SetEngineState(esMcts);
+
+  if CanUseFirstEngine then
+  begin
+    if EngineSupportsMcts(1) then
+    begin
+      PositionCommand := HubPositionCommand(1);
+      AppendEngineLog('> ' + PositionCommand + LineEnding);
+      SendEngineCommand(PositionCommand);
+      AppendEngineLog('> ' + LevelCommand + LineEnding);
+      SendEngineCommand(LevelCommand);
+      AppendEngineLog('> go mcts' + LineEnding);
+      SendEngineCommand('go mcts');
+      FEngineSearching := True;
+      FEngines[1].SearchMode := esmMcts;
+      SetEngineState(esMcts);
+    end
+    else
+      AppendEngineLog('[' + EngineLogName(1) +
+        ' does not support go mcts]' + LineEnding);
+  end;
+
+  if CanUseSecondEngine then
+  begin
+    if EngineSupportsMcts(2) then
+    begin
+      PositionCommand := HubPositionCommand(2);
+      AppendEngine2Log('> ' + PositionCommand + LineEnding);
+      SendSecondEngineCommand(PositionCommand);
+      AppendEngine2Log('> ' + LevelCommand + LineEnding);
+      SendSecondEngineCommand(LevelCommand);
+      AppendEngine2Log('> go mcts' + LineEnding);
+      SendSecondEngineCommand('go mcts');
+      FEngines[2].SearchMode := esmMcts;
+      SetSecondEngineState(esMcts);
+    end
+    else
+      AppendEngine2Log('[' + EngineLogName(2) +
+        ' does not support go mcts]' + LineEnding);
+  end;
 end;
 
 procedure TMainWindow.SendGoThinkToEngine(AMode: TEngineSearchMode);
@@ -5726,12 +6331,15 @@ begin
   SendEngineCommand(LevelCommand);
   AppendEngineLog('> go think' + LineEnding);
   FLastEngineInfoAnnotation := '';
+  FLastEngineInfoLine := '';
   FIgnoreNextDoneMove := False;
-  if FPonderBestSourceSquare <> 0 then
+  if FAnalyzeBestSourceSquare <> 0 then
   begin
-    FPonderBestSourceSquare := 0;
+    FAnalyzeBestSourceSquare := 0;
     InvalidateBoard;
-  end;
+  end
+  else
+    InvalidateBoard;
   SendEngineCommand('go think');
   FEngineSearching := True;
   FEngines[1].SearchMode := AMode;
@@ -5776,9 +6384,9 @@ begin
   SetSecondEngineState(esThinking);
 end;
 
-procedure TMainWindow.RestartEnginePonder;
+procedure TMainWindow.RestartEngineAnalyze;
 begin
-  if not FEnginePonderEnabled then
+  if not FEngineAnalyzeEnabled then
     Exit;
   if (not (EngineIsRunning and FEngines[1].Ready)) and
     (not (SecondEngineIsRunning and FEngines[2].Ready)) then
@@ -5790,18 +6398,18 @@ begin
   begin
     FPendingAutoPlayStart := False;
     FPendingMctsStart := False;
-    FPendingPonderMode := esmPonder;
-    FPendingPonderStart := True;
+    FPendingAnalyzeMode := esmAnalyze;
+    FPendingAnalyzeStart := True;
     FPendingPlayGameStart := False;
     FPendingThinkStart := False;
-    AppendEngineLog('[stopping previous search before ponder]' + LineEnding);
+    AppendEngineLog('[stopping previous search before analysis]' + LineEnding);
     SendStopToEngine;
   end
   else
   begin
     if EngineStateNeedsStop(FEngines[2].State) then
       SendStopToSecondEngine;
-    SendGoPonderToEngine;
+    SendGoAnalyzeToEngine;
   end;
 end;
 
@@ -5967,21 +6575,21 @@ begin
   end;
 end;
 
-procedure TMainWindow.UpdatePonderMenuItems;
+procedure TMainWindow.UpdateAnalyzeMenuItems;
 var
-  DisablePonderToggle: Boolean;
+  DisableAnalyzeToggle: Boolean;
 begin
-  DisablePonderToggle := FPlayGameActive and FPlayGameWhiteIsEngine and
+  DisableAnalyzeToggle := FPlayGameActive and FPlayGameWhiteIsEngine and
     FPlayGameBlackIsEngine;
-  if FEngines[1].PonderMenuItem <> nil then
+  if FEngines[1].AnalyzeMenuItem <> nil then
   begin
-    FEngines[1].PonderMenuItem.Checked := FEnginePonderEnabled;
-    FEngines[1].PonderMenuItem.Enabled := not DisablePonderToggle;
+    FEngines[1].AnalyzeMenuItem.Checked := FEngineAnalyzeEnabled;
+    FEngines[1].AnalyzeMenuItem.Enabled := not DisableAnalyzeToggle;
   end;
-  if FEngines[2].PonderMenuItem <> nil then
+  if FEngines[2].AnalyzeMenuItem <> nil then
   begin
-    FEngines[2].PonderMenuItem.Checked := FEnginePonderEnabled;
-    FEngines[2].PonderMenuItem.Enabled := not DisablePonderToggle;
+    FEngines[2].AnalyzeMenuItem.Checked := FEngineAnalyzeEnabled;
+    FEngines[2].AnalyzeMenuItem.Enabled := not DisableAnalyzeToggle;
   end;
   UpdateEnginePopupMenuItems;
 end;
@@ -6009,16 +6617,16 @@ begin
     FEngines[2].ParamsMenuItem.Enabled := Engine2Loaded;
 end;
 
-procedure TMainWindow.PonderMenuItemClick(Sender: TObject);
+procedure TMainWindow.AnalyzeMenuItemClick(Sender: TObject);
 begin
   if FPlayGameActive and FPlayGameWhiteIsEngine and FPlayGameBlackIsEngine then
     Exit;
-  FEnginePonderAutoDisabled := False;
-  FEnginePonderEnabled := not FEnginePonderEnabled;
-  UpdatePonderMenuItems;
-  if FEnginePonderEnabled then
+  FEngineAnalyzeAutoDisabled := False;
+  FEngineAnalyzeEnabled := not FEngineAnalyzeEnabled;
+  UpdateAnalyzeMenuItems;
+  if FEngineAnalyzeEnabled then
   begin
-    AppendEngineLog('[ponder enabled]' + LineEnding);
+    AppendEngineLog('[analysis enabled]' + LineEnding);
     if FAutoPlayActive then
       Exit;
     if FPlayGameActive then
@@ -6027,13 +6635,13 @@ begin
         ContinuePlayGameSearch;
     end
     else
-      RestartEnginePonder;
+      RestartEngineAnalyze;
   end
   else
   begin
-    AppendEngineLog('[ponder disabled]' + LineEnding);
-    FPendingPonderStart := False;
-    if (FEngines[1].State = esPondering) or (FEngines[2].State = esPondering) then
+    AppendEngineLog('[analysis disabled]' + LineEnding);
+    FPendingAnalyzeStart := False;
+    if (FEngines[1].State = esAnalyzing) or (FEngines[2].State = esAnalyzing) then
       SendStopToAllEngines;
   end;
 end;
@@ -6128,7 +6736,7 @@ begin
   UpdateMoveList;
   UpdateHistoryList;
   InvalidateBoard;
-  RestartEnginePonder;
+  RestartEngineAnalyze;
 end;
 
 procedure TMainWindow.LoadFenFile(const AFileName: String);
@@ -6166,7 +6774,7 @@ begin
     UpdateHistoryList;
     Caption := 'International Draughts - ' + ExtractFileName(AFileName);
     InvalidateBoard;
-    RestartEnginePonder;
+    RestartEngineAnalyze;
   finally
     FenText.Free;
   end;
@@ -6244,6 +6852,108 @@ begin
   end;
 end;
 
+procedure ExtractPdnMoveTokens(const ALines: TStrings; out ATokens,
+  AAnnotations: TTextArray);
+var
+  Ch: Char;
+  Comment: String;
+  I: Integer;
+  InComment: Boolean;
+  InVariation: Integer;
+  J: Integer;
+  LastTokenIndex: Integer;
+  Line: String;
+  Token: String;
+
+  procedure AppendToken;
+  begin
+    Token := Trim(Token);
+    if Token = '' then
+      Exit;
+    SetLength(ATokens, Length(ATokens) + 1);
+    SetLength(AAnnotations, Length(ATokens));
+    ATokens[High(ATokens)] := Token;
+    AAnnotations[High(AAnnotations)] := '';
+    LastTokenIndex := High(ATokens);
+    Token := '';
+  end;
+
+  procedure AppendComment;
+  begin
+    Comment := Trim(Comment);
+    if (Comment = '') or (LastTokenIndex < 0) then
+      Exit;
+    if AAnnotations[LastTokenIndex] <> '' then
+      AAnnotations[LastTokenIndex] += ' ';
+    AAnnotations[LastTokenIndex] += Comment;
+    Comment := '';
+  end;
+
+begin
+  SetLength(ATokens, 0);
+  SetLength(AAnnotations, 0);
+  InComment := False;
+  InVariation := 0;
+  LastTokenIndex := -1;
+  Token := '';
+  Comment := '';
+
+  for I := 0 to ALines.Count - 1 do
+  begin
+    Line := Trim(ALines[I]);
+    if (Line = '') or StartsText('[', Line) then
+      Continue;
+
+    for J := 1 to Length(Line) do
+    begin
+      Ch := Line[J];
+      if InComment then
+      begin
+        if Ch = '}' then
+        begin
+          InComment := False;
+          AppendComment;
+        end
+        else
+          Comment += Ch;
+        Continue;
+      end;
+      if InVariation > 0 then
+      begin
+        if Ch = '(' then
+          Inc(InVariation)
+        else if Ch = ')' then
+          Dec(InVariation);
+        Continue;
+      end;
+
+      case Ch of
+        '{':
+        begin
+          AppendToken;
+          InComment := True;
+          Comment := '';
+        end;
+        '(':
+        begin
+          AppendToken;
+          InVariation := 1;
+        end;
+        ';':
+        begin
+          AppendToken;
+          Break;
+        end;
+        ' ', #9, #10, #13:
+          AppendToken;
+      else
+        Token += Ch;
+      end;
+    end;
+    AppendToken;
+  end;
+end;
+
 function PdnTokenMoveText(const AToken: String): String;
 var
   DotPos: Integer;
@@ -6280,10 +6990,10 @@ var
   J: Integer;
   Lines: TStringList;
   MatchedMove: TMove;
-  MoveText: String;
   StartFen: String;
   Token: String;
-  Tokens: TStringArray;
+  TokenAnnotations: TTextArray;
+  Tokens: TTextArray;
 begin
   Lines := TStringList.Create;
   try
@@ -6304,8 +7014,7 @@ begin
     ParseFen(StartFen);
     LeavePlayGameMode;
     ResetHistoryFromCurrentPosition;
-    MoveText := StripPdnMoveText(Lines);
-    Tokens := MoveText.Split([' ', #9, #10, #13], TStringSplitOptions.ExcludeEmpty);
+    ExtractPdnMoveTokens(Lines, Tokens, TokenAnnotations);
 
     FSuppressBoardUpdates := True;
     try
@@ -6322,7 +7031,10 @@ begin
           begin
             CopyMove(FMoves[J], MatchedMove);
             ApplyMove(MatchedMove);
-            RecordPlayedMove(MatchedMove);
+            if I <= High(TokenAnnotations) then
+              RecordPlayedMove(MatchedMove, TokenAnnotations[I])
+            else
+              RecordPlayedMove(MatchedMove);
             FoundMove := True;
             Break;
           end;
@@ -6339,7 +7051,7 @@ begin
     Caption := 'International Draughts - ' + ExtractFileName(AFileName);
     FGameDirty := False;
     InvalidateBoard;
-    RestartEnginePonder;
+    RestartEngineAnalyze;
   finally
     Lines.Free;
   end;
@@ -6456,6 +7168,8 @@ begin
   FHistoryResultEdit.Text := FGameResult;
   FHistoryFenMemo.Text := BoardToFen(FHistoryBaseBoard, FHistoryBaseSide);
   FHistoryMemo.Text := BuildPdnMoveText(FGameResult, True);
+  if FHistoryEvalPaintBox <> nil then
+    FHistoryEvalPaintBox.Invalidate;
 
   SelectHistoryPly(FCurrentPly);
   FHistoryMemo.Invalidate;

@@ -24,6 +24,7 @@ type
     FInlineBoolCombo: TComboBox;
     FOKButton: TButton;
     FParams: TEngineParamArray;
+    FScorePerspectiveCombo: TComboBox;
     FSelectedRow: Integer;
     procedure BoolComboChange(Sender: TObject);
     procedure BrowseDirButtonClick(Sender: TObject);
@@ -35,12 +36,15 @@ type
     procedure InlineBoolComboSelect(Sender: TObject);
     procedure OKButtonClick(Sender: TObject);
     procedure LoadGrid;
+    procedure ScorePerspectiveComboChange(Sender: TObject);
     procedure SelectCell(Sender: TObject; aCol, aRow: Integer;
       var CanSelect: Boolean);
     procedure StoreGrid;
     procedure UpdateRowControls;
     function IsBoolRow(ARow: Integer): Boolean;
     function IsDirRow(ARow: Integer): Boolean;
+    function IsScorePerspectiveRow(ARow: Integer): Boolean;
+    procedure PrepareInlineComboForRow(ARow: Integer);
   public
     constructor Create(AOwner: TComponent); override;
     procedure SetParams(const AParams: TEngineParamArray);
@@ -107,6 +111,18 @@ begin
   FBoolCombo.Enabled := False;
   FBoolCombo.OnChange := @BoolComboChange;
 
+  FScorePerspectiveCombo := TComboBox.Create(EditPanel);
+  FScorePerspectiveCombo.Parent := EditPanel;
+  FScorePerspectiveCombo.Align := alLeft;
+  FScorePerspectiveCombo.Width := 170;
+  FScorePerspectiveCombo.Style := csDropDownList;
+  FScorePerspectiveCombo.Items.Add('side-to-move');
+  FScorePerspectiveCombo.Items.Add('white');
+  FScorePerspectiveCombo.Items.Add('black');
+  FScorePerspectiveCombo.BorderSpacing.Around := 8;
+  FScorePerspectiveCombo.Enabled := False;
+  FScorePerspectiveCombo.OnChange := @ScorePerspectiveComboChange;
+
   FBrowseDirButton := TButton.Create(EditPanel);
   FBrowseDirButton.Parent := EditPanel;
   FBrowseDirButton.Align := alLeft;
@@ -156,6 +172,14 @@ begin
     FGrid.Cells[2, FSelectedRow] := FBoolCombo.Text;
 end;
 
+procedure TEngineParamDialog.ScorePerspectiveComboChange(Sender: TObject);
+begin
+  if (FSelectedRow <= 0) or (FSelectedRow >= FGrid.RowCount) then
+    Exit;
+  if FScorePerspectiveCombo.ItemIndex >= 0 then
+    FGrid.Cells[2, FSelectedRow] := FScorePerspectiveCombo.Text;
+end;
+
 procedure TEngineParamDialog.BrowseDirButtonClick(Sender: TObject);
 begin
   if (FSelectedRow <= 0) or (FSelectedRow >= FGrid.RowCount) then
@@ -198,15 +222,12 @@ begin
   FSelectedRow := Row;
   UpdateRowControls;
 
-  if (Col = 2) and IsBoolRow(Row) then
+  if (Col = 2) and (IsBoolRow(Row) or IsScorePerspectiveRow(Row)) then
   begin
+    PrepareInlineComboForRow(Row);
     CellRect := FGrid.CellRect(Col, Row);
     FInlineBoolCombo.SetBounds(CellRect.Left, CellRect.Top,
       CellRect.Right - CellRect.Left, CellRect.Bottom - CellRect.Top);
-    if SameText(FGrid.Cells[2, Row], 'true') then
-      FInlineBoolCombo.ItemIndex := 1
-    else
-      FInlineBoolCombo.ItemIndex := 0;
     FInlineBoolCombo.Visible := True;
     FInlineBoolCombo.BringToFront;
     FInlineBoolCombo.SetFocus;
@@ -274,10 +295,12 @@ procedure TEngineParamDialog.UpdateRowControls;
 var
   IsBool: Boolean;
   IsDir: Boolean;
+  IsScorePerspective: Boolean;
   Value: String;
 begin
   IsBool := IsBoolRow(FSelectedRow);
   IsDir := IsDirRow(FSelectedRow);
+  IsScorePerspective := IsScorePerspectiveRow(FSelectedRow);
 
   FBoolCombo.Enabled := IsBool;
   if IsBool then
@@ -290,6 +313,20 @@ begin
   end
   else
     FBoolCombo.ItemIndex := -1;
+
+  FScorePerspectiveCombo.Enabled := IsScorePerspective;
+  if IsScorePerspective then
+  begin
+    Value := LowerCase(FGrid.Cells[2, FSelectedRow]);
+    if Value = 'white' then
+      FScorePerspectiveCombo.ItemIndex := 1
+    else if Value = 'black' then
+      FScorePerspectiveCombo.ItemIndex := 2
+    else
+      FScorePerspectiveCombo.ItemIndex := 0;
+  end
+  else
+    FScorePerspectiveCombo.ItemIndex := -1;
 
   FBrowseDirButton.Enabled := IsDir;
 end;
@@ -312,6 +349,41 @@ begin
   Result := (Pos('dir', ParamName) > 0) or
     (Copy(ParamName, Length(ParamName) - 3, 4) = '-dir') or
     (Copy(ParamName, Length(ParamName) - 4, 5) = '-path');
+end;
+
+function TEngineParamDialog.IsScorePerspectiveRow(ARow: Integer): Boolean;
+begin
+  Result := (ARow > 0) and (ARow < FGrid.RowCount) and
+    SameText(FGrid.Cells[0, ARow], 'gui-score-perspective');
+end;
+
+procedure TEngineParamDialog.PrepareInlineComboForRow(ARow: Integer);
+var
+  Value: String;
+begin
+  FInlineBoolCombo.Items.Clear;
+  if IsScorePerspectiveRow(ARow) then
+  begin
+    FInlineBoolCombo.Items.Add('side-to-move');
+    FInlineBoolCombo.Items.Add('white');
+    FInlineBoolCombo.Items.Add('black');
+    Value := LowerCase(FGrid.Cells[2, ARow]);
+    if Value = 'white' then
+      FInlineBoolCombo.ItemIndex := 1
+    else if Value = 'black' then
+      FInlineBoolCombo.ItemIndex := 2
+    else
+      FInlineBoolCombo.ItemIndex := 0;
+  end
+  else
+  begin
+    FInlineBoolCombo.Items.Add('false');
+    FInlineBoolCombo.Items.Add('true');
+    if SameText(FGrid.Cells[2, ARow], 'true') then
+      FInlineBoolCombo.ItemIndex := 1
+    else
+      FInlineBoolCombo.ItemIndex := 0;
+  end;
 end;
 
 procedure TEngineParamDialog.StoreGrid;
