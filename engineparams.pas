@@ -18,7 +18,11 @@ procedure AddOrUpdateParam(var AParams: TEngineParamArray; const AName, AType,
 function ExtractHubArgument(const ALine, AName: String): String;
 function HubQuote(const AValue: String): String;
 procedure LoadParamsFromJson(const AFileName: String; var AParams: TEngineParamArray);
+procedure LoadParamsFromJson(const AFileName, ASection: String;
+  var AParams: TEngineParamArray);
 procedure SaveParamsToJson(const AFileName: String; const AParams: TEngineParamArray);
+procedure SaveParamsToJson(const AFileName, ASection: String;
+  const AParams: TEngineParamArray);
 
 implementation
 
@@ -36,6 +40,102 @@ begin
     if SameText(AParams[I].Name, AName) then
       Exit(I);
   Result := -1;
+end;
+
+function ParamsSectionName(const AParams: TEngineParamArray): String;
+var
+  I: Integer;
+begin
+  Result := 'hub';
+  for I := 0 to High(AParams) do
+    if SameText(AParams[I].Name, 'gui-engine-type') then
+    begin
+      if SameText(AParams[I].Value, 'dxp') then
+        Result := 'dxp'
+      else
+        Result := 'hub';
+      Exit;
+    end;
+end;
+
+function NormalizeSectionName(const ASection: String): String;
+begin
+  if SameText(ASection, 'dxp') then
+    Result := 'dxp'
+  else
+    Result := 'hub';
+end;
+
+function ParamsArrayToJson(const AParams: TEngineParamArray): TJSONArray;
+var
+  I: Integer;
+  Item: TJSONObject;
+begin
+  Result := TJSONArray.Create;
+  for I := 0 to High(AParams) do
+  begin
+    Item := TJSONObject.Create;
+    Item.Add('name', AParams[I].Name);
+    Item.Add('type', AParams[I].ParamType);
+    Item.Add('value', AParams[I].Value);
+    Result.Add(Item);
+  end;
+end;
+
+procedure JsonToParamsArray(AArray: TJSONArray; var AParams: TEngineParamArray);
+var
+  I: Integer;
+  Item: TJSONObject;
+begin
+  SetLength(AParams, 0);
+  if AArray = nil then
+    Exit;
+
+  SetLength(AParams, AArray.Count);
+  for I := 0 to AArray.Count - 1 do
+  begin
+    if AArray.Items[I].JSONType = jtObject then
+    begin
+      Item := TJSONObject(AArray.Items[I]);
+      AParams[I].Name := Item.Get('name', '');
+      AParams[I].ParamType := Item.Get('type', '');
+      AParams[I].Value := Item.Get('value', '');
+    end;
+  end;
+end;
+
+function CloneJsonArray(AArray: TJSONArray): TJSONArray;
+var
+  Data: TJSONData;
+begin
+  if AArray = nil then
+  begin
+    Result := TJSONArray.Create;
+    Exit;
+  end;
+
+  Data := GetJSON(AArray.AsJSON);
+  if Data.JSONType = jtArray then
+    Result := TJSONArray(Data)
+  else if Data <> nil then
+  begin
+    Data.Free;
+    Result := TJSONArray.Create;
+  end
+  else
+    Result := TJSONArray.Create;
+end;
+
+function JsonObjectArray(AObject: TJSONObject; const AName: String): TJSONArray;
+var
+  Data: TJSONData;
+begin
+  Result := nil;
+  if AObject = nil then
+    Exit;
+  Data := AObject.Find(AName);
+  if (Data <> nil) and (Data.JSONType = jtArray) then
+    Result := TJSONArray(Data);
 end;
 
 procedure AddOrUpdateParam(var AParams: TEngineParamArray; const AName, AType,
@@ -118,9 +218,7 @@ end;
 procedure LoadParamsFromJson(const AFileName: String; var AParams: TEngineParamArray);
 var
   Data: TJSONData;
-  I: Integer;
-  Item: TJSONObject;
-  ParamsArray: TJSONArray;
+  Section: String;
   Stream: TFileStream;
 begin
   SetLength(AParams, 0);
@@ -134,17 +232,45 @@ begin
     Stream.Free;
   end;
   try
-    if Data.JSONType <> jtArray then
-      Exit;
-
-    ParamsArray := TJSONArray(Data);
-    SetLength(AParams, ParamsArray.Count);
-    for I := 0 to ParamsArray.Count - 1 do
+    if Data.JSONType = jtObject then
     begin
-      Item := ParamsArray.Objects[I];
-      AParams[I].Name := Item.Get('name', '');
-      AParams[I].ParamType := Item.Get('type', '');
-      AParams[I].Value := Item.Get('value', '');
+      Section := TJSONObject(Data).Get('active', '');
+      if Section = '' then
+        if TJSONObject(Data).Find('dxp') <> nil then
+          Section := 'dxp'
+        else
+          Section := 'hub';
+      LoadParamsFromJson(AFileName, Section, AParams);
+    end;
+  finally
+    Data.Free;
+  end;
+end;
+
+procedure LoadParamsFromJson(const AFileName, ASection: String;
+  var AParams: TEngineParamArray);
+var
+  Data: TJSONData;
+  ParamsArray: TJSONArray;
+  Section: String;
+  Stream: TFileStream;
+begin
+  SetLength(AParams, 0);
+  if not FileExists(AFileName) then
+    Exit;
+
+  Stream := TFileStream.Create(AFileName, fmOpenRead);
+  try
+    Data := GetJSON(Stream);
+  finally
+    Stream.Free;
+  end;
+  try
+    if Data.JSONType = jtObject then
+    begin
+      Section := NormalizeSectionName(ASection);
+      ParamsArray := JsonObjectArray(TJSONObject(Data), Section);
+      JsonToParamsArray(ParamsArray, AParams);
     end;
   finally
     Data.Free;
@@ -152,23 +278,53 @@ begin
 end;
 
 procedure SaveParamsToJson(const AFileName: String; const AParams: TEngineParamArray);
+begin
+  SaveParamsToJson(AFileName, ParamsSectionName(AParams), AParams);
+end;
+
+procedure SaveParamsToJson(const AFileName, ASection: String;
+  const AParams: TEngineParamArray);
 var
-  Data: TJSONArray;
-  I: Integer;
-  Item: TJSONObject;
+  Data: TJSONObject;
+  ExistingArray: TJSONArray;
+  ExistingData: TJSONData;
   JsonText: String;
   Lines: TStringList;
+  Section: String;
 begin
-  Data := TJSONArray.Create;
+  Section := NormalizeSectionName(ASection);
+  Data := TJSONObject.Create;
   try
-    for I := 0 to High(AParams) do
+    if FileExists(AFileName) then
     begin
-      Item := TJSONObject.Create;
-      Item.Add('name', AParams[I].Name);
-      Item.Add('type', AParams[I].ParamType);
-      Item.Add('value', AParams[I].Value);
-      Data.Add(Item);
+      Lines := TStringList.Create;
+      try
+        Lines.LoadFromFile(AFileName);
+        ExistingData := GetJSON(Lines.Text);
+      finally
+        Lines.Free;
+      end;
+      try
+        if ExistingData.JSONType = jtObject then
+        begin
+          ExistingArray := JsonObjectArray(TJSONObject(ExistingData), 'hub');
+          if ExistingArray <> nil then
+            Data.Add('hub', CloneJsonArray(ExistingArray));
+          ExistingArray := JsonObjectArray(TJSONObject(ExistingData), 'dxp');
+          if ExistingArray <> nil then
+            Data.Add('dxp', CloneJsonArray(ExistingArray));
+        end
+      finally
+        ExistingData.Free;
+      end;
     end;
+
+    if Data.Find(Section) <> nil then
+      Data.Delete(Section);
+    Data.Add(Section, ParamsArrayToJson(AParams));
+    if Data.Find('active') <> nil then
+      Data.Delete('active');
+    Data.Add('active', Section);
 
     JsonText := Data.FormatJSON([], 2) + LineEnding;
     Lines := TStringList.Create;

@@ -9,6 +9,7 @@ uses
   Controls,
   Dialogs,
   EngineParams,
+  ExtCtrls,
   Forms,
   Grids,
   StdCtrls;
@@ -22,6 +23,10 @@ type
     FDirectoryDialog: TSelectDirectoryDialog;
     FGrid: TStringGrid;
     FInlineBoolCombo: TComboBox;
+    FIniFileName: String;
+    FIniLabel: TLabel;
+    FIniMemo: TMemo;
+    FIniPanel: TPanel;
     FOKButton: TButton;
     FParams: TEngineParamArray;
     FScorePerspectiveCombo: TComboBox;
@@ -36,6 +41,8 @@ type
     procedure InlineBoolComboSelect(Sender: TObject);
     procedure OKButtonClick(Sender: TObject);
     procedure LoadGrid;
+    function FindIniFileForEngine(const AEngineFileName: String): String;
+    function SaveIniFile: Boolean;
     procedure ScorePerspectiveComboChange(Sender: TObject);
     procedure SelectCell(Sender: TObject; aCol, aRow: Integer;
       var CanSelect: Boolean);
@@ -47,6 +54,7 @@ type
     procedure PrepareInlineComboForRow(ARow: Integer);
   public
     constructor Create(AOwner: TComponent); override;
+    procedure LoadIniFromEngineFile(const AEngineFileName: String);
     procedure SetParams(const AParams: TEngineParamArray);
     property Params: TEngineParamArray read FParams;
   end;
@@ -54,8 +62,10 @@ type
 implementation
 
 uses
-  ExtCtrls,
   SysUtils;
+
+const
+  EngineIniFileParamName = 'gui-ini-file';
 
 constructor TEngineParamDialog.Create(AOwner: TComponent);
 var
@@ -135,6 +145,25 @@ begin
   FDirectoryDialog := TSelectDirectoryDialog.Create(Self);
   FDirectoryDialog.Title := 'Select parameter directory';
 
+  FIniPanel := TPanel.Create(Self);
+  FIniPanel.Parent := Self;
+  FIniPanel.Align := alBottom;
+  FIniPanel.Height := 170;
+  FIniPanel.BevelOuter := bvNone;
+  FIniPanel.BorderSpacing.Around := 8;
+  FIniPanel.Visible := False;
+
+  FIniLabel := TLabel.Create(FIniPanel);
+  FIniLabel.Parent := FIniPanel;
+  FIniLabel.Align := alTop;
+  FIniLabel.Height := 22;
+
+  FIniMemo := TMemo.Create(FIniPanel);
+  FIniMemo.Parent := FIniPanel;
+  FIniMemo.Align := alClient;
+  FIniMemo.ScrollBars := ssBoth;
+  FIniMemo.WordWrap := False;
+
   FGrid := TStringGrid.Create(Self);
   FGrid.Parent := Self;
   FGrid.Align := alClient;
@@ -199,6 +228,8 @@ procedure TEngineParamDialog.CloseWithResult(AResult: Integer);
 begin
   FInlineBoolCombo.Visible := False;
   FGrid.EditorMode := False;
+  if (AResult = mrOK) and (not SaveIniFile) then
+    Exit;
   if AResult = mrOK then
     StoreGrid;
   ModalResult := AResult;
@@ -260,13 +291,116 @@ begin
   CloseWithResult(mrOK);
 end;
 
+function TEngineParamDialog.FindIniFileForEngine(
+  const AEngineFileName: String): String;
+var
+  EngineDir: String;
+  Info: TSearchRec;
+  PreferredName: String;
+  PreferredStem: String;
+begin
+  Result := '';
+  if AEngineFileName = '' then
+    Exit;
+
+  EngineDir := ExtractFilePath(AEngineFileName);
+  if EngineDir = '' then
+    Exit;
+
+  PreferredStem := ChangeFileExt(ExtractFileName(AEngineFileName), '');
+  PreferredName := EngineDir + PreferredStem + '.ini';
+  if FileExists(PreferredName) then
+    Exit(PreferredName);
+
+  if FindFirst(EngineDir + '*', faAnyFile, Info) = 0 then
+  try
+    repeat
+      if ((Info.Attr and faDirectory) = 0) and
+        SameText(ChangeFileExt(Info.Name, ''), PreferredStem) and
+        SameText(ExtractFileExt(Info.Name), '.ini') then
+        Exit(EngineDir + Info.Name);
+    until FindNext(Info) <> 0;
+  finally
+    FindClose(Info);
+  end;
+
+  if FindFirst(EngineDir + '*', faAnyFile, Info) = 0 then
+  try
+    repeat
+      if ((Info.Attr and faDirectory) = 0) and
+        SameText(ExtractFileExt(Info.Name), '.ini') then
+        Exit(EngineDir + Info.Name);
+    until FindNext(Info) <> 0;
+  finally
+    FindClose(Info);
+  end;
+end;
+
+procedure TEngineParamDialog.LoadIniFromEngineFile(
+  const AEngineFileName: String);
+var
+  I: Integer;
+begin
+  FIniFileName := '';
+  for I := 0 to High(FParams) do
+    if SameText(FParams[I].Name, EngineIniFileParamName) then
+    begin
+      FIniFileName := Trim(FParams[I].Value);
+      Break;
+    end;
+  if FIniFileName = '' then
+    FIniFileName := FindIniFileForEngine(AEngineFileName);
+  FIniPanel.Visible := FIniFileName <> '';
+  if FIniFileName = '' then
+    Exit;
+
+  FIniLabel.Caption := 'INI file: ' + FIniFileName;
+  try
+    FIniMemo.Lines.LoadFromFile(FIniFileName);
+  except
+    on E: Exception do
+    begin
+      FIniMemo.Clear;
+      FIniMemo.Lines.Add('; Could not load INI file: ' + E.Message);
+    end;
+  end;
+end;
+
+function TEngineParamDialog.SaveIniFile: Boolean;
+begin
+  Result := True;
+  if FIniFileName = '' then
+    Exit;
+
+  try
+    FIniMemo.Lines.SaveToFile(FIniFileName);
+  except
+    on E: Exception do
+    begin
+      MessageDlg('Could not save INI file:' + LineEnding + FIniFileName +
+        LineEnding + E.Message, mtError, [mbOK], 0);
+      Result := False;
+    end;
+  end;
+end;
+
 procedure TEngineParamDialog.SetParams(const AParams: TEngineParamArray);
 var
   I: Integer;
+  J: Integer;
+  Temp: TEngineParam;
 begin
   SetLength(FParams, Length(AParams));
   for I := 0 to High(AParams) do
     FParams[I] := AParams[I];
+  for I := 0 to High(FParams) - 1 do
+    for J := I + 1 to High(FParams) do
+      if CompareText(FParams[I].Name, FParams[J].Name) > 0 then
+      begin
+        Temp := FParams[I];
+        FParams[I] := FParams[J];
+        FParams[J] := Temp;
+      end;
   LoadGrid;
 end;
 
