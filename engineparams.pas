@@ -16,7 +16,6 @@ type
 procedure AddOrUpdateParam(var AParams: TEngineParamArray; const AName, AType,
   AValue: String; AKeepExistingValue: Boolean);
 function ExtractHubArgument(const ALine, AName: String): String;
-function HubQuote(const AValue: String): String;
 procedure LoadParamsFromJson(const AFileName: String; var AParams: TEngineParamArray);
 procedure LoadParamsFromJson(const AFileName, ASection: String;
   var AParams: TEngineParamArray);
@@ -189,30 +188,6 @@ begin
       Inc(StopPos);
     Result := Copy(ALine, StartPos, StopPos - StartPos);
   end;
-end;
-
-function HubQuote(const AValue: String): String;
-var
-  I: Integer;
-  NeedsQuotes: Boolean;
-begin
-  NeedsQuotes := AValue = '';
-  for I := 1 to Length(AValue) do
-    if AValue[I] in [' ', '=', '"'] then
-      NeedsQuotes := True;
-
-  if not NeedsQuotes then
-    Exit(AValue);
-
-  Result := '"';
-  for I := 1 to Length(AValue) do
-  begin
-    if AValue[I] = '"' then
-      Result += '\"'
-    else
-      Result += AValue[I];
-  end;
-  Result += '"';
 end;
 
 procedure LoadParamsFromJson(const AFileName: String; var AParams: TEngineParamArray);

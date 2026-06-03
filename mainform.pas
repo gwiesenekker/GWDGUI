@@ -5,165 +5,78 @@ unit MainForm;
 interface
 
 uses
+  AnalysisBoardUi,
+  BoardGeometry,
+  BoardHighlightUi,
+  BoardUi,
   CheckLst,
   Classes,
+  ClockUi,
   Clipbrd,
   Controls,
   Dialogs,
   DraughtsRules,
+  DxpConnection,
+  DxpDispatcher,
+  DxpProtocol,
+  EngineCommands,
   EasyLazFreeType,
+  EngineConfig,
+  EngineGates,
+  EngineLogAdapter,
+  EngineLogMemo,
+  EngineLogMessages,
+  EngineLogPopup,
   EngineParams,
+  EngineProtocolCommands,
+  EngineRegistry,
+  EngineSearchController,
+  EngineSlot,
+  EngineSlotSelection,
+  EngineState,
+  EvalBarUi,
   ExtCtrls,
   FPJSON,
   FPImage,
   Forms,
+  GameClock,
+  GameFlow,
+  GameHistory,
+  GameState,
   GraphType,
   Graphics,
   Grids,
+  GuiDialogs,
+  GuiState,
+  HubProtocol,
   IntfGraphics,
   LazFreeTypeIntfDrawer,
   LazFreeTypeFontCollection,
   Menus,
+  Notation,
+  PdnAnnotations,
   PDNSaveDialog,
-  Process,
+  PlayClockController,
+  PlatformDialogs,
+  PlatformProcess,
   SetupDialog,
+  ScoreHistoryUi,
   ssockets,
   Spin,
   StdCtrls,
   JSONParser,
-  LCLType
-  {$IFDEF MSWINDOWS}
-  , Windows
-  {$ENDIF}
-  , Types;
+  LCLType,
+  TournamentFiles,
+  TournamentGridModel,
+  TournamentModel,
+  TournamentPairing,
+  TournamentStorage,
+  TournamentTypes,
+  TournamentUi,
+  Types;
 
 type
   TMainWindow = class;
-  TEngineProtocol = (epHub, epDxp);
-  TEngineDxpRole = (edrListener, edrClient);
-
-  TClockThread = class(TThread)
-  private
-    FOwner: TMainWindow;
-    procedure Tick;
-  protected
-    procedure Execute; override;
-  public
-    constructor Create(AOwner: TMainWindow);
-  end;
-
-  {$IFDEF MSWINDOWS}
-  TEngineReaderThread = class(TThread)
-  private
-    FChunk: String;
-    FEngineIndex: Integer;
-    FOwner: TMainWindow;
-    FReadHandle: THandle;
-    procedure DeliverChunk;
-  protected
-    procedure Execute; override;
-  public
-    constructor Create(AOwner: TMainWindow; AReadHandle: THandle;
-      AEngineIndex: Integer = 1);
-  end;
-  {$ENDIF}
-
-  TEngineDxpConnectionThread = class(TThread)
-  private
-    FEngineIndex: Integer;
-    FErrorMessage: String;
-    FIncomingMessage: String;
-    FIpAddress: String;
-    FListening: Boolean;
-    FOwner: TMainWindow;
-    FPort: Word;
-    FRole: TEngineDxpRole;
-    FServer: TInetServer;
-    FSocket: TSocketStream;
-    procedure ServerConnect(Sender: TObject; Data: TSocketStream);
-    procedure DeliverIncomingMessage;
-    procedure NotifyConnected;
-    procedure NotifyError;
-    procedure ReadIncomingMessages;
-  protected
-    procedure Execute; override;
-  public
-    constructor Create(AOwner: TMainWindow; AEngineIndex: Integer;
-      const AIpAddress: String; APort: Word; ARole: TEngineDxpRole);
-    destructor Destroy; override;
-    procedure StopConnection;
-    property Listening: Boolean read FListening;
-  end;
-
-  TIntegerArray = array of Integer;
-  TTextArray = array of String;
-  TClockSnapshot = record
-    HasClock: Boolean;
-    WhiteSeconds: Double;
-    BlackSeconds: Double;
-  end;
-  TClockSnapshotArray = array of TClockSnapshot;
-  TGuiState = (gsIdle, gsAnalyzing, gsMcts, gsAutoPlaying,
-    gsPlayGameHumanTurn, gsPlayGameEngineTurn, gsTournamentRunning,
-    gsStopping, gsGameOver);
-  TEngineState = (esIdle, esAnalyzing, esMcts, esThinking,
-    esWaitingForOtherEngine);
-  TEngineSearchMode = (esmIdle, esmAnalyze, esmMcts, esmAutoPlay,
-    esmPlayGameThink, esmPlayGameAnalyze);
-  TDxpGameState = (dgsIdle, dgsGameRequested, dgsWaitingForMoveOrGameEnd,
-    dgsGameEnding, dgsWaitingForNextGame);
-  TEngineSlot = class
-  public
-    Index: Integer;
-    LogMemo: TMemo;
-    DisplayName: String;
-    FileName: String;
-    Params: TEngineParamArray;
-    ParamsFileName: String;
-    {$IFDEF MSWINDOWS}
-    InputWriteHandle: THandle;
-    OutputReadHandle: THandle;
-    ProcessInfo: TProcessInformation;
-    ReaderThread: TEngineReaderThread;
-    Running: Boolean;
-    {$ELSE}
-    Process: TProcess;
-    {$ENDIF}
-    Ready: Boolean;
-    SearchMode: TEngineSearchMode;
-    State: TEngineState;
-    StateLabel: TLabel;
-    IgnoreNextDoneMove: Boolean;
-    PendingThinkStart: Boolean;
-    TextBuffer: String;
-    WaitingForInit: Boolean;
-    FirstReadSeen: Boolean;
-    Protocol: TEngineProtocol;
-    HubId: String;
-    IniFileName: String;
-    HubLaunchArgument: String;
-    DxpId: String;
-    DxpIpAddress: String;
-    DxpSocketNumber: String;
-    DxpLaunchArguments: String;
-    DxpRole: TEngineDxpRole;
-    DxpThread: TEngineDxpConnectionThread;
-    DxpSocket: TSocketStream;
-    DxpGameState: TDxpGameState;
-    DxpGameEndSent: Boolean;
-    LogPopupMenu: TPopupMenu;
-    CloseMenuItem: TMenuItem;
-    OpenMenuItem: TMenuItem;
-    ParamsMenuItem: TMenuItem;
-    AnalyzeMenuItem: TMenuItem;
-    SaveLogMenuItem: TMenuItem;
-    ShowTimestampsMenuItem: TMenuItem;
-    constructor Create(AIndex: Integer);
-    procedure BeginSearch(AMode: TEngineSearchMode; AState: TEngineState);
-    procedure FinishSearch;
-    procedure ResetRuntimeState;
-  end;
-  TEngineSlotArray = array[1..4] of TEngineSlot;
 
   TTournamentDialog = class(TForm)
   private
@@ -186,6 +99,7 @@ type
     FLoadButton: TButton;
     FMinutesEdit: TSpinEdit;
     FNameEdit: TEdit;
+    FPlayRoundButton: TButton;
     FPreviousMinutesValue: Integer;
     FPreviousRoundRobinIndex: Integer;
     FResultCombo: TComboBox;
@@ -197,34 +111,61 @@ type
     FSuppressRoundRobinChange: Boolean;
     FTournamentRunning: Boolean;
     FTournamentTimer: TTimer;
-    procedure AddPairing(const AWhite, ABlack: String);
+    procedure AddPairing(const AWhite, ABlack: String; ARound: Integer = 1);
     procedure AdjustSectionHeights;
+    procedure ApplyTournamentData(const AData: TTournamentFileData);
+    procedure ClearPairingGrid;
+    procedure CollectPairingRows(AWhiteEngines, ABlackEngines,
+      AResults: TStrings);
+    procedure CollectRoundRows(ARounds: TStrings);
+    procedure CollectSelectedEngineNames(AEngines: TStrings);
+    procedure CollectSelectedEngineNames(var AEngines: TTournamentTextArray);
     procedure CrossTableDrawCell(Sender: TObject; ACol, ARow: Integer;
       ARect: TRect; AState: TGridDrawState);
+    procedure PairingGridDrawCell(Sender: TObject; ACol, ARow: Integer;
+      ARect: TRect; AState: TGridDrawState);
+    procedure PlayRoundButtonClick(Sender: TObject);
     procedure DialogClose(Sender: TObject; var CloseAction: TCloseAction);
     function EngineFileNameForName(const AName: String): String;
     function EngineProtocolForName(const AName: String): String;
+    function FindNextUnplayedTournamentRow: Integer;
     procedure GridClick(Sender: TObject);
     function GridIsEmpty: Boolean;
+    procedure HighlightTournamentRow(ARow: Integer);
+    function LoadedSlotIndexForTournamentEngine(AMain: TMainWindow;
+      const AName, AFileName: String): Integer;
+    procedure LoadTournamentEngineIntoSlot(AMain: TMainWindow;
+      AEngineIndex: Integer; const AName, AFileName, AProtocol: String);
     procedure LoadButtonClick(Sender: TObject);
     procedure LoadEngineNames(AEngines: TStrings);
-    procedure LoadSelectedEngineNames(AEngines: TStrings);
     procedure MarkDirty;
     procedure MinutesEditChange(Sender: TObject);
+    function OtherTournamentSlot(AEngineIndex: Integer): Integer;
     procedure PopulateEngineCheckList;
     procedure ResultComboChange(Sender: TObject);
     procedure ResultComboExit(Sender: TObject);
+    function ResolveTournamentPairing(AMain: TMainWindow; ARow: Integer;
+      out AWhiteName, ABlackName, AWhiteFileName, ABlackFileName,
+      AWhiteProtocol, ABlackProtocol: String; out AWhiteLoadedIndex,
+      ABlackLoadedIndex: Integer): Boolean;
+    procedure ResolveTournamentSlots(AMain: TMainWindow; const AWhiteName,
+      ABlackName, AWhiteFileName, ABlackFileName, AWhiteProtocol,
+      ABlackProtocol: String; AWhiteLoadedIndex, ABlackLoadedIndex: Integer);
     procedure RoundRobinGroupClick(Sender: TObject);
     procedure SaveButtonClick(Sender: TObject);
     function SaveTournament: Boolean;
     procedure SaveTournamentGamePdn(AGameNumber: Integer);
+    function TournamentSlotMatches(AMain: TMainWindow; AIndex: Integer;
+      const AName, AFileName: String): Boolean;
     function StartNextTournamentGame: Boolean;
     procedure StartButtonClick(Sender: TObject);
     procedure StopButtonClick(Sender: TObject);
     procedure TournamentTimerTick(Sender: TObject);
     procedure TournamentResize(Sender: TObject);
+    procedure UpdateTournamentButtons;
     procedure UpdateCrossTable;
   public
+    function ConfirmClose: Boolean;
     constructor Create(AOwner: TComponent; const AEnginesFileName: String); reintroduce;
     destructor Destroy; override;
   end;
@@ -241,7 +182,6 @@ type
     FEngines: TEngineSlotArray;
     FEnginePanel: TPanel;
     FEnginePollTimer: TTimer;
-    FEngineSearching: Boolean;
     FEngineEvalScoreWhite: Double;
     FEvalBarRect: TRect;
     FLastEvalBarWhitePixels: Integer;
@@ -249,10 +189,8 @@ type
     FEngineAnalyzeEnabled: Boolean;
     FEngineLogShowTimestamps: Boolean;
     FEngineStartAfterReady: Boolean;
-    FEngineStopRequested: Boolean;
     FEditMenu: TMenuItem;
     FShuttingDown: Boolean;
-    FIgnoreNextDoneMove: Boolean;
     FLastEngineDoneLine: String;
     FLastEngineInfoAnnotation: String;
     FLastEngineInfoLine: String;
@@ -268,8 +206,9 @@ type
     FGameBlackName: String;
     FGameDirty: Boolean;
     FGameResult: String;
+    FGameResultReason: String;
     FGameWhiteName: String;
-    FBlackClockSeconds: Double;
+    FPlayClock: TPlayClockController;
     FBoardFlipped: Boolean;
     FButtonPanel: TPanel;
     FBoardPaintBox: TPaintBox;
@@ -277,35 +216,21 @@ type
     FBoardMoveSplitter: TSplitter;
     FBoardTopClockLabel: TLabel;
     FBoardBottomClockLabel: TLabel;
-    FClocksActive: Boolean;
-    FClockLastTick: Double;
-    FClockTimer: TTimer;
-    {$IFDEF MSWINDOWS}
-    FClockThread: TClockThread;
-    {$ENDIF}
-    FHistoryBaseBoard: TBoard;
-    FHistoryBaseSide: TSide;
+    FHistory: TGameHistory;
     FHistoryBlackEdit: TEdit;
     FHistoryBlackLabel: TLabel;
     FHistoryFenLabel: TLabel;
     FHistoryFenMemo: TMemo;
     FHistoryEvalPaintBox: TPaintBox;
     FHistoryMemo: TMemo;
-    FHistoryClockSnapshots: TClockSnapshotArray;
-    FHistoryMoveAnnotations: TTextArray;
-    FHistoryMoveLengths: TIntegerArray;
-    FHistoryMoveStarts: TIntegerArray;
-    FHistoryMoves: TMoveArray;
     FHistoryPvLabel: TLabel;
     FHistoryPvMiniBoardPanel: TPanel;
     FHistoryPvMiniBoardPaintBox: TPaintBox;
+    FPvEngineCombo: TComboBox;
     FHistoryResultEdit: TEdit;
     FHistoryResultLabel: TLabel;
     FHistoryWhiteEdit: TEdit;
     FHistoryWhiteLabel: TLabel;
-    FWhiteClockSeconds: Double;
-    FInitialBlackClockSeconds: Double;
-    FInitialWhiteClockSeconds: Double;
     FLastMoveTargetSquare: Integer;
     FOnlyMoveSourceSquare: Integer;
     FAnalyzeBestSourceSquare: Integer;
@@ -322,11 +247,11 @@ type
     FAnalyzePvLocked: Boolean;
     FAnalyzePvMoveLengths: TIntegerArray;
     FAnalyzePvMoveStarts: TIntegerArray;
+    FSelectedPvEngineIndex: Integer;
     FAnalysisBoardForm: TForm;
     FAnalysisBoardPaintBox: TPaintBox;
     FAnalysisBoardPopupMenu: TPopupMenu;
     FShowAnalysisBoardMenuItem: TMenuItem;
-    FCurrentPly: Integer;
     FCopyFenMenuItem: TMenuItem;
     FMainMenu: TMainMenu;
     FTournamentMenu: TMenuItem;
@@ -346,21 +271,14 @@ type
     FPieceDrawer: TIntfFreeTypeDrawer;
     FPieceFont: TFreeTypeFont;
     FPieceImage: TLazIntfImage;
-    FPendingAutoPlayStart: Boolean;
-    FPendingAnalyzeMode: TEngineSearchMode;
-    FPendingAnalyzeStart: Boolean;
-    FPendingMctsStart: Boolean;
     FPendingPlayGameFromCurrent: Boolean;
     FPendingPlayGameMinutes: Double;
     FPendingPlayGameBlackIsEngine: Boolean;
     FPendingPlayGameBlackEngineIndex: Integer;
     FPendingPlayGameBlackName: String;
-    FPendingPlayGameStart: Boolean;
     FPendingPlayGameWhiteIsEngine: Boolean;
     FPendingPlayGameWhiteEngineIndex: Integer;
     FPendingPlayGameWhiteName: String;
-    FPendingThinkMode: TEngineSearchMode;
-    FPendingThinkStart: Boolean;
     FPlayGameActive: Boolean;
     FPlayGameBlackIsEngine: Boolean;
     FPlayGameBlackEngineIndex: Integer;
@@ -392,10 +310,8 @@ type
     FSideToMove: TSide;
     FStopButton: TButton;
     procedure ApplyMove(const AMove: TMove);
-    procedure AppendEngine2Log(const AText: String);
-    procedure AppendEngine2RawLog(const AText: String);
-    procedure AppendEngineLog(const AText: String);
-    procedure AppendEngineRawLog(const AText: String);
+    procedure AppendEngineSlotLog(AEngineIndex: Integer; const AText: String);
+    procedure AppendEngineSlotRawLog(AEngineIndex: Integer; const AText: String);
     procedure BeginAutoPlay;
     procedure BeginPlayGame(AWhiteIsEngine, ABlackIsEngine: Boolean;
       const AWhiteName, ABlackName: String; AGameMinutes: Double; AStartFromCurrent: Boolean;
@@ -406,29 +322,49 @@ type
     procedure BoardPaintBoxPaint(Sender: TObject);
     procedure HistoryEvalPaintBoxPaint(Sender: TObject);
     procedure HistoryPvMiniBoardPaintBoxPaint(Sender: TObject);
+    procedure ApplicationIdle(Sender: TObject; var Done: Boolean);
     procedure ClockTimerTimer(Sender: TObject);
     procedure ClearBoardSelection;
     procedure ClearBoard;
     procedure CopyFenMenuItemClick(Sender: TObject);
     procedure CloseEngine;
+    procedure CloseEngineSlot(AEngineIndex: Integer);
+    procedure CloseEngineSlotProcess(AEngineIndex: Integer);
+    procedure RequestEngineSlotProcessExit(AEngineIndex: Integer);
+    procedure TerminateEngineSlotProcessIfRunning(AEngineIndex: Integer);
+    procedure CloseEngineSlotProcessHandles(AEngineIndex: Integer);
+    procedure ResetEngineSlotAfterClose(AEngineIndex: Integer);
+    procedure ResetEngineRuntimeForLaunch(AEngineIndex: Integer);
+    procedure ResetEngineRuntimeForClose(AEngineIndex: Integer);
+    procedure ResetEngineRuntimeAfterProcessExit(AEngineIndex: Integer);
+    procedure ResetPrimaryEngineAfterClose;
+    procedure ResetSecondaryEngineAfterClose;
+    procedure RefreshEngineUiAfterSlotChange;
+    function EngineSlotIndexFromSender(Sender: TObject): Integer;
     procedure CloseEngineMenuItemClick(Sender: TObject);
     procedure CloseSecondEngine;
-    procedure CloseSecondEngineMenuItemClick(Sender: TObject);
+    procedure CenterMainWindowOnScreen;
     procedure CenterDialogOnMainWindow(ADialog: TCustomForm);
-    procedure DrawAnalysisBoard(ACanvas: TCanvas; const AClient: TRect);
     procedure DrawBoard(ACanvas: TCanvas);
-    procedure DrawBoardClockLabels(const ABoardRect: TRect);
     procedure DrawEngineEvalBar(ACanvas: TCanvas; const ABoardRect: TRect);
     procedure DrawBoardSideToMoveMarker(ACanvas: TCanvas; const ABoardRect: TRect;
       ACellSize: Integer);
     procedure DrawPiece(ACanvas: TCanvas; const ASquare: TRect;
       APiece: TPiece; ACellSize: Integer; ASquareColor: TColor);
-    function BoardSquareAtCell(ARow, ACol: Integer): Integer;
     procedure EngineProcessReadData(Sender: TObject);
     procedure EngineProcessReadSecondEngineData;
+    procedure PlatformProcessData(Sender: TObject; const AText: String);
+    procedure ReadEngineSlotData(AEngineIndex: Integer);
     procedure EnginePollTimerTimer(Sender: TObject);
+    function AnyEngineSlotProcessHandlePresent: Boolean;
+    function EngineSlotShouldReadInPoll(AEngineIndex: Integer): Boolean;
+    procedure PollEngineSlot(AEngineIndex: Integer);
     procedure EngineProcessTerminate(Sender: TObject);
     procedure HandleEngineProcessTerminated(AEngineIndex: Integer);
+    function EngineSlotProcessHandlePresent(AEngineIndex: Integer): Boolean;
+    procedure DrainEngineSlotOutputAfterExit(AEngineIndex: Integer);
+    procedure LogEngineSlotProcessTerminated(AEngineIndex: Integer);
+    procedure CloseTerminatedEngineSlotProcess(AEngineIndex: Integer);
     procedure UpdateEnginePollTimer;
     procedure FormShow(Sender: TObject);
     procedure RefreshInitialLayout(Data: PtrInt);
@@ -436,13 +372,31 @@ type
     function EngineMoveMatchesLegalMove(const AEngineMove: String;
       const ALegalMove: TMove): Boolean;
     function EngineIsRunning: Boolean;
+    function EngineSlotIsRunning(AEngineIndex: Integer): Boolean;
+    function EngineSlotIndexValid(AEngineIndex: Integer): Boolean;
+    function EngineSlotConfigured(AEngineIndex: Integer): Boolean;
+    function EngineSlotDxpSocketOpen(AEngineIndex: Integer): Boolean;
+    function EngineSlotDxpConnectionActive(AEngineIndex: Integer): Boolean;
+    procedure CloseDxpSocket(AEngineIndex: Integer; const AReason: String);
+    function EngineSlotCanReceiveCommand(AEngineIndex: Integer;
+      ARequireReady: Boolean): TEngineCommandGate;
+    function EngineSlotCanStartHubSearch(AEngineIndex: Integer;
+      const AGoCommand: String; ARequireMctsSupport: Boolean):
+      TEngineCommandGate;
+    function EngineSlotCanSendDxpPacket(AEngineIndex: Integer;
+      const APacketName: String; ACheckGameEndSent: Boolean = False):
+      TEngineCommandGate;
+    function EngineSlotCanSendDxpGameEnd(AEngineIndex: Integer):
+      TEngineCommandGate;
+    function LogEngineGateFailure(AEngineIndex: Integer;
+      const AGate: TEngineCommandGate): Boolean;
     function EngineSlotAvailableForPlay(AEngineIndex: Integer): Boolean;
-    function EngineLogPrefix(const AName: String): String;
     function EngineOutputLogText(const AText: String; AEngineIndex: Integer): String;
+    function EngineCanonicalParamsFileName(const AEngineFileName: String): String;
+    procedure LoadEngineParamsForProtocol(AEngineIndex: Integer;
+      const AEngineFileName, AProtocol: String);
     function EngineParamsFileNameForDisplayName(const ADisplayName: String;
       const AEngineFileName: String = ''): String;
-    function EngineStateCaption(AState: TEngineState): String;
-    function GuiStateText(AState: TGuiState): String;
     function SecondEngineIsRunning: Boolean;
     function StartDxpConnection(AEngineIndex: Integer): Boolean;
     procedure StopDxpConnection(AEngineIndex: Integer);
@@ -450,20 +404,59 @@ type
       out AOtherEngineIndex: Integer): Boolean;
     function DxpGameEndCodeForEngine(AEngineIndex: Integer): Char;
     function DxpResultFromGameEnd(AEngineIndex: Integer; ACode: Char): String;
+    procedure StartDxpGameForSlot(AEngineIndex: Integer; AEngineSide: TSide;
+      AGameMinutes: Double);
+    procedure StartDxpPlayGameSessions(AGameMinutes: Double);
     procedure SendDxpGameReqToEngine(AEngineIndex: Integer; AEngineSide: TSide;
       AGameMinutes: Double);
     procedure SendDxpGameEndToEngine(AEngineIndex: Integer; ACode: Char);
-    procedure SendDxpGameEndToPlayingDxpEngines(
-      AExcludeEngineIndex: Integer = 0);
+    procedure NotifyDxpPlayGameEnd(AExcludeEngineIndex: Integer = 0);
+    procedure HandleDxpGameEndReceived(AEngineIndex: Integer; ACode: Char);
+    procedure StopNonOriginSearchAfterGameEnd(AOriginEngineIndex: Integer);
     procedure SendDxpMoveToEngine(AEngineIndex: Integer; const AMove: TMove;
-      ATimeUsedSeconds: Integer = 0);
-    function DxpGameStateText(AState: TDxpGameState): String;
-    procedure SetDxpGameState(AEngineIndex: Integer; AState: TDxpGameState);
+      ATotalTimeUsedSeconds: Integer = 0);
+    function SendDxpPacketAfterGate(AEngineIndex: Integer;
+      const APacketName, APacketText: String;
+      const AGate: TEngineCommandGate): Boolean;
+    function SendDxpPacketToEngine(AEngineIndex: Integer;
+      const APacketName, APacketText: String): Boolean;
+    procedure SetDxpGameState(AEngineIndex: Integer; AState: TDxpGameState;
+      const AReason: String = '');
+    procedure BeginDxpGameRequest(AEngineIndex: Integer);
+    procedure CancelDxpGameRequest(AEngineIndex: Integer);
+    procedure MarkDxpWaitingForProtocolReply(AEngineIndex: Integer;
+      const AReason: String; const ALogText: String = '');
+    procedure MarkDxpGameRequestSent(AEngineIndex: Integer);
+    procedure MarkDxpMoveSent(AEngineIndex: Integer);
+    procedure MarkDxpGameEndSent(AEngineIndex: Integer);
+    procedure MarkDxpGameEndArrived(AEngineIndex: Integer);
     procedure MarkDxpWaitingForReply(AEngineIndex: Integer;
-      AMode: TEngineSearchMode);
+      AMode: TEngineSearchMode; const AReason: String = 'waiting for engine reply');
     function DxpShouldAcceptMove(AEngineIndex: Integer;
       ASearchMode: TEngineSearchMode): Boolean;
-    procedure ProcessDxpMessage(AEngineIndex: Integer; const AMessage: String);
+    function DxpShouldAcceptGameEnd(AEngineIndex: Integer): Boolean;
+    procedure ClearEngineTiming(AEngineIndex: Integer);
+    procedure LogEngineTimingDiagnostic(AEngineIndex: Integer;
+      const AProtocolName, AReceivedMessage: String; AReceivedAtSeconds: Double);
+    procedure LogDxpTimingDiagnostic(AEngineIndex: Integer;
+      const AReceivedMessage: String; AReceivedAtSeconds: Double);
+    procedure StoreEngineTimingStart(AEngineIndex: Integer;
+      const ALabel: String);
+    procedure StoreDxpTimingStart(AEngineIndex: Integer;
+      const ALabel: String);
+    procedure DxpConnectionMessage(AEngineIndex: Integer; const AMessage: String;
+      AReceivedAtSeconds: Double);
+    procedure DxpConnectionConnected(AEngineIndex: Integer;
+      ASocket: TSocketStream; ARole: TEngineDxpRole; const AIpAddress: String;
+      APort: Word; AConnectAttemptCount, AConnectElapsedMs: QWord);
+    procedure DxpConnectionError(AEngineIndex: Integer; const AMessage: String);
+    procedure DxpConnectionAttemptFailed(AEngineIndex: Integer;
+      const AIpAddress: String; APort: Word; const AMessage: String);
+    procedure ProcessDxpMessage(AEngineIndex: Integer; const AMessage: String;
+      AReceivedAtSeconds: Double);
+    procedure HandleDxpGameAccPacket(AEngineIndex: Integer);
+    procedure HandleDxpMovePacket(AEngineIndex: Integer; const AMoveText: String;
+      AReceivedAtSeconds: Double);
     procedure SyncHubLaunchArgumentParam(AEngineIndex: Integer);
     procedure SyncSendStartingPositionParam(AEngineIndex: Integer);
     procedure SyncSingleCapturesIncludeCapturedSquareParam(AEngineIndex: Integer);
@@ -472,6 +465,17 @@ type
     procedure SyncEvaluationDepthMinParam(AEngineIndex: Integer);
     procedure SyncEvaluationBarMaxParam(AEngineIndex: Integer);
     procedure LoadHubLaunchArgumentFromParams(AEngineIndex: Integer);
+    procedure ApplyEngineSlotProtocolConfig(AEngineIndex: Integer;
+      const AConfig: TEngineProtocolConfig);
+    procedure ResetEngineSlotProtocolConfig(AEngineIndex: Integer);
+    function EngineSlotParamValue(AEngineIndex: Integer; const AName,
+      ADefault: String): String;
+    function EngineSlotParamBool(AEngineIndex: Integer; const AName: String;
+      ADefault: Boolean): Boolean;
+    function EngineSlotParamInt(AEngineIndex: Integer; const AName: String;
+      ADefault: Integer): Integer;
+    function EngineSlotParamFloat(AEngineIndex: Integer; const AName: String;
+      ADefault: Double): Double;
     function EngineSendStartingPosition(AEngineIndex: Integer): Boolean;
     function EngineSingleCapturesIncludeCapturedSquare(AEngineIndex: Integer): Boolean;
     procedure RemoveAnalyzeSendsInfoParam(AEngineIndex: Integer);
@@ -479,16 +483,13 @@ type
     function EngineScorePerspective(AEngineIndex: Integer): String;
     function EngineEvaluationDepthMin(AEngineIndex: Integer): Double;
     function EngineEvaluationBarMax(AEngineIndex: Integer): Double;
-    function EvalBarWhitePixels(const ABarRect: TRect; AScore: Double): Integer;
     procedure AutoPlayButtonClick(Sender: TObject);
     procedure GoButtonClick(Sender: TObject);
     function PlayEngineMove(const AEngineMove: String;
-      AEngineIndex: Integer = 1): Boolean;
+      AEngineIndex: Integer = 1; ADxpReceivedAtSeconds: Double = 0): Boolean;
     function CurrentPositionRepetitionCount: Integer;
     function HubPositionString: String;
-    function HubPositionStringFor(const ABoard: TBoard; ASide: TSide): String;
     function HubPositionCommand(AEngineIndex: Integer): String;
-    function PositionKeyFor(const ABoard: TBoard; ASide: TSide): String;
     function CurrentEngineRemainingTimeSeconds: Double;
     function HasPlayGameEnginePlayer: Boolean;
     function HasPlayGameHumanPlayer: Boolean;
@@ -497,22 +498,20 @@ type
     function IsPlayGameSecondEngineTurn: Boolean;
     function EngineIsDxp(AEngineIndex: Integer): Boolean;
     function EngineLogName(AEngineIndex: Integer): String;
-    function EngineStateLogText(AState: TEngineState): String;
     function PlayerNameToMove: String;
     procedure InvalidateBoard;
     procedure InvalidateBoardSquare(ASquare: Integer);
     procedure InvalidateEngineEvalBar;
     procedure RepaintEngineEvalBarDelta(AOldScore, ANewScore: Double);
-    function BoardToFen(const ABoard: TBoard; ASide: TSide): String;
     function BuildPdnMoveText(const AResult: String; AStoreRanges: Boolean): String;
     function BuildAnalyzePvText(AStoreRanges: Boolean): String;
-    function ClockAnnotation(APly: Integer): String;
     function EngineInfoAnnotation(const ALine: String): String;
     function HistoryAnnotationScoreWhite(APly: Integer; out AScore: Double): Boolean;
     function GuessResultFromFinalPosition: String;
     procedure HistoryMemoClick(Sender: TObject);
     procedure HistoryMemoKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure AnalyzePvMemoClick(Sender: TObject);
+    procedure AnalyzePvEngineComboChange(Sender: TObject);
     procedure AnalyzePvMemoKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure AnalyzePvMemoKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure AnalysisBoardFormClose(Sender: TObject; var CloseAction: TCloseAction);
@@ -522,11 +521,13 @@ type
     procedure LoadFenFile(const AFileName: String);
     procedure LoadPdnFile(const AFileName: String);
     procedure LeavePlayGameMode;
+    procedure FinishPlayGameMode(AUpdateHistory: Boolean = False;
+      ARestartAnalyze: Boolean = False);
     procedure MoveListMoveClick(Sender: TObject);
     procedure MctsButtonClick(Sender: TObject);
     procedure MovesMemoDblClick(Sender: TObject);
     procedure OpenEngineMenuItemClick(Sender: TObject);
-    procedure OpenSecondEngineMenuItemClick(Sender: TObject);
+    procedure EngineLauncherListDblClick(Sender: TObject);
     procedure EnginePopupMenuPopup(Sender: TObject);
     procedure OpenFenMenuItemClick(Sender: TObject);
     procedure OpenPdnMenuItemClick(Sender: TObject);
@@ -544,9 +545,19 @@ type
     procedure RegisteredEnginesDialogCloseButtonClick(Sender: TObject);
     procedure RegisteredEnginesDialogSaveButtonClick(Sender: TObject);
     procedure NormalizeRegisteredEngineIdsInGrid(AGrid: TStringGrid);
-    procedure NormalizeRegisteredEngineIdsInJson(AData: TJSONArray);
     procedure SaveRegisteredEnginesDialog(ADialog: TCustomForm);
     function CheckDrawByRepetition: Boolean;
+    function CheckDrawByTwentyFiveMoveRule: Boolean;
+    procedure AppendEngineSlotLogOrMain(AEngineIndex: Integer;
+      const AText: String);
+    procedure LogGameEventToRelevantEngines(const AText: String;
+      AOriginEngineIndex: Integer = 0);
+    procedure EndCurrentGame(AReason: TGameEndReason; const AResult: String = '';
+      AOriginEngineIndex: Integer = 0; ARestartAnalyze: Boolean = False);
+    procedure StopModeBecause(AEngineIndex: Integer; AMode: TStoppedMode;
+      const AReason: String);
+    procedure StopAutoPlayBecause(AEngineIndex: Integer; const AReason: String);
+    procedure StopPlayGameBecause(AEngineIndex: Integer; const AReason: String);
     procedure LogPlayedMoveToEngineWindows(const AMove: TMove;
       AActorEngineIndex: Integer);
     procedure RestoreClockSnapshot(APly: Integer);
@@ -564,26 +575,58 @@ type
     procedure SelectHistoryPly(APly: Integer);
     procedure SelectAnalyzePvPly(APly: Integer);
     procedure SetAnalyzePvLocked(ALocked: Boolean);
+    procedure ClearAnalyzeBoardHighlights;
+    procedure ClearAnalyzePvForEngine(AEngineIndex: Integer);
+    procedure ClearAnalyzePvForAllEngines;
+    procedure ClearSearchAnalysisDisplay;
+    procedure HandleTerminalSearchPosition(AEngineIndex: Integer;
+      AStopAutoPlay, ALeavePlayGame: Boolean);
+    procedure ShowAnalyzePvFromEngine(AEngineIndex: Integer);
     procedure SelectBoardSquare(ASquare: Integer);
     function ShowEngineLauncherDialog(AEngineIndex: Integer;
       out AFileName, APreferredProtocol: String): Boolean;
     function ShowEngineLaunchOptionsDialog(AEngineIndex: Integer;
       const APreferredProtocol: String = ''): Boolean;
     function SquareAtPoint(X, Y: Integer): Integer;
-    procedure ProcessEngineOutput(const AText: String);
-    procedure ProcessSecondEngineOutput(const AText: String);
+    procedure ProcessEngineSlotOutput(AEngineIndex: Integer;
+      const AText: String);
+    procedure DispatchEngineSlotReceivedLine(AEngineIndex: Integer;
+      const ALine: String);
     procedure EditEngineParamsMenuItemClick(Sender: TObject);
-    procedure EditSecondEngineParamsMenuItemClick(Sender: TObject);
     procedure EngineParamsDialogHide(Sender: TObject);
-    procedure Engine2ParamsDialogHide(Sender: TObject);
-    procedure HandleEngineIdLine(const ALine: String);
-    procedure HandleEngine2IdLine(const ALine: String);
+    procedure ShowEngineSlotParamsDialog(AEngineIndex: Integer);
+    procedure HandleEngineSlotParamsDialogHide(AEngineIndex: Integer;
+      ADialog: TObject);
+    procedure SyncEngineSlotGuiParams(AEngineIndex: Integer);
+    procedure HandleEngineSlotIdLine(AEngineIndex: Integer;
+      const ALine: String);
+    procedure HandleEngineSlotParamLine(AEngineIndex: Integer;
+      const ALine: String);
+    procedure HandleEngineSlotInfoLine(AEngineIndex: Integer;
+      const ALine: String);
+    procedure HandleEngineSlotErrorLine(AEngineIndex: Integer;
+      const ALine: String);
+    procedure HandleEngineSlotWaitLine(AEngineIndex: Integer);
+    procedure HandleEngineSlotReadyLine(AEngineIndex: Integer);
+    procedure HandleEngineSlotDoneLine(AEngineIndex: Integer;
+      const ALine: String);
+    function HandleHubDoneDrawResult(AEngineIndex: Integer;
+      const AResultText: String): Boolean;
+    function HandleStoppedSearchDone(AEngineIndex: Integer;
+      const AMoveText: String): Boolean;
+    procedure HandleEngine1DoneMove(const AMoveText: String);
+    procedure HandleEngine2DoneMove(const AMoveText: String;
+      ASearchMode: TEngineSearchMode);
     procedure EngineIniBrowseClick(Sender: TObject);
-    procedure SendEngineParams;
-    procedure SendSecondEngineParams;
+    procedure SendEngineSlotParams(AEngineIndex: Integer);
     procedure SetupMenu;
     procedure SetupBoardArea;
     procedure SetupEngineLog;
+    function CreateEngineLogPanel(AParent: TWinControl; AAlign: TAlign;
+      AHeight: Integer = 0): TPanel;
+    procedure SetupEngineSlotLogControls(AEngineIndex: Integer;
+      AParentPanel: TWinControl; const AInitialText: String);
+    procedure SetupEngineSlotLogPopupMenu(AEngineIndex: Integer);
     procedure SetupMoveList;
     procedure SetupPieceFont;
     procedure SetupPositionMenuItemClick(Sender: TObject);
@@ -595,6 +638,16 @@ type
     procedure UnsavedGamePromptButtonClick(Sender: TObject);
     procedure UnsavedGamePromptHide(Sender: TObject);
     procedure ShowPlayGameDialog;
+    procedure PrepareManualEngineCommand(AClearPendingActions,
+      ALeavePlayGameMode: Boolean);
+    procedure StorePendingPlayGameOptions(AWhiteIsEngine,
+      ABlackIsEngine: Boolean; const AWhiteName, ABlackName: String;
+      AGameMinutes: Double; AStartFromCurrent: Boolean;
+      AWhiteEngineIndex, ABlackEngineIndex: Integer);
+    procedure PendingActionForPlayGameStart(out AAction: TPendingEngineAction;
+      out AMode: TEngineSearchMode);
+    procedure RequestPlayGameStartAfterEngine1Stop;
+    procedure HandleEngine2StopBeforePlayGameStart;
     procedure StartGameClocks(AGameMinutes: Double);
     procedure StartPlayGameFromOptions(AWhiteIsEngine, ABlackIsEngine: Boolean;
       const AWhiteName, ABlackName: String; AGameMinutes: Double;
@@ -605,52 +658,151 @@ type
     procedure StartSecondEngine(const AFileName: String;
       AUseCurrentParams: Boolean = False; AShowLaunchOptions: Boolean = False;
       const APreferredProtocol: String = '');
-    procedure SendEngineCommand(const ACommand: String);
-    procedure SendSecondEngineCommand(const ACommand: String);
-    procedure SetEngineState(AState: TEngineState);
-    procedure SetSecondEngineState(AState: TEngineState);
+    procedure StartEngineSlot(AEngineIndex: Integer; const AFileName: String;
+      AUseCurrentParams, AShowLaunchOptions: Boolean;
+      const APreferredProtocol: String);
+    procedure PrepareUiForEngineSlotStart(AEngineIndex: Integer);
+    procedure ResetPrimaryStateBeforeEngineStart;
+    procedure ResetSecondaryStateBeforeEngineStart;
+    function PrepareEngineSlotForLaunch(AEngineIndex: Integer;
+      const AFileName: String; AUseCurrentParams, AShowLaunchOptions: Boolean;
+      const APreferredProtocol: String): Boolean;
+    procedure PrepareEngineSlotLaunchLog(AEngineIndex: Integer;
+      const AFileName: String);
+    procedure LoadEngineSlotLaunchParams(AEngineIndex: Integer;
+      const AFileName: String; AUseCurrentParams: Boolean);
+    function ConfirmEngineSlotLaunchOptions(AEngineIndex: Integer;
+      AShowLaunchOptions: Boolean; const APreferredProtocol: String): Boolean;
+    procedure FinalizeEngineSlotLaunchPreparation(AEngineIndex: Integer);
+    function EnsureDxpListenerReadyForLaunch(AEngineIndex: Integer): Boolean;
+    procedure LogEngineSlotLaunch(AEngineIndex: Integer; ALaunchArgs: TStringList);
+    procedure LaunchEngineSlotProcess(AEngineIndex: Integer;
+      const AFileName: String; ALaunchArgs: TStringList);
+    procedure FinalizeEngineSlotLaunch(AEngineIndex: Integer;
+      const AFileName: String);
+    procedure RegisterLaunchedEngineSlot(AEngineIndex: Integer;
+      const AFileName: String);
+    procedure FinalizeDxpEngineSlotLaunch(AEngineIndex: Integer);
+    procedure FinalizeHubEngineSlotLaunch(AEngineIndex: Integer);
+    procedure SendEngineSlotCommand(AEngineIndex: Integer;
+      const ACommand: String);
+    procedure LogEngineSlotCommandSent(AEngineIndex: Integer;
+      const ACommand: String);
     procedure SetEngineSlotState(AEngineIndex: Integer; AState: TEngineState);
     procedure SetGuiState(AState: TGuiState; const AReason: String);
+    function EngineSlotPendingAction(AEngineIndex: Integer): TPendingEngineAction;
+    procedure ClearEngineSlotPendingAction(AEngineIndex: Integer);
+    procedure SetEngineSlotPendingAction(AEngineIndex: Integer;
+      AAction: TPendingEngineAction; AMode: TEngineSearchMode = esmIdle);
+    procedure RequestEngineSlotActionAfterStop(AEngineIndex: Integer;
+      AAction: TPendingEngineAction; AMode: TEngineSearchMode;
+      const AReason: String);
+    function RunPendingEngineSlotAction(AEngineIndex: Integer;
+      const AStoppedMoveText: String): Boolean;
     procedure BeginEngineSlotSearch(AEngineIndex: Integer;
       AMode: TEngineSearchMode; AState: TEngineState);
     procedure FinishEngineSlotSearch(AEngineIndex: Integer);
     procedure ResetEngineSlotRuntime(AEngineIndex: Integer);
+    function EngineSlotSupportsAutoPlay(AEngineIndex: Integer): Boolean;
+    function EngineSlotCommandUiAvailable(AEngineIndex: Integer): Boolean;
+    procedure UpdateEngineCommandButtons;
+    procedure UpdateEngineSlotReadyUi(AEngineIndex: Integer);
     procedure UpdateEngineStateLabels;
     procedure UpdateRegisteredEngineId(const AFileName, AEngineId: String;
       const AProtocol: String = '');
     procedure UpdateRegisteredEngineProtocol(const AFileName,
       AProtocol: String);
     procedure SendPlayGameHumanTurnAnalyze;
+    function CurrentPlayGameEngineIndex: Integer;
     procedure ContinuePlayGameSearch;
+    procedure ContinuePlayGameEngineTurn(AEngineIndex: Integer);
+    procedure ContinuePlayGameHumanTurn;
+    procedure StartDxpPlayGameThink(AEngineIndex: Integer);
+    procedure StartHubPlayGameThink(AEngineIndex: Integer);
+    procedure ContinueAutoPlayAfterPositionChange;
+    procedure MarkPlayGameWaitingEngine(AActorEngineIndex: Integer);
+    procedure ContinuePlayGameAfterPositionChange(AActorEngineIndex: Integer);
+    function HandleTerminalPositionAfterFlowChange(
+      AReason: TGameFlowReason): Boolean;
+    procedure ContinueGameFlowAfterPositionChange(AReason: TGameFlowReason;
+      AActorEngineIndex: Integer = 0);
+    procedure HandleEngineMoveForSearchMode(AEngineIndex: Integer;
+      const AMoveText: String; ASearchMode: TEngineSearchMode;
+      ADxpReceivedAtSeconds: Double = 0);
+    function ApplyEngineMoveForSearchMode(AEngineIndex: Integer;
+      const AMoveText: String; ASearchMode: TEngineSearchMode;
+      ADxpReceivedAtSeconds: Double = 0): Boolean;
+    procedure HandleFailedEngineMove(AEngineIndex: Integer;
+      ASearchMode: TEngineSearchMode);
+    procedure ContinueAfterEngineMove(AEngineIndex: Integer;
+      ASearchMode: TEngineSearchMode);
     procedure SendDxpStartOrMoveToEngine(AEngineIndex: Integer;
       AMode: TEngineSearchMode);
+    function CanStartHubSearch(AEngineIndex: Integer; AGoCommand: THubGoCommand;
+      ARequireMctsSupport: Boolean): Boolean;
+    function EngineSlotReadyForSearch(AEngineIndex: Integer): Boolean;
+    function ReadyEngineSlotsForSearch: TIntegerArray;
+    procedure AppendEngineSlotLogs(const ASlots: TIntegerArray;
+      const AText: String);
+    procedure HandleTerminalSearchPositions(const ASlots: TIntegerArray;
+      const APreparation: TEngineSearchPreparation);
+    function HandleEngineSlotTerminalSearchPosition(AEngineIndex: Integer;
+      AAutoPlay, ASendTerminalToEngine: Boolean): Boolean;
+    procedure StartHubEngineSlotSearch(AEngineIndex: Integer;
+      ALevelCommand: THubLevelCommand; AGoCommand: THubGoCommand;
+      AMode: TEngineSearchMode; AState: TEngineState;
+      ARequireMctsSupport: Boolean);
+    procedure SendHubSearchToEngine(AEngineIndex: Integer;
+      ALevelCommand: THubLevelCommand; AGoCommand: THubGoCommand;
+      AMode: TEngineSearchMode; AState: TEngineState);
     procedure SendGoAnalyzeToEngine(AMode: TEngineSearchMode = esmAnalyze);
-    procedure SendGoAnalyzeToSecondEngine(AMode: TEngineSearchMode = esmAnalyze);
+    procedure SendGoAnalyzeToEngineSlot(AEngineIndex: Integer;
+      AMode: TEngineSearchMode);
+    procedure RequestOrSendAnalyzeToEngineSlot(AEngineIndex: Integer;
+      AMode: TEngineSearchMode; const AStopReason: String);
     procedure SendGoMctsToEngine;
-    procedure SendGoThinkToEngine(AMode: TEngineSearchMode = esmAutoPlay);
-    procedure SendGoThinkToSecondEngine;
+    procedure SendGoMctsToEngineSlot(AEngineIndex: Integer);
+    procedure SendGoThinkToEngineSlot(AEngineIndex: Integer;
+      AMode: TEngineSearchMode);
+    procedure RequestOrSendThinkToEngineSlot(AEngineIndex: Integer;
+      AMode: TEngineSearchMode; const AStopReason: String);
+    procedure SendProtocolCommandToEngineSlot(AEngineIndex: Integer;
+      ACommand: TEngineProtocolCommand; AMode: TEngineSearchMode = esmIdle);
+    procedure SendProtocolCommandToAllEngines(ACommand: TEngineProtocolCommand;
+      AMode: TEngineSearchMode = esmIdle);
     procedure RestartEngineAnalyze;
-    procedure SendStopToEngine;
-    procedure SendStopToSecondEngine;
+    procedure SendStopToEngineSlot(AEngineIndex: Integer);
     procedure SendStopToAllEngines;
+    procedure SendProtocolCommandToEngineSlots(const ASlots: TIntegerArray;
+      ACommand: TEngineProtocolCommand; AMode: TEngineSearchMode = esmIdle);
+    procedure ClearEngineSlotStopState(AEngineIndex: Integer;
+      APreviousState: TEngineState; AStoppedByHubCommand: Boolean);
+    procedure LogEngineSlotStopTransition(AEngineIndex: Integer;
+      APreviousState: TEngineState);
+    procedure StopDxpEngineSlot(AEngineIndex: Integer;
+      APreviousState: TEngineState);
+    procedure StopHubEngineSlot(AEngineIndex: Integer;
+      APreviousState: TEngineState);
     procedure SendPositionMenuItemClick(Sender: TObject);
     procedure SendPositionToEngine;
     procedure SavePdnMenuItemClick(Sender: TObject);
     procedure SavePdnOptionsDialogHide(Sender: TObject);
     procedure SaveEngineLogMenuItemClick(Sender: TObject);
-    procedure SaveSecondEngineLogMenuItemClick(Sender: TObject);
     procedure AnalyzeMenuItemClick(Sender: TObject);
     procedure ShowTimestampsMenuItemClick(Sender: TObject);
     procedure SavePdnFile(const AFileName, AWhiteName, ABlackName,
       AResult: String; const AEvent: String = '?'; const ARound: String = '?';
       AAppend: Boolean = False);
-    procedure SetTerminalResult;
+    procedure EndGameIfTerminalPosition;
     procedure StopButtonClick(Sender: TObject);
     procedure StopGameClocks;
+    procedure PauseGameClocks;
+    procedure PauseGameClocksAt(AReceivedAtSeconds: Double);
     procedure ExecuteMoveFromList(AMoveIndex: Integer; AContinueEngine: Boolean);
     procedure ExecuteLegalMoveIndex(AMoveIndex: Integer; AContinueEngine: Boolean);
     procedure UpdateBoardLayout;
     procedure UpdateClockLabels;
+    procedure HandleClockExpired;
     procedure UpdateGameClock;
     procedure UpdateHistoryList;
     procedure UpdateMovePanelWidth;
@@ -660,8 +812,10 @@ type
     procedure UpdateEnginePopupMenuItems;
     procedure UpdateAnalyzeMenuItems;
     procedure UpdateAnalyzeBestMoveFromMoveText(const AMoveText: String);
-    procedure UpdateAnalyzeBestMoveFromInfo(const ALine: String);
-    procedure UpdateAnalyzePvFromMoveText(const APvText: String);
+    procedure UpdateAnalyzeBestMoveFromInfo(AEngineIndex: Integer;
+      const ALine: String);
+    procedure UpdateAnalyzePvFromMoveText(AEngineIndex: Integer;
+      const APvText: String);
     procedure UpdateEngineEvalFromInfo(const ALine: String; AForce: Boolean = False);
   protected
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -681,6 +835,7 @@ uses
   FileUtil,
   LCLIntf,
   Math,
+  PlatformTime,
   StrUtils,
   SysUtils;
 
@@ -694,43 +849,13 @@ const
   LegalMovesGap = 4;
   EvalBarWidth = 18;
   EvalBarGap = 8;
-  EvalBarDefaultMaxScore = 1000.0;
   BoardSideMarkerGap = 6;
   BoardSideMarkerWidth = 72;
   BoardMargin = 24;
   WoodSquareColor = TColor($00305E8B);
   AnalyzeBestSourceColor = TColor($0000A5FF);
   AnalyzeHintSourceColor = clRed;
-  EngineTypeParamName = 'gui-engine-type';
-  HubIdParamName = 'gui-hub-id';
-  EngineIniFileParamName = 'gui-ini-file';
-  HubLaunchArgumentParamName = 'gui-hub-launch-argument';
-  OldHubLaunchArgumentParamName = 'hub-launch-argument';
-  OldLaunchWithHubArgumentParamName = 'launch-with-hub-argument';
-  DxpIdParamName = 'gui-dxp-id';
-  DxpIpParamName = 'gui-dxp-ip';
-  DxpSocketParamName = 'gui-dxp-socket';
-  DxpLaunchArgumentsParamName = 'gui-dxp-launch-arguments';
-  DxpRoleParamName = 'gui-dxp-role';
-  DxpDefaultIp = '127.0.0.1';
-  DxpDefaultSocket = '27531';
-  SendStartingPositionParamName = 'gui-send-starting-position';
-  OldSendStartingPositionParamName = 'send-starting-position';
-  SingleCapturesIncludeCapturedSquareParamName =
-    'gui-single-captures-include-captured-square';
-  OldSingleCapturesIncludeCapturedSquareParamName =
-    'single-captures-include-captured-square';
-  AnalyzeSendsInfoParamName = 'gui-analyze-sends-info';
-  OldAnalyzeSendsInfoParamName = 'gui-ponder-sends-info';
-  EngineSupportsMctsParamName = 'gui-engine-supports-mcts';
-  ScorePerspectiveParamName = 'gui-score-perspective';
-  EvaluationDepthMinParamName = 'gui-evaluation-bar-depth-min';
-  OldEvaluationDepthMinParamName = 'gui-evaluation-depth-min';
-  EvaluationBarMaxParamName = 'gui-evaluation-bar-score-max';
-  OldEvaluationBarMaxParamName = 'gui-evaluation-bar-max';
 
-function EngineLogTimestamp: String; forward;
-function CommandLineQuote(const AText: String): String; forward;
 procedure EngineLaunchArguments(AEngine: TEngineSlot; AArgs: TStrings); forward;
 
 constructor TTournamentDialog.Create(AOwner: TComponent;
@@ -784,9 +909,10 @@ begin
   FRoundRobinGroup.Caption := 'Pairing';
   FRoundRobinGroup.Items.Add('Single round-robin');
   FRoundRobinGroup.Items.Add('Double round-robin');
-  FRoundRobinGroup.ItemIndex := 0;
+  FRoundRobinGroup.Items.Add('Swiss');
+  FRoundRobinGroup.ItemIndex := TournamentPairingIndexSingleRoundRobin;
   FRoundRobinGroup.OnClick := @RoundRobinGroupClick;
-  FRoundRobinGroup.SetBounds(72, 42, 250, 68);
+  FRoundRobinGroup.SetBounds(72, 42, 250, 76);
   FPreviousRoundRobinIndex := FRoundRobinGroup.ItemIndex;
   FSuppressRoundRobinChange := False;
 
@@ -825,14 +951,20 @@ begin
 
   FStartButton := TButton.Create(ButtonPanel);
   FStartButton.Parent := ButtonPanel;
-  FStartButton.Caption := 'Start';
-  FStartButton.SetBounds(206, 7, 86, 28);
+  FStartButton.Caption := 'Create pairing for next round';
+  FStartButton.SetBounds(206, 7, 190, 28);
   FStartButton.OnClick := @StartButtonClick;
+
+  FPlayRoundButton := TButton.Create(ButtonPanel);
+  FPlayRoundButton.Parent := ButtonPanel;
+  FPlayRoundButton.Caption := 'Complete next round';
+  FPlayRoundButton.SetBounds(404, 7, 150, 28);
+  FPlayRoundButton.OnClick := @PlayRoundButtonClick;
 
   FStopButton := TButton.Create(ButtonPanel);
   FStopButton.Parent := ButtonPanel;
   FStopButton.Caption := 'Stop';
-  FStopButton.SetBounds(300, 7, 86, 28);
+  FStopButton.SetBounds(562, 7, 86, 28);
   FStopButton.OnClick := @StopButtonClick;
 
   FBodyPanel := TPanel.Create(Self);
@@ -928,25 +1060,33 @@ begin
   FGrid := TStringGrid.Create(PairingSectionPanel);
   FGrid.Parent := PairingSectionPanel;
   FGrid.Align := alClient;
-  FGrid.ColCount := 4;
+  FGrid.ColCount := 6;
+  FGrid.DefaultDrawing := False;
   FGrid.FixedCols := 0;
   FGrid.FixedRows := 1;
   FGrid.RowCount := 2;
   FGrid.Options := FGrid.Options - [goEditing] + [goColSizing, goRowSelect];
-  FGrid.Cells[0, 0] := 'Game';
-  FGrid.Cells[1, 0] := 'White';
-  FGrid.Cells[2, 0] := 'Black';
-  FGrid.Cells[3, 0] := 'Result';
-  FGrid.Cells[3, 1] := '*';
-  FGrid.ColWidths[0] := 54;
-  FGrid.ColWidths[1] := 280;
-  FGrid.ColWidths[2] := 280;
-  FGrid.ColWidths[3] := 90;
+  FGrid.Cells[TournamentColGame, 0] := 'Game';
+  FGrid.Cells[TournamentColRound, 0] := 'Round';
+  FGrid.Cells[TournamentColWhite, 0] := 'White';
+  FGrid.Cells[TournamentColBlack, 0] := 'Black';
+  FGrid.Cells[TournamentColResult, 0] := 'Result';
+  FGrid.Cells[TournamentColReason, 0] := 'Reason';
+  FGrid.Cells[TournamentColResult, 1] := '*';
+  FGrid.Cells[TournamentColReason, 1] := '';
+  FGrid.ColWidths[TournamentColGame] := 54;
+  FGrid.ColWidths[TournamentColRound] := 54;
+  FGrid.ColWidths[TournamentColWhite] := 260;
+  FGrid.ColWidths[TournamentColBlack] := 260;
+  FGrid.ColWidths[TournamentColResult] := 90;
+  FGrid.ColWidths[TournamentColReason] := 180;
   FGrid.OnClick := @GridClick;
+  FGrid.OnDrawCell := @PairingGridDrawCell;
 
   FResultCombo := TComboBox.Create(FGrid);
   FResultCombo.Parent := FGrid;
   FResultCombo.Style := csDropDownList;
+  FResultCombo.Items.Add('*');
   FResultCombo.Items.Add('2-0');
   FResultCombo.Items.Add('1-1');
   FResultCombo.Items.Add('0-2');
@@ -971,27 +1111,11 @@ end;
 
 procedure TTournamentDialog.DialogClose(Sender: TObject;
   var CloseAction: TCloseAction);
-var
-  Answer: Integer;
 begin
-  if FDirty then
+  if not ConfirmClose then
   begin
-    Answer := MessageDlg('Tournament changed',
-      'Tournament results have changed.' + LineEnding +
-      'Save before closing?', mtConfirmation, [mbYes, mbNo, mbCancel], 0);
-    case Answer of
-      mrYes:
-        if not SaveTournament then
-        begin
-          CloseAction := caNone;
-          Exit;
-        end;
-      mrCancel:
-      begin
-        CloseAction := caNone;
-        Exit;
-      end;
-    end;
+    CloseAction := caNone;
+    Exit;
   end;
 
   if FTournamentRunning then
@@ -999,6 +1123,32 @@ begin
   if Owner is TMainWindow then
     TMainWindow(Owner).FTournamentDialog := nil;
   CloseAction := caFree;
+end;
+
+function TTournamentDialog.ConfirmClose: Boolean;
+var
+  Answer: Integer;
+begin
+  Result := False;
+  if FDirty then
+  begin
+    Answer := ShowGuiConfirmationDialog(Self, 'Unsaved tournament',
+      'Tournament results have changed.' + LineEnding +
+      'Save before closing?', 'Save', 'Don''t Save', mrNo);
+    case Answer of
+      mrYes:
+        if not SaveTournament then
+        begin
+          Exit;
+        end;
+      mrCancel:
+      begin
+        Exit;
+      end;
+    end;
+  end;
+
+  Result := True;
 end;
 
 procedure TTournamentDialog.MarkDirty;
@@ -1090,6 +1240,11 @@ begin
   AdjustSectionHeights;
 end;
 
+procedure TTournamentDialog.ClearPairingGrid;
+begin
+  ClearTournamentPairingGrid(FGrid);
+end;
+
 procedure TTournamentDialog.MinutesEditChange(Sender: TObject);
 begin
   if FSuppressMinutesChange then
@@ -1098,9 +1253,9 @@ begin
     Exit;
 
   if (not GridIsEmpty) and
-    (MessageDlg('Tournament',
+    (ShowGuiConfirmationDialog(Self, 'Tournament',
     'Warning: you will lose all results if you change the time setting.' +
-    LineEnding + 'Are you sure?', mtWarning, [mbYes, mbNo], 0) <> mrYes) then
+    LineEnding + 'Are you sure?', 'Yes', 'No', mrNo) <> mrYes) then
   begin
     FSuppressMinutesChange := True;
     try
@@ -1114,11 +1269,7 @@ begin
   FPreviousMinutesValue := FMinutesEdit.Value;
   if not GridIsEmpty then
   begin
-    FGrid.RowCount := 2;
-    FGrid.Cells[0, 1] := '';
-    FGrid.Cells[1, 1] := '';
-    FGrid.Cells[2, 1] := '';
-    FGrid.Cells[3, 1] := '';
+    ClearPairingGrid;
     UpdateCrossTable;
     MarkDirty;
   end;
@@ -1126,173 +1277,77 @@ end;
 
 procedure TTournamentDialog.CrossTableDrawCell(Sender: TObject; ACol,
   ARow: Integer; ARect: TRect; AState: TGridDrawState);
-var
-  Grid: TStringGrid;
-  TextRect: TRect;
 begin
-  Grid := TStringGrid(Sender);
-  if (ARow > 0) and (ACol > 0) and (ACol = ARow) and
-    (ACol < Grid.ColCount - 1) then
-  begin
-    Grid.Canvas.Brush.Color := clGray;
-    Grid.Canvas.Font.Color := clWhite;
-  end
-  else if (ARow = 0) then
-  begin
-    Grid.Canvas.Brush.Color := clBtnFace;
-    Grid.Canvas.Font.Color := clWindowText;
-  end
-  else
-  begin
-    Grid.Canvas.Brush.Color := clWindow;
-    Grid.Canvas.Font.Color := clWindowText;
-  end;
-
-  Grid.Canvas.FillRect(ARect);
-  TextRect := ARect;
-  InflateRect(TextRect, -4, -2);
-  Grid.Canvas.TextRect(TextRect, TextRect.Left,
-    TextRect.Top + Max(0, (TextRect.Bottom - TextRect.Top -
-    Grid.Canvas.TextHeight(Grid.Cells[ACol, ARow])) div 2),
-    Grid.Cells[ACol, ARow]);
+  DrawCrossTableCell(TStringGrid(Sender), ACol, ARow, ARect);
 end;
 
-procedure TTournamentDialog.AddPairing(const AWhite, ABlack: String);
-var
-  Row: Integer;
+procedure TTournamentDialog.PairingGridDrawCell(Sender: TObject; ACol,
+  ARow: Integer; ARect: TRect; AState: TGridDrawState);
 begin
-  if (FGrid.RowCount = 2) and (FGrid.Cells[0, 1] = '') and
-    (FGrid.Cells[1, 1] = '') and (FGrid.Cells[2, 1] = '') then
-    Row := 1
-  else
-  begin
-    Row := FGrid.RowCount;
-    FGrid.RowCount := FGrid.RowCount + 1;
-  end;
+  DrawPairingGridCell(TStringGrid(Sender), ACol, ARow, ARect,
+    FCurrentTournamentRow, FTournamentRunning);
+end;
 
-  FGrid.Cells[0, Row] := IntToStr(Row);
-  FGrid.Cells[1, Row] := AWhite;
-  FGrid.Cells[2, Row] := ABlack;
-  FGrid.Cells[3, Row] := '*';
+procedure TTournamentDialog.AddPairing(const AWhite, ABlack: String;
+  ARound: Integer);
+begin
+  AddTournamentPairingRow(FGrid, AWhite, ABlack, ARound);
   UpdateCrossTable;
   MarkDirty;
 end;
 
-procedure TTournamentDialog.LoadEngineNames(AEngines: TStrings);
-var
-  Data: TJSONData;
-  DisplayText: String;
-  ExeText: String;
-  EngineFileName: String;
-  HubId: String;
-  DxpId: String;
-  IdText: String;
-  I: Integer;
-  Lines: TStringList;
-  PathText: String;
-  SortedEngines: TStringList;
-
-  procedure AddTournamentEngine(const ADisplayText, AFileName,
-    AProtocol: String);
-  var
-    BaseDisplayText: String;
-    DirectoryText: String;
-    Suffix: Integer;
-  begin
-    if ADisplayText = '' then
-      Exit;
-
-    BaseDisplayText := ADisplayText;
-    DirectoryText := ExtractFileName(ExcludeTrailingPathDelimiter(
-      ExtractFilePath(AFileName)));
-    if DirectoryText = '' then
-      DirectoryText := ExtractFileName(AFileName);
-    if SortedEngines.IndexOf(BaseDisplayText) >= 0 then
-      BaseDisplayText := ADisplayText + ' (' + DirectoryText + ')';
-    Suffix := 2;
-    while SortedEngines.IndexOf(BaseDisplayText) >= 0 do
-    begin
-      BaseDisplayText := ADisplayText + ' (' + DirectoryText + ' ' +
-        IntToStr(Suffix) + ')';
-      Inc(Suffix);
-    end;
-
-    SortedEngines.Add(BaseDisplayText);
-    if FEngineFileNames <> nil then
-      FEngineFileNames.Values[BaseDisplayText] := AFileName;
-    if FEngineProtocols <> nil then
-      FEngineProtocols.Values[BaseDisplayText] := AProtocol;
-  end;
+procedure TTournamentDialog.CollectPairingRows(AWhiteEngines, ABlackEngines,
+  AResults: TStrings);
 begin
-  AEngines.Clear;
-  if FEngineFileNames <> nil then
-    FEngineFileNames.Clear;
-  if FEngineProtocols <> nil then
-    FEngineProtocols.Clear;
-  if not FileExists(FEnginesFileName) then
-    Exit;
+  CollectTournamentPairingRows(FGrid, AWhiteEngines, ABlackEngines,
+    AResults);
+end;
 
-  Lines := TStringList.Create;
-  try
-    Lines.LoadFromFile(FEnginesFileName);
-    Data := GetJSON(Lines.Text);
-  finally
-    Lines.Free;
-  end;
-  try
-    if Data.JSONType <> jtArray then
-      Exit;
-    SortedEngines := TStringList.Create;
-    try
-      SortedEngines.Sorted := True;
-      SortedEngines.Duplicates := dupAccept;
-    for I := 0 to TJSONArray(Data).Count - 1 do
-      if TJSONArray(Data).Items[I].JSONType = jtObject then
-      begin
-        ExeText := TJSONObject(TJSONArray(Data).Items[I]).Get('executable', '');
-        PathText := TJSONObject(TJSONArray(Data).Items[I]).Get('path', '');
-        EngineFileName := IncludeTrailingPathDelimiter(PathText) + ExeText;
-        IdText := TJSONObject(TJSONArray(Data).Items[I]).Get('id', '');
-        HubId := Trim(TJSONObject(TJSONArray(Data).Items[I]).Get('hub_id', ''));
-        DxpId := Trim(TJSONObject(TJSONArray(Data).Items[I]).Get('dxp_id', ''));
-        if (HubId = '') and
-          SameText(TJSONObject(TJSONArray(Data).Items[I]).Get('protocol', ''), 'hub') then
-          HubId := Trim(TJSONObject(TJSONArray(Data).Items[I]).Get('reported_id',
-            IdText));
-        if (DxpId = '') and
-          SameText(TJSONObject(TJSONArray(Data).Items[I]).Get('protocol', ''), 'dxp') then
-          DxpId := Trim(TJSONObject(TJSONArray(Data).Items[I]).Get('reported_id',
-            IdText));
+procedure TTournamentDialog.CollectRoundRows(ARounds: TStrings);
+begin
+  CollectTournamentRoundRows(FGrid, ARounds);
+end;
 
-        if HubId <> '' then
-        begin
-          DisplayText := HubId + ' (Engine ' + IntToStr(I + 1) +
-            ' Hub mode)';
-          AddTournamentEngine(DisplayText, EngineFileName, 'hub');
-        end;
-        if DxpId <> '' then
-        begin
-          DisplayText := DxpId + ' (Engine ' + IntToStr(I + 1) +
-            ' DXP mode)';
-          AddTournamentEngine(DisplayText, EngineFileName, 'dxp');
-        end;
-        if (HubId = '') and (DxpId = '') then
-        begin
-          if IdText = '' then
-            IdText := ChangeFileExt(ExeText, '');
-          if IdText = '' then
-            IdText := ExeText;
-          AddTournamentEngine(IdText, EngineFileName,
-            LowerCase(Trim(TJSONObject(TJSONArray(Data).Items[I]).Get('protocol', ''))));
-        end;
-      end;
-      AEngines.Assign(SortedEngines);
-    finally
-      SortedEngines.Free;
-    end;
+procedure TTournamentDialog.CollectSelectedEngineNames(AEngines: TStrings);
+begin
+  CollectSelectedTournamentEngineNames(FEngineCheckList, AEngines);
+end;
+
+procedure TTournamentDialog.CollectSelectedEngineNames(
+  var AEngines: TTournamentTextArray);
+begin
+  CollectSelectedTournamentEngineNames(FEngineCheckList, AEngines);
+end;
+
+procedure TTournamentDialog.ApplyTournamentData(const AData: TTournamentFileData);
+begin
+  FNameEdit.Text := AData.Name;
+  FSuppressMinutesChange := True;
+  try
+    FMinutesEdit.Value := AData.Minutes;
+    FPreviousMinutesValue := FMinutesEdit.Value;
   finally
-    Data.Free;
+    FSuppressMinutesChange := False;
   end;
+
+  FSuppressRoundRobinChange := True;
+  try
+    FRoundRobinGroup.ItemIndex :=
+      RoundRobinIndexForTournamentType(AData.TournamentType);
+    FPreviousRoundRobinIndex := FRoundRobinGroup.ItemIndex;
+  finally
+    FSuppressRoundRobinChange := False;
+  end;
+
+  ApplySelectedTournamentEngineNames(FEngineCheckList, AData.EngineNames);
+  ApplyTournamentGamesToGrid(FGrid, AData);
+  UpdateCrossTable;
+end;
+
+procedure TTournamentDialog.LoadEngineNames(AEngines: TStrings);
+begin
+  LoadRegisteredTournamentEngines(FEnginesFileName, AEngines,
+    FEngineFileNames, FEngineProtocols);
 end;
 
 function TTournamentDialog.EngineProtocolForName(const AName: String): String;
@@ -1303,51 +1358,13 @@ begin
 end;
 
 function TTournamentDialog.EngineFileNameForName(const AName: String): String;
-var
-  Data: TJSONData;
-  DisplayText: String;
-  ExeText: String;
-  IdText: String;
-  I: Integer;
-  Lines: TStringList;
-  PathText: String;
 begin
   Result := '';
   if AName = '' then
     Exit;
   if (FEngineFileNames <> nil) and (FEngineFileNames.Values[AName] <> '') then
     Exit(FEngineFileNames.Values[AName]);
-  if not FileExists(FEnginesFileName) then
-    Exit;
-
-  Lines := TStringList.Create;
-  try
-    Lines.LoadFromFile(FEnginesFileName);
-    Data := GetJSON(Lines.Text);
-  finally
-    Lines.Free;
-  end;
-  try
-    if Data.JSONType <> jtArray then
-      Exit;
-    for I := 0 to TJSONArray(Data).Count - 1 do
-      if TJSONArray(Data).Items[I].JSONType = jtObject then
-      begin
-        ExeText := TJSONObject(TJSONArray(Data).Items[I]).Get('executable', '');
-        IdText := TJSONObject(TJSONArray(Data).Items[I]).Get('id', '');
-        DisplayText := ChangeFileExt(ExeText, '');
-        if SameText(ExeText, AName) or SameText(ChangeFileExt(ExeText, ''), AName) or
-          SameText(IdText, AName) or SameText(IdText + ' (' + ExeText + ')', AName) or
-          SameText(DisplayText, AName) then
-        begin
-          PathText := TJSONObject(TJSONArray(Data).Items[I]).Get('path', '');
-          Result := IncludeTrailingPathDelimiter(PathText) + ExeText;
-          Exit;
-        end;
-      end;
-  finally
-    Data.Free;
-  end;
+  Result := RegisteredEngineFileNameForDisplayName(FEnginesFileName, AName);
 end;
 
 procedure TTournamentDialog.PopulateEngineCheckList;
@@ -1376,114 +1393,15 @@ begin
   end;
 end;
 
-procedure TTournamentDialog.LoadSelectedEngineNames(AEngines: TStrings);
-var
-  I: Integer;
-begin
-  AEngines.Clear;
-  for I := 0 to FEngineCheckList.Items.Count - 1 do
-    if FEngineCheckList.Checked[I] and
-      (not AnsiStartsText('(', FEngineCheckList.Items[I])) then
-      AEngines.Add(FEngineCheckList.Items[I]);
-end;
-
 procedure TTournamentDialog.UpdateCrossTable;
 var
-  BlackIndex: Integer;
-  EngineNames: TStringList;
+  BlackEngines: TStringList;
   I: Integer;
-  Index: Integer;
   J: Integer;
-  Matrix: array of array of String;
-  Order: array of Integer;
-  Points: array of Integer;
-  ResultText: String;
-  SB: array of Double;
-  Temp: Integer;
-  Wins: array of Integer;
-  WhiteIndex: Integer;
-
-  procedure EnsureEngine(const AName: String);
-  begin
-    if (AName = '') or AnsiStartsText('(', AName) then
-      Exit;
-    if EngineNames.IndexOf(AName) >= 0 then
-      Exit;
-    EngineNames.Add(AName);
-    SetLength(Points, EngineNames.Count);
-    SetLength(Wins, EngineNames.Count);
-    SetLength(SB, EngineNames.Count);
-  end;
-
-  procedure AddPoints(const AName: String; APoints: Integer);
-  begin
-    Index := EngineNames.IndexOf(AName);
-    if Index >= 0 then
-      Inc(Points[Index], APoints);
-  end;
-
-  procedure AddWin(const AName: String);
-  begin
-    Index := EngineNames.IndexOf(AName);
-    if Index >= 0 then
-      Inc(Wins[Index]);
-  end;
-
-  procedure AddMarker(ARow, AOpponent: Integer; const AText: String);
-  begin
-    if (ARow < 0) or (AOpponent < 0) or (AText = '') then
-      Exit;
-
-    if Matrix[ARow, AOpponent] <> '' then
-      Matrix[ARow, AOpponent] := Matrix[ARow, AOpponent] + '/' + AText
-    else
-      Matrix[ARow, AOpponent] := AText;
-  end;
-
-  function ComesBefore(AIndex, BIndex: Integer): Boolean;
-  begin
-    if Points[AIndex] <> Points[BIndex] then
-      Exit(Points[AIndex] > Points[BIndex]);
-    if Wins[AIndex] <> Wins[BIndex] then
-      Exit(Wins[AIndex] > Wins[BIndex]);
-    if Abs(SB[AIndex] - SB[BIndex]) > 0.0001 then
-      Exit(SB[AIndex] > SB[BIndex]);
-    Result := AnsiCompareText(EngineNames[AIndex], EngineNames[BIndex]) < 0;
-  end;
-
-  function FormatSB(AValue: Double): String;
-  begin
-    if Abs(AValue - Round(AValue)) < 0.0001 then
-      Result := IntToStr(Round(AValue))
-    else
-      Result := FormatFloat('0.0', AValue);
-  end;
-
-  function CompactEngineHeader(const AName: String): String;
-  const
-    Marker = ' (Engine ';
-  var
-    IChar: Integer;
-    NumberText: String;
-    P: Integer;
-  begin
-    Result := Trim(AName);
-    P := Pos(Marker, Result);
-    if P <= 0 then
-      Exit;
-
-    NumberText := '';
-    IChar := P + Length(Marker);
-    while (IChar <= Length(Result)) and (Result[IChar] in ['0'..'9']) do
-    begin
-      NumberText := NumberText + Result[IChar];
-      Inc(IChar);
-    end;
-
-    Result := Trim(Copy(Result, 1, P - 1));
-    if NumberText <> '' then
-      Result := Result + '#' + NumberText;
-  end;
+  Results: TStringList;
+  SelectedEngines: TStringList;
+  Table: TTournamentCrossTable;
+  WhiteEngines: TStringList;
 
   procedure AutoSizeCrossTableColumns;
   const
@@ -1516,175 +1434,169 @@ begin
   if FCrossTableGrid = nil then
     Exit;
 
-  EngineNames := TStringList.Create;
+  SelectedEngines := TStringList.Create;
+  WhiteEngines := TStringList.Create;
+  BlackEngines := TStringList.Create;
+  Results := TStringList.Create;
   try
-    for I := 0 to FEngineCheckList.Items.Count - 1 do
-      if FEngineCheckList.Checked[I] and
-        (not AnsiStartsText('(', FEngineCheckList.Items[I])) then
-        EnsureEngine(FEngineCheckList.Items[I]);
+    CollectSelectedEngineNames(SelectedEngines);
+    CollectPairingRows(WhiteEngines, BlackEngines, Results);
 
-    for I := 1 to FGrid.RowCount - 1 do
-    begin
-      EnsureEngine(FGrid.Cells[1, I]);
-      EnsureEngine(FGrid.Cells[2, I]);
-    end;
+    BuildTournamentCrossTable(SelectedEngines, WhiteEngines, BlackEngines,
+      Results, Table);
 
-    SetLength(Matrix, EngineNames.Count, EngineNames.Count);
-    SetLength(Order, EngineNames.Count);
-    for I := 0 to EngineNames.Count - 1 do
-      Order[I] := I;
-
-    for I := 1 to FGrid.RowCount - 1 do
-    begin
-      ResultText := FGrid.Cells[3, I];
-      if (FGrid.Cells[1, I] = '') or (FGrid.Cells[2, I] = '') or
-        (ResultText = '*') then
-        Continue;
-
-      if ResultText = '2-0' then
-      begin
-        AddPoints(FGrid.Cells[1, I], 2);
-        AddWin(FGrid.Cells[1, I]);
-      end
-      else if ResultText = '1-1' then
-      begin
-        AddPoints(FGrid.Cells[1, I], 1);
-        AddPoints(FGrid.Cells[2, I], 1);
-      end
-      else if ResultText = '0-2' then
-      begin
-        AddPoints(FGrid.Cells[2, I], 2);
-        AddWin(FGrid.Cells[2, I]);
-      end;
-    end;
-
-    for I := 1 to FGrid.RowCount - 1 do
-    begin
-      ResultText := FGrid.Cells[3, I];
-      if (FGrid.Cells[1, I] = '') or (FGrid.Cells[2, I] = '') or
-        (ResultText = '*') then
-        Continue;
-
-      WhiteIndex := EngineNames.IndexOf(FGrid.Cells[1, I]);
-      BlackIndex := EngineNames.IndexOf(FGrid.Cells[2, I]);
-      if (WhiteIndex < 0) or (BlackIndex < 0) then
-        Continue;
-
-      if ResultText = '2-0' then
-      begin
-        SB[WhiteIndex] := SB[WhiteIndex] + Points[BlackIndex];
-        AddMarker(WhiteIndex, BlackIndex, '2W');
-        AddMarker(BlackIndex, WhiteIndex, '0B');
-      end
-      else if ResultText = '1-1' then
-      begin
-        SB[WhiteIndex] := SB[WhiteIndex] + (Points[BlackIndex] / 2);
-        SB[BlackIndex] := SB[BlackIndex] + (Points[WhiteIndex] / 2);
-        AddMarker(WhiteIndex, BlackIndex, '1W');
-        AddMarker(BlackIndex, WhiteIndex, '1B');
-      end
-      else if ResultText = '0-2' then
-      begin
-        SB[BlackIndex] := SB[BlackIndex] + Points[WhiteIndex];
-        AddMarker(WhiteIndex, BlackIndex, '0W');
-        AddMarker(BlackIndex, WhiteIndex, '2B');
-      end;
-    end;
-
-    for I := 0 to High(Order) - 1 do
-      for J := I + 1 to High(Order) do
-        if not ComesBefore(Order[I], Order[J]) then
-        begin
-          Temp := Order[I];
-          Order[I] := Order[J];
-          Order[J] := Temp;
-        end;
-
-    FCrossTableGrid.ColCount := Max(4, EngineNames.Count + 4);
-    FCrossTableGrid.RowCount := Max(2, EngineNames.Count + 1);
+    FCrossTableGrid.ColCount := Max(4, Length(Table.EngineNames) + 4);
+    FCrossTableGrid.RowCount := Max(2, Length(Table.EngineNames) + 1);
     for I := 0 to FCrossTableGrid.ColCount - 1 do
       for J := 0 to FCrossTableGrid.RowCount - 1 do
         FCrossTableGrid.Cells[I, J] := '';
 
     FCrossTableGrid.Cells[0, 0] := 'Engine';
-    for I := 0 to EngineNames.Count - 1 do
+    for I := 0 to High(Table.EngineNames) do
     begin
       FCrossTableGrid.Cells[I + 1, 0] :=
-        CompactEngineHeader(EngineNames[Order[I]]);
-      FCrossTableGrid.Cells[0, I + 1] := EngineNames[Order[I]];
+        CompactTournamentEngineHeader(Table.EngineNames[Table.Order[I]]);
+      FCrossTableGrid.Cells[0, I + 1] := Table.EngineNames[Table.Order[I]];
     end;
-    FCrossTableGrid.Cells[EngineNames.Count + 1, 0] := 'Points';
-    FCrossTableGrid.Cells[EngineNames.Count + 2, 0] := '#Wins';
-    FCrossTableGrid.Cells[EngineNames.Count + 3, 0] := 'SB';
+    FCrossTableGrid.Cells[Length(Table.EngineNames) + 1, 0] := 'Points';
+    FCrossTableGrid.Cells[Length(Table.EngineNames) + 2, 0] := '#Wins';
+    FCrossTableGrid.Cells[Length(Table.EngineNames) + 3, 0] := 'SB';
 
-    if EngineNames.Count = 0 then
+    if Length(Table.EngineNames) = 0 then
     begin
       FCrossTableGrid.Cells[0, 1] := '';
       FCrossTableGrid.Cells[1, 1] := '0';
     end;
 
-    for I := 0 to EngineNames.Count - 1 do
+    for I := 0 to High(Table.EngineNames) do
     begin
-      for J := 0 to EngineNames.Count - 1 do
-        FCrossTableGrid.Cells[J + 1, I + 1] := Matrix[Order[I], Order[J]];
-      FCrossTableGrid.Cells[EngineNames.Count + 1, I + 1] :=
-        IntToStr(Points[Order[I]]);
-      FCrossTableGrid.Cells[EngineNames.Count + 2, I + 1] :=
-        IntToStr(Wins[Order[I]]);
-      FCrossTableGrid.Cells[EngineNames.Count + 3, I + 1] :=
-        FormatSB(SB[Order[I]]);
+      for J := 0 to High(Table.EngineNames) do
+        FCrossTableGrid.Cells[J + 1, I + 1] :=
+          Table.Matrix[Table.Order[I], Table.Order[J]];
+      FCrossTableGrid.Cells[Length(Table.EngineNames) + 1, I + 1] :=
+        IntToStr(Table.Points[Table.Order[I]]);
+      FCrossTableGrid.Cells[Length(Table.EngineNames) + 2, I + 1] :=
+        IntToStr(Table.Wins[Table.Order[I]]);
+      FCrossTableGrid.Cells[Length(Table.EngineNames) + 3, I + 1] :=
+        FormatTournamentSB(Table.SB[Table.Order[I]]);
     end;
 
     AutoSizeCrossTableColumns;
     AdjustSectionHeights;
+    UpdateTournamentButtons;
   finally
-    EngineNames.Free;
+    Results.Free;
+    BlackEngines.Free;
+    WhiteEngines.Free;
+    SelectedEngines.Free;
+  end;
+end;
+
+procedure TTournamentDialog.UpdateTournamentButtons;
+var
+  BlackEngines: TStringList;
+  Results: TStringList;
+  State: TTournamentButtonState;
+  WhiteEngines: TStringList;
+begin
+  if (FStartButton = nil) or (FPlayRoundButton = nil) then
+    Exit;
+
+  WhiteEngines := TStringList.Create;
+  BlackEngines := TStringList.Create;
+  Results := TStringList.Create;
+  try
+    CollectPairingRows(WhiteEngines, BlackEngines, Results);
+
+    State := BuildTournamentButtonState(
+      TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex),
+      FTournamentRunning, GridIsEmpty, WhiteEngines, BlackEngines, Results);
+    FStartButton.Enabled := State.CanCreatePairing;
+    FPlayRoundButton.Enabled := State.CanPlayRound;
+    FStopButton.Enabled := State.CanStop;
+  finally
+    Results.Free;
+    BlackEngines.Free;
+    WhiteEngines.Free;
   end;
 end;
 
 procedure TTournamentDialog.StartButtonClick(Sender: TObject);
 var
+  BlackEngines: TStringList;
   Engines: TStringList;
-  I: Integer;
-  J: Integer;
+  PairingRound: TTournamentPairingRound;
+  Results: TStringList;
+  Rounds: TStringList;
+  SwissPairing: Boolean;
+  WhiteEngines: TStringList;
 begin
   if FTournamentRunning then
     Exit;
 
-  if GridIsEmpty then
-  begin
-    Engines := TStringList.Create;
-    try
-      LoadSelectedEngineNames(Engines);
-      if Engines.Count < 2 then
-      begin
-        MessageDlg('Tournament', 'Select at least two engines for the tournament.',
-          mtInformation, [mbOK], 0);
-        Exit;
-      end;
-
-      FGrid.RowCount := 2;
-      FGrid.Cells[0, 1] := '';
-      FGrid.Cells[1, 1] := '';
-      FGrid.Cells[2, 1] := '';
-      FGrid.Cells[3, 1] := '';
-
-      for I := 0 to Engines.Count - 2 do
-        for J := I + 1 to Engines.Count - 1 do
-        begin
-          AddPairing(Engines[I], Engines[J]);
-          if FRoundRobinGroup.ItemIndex = 1 then
-            AddPairing(Engines[J], Engines[I]);
-        end;
-    finally
-      Engines.Free;
+  Engines := TStringList.Create;
+  WhiteEngines := TStringList.Create;
+  BlackEngines := TStringList.Create;
+  Results := TStringList.Create;
+  Rounds := TStringList.Create;
+  try
+    CollectSelectedEngineNames(Engines);
+    if Engines.Count < 2 then
+    begin
+      ShowGuiOkDialog(Self, 'Tournament',
+        'Select at least two engines for the tournament.');
+      Exit;
     end;
+
+    SwissPairing := TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex);
+    CollectPairingRows(WhiteEngines, BlackEngines, Results);
+    CollectRoundRows(Rounds);
+
+    if not SwissPairing then
+    begin
+      if not GridIsEmpty then
+        Exit;
+      ClearPairingGrid;
+    end;
+    if SwissPairing and
+      (not TournamentAllResultsKnown(WhiteEngines, BlackEngines, Results)) then
+    begin
+      ShowGuiOkDialog(Self, 'Tournament',
+        'Enter all results before creating the next Swiss round.');
+      Exit;
+    end;
+
+    PairingRound := BuildTournamentPairingRound(SwissPairing,
+      TournamentRoundRobinIndexIsDouble(FRoundRobinGroup.ItemIndex), Engines,
+      WhiteEngines, BlackEngines, Results, Rounds);
+    if PairingRound.HasRepeat and
+      (ShowGuiConfirmationDialog(Self, 'Tournament',
+      'A Swiss pairing without repeated opponents is no longer possible.' +
+      LineEnding + 'Continue with repeated pairing?', 'Continue', '',
+      mrCancel) <> mrYes) then
+      Exit;
+    ApplyTournamentPairingRoundToGrid(FGrid, PairingRound);
+  finally
+    Rounds.Free;
+    Results.Free;
+    BlackEngines.Free;
+    WhiteEngines.Free;
+    Engines.Free;
   end;
 
+  UpdateCrossTable;
+  MarkDirty;
+end;
+
+procedure TTournamentDialog.PlayRoundButtonClick(Sender: TObject);
+begin
+  if FTournamentRunning then
+    Exit;
   FTournamentRunning := StartNextTournamentGame;
   FTournamentTimer.Enabled := FTournamentRunning;
   if (Owner is TMainWindow) and FTournamentRunning then
     TMainWindow(Owner).SetGuiState(gsTournamentRunning, 'tournament started');
+  UpdateTournamentButtons;
 end;
 
 procedure TTournamentDialog.StopButtonClick(Sender: TObject);
@@ -1696,6 +1608,8 @@ begin
     TMainWindow(Owner).SetGuiState(gsStopping, 'tournament stop requested');
   FCurrentGameStarted := False;
   FCurrentTournamentRow := 0;
+  if FGrid <> nil then
+    FGrid.Invalidate;
   FCurrentWhiteEngineIndex := 1;
   FCurrentBlackEngineIndex := 2;
   if FTournamentTimer <> nil then
@@ -1704,6 +1618,169 @@ begin
   begin
     Main := TMainWindow(Owner);
     Main.StopButtonClick(Sender);
+  end;
+  UpdateTournamentButtons;
+end;
+
+function TTournamentDialog.FindNextUnplayedTournamentRow: Integer;
+var
+  BlackEngines: TStringList;
+  Results: TStringList;
+  Rounds: TStringList;
+  WhiteEngines: TStringList;
+begin
+  WhiteEngines := TStringList.Create;
+  BlackEngines := TStringList.Create;
+  Results := TStringList.Create;
+  Rounds := TStringList.Create;
+  try
+    CollectPairingRows(WhiteEngines, BlackEngines, Results);
+    CollectRoundRows(Rounds);
+    Result := TournamentPairing.FindNextUnplayedTournamentRow(
+      TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex), Results,
+      Rounds);
+  finally
+    Rounds.Free;
+    Results.Free;
+    BlackEngines.Free;
+    WhiteEngines.Free;
+  end;
+end;
+
+function TTournamentDialog.TournamentSlotMatches(AMain: TMainWindow;
+  AIndex: Integer; const AName, AFileName: String): Boolean;
+begin
+  Result := False;
+  if (AMain = nil) or (AIndex < Low(AMain.FEngines)) or
+    (AIndex > High(AMain.FEngines)) then
+    Exit;
+  if (AIndex = 1) and (not AMain.EngineIsRunning) then
+    Exit;
+  if (AIndex = 2) and (not AMain.SecondEngineIsRunning) then
+    Exit;
+  Result := ((AFileName <> '') and
+    SameFileName(AMain.FEngines[AIndex].FileName, AFileName)) or
+    SameText(AMain.FEngines[AIndex].DisplayName, AName) or
+    SameText(ChangeFileExt(ExtractFileName(AMain.FEngines[AIndex].FileName),
+    ''), AName) or SameText(AName, 'Engine' + IntToStr(AIndex)) or
+    SameText(AName, 'Engine ' + IntToStr(AIndex));
+end;
+
+function TTournamentDialog.LoadedSlotIndexForTournamentEngine(
+  AMain: TMainWindow; const AName, AFileName: String): Integer;
+begin
+  if TournamentSlotMatches(AMain, 1, AName, AFileName) then
+    Exit(1);
+  if TournamentSlotMatches(AMain, 2, AName, AFileName) then
+    Exit(2);
+  Result := 0;
+end;
+
+function TTournamentDialog.OtherTournamentSlot(AEngineIndex: Integer): Integer;
+begin
+  if AEngineIndex = 1 then
+    Result := 2
+  else
+    Result := 1;
+end;
+
+procedure TTournamentDialog.HighlightTournamentRow(ARow: Integer);
+begin
+  FCurrentTournamentRow := ARow;
+  FCurrentGameStarted := False;
+  if FGrid = nil then
+    Exit;
+
+  FGrid.Row := ARow;
+  FGrid.Col := 0;
+  if ARow >= FGrid.FixedRows then
+    FGrid.TopRow := ARow;
+  FGrid.Invalidate;
+end;
+
+procedure TTournamentDialog.LoadTournamentEngineIntoSlot(AMain: TMainWindow;
+  AEngineIndex: Integer; const AName, AFileName, AProtocol: String);
+begin
+  AMain.FEngines[AEngineIndex].DisplayName := AName;
+  AMain.LoadEngineParamsForProtocol(AEngineIndex, AFileName, AProtocol);
+  if AEngineIndex = 2 then
+    AMain.StartSecondEngine(AFileName, True)
+  else
+    AMain.StartEngine(AFileName, True);
+end;
+
+function TTournamentDialog.ResolveTournamentPairing(AMain: TMainWindow;
+  ARow: Integer; out AWhiteName, ABlackName, AWhiteFileName, ABlackFileName,
+  AWhiteProtocol, ABlackProtocol: String; out AWhiteLoadedIndex,
+  ABlackLoadedIndex: Integer): Boolean;
+begin
+  Result := False;
+  AWhiteName := FGrid.Cells[TournamentColWhite, ARow];
+  ABlackName := FGrid.Cells[TournamentColBlack, ARow];
+  AWhiteFileName := EngineFileNameForName(AWhiteName);
+  ABlackFileName := EngineFileNameForName(ABlackName);
+  AWhiteProtocol := EngineProtocolForName(AWhiteName);
+  ABlackProtocol := EngineProtocolForName(ABlackName);
+  AWhiteLoadedIndex := LoadedSlotIndexForTournamentEngine(AMain, AWhiteName,
+    AWhiteFileName);
+  ABlackLoadedIndex := LoadedSlotIndexForTournamentEngine(AMain, ABlackName,
+    ABlackFileName);
+
+  if (AWhiteFileName = '') and (AWhiteLoadedIndex <> 0) then
+    AWhiteFileName := AMain.FEngines[AWhiteLoadedIndex].FileName;
+  if (ABlackFileName = '') and (ABlackLoadedIndex <> 0) then
+    ABlackFileName := AMain.FEngines[ABlackLoadedIndex].FileName;
+
+  if (AWhiteFileName = '') or (ABlackFileName = '') then
+  begin
+    ShowGuiOkDialog(Self, 'Tournament',
+      'Could not find engine executable for this pairing:' + LineEnding +
+      'White: ' + AWhiteName + LineEnding + 'Black: ' + ABlackName);
+    Exit;
+  end;
+  Result := True;
+end;
+
+procedure TTournamentDialog.ResolveTournamentSlots(AMain: TMainWindow;
+  const AWhiteName, ABlackName, AWhiteFileName, ABlackFileName,
+  AWhiteProtocol, ABlackProtocol: String; AWhiteLoadedIndex,
+  ABlackLoadedIndex: Integer);
+begin
+  AWhiteLoadedIndex := LoadedSlotIndexForTournamentEngine(AMain, AWhiteName,
+    AWhiteFileName);
+  ABlackLoadedIndex := LoadedSlotIndexForTournamentEngine(AMain, ABlackName,
+    ABlackFileName);
+
+  if (AWhiteLoadedIndex <> 0) and (ABlackLoadedIndex <> 0) and
+    (AWhiteLoadedIndex <> ABlackLoadedIndex) then
+  begin
+    FCurrentWhiteEngineIndex := AWhiteLoadedIndex;
+    FCurrentBlackEngineIndex := ABlackLoadedIndex;
+    Exit;
+  end;
+
+  if AWhiteLoadedIndex <> 0 then
+  begin
+    FCurrentWhiteEngineIndex := AWhiteLoadedIndex;
+    FCurrentBlackEngineIndex := OtherTournamentSlot(AWhiteLoadedIndex);
+    LoadTournamentEngineIntoSlot(AMain, FCurrentBlackEngineIndex, ABlackName,
+      ABlackFileName, ABlackProtocol);
+  end
+  else if ABlackLoadedIndex <> 0 then
+  begin
+    FCurrentBlackEngineIndex := ABlackLoadedIndex;
+    FCurrentWhiteEngineIndex := OtherTournamentSlot(ABlackLoadedIndex);
+    LoadTournamentEngineIntoSlot(AMain, FCurrentWhiteEngineIndex, AWhiteName,
+      AWhiteFileName, AWhiteProtocol);
+  end
+  else
+  begin
+    FCurrentWhiteEngineIndex := 1;
+    FCurrentBlackEngineIndex := 2;
+    LoadTournamentEngineIntoSlot(AMain, 1, AWhiteName, AWhiteFileName,
+      AWhiteProtocol);
+    LoadTournamentEngineIntoSlot(AMain, 2, ABlackName, ABlackFileName,
+      ABlackProtocol);
   end;
 end;
 
@@ -1719,92 +1796,6 @@ var
   WhiteLoadedIndex: Integer;
   WhiteName: String;
   BlackProtocol: String;
-
-  function SlotMatches(AIndex: Integer; const AName, AFileName: String): Boolean;
-  begin
-    Result := False;
-    if (AIndex < Low(Main.FEngines)) or (AIndex > High(Main.FEngines)) then
-      Exit;
-    if (AIndex = 1) and (not Main.EngineIsRunning) then
-      Exit;
-    if (AIndex = 2) and (not Main.SecondEngineIsRunning) then
-      Exit;
-    Result := ((AFileName <> '') and
-      SameFileName(Main.FEngines[AIndex].FileName, AFileName)) or
-      SameText(Main.FEngines[AIndex].DisplayName, AName) or
-      SameText(ChangeFileExt(ExtractFileName(Main.FEngines[AIndex].FileName), ''),
-      AName) or SameText(AName, 'Engine' + IntToStr(AIndex)) or
-      SameText(AName, 'Engine ' + IntToStr(AIndex));
-  end;
-
-  function LoadedSlotIndex(const AName, AFileName: String): Integer;
-  begin
-    if SlotMatches(1, AName, AFileName) then
-      Exit(1);
-    if SlotMatches(2, AName, AFileName) then
-      Exit(2);
-    Result := 0;
-  end;
-
-  function OtherSlot(AEngineIndex: Integer): Integer;
-  begin
-    if AEngineIndex = 1 then
-      Result := 2
-    else
-      Result := 1;
-  end;
-
-  procedure LoadEngineIntoSlot(AEngineIndex: Integer; const AName,
-    AFileName, AProtocol: String);
-  var
-    CandidateParams: TEngineParamArray;
-    CandidateParamsFile: String;
-    I: Integer;
-
-    function ParamsMatchProtocol(const AParams: TEngineParamArray;
-      const AProtocolText: String): Boolean;
-    var
-      P: Integer;
-    begin
-      Result := AProtocolText = '';
-      for P := 0 to High(AParams) do
-        if SameText(AParams[P].Name, EngineTypeParamName) then
-          Exit(SameText(AParams[P].Value, AProtocolText));
-    end;
-  begin
-    Main.FEngines[AEngineIndex].DisplayName := AName;
-    Main.FEngines[AEngineIndex].ParamsFileName :=
-      Main.EngineParamsFileNameForDisplayName(AName, AFileName);
-    LoadParamsFromJson(Main.FEngines[AEngineIndex].ParamsFileName,
-      Main.FEngines[AEngineIndex].Params);
-
-    CandidateParamsFile := Main.EngineParamsFileNameForDisplayName(
-      ChangeFileExt(ExtractFileName(AFileName), ''), AFileName);
-    if (CandidateParamsFile <> Main.FEngines[AEngineIndex].ParamsFileName) and
-      FileExists(CandidateParamsFile) then
-    begin
-      SetLength(CandidateParams, 0);
-      LoadParamsFromJson(CandidateParamsFile, CandidateParams);
-      if ParamsMatchProtocol(CandidateParams, AProtocol) then
-      begin
-        Main.FEngines[AEngineIndex].ParamsFileName := CandidateParamsFile;
-        SetLength(Main.FEngines[AEngineIndex].Params, Length(CandidateParams));
-        for I := 0 to High(CandidateParams) do
-          Main.FEngines[AEngineIndex].Params[I] := CandidateParams[I];
-      end;
-    end;
-
-    if SameText(AProtocol, 'dxp') then
-      AddOrUpdateParam(Main.FEngines[AEngineIndex].Params,
-        EngineTypeParamName, 'string', 'dxp', False)
-    else if SameText(AProtocol, 'hub') then
-      AddOrUpdateParam(Main.FEngines[AEngineIndex].Params,
-        EngineTypeParamName, 'string', 'hub', False);
-    if AEngineIndex = 2 then
-      Main.StartSecondEngine(AFileName, True)
-    else
-      Main.StartEngine(AFileName, True);
-  end;
 begin
   Result := False;
   if not (Owner is TMainWindow) then
@@ -1812,72 +1803,23 @@ begin
 
   Main := TMainWindow(Owner);
 
-  for Row := 1 to FGrid.RowCount - 1 do
-    if SameText(FGrid.Cells[3, Row], '*') then
-    begin
-      WhiteName := FGrid.Cells[1, Row];
-      BlackName := FGrid.Cells[2, Row];
-      WhiteFileName := EngineFileNameForName(WhiteName);
-      BlackFileName := EngineFileNameForName(BlackName);
-      WhiteProtocol := EngineProtocolForName(WhiteName);
-      BlackProtocol := EngineProtocolForName(BlackName);
-      WhiteLoadedIndex := LoadedSlotIndex(WhiteName, WhiteFileName);
-      BlackLoadedIndex := LoadedSlotIndex(BlackName, BlackFileName);
-      if (WhiteFileName = '') and (WhiteLoadedIndex <> 0) then
-        WhiteFileName := Main.FEngines[WhiteLoadedIndex].FileName;
-      if (BlackFileName = '') and (BlackLoadedIndex <> 0) then
-        BlackFileName := Main.FEngines[BlackLoadedIndex].FileName;
-      if (WhiteFileName = '') or (BlackFileName = '') then
-      begin
-        MessageDlg('Tournament',
-          'Could not find engine executable for this pairing:' + LineEnding +
-          'White: ' + WhiteName + LineEnding + 'Black: ' + BlackName,
-          mtError,
-          [mbOK], 0);
-        Exit;
-      end;
+  Row := FindNextUnplayedTournamentRow;
+  if Row = 0 then
+    Exit;
 
-      FCurrentTournamentRow := Row;
-      FCurrentGameStarted := False;
+  if not ResolveTournamentPairing(Main, Row, WhiteName, BlackName,
+    WhiteFileName, BlackFileName, WhiteProtocol, BlackProtocol,
+    WhiteLoadedIndex, BlackLoadedIndex) then
+    Exit;
 
-      Main.FGameResult := '*';
+  HighlightTournamentRow(Row);
+  Main.FGameResult := '*';
+  Main.FGameResultReason := '';
+  ResolveTournamentSlots(Main, WhiteName, BlackName, WhiteFileName,
+    BlackFileName, WhiteProtocol, BlackProtocol, WhiteLoadedIndex,
+    BlackLoadedIndex);
 
-      WhiteLoadedIndex := LoadedSlotIndex(WhiteName, WhiteFileName);
-      BlackLoadedIndex := LoadedSlotIndex(BlackName, BlackFileName);
-      if (WhiteLoadedIndex <> 0) and (BlackLoadedIndex <> 0) and
-        (WhiteLoadedIndex <> BlackLoadedIndex) then
-      begin
-        FCurrentWhiteEngineIndex := WhiteLoadedIndex;
-        FCurrentBlackEngineIndex := BlackLoadedIndex;
-        Result := True;
-        Exit;
-      end;
-
-      if WhiteLoadedIndex <> 0 then
-      begin
-        FCurrentWhiteEngineIndex := WhiteLoadedIndex;
-        FCurrentBlackEngineIndex := OtherSlot(WhiteLoadedIndex);
-        LoadEngineIntoSlot(FCurrentBlackEngineIndex, BlackName, BlackFileName,
-          BlackProtocol);
-      end
-      else if BlackLoadedIndex <> 0 then
-      begin
-        FCurrentBlackEngineIndex := BlackLoadedIndex;
-        FCurrentWhiteEngineIndex := OtherSlot(BlackLoadedIndex);
-        LoadEngineIntoSlot(FCurrentWhiteEngineIndex, WhiteName, WhiteFileName,
-          WhiteProtocol);
-      end
-      else
-      begin
-        FCurrentWhiteEngineIndex := 1;
-        FCurrentBlackEngineIndex := 2;
-        LoadEngineIntoSlot(1, WhiteName, WhiteFileName, WhiteProtocol);
-        LoadEngineIntoSlot(2, BlackName, BlackFileName, BlackProtocol);
-      end;
-
-      Result := True;
-      Exit;
-    end;
+  Result := True;
 end;
 
 procedure TTournamentDialog.TournamentTimerTick(Sender: TObject);
@@ -1893,8 +1835,8 @@ begin
 
   if not FCurrentGameStarted then
   begin
-    if Main.EngineIsRunning and Main.SecondEngineIsRunning and
-      Main.FEngines[1].Ready and Main.FEngines[2].Ready then
+    if Main.EngineSlotAvailableForPlay(FCurrentWhiteEngineIndex) and
+      Main.EngineSlotAvailableForPlay(FCurrentBlackEngineIndex) then
     begin
       FCurrentGameStarted := True;
       Main.StartPlayGameFromOptions(True, True,
@@ -1911,15 +1853,19 @@ begin
     if (FCurrentTournamentRow > 0) and
       (FCurrentTournamentRow < FGrid.RowCount) then
     begin
-      FGrid.Cells[3, FCurrentTournamentRow] := Main.FGameResult;
+      FGrid.Cells[TournamentColResult, FCurrentTournamentRow] :=
+        Main.FGameResult;
+      FGrid.Cells[TournamentColReason, FCurrentTournamentRow] :=
+        Main.FGameResultReason;
       UpdateCrossTable;
       MarkDirty;
-      SaveTournamentGamePdn(StrToIntDef(FGrid.Cells[0, FCurrentTournamentRow],
-        FCurrentTournamentRow));
+      SaveTournamentGamePdn(StrToIntDef(FGrid.Cells[TournamentColGame,
+        FCurrentTournamentRow], FCurrentTournamentRow));
     end;
 
     FCurrentGameStarted := False;
     FCurrentTournamentRow := 0;
+    FGrid.Invalidate;
 
     FTournamentRunning := StartNextTournamentGame;
     FTournamentTimer.Enabled := FTournamentRunning;
@@ -1930,16 +1876,17 @@ procedure TTournamentDialog.GridClick(Sender: TObject);
 var
   CellRect: TRect;
 begin
-  if (FGrid.Row <= 0) or (FGrid.Col <> 3) then
+  if (FGrid.Row <= 0) or (FGrid.Col <> TournamentColResult) then
   begin
     FResultCombo.Visible := False;
     Exit;
   end;
 
-  CellRect := FGrid.CellRect(3, FGrid.Row);
+  CellRect := FGrid.CellRect(TournamentColResult, FGrid.Row);
   FResultCombo.SetBounds(CellRect.Left, CellRect.Top,
     CellRect.Right - CellRect.Left, CellRect.Bottom - CellRect.Top);
-  FResultCombo.ItemIndex := FResultCombo.Items.IndexOf(FGrid.Cells[3, FGrid.Row]);
+  FResultCombo.ItemIndex := FResultCombo.Items.IndexOf(
+    FGrid.Cells[TournamentColResult, FGrid.Row]);
   FResultCombo.Visible := True;
   FResultCombo.BringToFront;
   FResultCombo.SetFocus;
@@ -1948,11 +1895,15 @@ end;
 
 procedure TTournamentDialog.ResultComboChange(Sender: TObject);
 begin
-  if (FGrid.Row > 0) and (FGrid.Col = 3) and
+  if (FGrid.Row > 0) and (FGrid.Col = TournamentColResult) and
     (FResultCombo.ItemIndex >= 0) and
-    (FGrid.Cells[3, FGrid.Row] <> FResultCombo.Text) then
+    (FGrid.Cells[TournamentColResult, FGrid.Row] <> FResultCombo.Text) then
   begin
-    FGrid.Cells[3, FGrid.Row] := FResultCombo.Text;
+    FGrid.Cells[TournamentColResult, FGrid.Row] := FResultCombo.Text;
+    if FResultCombo.Text = '*' then
+      FGrid.Cells[TournamentColReason, FGrid.Row] := ''
+    else
+      FGrid.Cells[TournamentColReason, FGrid.Row] := 'Manual result';
     UpdateCrossTable;
     MarkDirty;
   end;
@@ -1971,9 +1922,9 @@ begin
     Exit;
 
   if (not GridIsEmpty) and
-    (MessageDlg('Tournament',
+    (ShowGuiConfirmationDialog(Self, 'Tournament',
     'Warning: you will lose all results if you change tournament type.' +
-    LineEnding + 'Are you sure?', mtWarning, [mbYes, mbNo], 0) <> mrYes) then
+    LineEnding + 'Are you sure?', 'Yes', 'No', mrNo) <> mrYes) then
   begin
     FSuppressRoundRobinChange := True;
     try
@@ -1987,27 +1938,15 @@ begin
   FPreviousRoundRobinIndex := FRoundRobinGroup.ItemIndex;
   if not GridIsEmpty then
   begin
-    FGrid.RowCount := 2;
-    FGrid.Cells[0, 1] := '';
-    FGrid.Cells[1, 1] := '';
-    FGrid.Cells[2, 1] := '';
-    FGrid.Cells[3, 1] := '';
+    ClearPairingGrid;
     UpdateCrossTable;
     MarkDirty;
   end;
 end;
 
 function TTournamentDialog.GridIsEmpty: Boolean;
-var
-  I: Integer;
 begin
-  Result := True;
-  for I := 1 to FGrid.RowCount - 1 do
-    if (FGrid.Cells[1, I] <> '') or (FGrid.Cells[2, I] <> '') then
-    begin
-      Result := False;
-      Exit;
-    end;
+  Result := TournamentPairingGridIsEmpty(FGrid);
 end;
 
 procedure TTournamentDialog.SaveButtonClick(Sender: TObject);
@@ -2054,526 +1993,36 @@ end;
 
 function TTournamentDialog.SaveTournament: Boolean;
 var
-  Data: TJSONObject;
-  Games: TJSONArray;
-  Game: TJSONObject;
-  I: Integer;
-  Lines: TStringList;
-  SaveDialog: TSaveDialog;
-  SelectedEngines: TJSONArray;
+  Data: TTournamentFileData;
+  FileName: String;
+  TournamentType: String;
 begin
   Result := False;
-  SaveDialog := TSaveDialog.Create(Self);
-  try
-    SaveDialog.Title := 'Save tournament';
-    SaveDialog.Filter := 'Tournament files (*.json)|*.json|All files (*.*)|*.*';
-    SaveDialog.DefaultExt := 'json';
-    if FFileName <> '' then
-      SaveDialog.FileName := FFileName
-    else if Trim(FNameEdit.Text) <> '' then
-      SaveDialog.FileName := Trim(FNameEdit.Text) + '.json'
-    else
-      SaveDialog.FileName := 'Tournament.json';
-    SaveDialog.Options := SaveDialog.Options + [ofOverwritePrompt];
-    if not SaveDialog.Execute then
-      Exit;
+  if not SelectTournamentSaveFile(Self, FFileName, FNameEdit.Text, FileName) then
+    Exit;
 
-    Data := TJSONObject.Create;
-    try
-      Data.Add('name', FNameEdit.Text);
-      Data.Add('minutes', FMinutesEdit.Value);
-      if FRoundRobinGroup.ItemIndex = 1 then
-        Data.Add('type', 'double-round-robin')
-      else
-        Data.Add('type', 'single-round-robin');
+  TournamentType := TournamentTypeForRoundRobinIndex(FRoundRobinGroup.ItemIndex);
+  BuildTournamentFileDataFromGrid(FGrid, FEngineCheckList, FNameEdit.Text,
+    TournamentType, FMinutesEdit.Value, Data);
 
-      SelectedEngines := TJSONArray.Create;
-      Data.Add('engines', SelectedEngines);
-      for I := 0 to FEngineCheckList.Items.Count - 1 do
-        if FEngineCheckList.Checked[I] and
-          (not AnsiStartsText('(', FEngineCheckList.Items[I])) then
-          SelectedEngines.Add(FEngineCheckList.Items[I]);
-
-      Games := TJSONArray.Create;
-      Data.Add('games', Games);
-      for I := 1 to FGrid.RowCount - 1 do
-        if (FGrid.Cells[1, I] <> '') or (FGrid.Cells[2, I] <> '') then
-        begin
-          Game := TJSONObject.Create;
-          Game.Add('number', StrToIntDef(FGrid.Cells[0, I], I));
-          Game.Add('white', FGrid.Cells[1, I]);
-          Game.Add('black', FGrid.Cells[2, I]);
-          Game.Add('result', FGrid.Cells[3, I]);
-          Games.Add(Game);
-        end;
-
-      Lines := TStringList.Create;
-      try
-        Lines.Text := Data.FormatJSON([], 2) + LineEnding;
-        Lines.SaveToFile(SaveDialog.FileName);
-        FFileName := SaveDialog.FileName;
-        FDirty := False;
-        Result := True;
-      finally
-        Lines.Free;
-      end;
-    finally
-      Data.Free;
-    end;
-  finally
-    SaveDialog.Free;
-  end;
+  SaveTournamentFile(FileName, Data);
+  FFileName := FileName;
+  FDirty := False;
+  Result := True;
 end;
 
 procedure TTournamentDialog.LoadButtonClick(Sender: TObject);
 var
-  Data: TJSONData;
-  EngineName: String;
-  Engines: TJSONData;
-  Games: TJSONArray;
-  I: Integer;
-  J: Integer;
-  Lines: TStringList;
-  OpenDialog: TOpenDialog;
+  Data: TTournamentFileData;
+  FileName: String;
 begin
-  OpenDialog := TOpenDialog.Create(Self);
-  try
-    OpenDialog.Title := 'Load tournament';
-    OpenDialog.Filter := 'Tournament files (*.json)|*.json|All files (*.*)|*.*';
-    OpenDialog.Options := OpenDialog.Options + [ofFileMustExist];
-    if not OpenDialog.Execute then
-      Exit;
-
-    Lines := TStringList.Create;
-    try
-      Lines.LoadFromFile(OpenDialog.FileName);
-      Data := GetJSON(Lines.Text);
-    finally
-      Lines.Free;
-    end;
-    try
-      if Data.JSONType <> jtObject then
-        Exit;
-
-      FNameEdit.Text := TJSONObject(Data).Get('name', 'Tournament');
-      FSuppressMinutesChange := True;
-      try
-        FMinutesEdit.Value := TJSONObject(Data).Get('minutes', 5);
-        FPreviousMinutesValue := FMinutesEdit.Value;
-      finally
-        FSuppressMinutesChange := False;
-      end;
-      FSuppressRoundRobinChange := True;
-      try
-        if TJSONObject(Data).Get('type', 'single-round-robin') =
-          'double-round-robin' then
-          FRoundRobinGroup.ItemIndex := 1
-        else
-          FRoundRobinGroup.ItemIndex := 0;
-        FPreviousRoundRobinIndex := FRoundRobinGroup.ItemIndex;
-      finally
-        FSuppressRoundRobinChange := False;
-      end;
-
-      Engines := TJSONObject(Data).Find('engines');
-      if (Engines <> nil) and (Engines.JSONType = jtArray) then
-      begin
-        for I := 0 to FEngineCheckList.Items.Count - 1 do
-          if not AnsiStartsText('(', FEngineCheckList.Items[I]) then
-            FEngineCheckList.Checked[I] := False;
-        for I := 0 to TJSONArray(Engines).Count - 1 do
-        begin
-          EngineName := TJSONArray(Engines).Strings[I];
-          for J := 0 to FEngineCheckList.Items.Count - 1 do
-            if SameText(FEngineCheckList.Items[J], EngineName) then
-            begin
-              FEngineCheckList.Checked[J] := True;
-              Break;
-            end;
-        end;
-      end;
-
-      FGrid.RowCount := 2;
-      FGrid.Cells[0, 1] := '';
-      FGrid.Cells[1, 1] := '';
-      FGrid.Cells[2, 1] := '';
-      FGrid.Cells[3, 1] := '';
-      if TJSONObject(Data).Find('games') = nil then
-        Exit;
-      if TJSONObject(Data).Find('games').JSONType <> jtArray then
-        Exit;
-
-      Games := TJSONArray(TJSONObject(Data).Find('games'));
-      for I := 0 to Games.Count - 1 do
-        if Games.Items[I].JSONType = jtObject then
-        begin
-          AddPairing(TJSONObject(Games.Items[I]).Get('white', ''),
-            TJSONObject(Games.Items[I]).Get('black', ''));
-          FGrid.Cells[0, FGrid.RowCount - 1] :=
-            IntToStr(TJSONObject(Games.Items[I]).Get('number',
-            FGrid.RowCount - 1));
-          FGrid.Cells[3, FGrid.RowCount - 1] :=
-            TJSONObject(Games.Items[I]).Get('result', '*');
-        end;
-      UpdateCrossTable;
-      FFileName := OpenDialog.FileName;
-      FDirty := False;
-    finally
-      Data.Free;
-    end;
-  finally
-    OpenDialog.Free;
-  end;
-end;
-
-constructor TEngineSlot.Create(AIndex: Integer);
-begin
-  inherited Create;
-  Index := AIndex;
-  if AIndex = 1 then
-    DisplayName := 'Engine'
-  else
-    DisplayName := 'Engine ' + IntToStr(AIndex);
-  Protocol := epHub;
-  HubId := 'Hub' + IntToStr(AIndex);
-  IniFileName := '';
-  HubLaunchArgument := '';
-  DxpId := 'DXP' + IntToStr(AIndex);
-  DxpIpAddress := DxpDefaultIp;
-  DxpSocketNumber := DxpDefaultSocket;
-  DxpLaunchArguments := '';
-  DxpRole := edrListener;
-  DxpGameState := dgsIdle;
-  DxpGameEndSent := False;
-  SearchMode := esmIdle;
-  State := esIdle;
-end;
-
-procedure TEngineSlot.BeginSearch(AMode: TEngineSearchMode;
-  AState: TEngineState);
-begin
-  SearchMode := AMode;
-  State := AState;
-  IgnoreNextDoneMove := False;
-end;
-
-procedure TEngineSlot.FinishSearch;
-begin
-  SearchMode := esmIdle;
-  State := esIdle;
-  IgnoreNextDoneMove := False;
-end;
-
-procedure TEngineSlot.ResetRuntimeState;
-begin
-  Ready := False;
-  SearchMode := esmIdle;
-  State := esIdle;
-  IgnoreNextDoneMove := False;
-  PendingThinkStart := False;
-  TextBuffer := '';
-  WaitingForInit := False;
-  FirstReadSeen := False;
-  DxpGameState := dgsIdle;
-  DxpGameEndSent := False;
-end;
-
-constructor TClockThread.Create(AOwner: TMainWindow);
-begin
-  inherited Create(True);
-  FreeOnTerminate := False;
-  FOwner := AOwner;
-  Start;
-end;
-
-procedure TClockThread.Tick;
-begin
-  if FOwner <> nil then
-    FOwner.UpdateGameClock;
-end;
-
-procedure TClockThread.Execute;
-begin
-  while not Terminated do
-  begin
-    Sleep(250);
-    if not Terminated then
-      Synchronize(@Tick);
-  end;
-end;
-
-{$IFDEF MSWINDOWS}
-constructor TEngineReaderThread.Create(AOwner: TMainWindow; AReadHandle: THandle;
-  AEngineIndex: Integer);
-begin
-  inherited Create(True);
-  FreeOnTerminate := False;
-  FEngineIndex := AEngineIndex;
-  FOwner := AOwner;
-  FReadHandle := AReadHandle;
-  Start;
-end;
-
-procedure TEngineReaderThread.DeliverChunk;
-begin
-  if (FOwner <> nil) and (FChunk <> '') then
-  begin
-    if FEngineIndex = 2 then
-    begin
-      if not FOwner.FEngines[2].FirstReadSeen then
-      begin
-        FOwner.FEngines[2].FirstReadSeen := True;
-        FOwner.AppendEngine2Log('[' + FOwner.EngineLogName(2) +
-          ' first read thread bytes=' + IntToStr(Length(FChunk)) + ']' +
-          LineEnding);
-      end;
-      FOwner.AppendEngine2RawLog(FOwner.EngineOutputLogText(FChunk, 2));
-      FOwner.ProcessSecondEngineOutput(FChunk);
-    end
-    else
-    begin
-      if not FOwner.FEngines[1].FirstReadSeen then
-      begin
-        FOwner.FEngines[1].FirstReadSeen := True;
-        FOwner.AppendEngineLog('[' + FOwner.EngineLogName(1) +
-          ' first read thread bytes=' + IntToStr(Length(FChunk)) + ']' +
-          LineEnding);
-      end;
-      FOwner.AppendEngineRawLog(FOwner.EngineOutputLogText(FChunk, 1));
-      FOwner.ProcessEngineOutput(FChunk);
-    end;
-  end;
-end;
-
-procedure TEngineReaderThread.Execute;
-var
-  Buffer: array[0..4095] of Byte;
-  BytesRead: DWORD;
-begin
-  while (not Terminated) and (FReadHandle <> 0) do
-  begin
-    BytesRead := 0;
-    if (not ReadFile(FReadHandle, Buffer[0], SizeOf(Buffer), BytesRead, nil)) or
-      (BytesRead = 0) then
-      Break;
-
-    SetString(FChunk, PChar(@Buffer[0]), BytesRead);
-    Synchronize(@DeliverChunk);
-  end;
-end;
-{$ENDIF}
-
-constructor TEngineDxpConnectionThread.Create(AOwner: TMainWindow;
-  AEngineIndex: Integer; const AIpAddress: String; APort: Word;
-  ARole: TEngineDxpRole);
-begin
-  inherited Create(True);
-  FreeOnTerminate := False;
-  FOwner := AOwner;
-  FEngineIndex := AEngineIndex;
-  FIpAddress := AIpAddress;
-  FPort := APort;
-  FRole := ARole;
-  FServer := nil;
-  FSocket := nil;
-  FListening := False;
-  FIncomingMessage := '';
-  FErrorMessage := '';
-  Start;
-end;
-
-destructor TEngineDxpConnectionThread.Destroy;
-begin
-  StopConnection;
-  inherited Destroy;
-end;
-
-procedure TEngineDxpConnectionThread.ServerConnect(Sender: TObject;
-  Data: TSocketStream);
-begin
-  FSocket := Data;
-  if FServer <> nil then
-    FServer.StopAccepting(False);
-end;
-
-procedure TEngineDxpConnectionThread.DeliverIncomingMessage;
-begin
-  if (FOwner = nil) or Terminated then
-    Exit;
-  FOwner.ProcessDxpMessage(FEngineIndex, FIncomingMessage);
-end;
-
-procedure TEngineDxpConnectionThread.NotifyConnected;
-begin
-  if (FOwner = nil) or Terminated then
+  if not SelectTournamentOpenFile(Self, FileName) then
     Exit;
 
-  if (FEngineIndex >= Low(FOwner.FEngines)) and
-    (FEngineIndex <= High(FOwner.FEngines)) then
-  begin
-    FOwner.FEngines[FEngineIndex].DxpSocket := FSocket;
-    FOwner.FEngines[FEngineIndex].Ready := True;
-  end;
-
-  if FEngineIndex = 2 then
-  begin
-    if FRole = edrClient then
-      FOwner.AppendEngine2Log('[Connected to DXP socket peer]' + LineEnding)
-    else
-      FOwner.AppendEngine2Log('[Connected to DXP socket listener]' + LineEnding);
-  end
-  else
-  begin
-    if FRole = edrClient then
-      FOwner.AppendEngineLog('[Connected to DXP socket peer]' + LineEnding)
-    else
-      FOwner.AppendEngineLog('[Connected to DXP socket listener]' + LineEnding);
-  end;
-end;
-
-procedure TEngineDxpConnectionThread.NotifyError;
-begin
-  if (FOwner = nil) or Terminated then
-    Exit;
-  if FEngineIndex = 2 then
-    FOwner.AppendEngine2Log('[DXP connection error: ' + FErrorMessage + ']' +
-      LineEnding)
-  else
-    FOwner.AppendEngineLog('[DXP connection error: ' + FErrorMessage + ']' +
-      LineEnding);
-end;
-
-procedure TEngineDxpConnectionThread.StopConnection;
-begin
-  Terminate;
-  if FServer <> nil then
-    FServer.StopAccepting(True);
-end;
-
-procedure TEngineDxpConnectionThread.ReadIncomingMessages;
-var
-  BytesRead: Longint;
-  Ch: Char;
-  MessageText: String;
-begin
-  if FSocket = nil then
-    Exit;
-
-  try
-    FSocket.IOTimeout := 250;
-  except
-    on E: Exception do
-      ;
-  end;
-
-  MessageText := '';
-  while not Terminated do
-  begin
-    Ch := #0;
-    try
-      BytesRead := FSocket.Read(Ch, 1);
-    except
-      on E: Exception do
-      begin
-        if Terminated then
-          Break;
-        Sleep(10);
-        Continue;
-      end;
-    end;
-    if BytesRead = 0 then
-      Break;
-    if BytesRead < 0 then
-    begin
-      Sleep(10);
-      Continue;
-    end;
-
-    if Ch = #0 then
-    begin
-      FIncomingMessage := MessageText;
-      MessageText := '';
-      Synchronize(@DeliverIncomingMessage);
-    end
-    else
-      MessageText += Ch;
-  end;
-end;
-
-procedure TEngineDxpConnectionThread.Execute;
-var
-  Attempt: Integer;
-  Connected: Boolean;
-  Socket: TInetSocket;
-begin
-  try
-    if FRole = edrClient then
-    begin
-      FServer := TInetServer.Create('0.0.0.0', FPort);
-      try
-        FServer.ReuseAddress := True;
-        FServer.MaxConnections := 1;
-        FServer.OnConnect := @ServerConnect;
-        FServer.Listen;
-        FListening := True;
-        FServer.StartAccepting;
-      finally
-        FreeAndNil(FServer);
-      end;
-      if not Terminated then
-      begin
-        if FSocket <> nil then
-          Synchronize(@NotifyConnected)
-        else
-        begin
-          FErrorMessage := 'DXP listener stopped before accepting a connection';
-          Synchronize(@NotifyError);
-        end;
-      end;
-    end
-    else
-    begin
-      Connected := False;
-      for Attempt := 1 to 30 do
-      begin
-        if Terminated then
-          Exit;
-        try
-          Socket := TInetSocket.Create(FIpAddress, FPort, 1000);
-          try
-            Socket.Connect;
-            FSocket := Socket;
-            Socket := nil;
-            Connected := True;
-            Break;
-          finally
-            Socket.Free;
-          end;
-        except
-          on E: Exception do
-          begin
-            FErrorMessage := E.Message;
-            Sleep(250);
-          end;
-        end;
-      end;
-      if Terminated then
-        Exit;
-      if Connected then
-        Synchronize(@NotifyConnected)
-      else
-        Synchronize(@NotifyError);
-    end;
-    if (not Terminated) and (FSocket <> nil) then
-      ReadIncomingMessages;
-  except
-    on E: Exception do
-    begin
-      FErrorMessage := E.Message;
-      if not Terminated then
-        Synchronize(@NotifyError);
-    end;
-  end;
+  LoadTournamentFile(FileName, Data);
+  ApplyTournamentData(Data);
+  FFileName := FileName;
+  FDirty := False;
 end;
 
 constructor TMainWindow.Create(AOwner: TComponent);
@@ -2583,7 +2032,10 @@ begin
   inherited Create(AOwner);
 
   for I := Low(FEngines) to High(FEngines) do
+  begin
     FEngines[I] := TEngineSlot.Create(I);
+    FEngines[I].PlatformProcess.OnData := @PlatformProcessData;
+  end;
 
   Caption := 'International Draughts';
   Color := clBtnFace;
@@ -2591,6 +2043,7 @@ begin
   Constraints.MinHeight := 440;
   Width := 1280;
   Height := 900;
+  CenterMainWindowOnScreen;
   DoubleBuffered := True;
   KeyPreview := True;
   OnCloseQuery := @MainWindowCloseQuery;
@@ -2612,39 +2065,28 @@ begin
   FEngines[2].IgnoreNextDoneMove := False;
   FEngineAnalyzeAutoDisabled := False;
   FEngineAnalyzeEnabled := True;
+  FSelectedPvEngineIndex := 1;
   FEngineLogShowTimestamps := False;
   FGameWhiteName := 'Human';
   FGameBlackName := 'Human';
   FGameResult := '*';
+  FGameResultReason := '';
   FGameDirty := False;
   FShutdownAfterPdnSave := False;
   FShutdownConfirmed := False;
   FSuppressBoardUpdates := False;
   ClearBoardSelection;
 
+  FHistory := TGameHistory.Create;
   ParseFen('W:W31-50:B1-20');
   ResetHistoryFromCurrentPosition;
-  FClockTimer := TTimer.Create(Self);
-  FClockTimer.Enabled := False;
-  FClockTimer.Interval := 250;
-  FClockTimer.OnTimer := @ClockTimerTimer;
+  FPlayClock := TPlayClockController.Create(250);
+  FPlayClock.OnTick := @ClockTimerTimer;
+  Application.OnIdle := @ApplicationIdle;
   FEnginePollTimer := TTimer.Create(Self);
   FEnginePollTimer.Enabled := False;
   FEnginePollTimer.Interval := 50;
   FEnginePollTimer.OnTimer := @EnginePollTimerTimer;
-  {$IFDEF MSWINDOWS}
-  FEngines[1].InputWriteHandle := 0;
-  FEngines[1].OutputReadHandle := 0;
-  FEngines[2].InputWriteHandle := 0;
-  FEngines[2].OutputReadHandle := 0;
-  FillChar(FEngines[1].ProcessInfo, SizeOf(FEngines[1].ProcessInfo), 0);
-  FillChar(FEngines[2].ProcessInfo, SizeOf(FEngines[2].ProcessInfo), 0);
-  FEngines[1].ReaderThread := nil;
-  FEngines[2].ReaderThread := nil;
-  FEngines[1].Running := False;
-  FEngines[2].Running := False;
-  FClockThread := TClockThread.Create(Self);
-  {$ENDIF}
   SetupMenu;
   SetupBoardArea;
   SetupEngineLog;
@@ -2661,14 +2103,9 @@ destructor TMainWindow.Destroy;
 var
   I: Integer;
 begin
-  {$IFDEF MSWINDOWS}
-  if FClockThread <> nil then
-  begin
-    FClockThread.Terminate;
-    FClockThread.WaitFor;
-    FreeAndNil(FClockThread);
-  end;
-  {$ENDIF}
+  Application.OnIdle := nil;
+  FreeAndNil(FPlayClock);
+  FreeAndNil(FHistory);
   CloseSecondEngine;
   CloseEngine;
   FPieceFont.Free;
@@ -2710,6 +2147,7 @@ var
   HistoryPanel: TPanel;
   FenPanel: TPanel;
   PvPanel: TPanel;
+  PvTextPanel: TPanel;
   RowPanel: TPanel;
 begin
   FBoardMoveSplitter := TSplitter.Create(FRootPanel);
@@ -2875,11 +2313,27 @@ begin
   FHistoryPvMiniBoardPaintBox.OnPaint := @HistoryPvMiniBoardPaintBoxPaint;
   FHistoryPvMiniBoardPaintBox.PopupMenu := FAnalysisBoardPopupMenu;
 
-  FPvMemo := TMemo.Create(PvPanel);
-  FPvMemo.Parent := PvPanel;
+  PvTextPanel := TPanel.Create(PvPanel);
+  PvTextPanel.Parent := PvPanel;
+  PvTextPanel.Align := alClient;
+  PvTextPanel.BevelOuter := bvNone;
+  PvTextPanel.BorderSpacing.Right := 6;
+
+  FPvEngineCombo := TComboBox.Create(PvTextPanel);
+  FPvEngineCombo.Parent := PvTextPanel;
+  FPvEngineCombo.Align := alTop;
+  FPvEngineCombo.Height := 26;
+  FPvEngineCombo.Style := csDropDownList;
+  FPvEngineCombo.Items.Add('Show PV from Engine 1');
+  FPvEngineCombo.Items.Add('Show PV from Engine 2');
+  FPvEngineCombo.ItemIndex := 0;
+  FPvEngineCombo.OnChange := @AnalyzePvEngineComboChange;
+
+  FPvMemo := TMemo.Create(PvTextPanel);
+  FPvMemo.Parent := PvTextPanel;
   FPvMemo.Align := alClient;
   FPvMemo.BorderSpacing.Left := 0;
-  FPvMemo.BorderSpacing.Right := 6;
+  FPvMemo.BorderSpacing.Top := 3;
   FPvMemo.ReadOnly := True;
   FPvMemo.ScrollBars := ssVertical;
   FPvMemo.WordWrap := True;
@@ -2963,7 +2417,7 @@ begin
     PaintHeight := FRootPanel.ClientHeight;
 
   BoardPixels := Max(BoardSize, PaintHeight - (2 * BoardMargin));
-  BoardPixels := (BoardPixels div BoardSize) * BoardSize;
+  BoardPixels := SnapBoardPixels(BoardPixels);
   DesiredLeftWidth := (2 * LayoutMargin) + LegalMovesPanelWidth + LegalMovesGap +
     BoardPixels + BoardSideMarkerGap + BoardSideMarkerWidth;
 
@@ -3043,22 +2497,18 @@ begin
     FEvalBarRect := Types.Rect(0, 0, 0, 0);
     if FLegalMovesPanel <> nil then
       FLegalMovesPanel.Visible := False;
-    if FBoardTopClockLabel <> nil then
-      FBoardTopClockLabel.Visible := False;
-    if FBoardBottomClockLabel <> nil then
-      FBoardBottomClockLabel.Visible := False;
+    HideBoardClockLabels(FBoardTopClockLabel, FBoardBottomClockLabel);
     Exit;
   end;
 
-  BoardPixels := (BoardPixels div BoardSize) * BoardSize;
+  BoardPixels := SnapBoardPixels(BoardPixels);
   UnitLeft := BoardArea.Left + LayoutMargin;
   LegalLeft := UnitLeft;
   LeftPos := UnitLeft + LegalWidth + LegalGap + EvalWidth + EvalGap;
   TopPos := BoardArea.Top + ((BoardArea.Bottom - BoardArea.Top - BoardPixels) div 2);
   FBoardRect := Types.Rect(LeftPos, TopPos, LeftPos + BoardPixels,
     TopPos + BoardPixels);
-  FEvalBarRect := Types.Rect(FBoardRect.Left - EvalBarGap - EvalBarWidth,
-    FBoardRect.Top, FBoardRect.Left - EvalBarGap, FBoardRect.Bottom);
+  FEvalBarRect := EvalBarRectForBoard(FBoardRect, EvalBarGap, EvalBarWidth);
 
   if FButtonPanel <> nil then
   begin
@@ -3075,7 +2525,65 @@ begin
     FLegalMovesPanel.BringToFront;
   end;
 
-  DrawBoardClockLabels(FBoardRect);
+  PositionBoardClockLabels(FBoardTopClockLabel, FBoardBottomClockLabel,
+    FBoardRect, OffsetX, OffsetY);
+end;
+
+function TMainWindow.CreateEngineLogPanel(AParent: TWinControl; AAlign: TAlign;
+  AHeight: Integer): TPanel;
+begin
+  Result := TPanel.Create(AParent);
+  Result.Parent := AParent;
+  Result.Align := AAlign;
+  if AHeight > 0 then
+    Result.Height := AHeight;
+  Result.BevelOuter := bvNone;
+end;
+
+procedure TMainWindow.SetupEngineSlotLogControls(AEngineIndex: Integer;
+  AParentPanel: TWinControl; const AInitialText: String);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  FEngines[AEngineIndex].StateLabel := TLabel.Create(AParentPanel);
+  FEngines[AEngineIndex].StateLabel.Parent := AParentPanel;
+  FEngines[AEngineIndex].StateLabel.Align := alRight;
+  FEngines[AEngineIndex].StateLabel.AutoSize := False;
+  FEngines[AEngineIndex].StateLabel.Width := EngineStateLabelWidth;
+  FEngines[AEngineIndex].StateLabel.BorderSpacing.Right := LayoutMargin;
+  FEngines[AEngineIndex].StateLabel.BorderSpacing.Bottom := 6;
+  FEngines[AEngineIndex].StateLabel.Alignment := taCenter;
+  FEngines[AEngineIndex].StateLabel.Layout := tlCenter;
+  FEngines[AEngineIndex].StateLabel.Font.Style := [fsBold];
+  FEngines[AEngineIndex].StateLabel.Transparent := False;
+  FEngines[AEngineIndex].StateLabel.Color := clBtnFace;
+
+  FEngines[AEngineIndex].LogMemo := TMemo.Create(AParentPanel);
+  FEngines[AEngineIndex].LogMemo.Parent := AParentPanel;
+  FEngines[AEngineIndex].LogMemo.Align := alClient;
+  FEngines[AEngineIndex].LogMemo.BorderSpacing.Left := LayoutMargin;
+  FEngines[AEngineIndex].LogMemo.BorderSpacing.Right := 6;
+  FEngines[AEngineIndex].LogMemo.BorderSpacing.Bottom := 6;
+  FEngines[AEngineIndex].LogMemo.ReadOnly := True;
+  FEngines[AEngineIndex].LogMemo.ScrollBars := ssBoth;
+  FEngines[AEngineIndex].LogMemo.WordWrap := False;
+  FEngines[AEngineIndex].LogMemo.TabStop := False;
+
+  SetupEngineSlotLogPopupMenu(AEngineIndex);
+  FEngines[AEngineIndex].LogMemo.Lines.Add(AInitialText);
+end;
+
+procedure TMainWindow.SetupEngineSlotLogPopupMenu(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  SetupEngineLogPopupMenu(Self, FEngines[AEngineIndex], @EnginePopupMenuPopup,
+    @OpenEngineMenuItemClick, @EditEngineParamsMenuItemClick,
+    @CloseEngineMenuItemClick, @AnalyzeMenuItemClick,
+    @ShowTimestampsMenuItemClick, @SaveEngineLogMenuItemClick,
+    FEngineAnalyzeEnabled, FEngineLogShowTimestamps);
 end;
 
 procedure TMainWindow.SetupEngineLog;
@@ -3099,75 +2607,9 @@ begin
   Splitter.ResizeAnchor := akBottom;
   Splitter.Height := 6;
 
-  Engine1Panel := TPanel.Create(FEnginePanel);
-  Engine1Panel.Parent := FEnginePanel;
-  Engine1Panel.Align := alClient;
-  Engine1Panel.BevelOuter := bvNone;
+  Engine1Panel := CreateEngineLogPanel(FEnginePanel, alClient);
 
-  FEngines[1].StateLabel := TLabel.Create(Engine1Panel);
-  FEngines[1].StateLabel.Parent := Engine1Panel;
-  FEngines[1].StateLabel.Align := alRight;
-  FEngines[1].StateLabel.AutoSize := False;
-  FEngines[1].StateLabel.Width := EngineStateLabelWidth;
-  FEngines[1].StateLabel.BorderSpacing.Right := LayoutMargin;
-  FEngines[1].StateLabel.BorderSpacing.Bottom := 6;
-  FEngines[1].StateLabel.Alignment := taCenter;
-  FEngines[1].StateLabel.Layout := tlCenter;
-  FEngines[1].StateLabel.Font.Style := [fsBold];
-  FEngines[1].StateLabel.Transparent := False;
-  FEngines[1].StateLabel.Color := clBtnFace;
-
-  FEngines[1].LogMemo := TMemo.Create(Engine1Panel);
-  FEngines[1].LogMemo.Parent := Engine1Panel;
-  FEngines[1].LogMemo.Align := alClient;
-  FEngines[1].LogMemo.BorderSpacing.Left := LayoutMargin;
-  FEngines[1].LogMemo.BorderSpacing.Right := 6;
-  FEngines[1].LogMemo.BorderSpacing.Bottom := 6;
-  FEngines[1].LogMemo.ReadOnly := True;
-  FEngines[1].LogMemo.ScrollBars := ssBoth;
-  FEngines[1].LogMemo.WordWrap := False;
-  FEngines[1].LogMemo.TabStop := False;
-
-  FEngines[1].LogPopupMenu := TPopupMenu.Create(Self);
-  FEngines[1].LogPopupMenu.OnPopup := @EnginePopupMenuPopup;
-  FEngines[1].OpenMenuItem := TMenuItem.Create(FEngines[1].LogPopupMenu);
-  FEngines[1].OpenMenuItem.Caption := 'Open Engine...';
-  FEngines[1].OpenMenuItem.OnClick := @OpenEngineMenuItemClick;
-  FEngines[1].LogPopupMenu.Items.Add(FEngines[1].OpenMenuItem);
-
-  FEngines[1].ParamsMenuItem := TMenuItem.Create(FEngines[1].LogPopupMenu);
-  FEngines[1].ParamsMenuItem.Caption := 'Engine Parameters...';
-  FEngines[1].ParamsMenuItem.OnClick := @EditEngineParamsMenuItemClick;
-  FEngines[1].LogPopupMenu.Items.Add(FEngines[1].ParamsMenuItem);
-
-  FEngines[1].CloseMenuItem := TMenuItem.Create(FEngines[1].LogPopupMenu);
-  FEngines[1].CloseMenuItem.Caption := 'Close Engine';
-  FEngines[1].CloseMenuItem.OnClick := @CloseEngineMenuItemClick;
-  FEngines[1].LogPopupMenu.Items.Add(FEngines[1].CloseMenuItem);
-
-  FEngines[1].LogPopupMenu.Items.AddSeparator;
-
-  FEngines[1].AnalyzeMenuItem := TMenuItem.Create(FEngines[1].LogPopupMenu);
-  FEngines[1].AnalyzeMenuItem.Caption := 'Analyze';
-  FEngines[1].AnalyzeMenuItem.AutoCheck := False;
-  FEngines[1].AnalyzeMenuItem.Checked := FEngineAnalyzeEnabled;
-  FEngines[1].AnalyzeMenuItem.OnClick := @AnalyzeMenuItemClick;
-  FEngines[1].LogPopupMenu.Items.Add(FEngines[1].AnalyzeMenuItem);
-
-  FEngines[1].ShowTimestampsMenuItem := TMenuItem.Create(FEngines[1].LogPopupMenu);
-  FEngines[1].ShowTimestampsMenuItem.Caption := 'Show timestamps';
-  FEngines[1].ShowTimestampsMenuItem.AutoCheck := False;
-  FEngines[1].ShowTimestampsMenuItem.Checked := FEngineLogShowTimestamps;
-  FEngines[1].ShowTimestampsMenuItem.OnClick := @ShowTimestampsMenuItemClick;
-  FEngines[1].LogPopupMenu.Items.Add(FEngines[1].ShowTimestampsMenuItem);
-
-  FEngines[1].SaveLogMenuItem := TMenuItem.Create(FEngines[1].LogPopupMenu);
-  FEngines[1].SaveLogMenuItem.Caption := 'Save as...';
-  FEngines[1].SaveLogMenuItem.OnClick := @SaveEngineLogMenuItemClick;
-  FEngines[1].LogPopupMenu.Items.Add(FEngines[1].SaveLogMenuItem);
-  FEngines[1].LogMemo.PopupMenu := FEngines[1].LogPopupMenu;
-
-  FEngines[1].LogMemo.Lines.Add('Engine output');
+  SetupEngineSlotLogControls(1, Engine1Panel, 'Engine output');
 
   EngineLogSplitter := TSplitter.Create(FEnginePanel);
   EngineLogSplitter.Parent := FEnginePanel;
@@ -3175,76 +2617,10 @@ begin
   EngineLogSplitter.ResizeAnchor := akBottom;
   EngineLogSplitter.Height := 4;
 
-  Engine2Panel := TPanel.Create(FEnginePanel);
-  Engine2Panel.Parent := FEnginePanel;
-  Engine2Panel.Align := alBottom;
-  Engine2Panel.Height := (FEnginePanel.Height - EngineLogSplitter.Height) div 2;
-  Engine2Panel.BevelOuter := bvNone;
+  Engine2Panel := CreateEngineLogPanel(FEnginePanel, alBottom,
+    (FEnginePanel.Height - EngineLogSplitter.Height) div 2);
 
-  FEngines[2].StateLabel := TLabel.Create(Engine2Panel);
-  FEngines[2].StateLabel.Parent := Engine2Panel;
-  FEngines[2].StateLabel.Align := alRight;
-  FEngines[2].StateLabel.AutoSize := False;
-  FEngines[2].StateLabel.Width := EngineStateLabelWidth;
-  FEngines[2].StateLabel.BorderSpacing.Right := LayoutMargin;
-  FEngines[2].StateLabel.BorderSpacing.Bottom := 6;
-  FEngines[2].StateLabel.Alignment := taCenter;
-  FEngines[2].StateLabel.Layout := tlCenter;
-  FEngines[2].StateLabel.Font.Style := [fsBold];
-  FEngines[2].StateLabel.Transparent := False;
-  FEngines[2].StateLabel.Color := clBtnFace;
-
-  FEngines[2].LogMemo := TMemo.Create(Engine2Panel);
-  FEngines[2].LogMemo.Parent := Engine2Panel;
-  FEngines[2].LogMemo.Align := alClient;
-  FEngines[2].LogMemo.BorderSpacing.Left := LayoutMargin;
-  FEngines[2].LogMemo.BorderSpacing.Right := 6;
-  FEngines[2].LogMemo.BorderSpacing.Bottom := 6;
-  FEngines[2].LogMemo.ReadOnly := True;
-  FEngines[2].LogMemo.ScrollBars := ssBoth;
-  FEngines[2].LogMemo.WordWrap := False;
-  FEngines[2].LogMemo.TabStop := False;
-
-  FEngines[2].LogPopupMenu := TPopupMenu.Create(Self);
-  FEngines[2].LogPopupMenu.OnPopup := @EnginePopupMenuPopup;
-  FEngines[2].OpenMenuItem := TMenuItem.Create(FEngines[2].LogPopupMenu);
-  FEngines[2].OpenMenuItem.Caption := 'Open Engine...';
-  FEngines[2].OpenMenuItem.OnClick := @OpenSecondEngineMenuItemClick;
-  FEngines[2].LogPopupMenu.Items.Add(FEngines[2].OpenMenuItem);
-
-  FEngines[2].ParamsMenuItem := TMenuItem.Create(FEngines[2].LogPopupMenu);
-  FEngines[2].ParamsMenuItem.Caption := 'Engine Parameters...';
-  FEngines[2].ParamsMenuItem.OnClick := @EditSecondEngineParamsMenuItemClick;
-  FEngines[2].LogPopupMenu.Items.Add(FEngines[2].ParamsMenuItem);
-
-  FEngines[2].CloseMenuItem := TMenuItem.Create(FEngines[2].LogPopupMenu);
-  FEngines[2].CloseMenuItem.Caption := 'Close Engine';
-  FEngines[2].CloseMenuItem.OnClick := @CloseSecondEngineMenuItemClick;
-  FEngines[2].LogPopupMenu.Items.Add(FEngines[2].CloseMenuItem);
-
-  FEngines[2].LogPopupMenu.Items.AddSeparator;
-
-  FEngines[2].AnalyzeMenuItem := TMenuItem.Create(FEngines[2].LogPopupMenu);
-  FEngines[2].AnalyzeMenuItem.Caption := 'Analyze';
-  FEngines[2].AnalyzeMenuItem.AutoCheck := False;
-  FEngines[2].AnalyzeMenuItem.Checked := FEngineAnalyzeEnabled;
-  FEngines[2].AnalyzeMenuItem.OnClick := @AnalyzeMenuItemClick;
-  FEngines[2].LogPopupMenu.Items.Add(FEngines[2].AnalyzeMenuItem);
-
-  FEngines[2].ShowTimestampsMenuItem := TMenuItem.Create(FEngines[2].LogPopupMenu);
-  FEngines[2].ShowTimestampsMenuItem.Caption := 'Show timestamps';
-  FEngines[2].ShowTimestampsMenuItem.AutoCheck := False;
-  FEngines[2].ShowTimestampsMenuItem.Checked := FEngineLogShowTimestamps;
-  FEngines[2].ShowTimestampsMenuItem.OnClick := @ShowTimestampsMenuItemClick;
-  FEngines[2].LogPopupMenu.Items.Add(FEngines[2].ShowTimestampsMenuItem);
-
-  FEngines[2].SaveLogMenuItem := TMenuItem.Create(FEngines[2].LogPopupMenu);
-  FEngines[2].SaveLogMenuItem.Caption := 'Save as...';
-  FEngines[2].SaveLogMenuItem.OnClick := @SaveSecondEngineLogMenuItemClick;
-  FEngines[2].LogPopupMenu.Items.Add(FEngines[2].SaveLogMenuItem);
-  FEngines[2].LogMemo.PopupMenu := FEngines[2].LogPopupMenu;
-
-  FEngines[2].LogMemo.Lines.Add('Engine 2 output');
+  SetupEngineSlotLogControls(2, Engine2Panel, 'Engine 2 output');
   UpdateAnalyzeMenuItems;
   UpdateEngineStateLabels;
 end;
@@ -3458,13 +2834,8 @@ begin
 
   FEngineOpenDialog := TOpenDialog.Create(Self);
   FEngineOpenDialog.Title := 'Open engine';
-  {$IFDEF MSWINDOWS}
-  FEngineOpenDialog.Filter := 'Windows engine executables (*.exe)|*.exe|All files (*.*)|*.*';
-  FEngineOpenDialog.DefaultExt := 'exe';
-  {$ELSE}
-  FEngineOpenDialog.Filter := 'Linux engine executables (*.out)|*.out|All files (*)|*';
-  FEngineOpenDialog.DefaultExt := 'out';
-  {$ENDIF}
+  FEngineOpenDialog.Filter := EngineExecutableFilter;
+  FEngineOpenDialog.DefaultExt := EngineExecutableDefaultExt;
   FEngineOpenDialog.Options := FEngineOpenDialog.Options + [ofFileMustExist];
 end;
 
@@ -3537,12 +2908,9 @@ end;
 
 procedure TMainWindow.InvalidateBoardSquare(ASquare: Integer);
 var
-  CellSize: Integer;
   DisplayCol: Integer;
   DisplayRow: Integer;
   InvalidateArea: TRect;
-  LogicalCol: Integer;
-  LogicalRow: Integer;
 begin
   if ASquare = 0 then
     Exit;
@@ -3554,27 +2922,10 @@ begin
     Exit;
   end;
 
-  LogicalRow := (ASquare - 1) div 5;
-  LogicalCol := ((ASquare - 1) mod 5) * 2;
-  if not Odd(LogicalRow) then
-    Inc(LogicalCol);
+  if not BoardCellForSquare(ASquare, FBoardFlipped, DisplayRow, DisplayCol) then
+    Exit;
 
-  if FBoardFlipped then
-  begin
-    DisplayRow := BoardSize - 1 - LogicalRow;
-    DisplayCol := BoardSize - 1 - LogicalCol;
-  end
-  else
-  begin
-    DisplayRow := LogicalRow;
-    DisplayCol := LogicalCol;
-  end;
-
-  CellSize := (FBoardRect.Right - FBoardRect.Left) div BoardSize;
-  InvalidateArea := Types.Rect(FBoardRect.Left + (DisplayCol * CellSize),
-    FBoardRect.Top + (DisplayRow * CellSize),
-    FBoardRect.Left + ((DisplayCol + 1) * CellSize),
-    FBoardRect.Top + ((DisplayRow + 1) * CellSize));
+  InvalidateArea := BoardCellRect(FBoardRect, DisplayRow, DisplayCol);
   InflateRect(InvalidateArea, 3, 3);
   Types.OffsetRect(InvalidateArea, FBoardPaintBox.Left, FBoardPaintBox.Top);
   LCLIntf.InvalidateRect(FBoardPaintBox.Parent.Handle, @InvalidateArea, False);
@@ -3600,12 +2951,8 @@ end;
 
 procedure TMainWindow.RepaintEngineEvalBarDelta(AOldScore, ANewScore: Double);
 var
-  BarRect: TRect;
-  BlackRect: TRect;
-  PaintCanvas: TCanvas;
   NewPixels: Integer;
-  OldPixels: Integer;
-  WhiteRect: TRect;
+  PaintCanvas: TCanvas;
 begin
   if (FBoardPaintBox = nil) or (FEvalBarRect.Right <= FEvalBarRect.Left) or
     (FEvalBarRect.Bottom <= FEvalBarRect.Top) then
@@ -3614,41 +2961,11 @@ begin
     Exit;
   end;
 
-  BarRect := FEvalBarRect;
-  InflateRect(BarRect, -1, -1);
-  if (BarRect.Right <= BarRect.Left) or (BarRect.Bottom <= BarRect.Top) then
-    Exit;
-
-  OldPixels := EvalBarWhitePixels(BarRect, AOldScore);
-  NewPixels := EvalBarWhitePixels(BarRect, ANewScore);
-  if NewPixels = OldPixels then
-    Exit;
-
   PaintCanvas := FBoardPaintBox.Canvas;
-  if NewPixels > OldPixels then
-  begin
-    PaintCanvas.Brush.Color := clWhite;
-    if FBoardFlipped then
-      WhiteRect := Types.Rect(BarRect.Left, BarRect.Top + OldPixels,
-        BarRect.Right, BarRect.Top + NewPixels)
-    else
-      WhiteRect := Types.Rect(BarRect.Left, BarRect.Bottom - NewPixels,
-        BarRect.Right, BarRect.Bottom - OldPixels);
-    PaintCanvas.FillRect(WhiteRect);
-  end
-  else
-  begin
-    PaintCanvas.Brush.Color := clBlack;
-    if FBoardFlipped then
-      BlackRect := Types.Rect(BarRect.Left, BarRect.Top + NewPixels,
-        BarRect.Right, BarRect.Top + OldPixels)
-    else
-      BlackRect := Types.Rect(BarRect.Left, BarRect.Bottom - OldPixels,
-        BarRect.Right, BarRect.Bottom - NewPixels);
-    PaintCanvas.FillRect(BlackRect);
-  end;
-
-  FLastEvalBarWhitePixels := NewPixels;
+  EvalBarUi.RepaintEvalBarDelta(PaintCanvas, FEvalBarRect, AOldScore,
+    ANewScore, EngineEvaluationBarMax(1), FBoardFlipped, NewPixels);
+  if NewPixels >= 0 then
+    FLastEvalBarWhitePixels := NewPixels;
 end;
 
 procedure TMainWindow.BoardPaintBoxMouseDown(Sender: TObject; Button: TMouseButton;
@@ -3703,235 +3020,30 @@ begin
 end;
 
 procedure TMainWindow.HistoryEvalPaintBoxPaint(Sender: TObject);
-var
-  BarHalfWidth: Integer;
-  BarRect: TRect;
-  Bitmap: Graphics.TBitmap;
-  ChartRect: TRect;
-  Client: TRect;
-  EvalCanvas: TCanvas;
-  I: Integer;
-  MaxScore: Double;
-  MidY: Integer;
-  PlotLeft: Integer;
-  PlotRight: Integer;
-  Score: Double;
-  X: Integer;
-  Y: Integer;
 begin
   if FHistoryEvalPaintBox = nil then
     Exit;
 
-  Client := FHistoryEvalPaintBox.ClientRect;
-  Bitmap := Graphics.TBitmap.Create;
-  try
-    Bitmap.SetSize(Client.Right - Client.Left, Client.Bottom - Client.Top);
-    EvalCanvas := Bitmap.Canvas;
-    EvalCanvas.Brush.Color := clWhite;
-    EvalCanvas.FillRect(Types.Rect(0, 0, Bitmap.Width, Bitmap.Height));
-
-    if (Bitmap.Width < 32) or (Bitmap.Height < 24) then
-    begin
-      FHistoryEvalPaintBox.Canvas.Draw(Client.Left, Client.Top, Bitmap);
-      Exit;
-    end;
-
-    ChartRect := Types.Rect(8, 8, Bitmap.Width - 8, Bitmap.Height - 8);
-    MidY := (ChartRect.Top + ChartRect.Bottom) div 2;
-
-    EvalCanvas.Pen.Color := clSilver;
-    EvalCanvas.Pen.Width := 1;
-    EvalCanvas.Rectangle(ChartRect);
-    EvalCanvas.Line(ChartRect.Left, MidY, ChartRect.Right, MidY);
-
-    if Length(FHistoryMoves) = 0 then
-    begin
-      FHistoryEvalPaintBox.Canvas.Draw(Client.Left, Client.Top, Bitmap);
-      Exit;
-    end;
-
-    MaxScore := EngineEvaluationBarMax(1);
-    BarHalfWidth := Max(1, ((ChartRect.Right - ChartRect.Left) div
-      Max(Length(FHistoryMoves), 1)) div 3);
-    PlotLeft := ChartRect.Left + BarHalfWidth + 1;
-    PlotRight := ChartRect.Right - BarHalfWidth - 1;
-
-    for I := 1 to Length(FHistoryMoves) do
-    begin
-      if Length(FHistoryMoves) = 1 then
-        X := (PlotLeft + PlotRight) div 2
-      else
-        X := PlotLeft + Round(((I - 1) / (Length(FHistoryMoves) - 1)) *
-          (PlotRight - PlotLeft));
-
-      if HistoryAnnotationScoreWhite(I, Score) then
-      begin
-        Score := Max(-MaxScore, Min(MaxScore, Score));
-        Y := MidY - Round((Score / MaxScore) *
-          ((ChartRect.Bottom - ChartRect.Top) / 2));
-
-        if Score >= 0.0 then
-        begin
-          EvalCanvas.Brush.Color := clGreen;
-          EvalCanvas.Pen.Color := clGreen;
-          BarRect := Types.Rect(X - BarHalfWidth, Y, X + BarHalfWidth + 1, MidY);
-        end
-        else
-        begin
-          EvalCanvas.Brush.Color := clRed;
-          EvalCanvas.Pen.Color := clRed;
-          BarRect := Types.Rect(X - BarHalfWidth, MidY, X + BarHalfWidth + 1, Y);
-        end;
-        if BarRect.Bottom = BarRect.Top then
-        begin
-          Dec(BarRect.Top);
-          Inc(BarRect.Bottom);
-        end;
-        EvalCanvas.Rectangle(BarRect);
-      end
-      else
-      begin
-        EvalCanvas.Brush.Color := clBlue;
-        EvalCanvas.Pen.Color := clBlue;
-        BarRect := Types.Rect(X - BarHalfWidth, MidY,
-          X + BarHalfWidth + 1, MidY);
-        Dec(BarRect.Top);
-        Inc(BarRect.Bottom);
-        EvalCanvas.Rectangle(BarRect);
-      end;
-    end;
-
-    if (FCurrentPly > 0) and (FCurrentPly < Length(FHistoryMoves)) and
-      (Length(FHistoryMoves) > 1) then
-    begin
-      X := PlotLeft + Round(((FCurrentPly - 1) / (Length(FHistoryMoves) - 1)) *
-        (PlotRight - PlotLeft));
-      EvalCanvas.Pen.Color := clGray;
-      EvalCanvas.Pen.Width := 1;
-      EvalCanvas.Line(X, ChartRect.Top, X, ChartRect.Bottom);
-    end;
-
-    FHistoryEvalPaintBox.Canvas.Draw(Client.Left, Client.Top, Bitmap);
-  finally
-    Bitmap.Free;
-  end;
-end;
-
-procedure TMainWindow.DrawAnalysisBoard(ACanvas: TCanvas; const AClient: TRect);
-var
-  Bitmap: Graphics.TBitmap;
-  BoardPixels: Integer;
-  CellSize: Integer;
-  Col: Integer;
-  MiniCanvas: TCanvas;
-  PiecePosition: Integer;
-  Row: Integer;
-  SquareColor: TColor;
-  SquareRect: TRect;
-  X0: Integer;
-  Y0: Integer;
-
-  procedure DrawMiniPiece(const ASquare: TRect; APiece: TPiece);
-  var
-    MarkY: Integer;
-    PieceRect: TRect;
-  begin
-    if APiece = pcNone then
-      Exit;
-
-    PieceRect := ASquare;
-    InflateRect(PieceRect, -Max(1, CellSize div 5), -Max(1, CellSize div 5));
-    if (PieceRect.Right <= PieceRect.Left) or
-      (PieceRect.Bottom <= PieceRect.Top) then
-      Exit;
-
-    if APiece in [pcWhiteMan, pcWhiteKing] then
-    begin
-      MiniCanvas.Brush.Color := clWhite;
-      MiniCanvas.Pen.Color := clBlack;
-    end
-    else
-    begin
-      MiniCanvas.Brush.Color := clBlack;
-      MiniCanvas.Pen.Color := clWhite;
-    end;
-    MiniCanvas.Pen.Width := 1;
-    MiniCanvas.Ellipse(PieceRect);
-
-    if APiece in [pcWhiteKing, pcBlackKing] then
-    begin
-      MarkY := (PieceRect.Top + PieceRect.Bottom) div 2;
-      if APiece = pcWhiteKing then
-        MiniCanvas.Pen.Color := clBlack
-      else
-        MiniCanvas.Pen.Color := clWhite;
-      MiniCanvas.Line(PieceRect.Left + 2, MarkY, PieceRect.Right - 2, MarkY);
-    end;
-  end;
-begin
-  Bitmap := Graphics.TBitmap.Create;
-  try
-    Bitmap.SetSize(AClient.Right - AClient.Left, AClient.Bottom - AClient.Top);
-    MiniCanvas := Bitmap.Canvas;
-    MiniCanvas.Brush.Color := Color;
-    MiniCanvas.FillRect(Types.Rect(0, 0, Bitmap.Width, Bitmap.Height));
-
-    BoardPixels := Min(Bitmap.Width, Bitmap.Height);
-    BoardPixels := (BoardPixels div BoardSize) * BoardSize;
-    if BoardPixels < BoardSize then
-    begin
-      ACanvas.Draw(AClient.Left, AClient.Top, Bitmap);
-      Exit;
-    end;
-
-    CellSize := BoardPixels div BoardSize;
-    X0 := (Bitmap.Width - BoardPixels) div 2;
-    Y0 := (Bitmap.Height - BoardPixels) div 2;
-
-    for Row := 0 to BoardSize - 1 do
-      for Col := 0 to BoardSize - 1 do
-      begin
-        if Odd(Row + Col) then
-          SquareColor := WoodSquareColor
-        else
-          SquareColor := clWhite;
-
-        SquareRect := Types.Rect(X0 + (Col * CellSize), Y0 + (Row * CellSize),
-          X0 + ((Col + 1) * CellSize), Y0 + ((Row + 1) * CellSize));
-        MiniCanvas.Brush.Color := SquareColor;
-        MiniCanvas.FillRect(SquareRect);
-
-        if Odd(Row + Col) and FAnalyzePvHasBase then
-        begin
-          PiecePosition := BoardSquareAtCell(Row, Col);
-          DrawMiniPiece(SquareRect, FAnalyzePvBrowseBoard[PiecePosition]);
-        end;
-      end;
-
-    MiniCanvas.Brush.Style := bsClear;
-    MiniCanvas.Pen.Color := clBlack;
-    MiniCanvas.Pen.Width := 1;
-    MiniCanvas.Rectangle(X0, Y0, X0 + BoardPixels, Y0 + BoardPixels);
-    MiniCanvas.Brush.Style := bsSolid;
-
-    ACanvas.Draw(AClient.Left, AClient.Top, Bitmap);
-  finally
-    Bitmap.Free;
-  end;
+  DrawScoreHistoryGraph(FHistoryEvalPaintBox.Canvas,
+    FHistoryEvalPaintBox.ClientRect, Length(FHistory.Moves),
+    FHistory.CurrentPly, EngineEvaluationBarMax(1),
+    @HistoryAnnotationScoreWhite);
 end;
 
 procedure TMainWindow.HistoryPvMiniBoardPaintBoxPaint(Sender: TObject);
 begin
   if FHistoryPvMiniBoardPaintBox <> nil then
-    DrawAnalysisBoard(FHistoryPvMiniBoardPaintBox.Canvas,
-      FHistoryPvMiniBoardPaintBox.ClientRect);
+    DrawAnalysisMiniBoard(FHistoryPvMiniBoardPaintBox.Canvas,
+      FHistoryPvMiniBoardPaintBox.ClientRect, FAnalyzePvBrowseBoard,
+      FAnalyzePvHasBase, FBoardFlipped, Color, WoodSquareColor);
 end;
 
 procedure TMainWindow.AnalysisBoardPaintBoxPaint(Sender: TObject);
 begin
   if FAnalysisBoardPaintBox <> nil then
-    DrawAnalysisBoard(FAnalysisBoardPaintBox.Canvas,
-      FAnalysisBoardPaintBox.ClientRect);
+    DrawAnalysisMiniBoard(FAnalysisBoardPaintBox.Canvas,
+      FAnalysisBoardPaintBox.ClientRect, FAnalyzePvBrowseBoard,
+      FAnalyzePvHasBase, FBoardFlipped, Color, WoodSquareColor);
 end;
 
 procedure TMainWindow.AnalysisBoardFormClose(Sender: TObject;
@@ -3940,30 +3052,6 @@ begin
   FAnalysisBoardPaintBox := nil;
   FAnalysisBoardForm := nil;
   CloseAction := caFree;
-end;
-
-function TMainWindow.BoardSquareAtCell(ARow, ACol: Integer): Integer;
-var
-  LogicalCol: Integer;
-  LogicalRow: Integer;
-begin
-  if FBoardFlipped then
-  begin
-    LogicalRow := BoardSize - 1 - ARow;
-    LogicalCol := BoardSize - 1 - ACol;
-  end
-  else
-  begin
-    LogicalRow := ARow;
-    LogicalCol := ACol;
-  end;
-
-  if (LogicalRow < 0) or (LogicalRow >= BoardSize) or
-    (LogicalCol < 0) or (LogicalCol >= BoardSize) or
-    (not Odd(LogicalRow + LogicalCol)) then
-    Exit(0);
-
-  Result := (LogicalRow * 5) + (LogicalCol div 2) + 1;
 end;
 
 procedure TMainWindow.DrawBoard(ACanvas: TCanvas);
@@ -3987,7 +3075,7 @@ begin
     (FBoardRect.Bottom <= FBoardRect.Top) then
     Exit;
 
-  CellSize := (FBoardRect.Right - FBoardRect.Left) div BoardSize;
+  CellSize := BoardCellSize(FBoardRect);
   DrawBoardSideToMoveMarker(ACanvas, FBoardRect, CellSize);
   DrawEngineEvalBar(ACanvas, FBoardRect);
 
@@ -3999,83 +3087,43 @@ begin
       else
         SquareColor := clWhite;
 
-      SquareRect := Types.Rect(
-        FBoardRect.Left + (Col * CellSize),
-        FBoardRect.Top + (Row * CellSize),
-        FBoardRect.Left + ((Col + 1) * CellSize),
-        FBoardRect.Top + ((Row + 1) * CellSize)
-      );
+      SquareRect := BoardCellRect(FBoardRect, Row, Col);
       ACanvas.Brush.Color := SquareColor;
       ACanvas.FillRect(SquareRect);
 
       if Odd(Row + Col) then
       begin
-        PiecePosition := BoardSquareAtCell(Row, Col);
+        PiecePosition := BoardGeometry.BoardSquareAtCell(Row, Col, FBoardFlipped);
         if PiecePosition = FSelectedSquare then
-        begin
-          ACanvas.Brush.Style := bsClear;
-          ACanvas.Pen.Color := clYellow;
-          ACanvas.Pen.Width := Max(2, CellSize div 16);
-          ACanvas.Rectangle(SquareRect);
-          ACanvas.Brush.Style := bsSolid;
-        end
+          DrawSquareOutline(ACanvas, SquareRect, clYellow,
+            Max(2, CellSize div 16), 0)
         else if FTargetSquares[PiecePosition] then
         begin
-          ACanvas.Brush.Style := bsClear;
           if FAmbiguousTargetSquares[PiecePosition] then
-            ACanvas.Pen.Color := clRed
+            DrawTargetCircle(ACanvas, SquareRect, clRed,
+              Max(2, CellSize div 18), CellSize div 4)
           else
-            ACanvas.Pen.Color := clLime;
-          ACanvas.Pen.Width := Max(2, CellSize div 18);
-          ACanvas.Ellipse(SquareRect.Left + (CellSize div 4),
-            SquareRect.Top + (CellSize div 4), SquareRect.Right - (CellSize div 4),
-            SquareRect.Bottom - (CellSize div 4));
-          ACanvas.Brush.Style := bsSolid;
+            DrawTargetCircle(ACanvas, SquareRect, clLime,
+              Max(2, CellSize div 18), CellSize div 4);
         end;
       end;
 
       if Odd(Row + Col) then
       begin
-        PiecePosition := BoardSquareAtCell(Row, Col);
+        PiecePosition := BoardGeometry.BoardSquareAtCell(Row, Col, FBoardFlipped);
         DrawPiece(ACanvas, SquareRect, FBoard[PiecePosition], CellSize, SquareColor);
         if PiecePosition = FOnlyMoveSourceSquare then
-        begin
-          ACanvas.Brush.Style := bsClear;
-          ACanvas.Pen.Color := clBlue;
-          ACanvas.Pen.Width := Max(3, CellSize div 12);
-          ACanvas.Rectangle(SquareRect.Left + 2, SquareRect.Top + 2,
-            SquareRect.Right - 2, SquareRect.Bottom - 2);
-          ACanvas.Brush.Style := bsSolid;
-        end;
+          DrawSquareOutline(ACanvas, SquareRect, clBlue,
+            Max(3, CellSize div 12), 2);
         if PiecePosition = FAnalyzeBestSourceSquare then
-        begin
-          ACanvas.Brush.Style := bsClear;
-          ACanvas.Pen.Color := AnalyzeBestSourceColor;
-          ACanvas.Pen.Width := Max(3, CellSize div 12);
-          ACanvas.Rectangle(SquareRect.Left + (CellSize div 10),
-            SquareRect.Top + (CellSize div 10), SquareRect.Right - (CellSize div 10),
-            SquareRect.Bottom - (CellSize div 10));
-          ACanvas.Brush.Style := bsSolid;
-        end;
+          DrawSquareOutline(ACanvas, SquareRect, AnalyzeBestSourceColor,
+            Max(3, CellSize div 12), CellSize div 10);
         if PiecePosition = FAnalyzeHintSourceSquare then
-        begin
-          ACanvas.Brush.Style := bsClear;
-          ACanvas.Pen.Color := AnalyzeHintSourceColor;
-          ACanvas.Pen.Width := Max(3, CellSize div 12);
-          ACanvas.Rectangle(SquareRect.Left + (CellSize div 7),
-            SquareRect.Top + (CellSize div 7), SquareRect.Right - (CellSize div 7),
-            SquareRect.Bottom - (CellSize div 7));
-          ACanvas.Brush.Style := bsSolid;
-        end;
+          DrawSquareOutline(ACanvas, SquareRect, AnalyzeHintSourceColor,
+            Max(3, CellSize div 12), CellSize div 7);
         if PiecePosition = FLastMoveTargetSquare then
-        begin
-          ACanvas.Brush.Style := bsClear;
-          ACanvas.Pen.Color := clYellow;
-          ACanvas.Pen.Width := Max(3, CellSize div 12);
-          ACanvas.Rectangle(SquareRect.Left + 2, SquareRect.Top + 2,
-            SquareRect.Right - 2, SquareRect.Bottom - 2);
-          ACanvas.Brush.Style := bsSolid;
-        end;
+          DrawSquareOutline(ACanvas, SquareRect, clYellow,
+            Max(3, CellSize div 12), 2);
       end;
     end;
 
@@ -4086,122 +3134,27 @@ begin
   ACanvas.Brush.Style := bsSolid;
 end;
 
-function TMainWindow.EvalBarWhitePixels(const ABarRect: TRect; AScore: Double): Integer;
-var
-  ClampedScore: Double;
-  MaxScore: Double;
-begin
-  MaxScore := EngineEvaluationBarMax(1);
-  ClampedScore := Max(-MaxScore, Min(MaxScore, AScore));
-  Result := Round(((ClampedScore + MaxScore) / (2.0 * MaxScore)) *
-    (ABarRect.Bottom - ABarRect.Top));
-end;
-
 procedure TMainWindow.DrawEngineEvalBar(ACanvas: TCanvas; const ABoardRect: TRect);
-var
-  BarRect: TRect;
-  FillRect: TRect;
-  WhitePixels: Integer;
-  WhiteRect: TRect;
 begin
   if (ABoardRect.Right <= ABoardRect.Left) or
     (ABoardRect.Bottom <= ABoardRect.Top) then
     Exit;
 
-  BarRect := Types.Rect(ABoardRect.Left - EvalBarGap - EvalBarWidth,
-    ABoardRect.Top, ABoardRect.Left - EvalBarGap, ABoardRect.Bottom);
-  FEvalBarRect := BarRect;
-  FillRect := BarRect;
-  InflateRect(FillRect, -1, -1);
-  WhitePixels := EvalBarWhitePixels(FillRect, FEngineEvalScoreWhite);
-  FLastEvalBarWhitePixels := WhitePixels;
-
-  ACanvas.Brush.Color := clBlack;
-  ACanvas.FillRect(FillRect);
-  ACanvas.Brush.Color := clWhite;
-  if FBoardFlipped then
-    WhiteRect := Types.Rect(FillRect.Left, FillRect.Top, FillRect.Right,
-      FillRect.Top + WhitePixels)
-  else
-    WhiteRect := Types.Rect(FillRect.Left, FillRect.Bottom - WhitePixels,
-      FillRect.Right, FillRect.Bottom);
-  ACanvas.FillRect(WhiteRect);
-
-  ACanvas.Brush.Style := bsClear;
-  ACanvas.Pen.Color := clGray;
-  ACanvas.Pen.Width := 1;
-  ACanvas.Rectangle(BarRect);
-  ACanvas.Brush.Style := bsSolid;
-end;
-
-procedure TMainWindow.DrawBoardClockLabels(const ABoardRect: TRect);
-const
-  ClockHeight = 22;
-  ClockGap = 2;
-var
-  BottomRect: TRect;
-  OffsetX: Integer;
-  OffsetY: Integer;
-  TopRect: TRect;
-begin
-  if (FBoardTopClockLabel = nil) or (FBoardBottomClockLabel = nil) then
-    Exit;
-
-  if FBoardPaintBox <> nil then
-  begin
-    OffsetX := FBoardPaintBox.Left;
-    OffsetY := FBoardPaintBox.Top;
-  end
-  else
-  begin
-    OffsetX := 0;
-    OffsetY := 0;
-  end;
-
-  TopRect := Types.Rect(OffsetX + ABoardRect.Left,
-    Max(0, OffsetY + ABoardRect.Top - ClockHeight - ClockGap),
-    OffsetX + ABoardRect.Right,
-    Max(ClockHeight, OffsetY + ABoardRect.Top - ClockGap));
-  BottomRect := Types.Rect(OffsetX + ABoardRect.Left, OffsetY + ABoardRect.Bottom + ClockGap,
-    OffsetX + ABoardRect.Right, OffsetY + ABoardRect.Bottom + ClockGap + ClockHeight);
-
-  FBoardTopClockLabel.BoundsRect := TopRect;
-  FBoardBottomClockLabel.BoundsRect := BottomRect;
-  FBoardTopClockLabel.Visible := True;
-  FBoardBottomClockLabel.Visible := True;
-  FBoardTopClockLabel.BringToFront;
-  FBoardBottomClockLabel.BringToFront;
+  FEvalBarRect := EvalBarRectForBoard(ABoardRect, EvalBarGap, EvalBarWidth);
+  DrawEvalBar(ACanvas, FEvalBarRect, FEngineEvalScoreWhite,
+    EngineEvaluationBarMax(1), FBoardFlipped, FLastEvalBarWhitePixels);
 end;
 
 procedure TMainWindow.DrawBoardSideToMoveMarker(ACanvas: TCanvas;
   const ABoardRect: TRect; ACellSize: Integer);
 var
-  MarkerAtBottom: Boolean;
   MarkerPiece: TPiece;
   MarkerRect: TRect;
-  MarkerSize: Integer;
-  MarkerX: Integer;
-  MarkerY: Integer;
 begin
-  MarkerSize := ACellSize;
-  MarkerX := ABoardRect.Right + BoardSideMarkerGap +
-    ((BoardSideMarkerWidth - MarkerSize) div 2);
-
-  MarkerAtBottom := ((FSideToMove = sideWhite) and (not FBoardFlipped)) or
-    ((FSideToMove = sideBlack) and FBoardFlipped);
-  if FSideToMove = sideBlack then
-    MarkerPiece := pcBlackMan
-  else
-    MarkerPiece := pcWhiteMan;
-
-  if MarkerAtBottom then
-    MarkerY := ABoardRect.Bottom - MarkerSize
-  else
-    MarkerY := ABoardRect.Top;
-
-  MarkerRect := Types.Rect(MarkerX, MarkerY, MarkerX + MarkerSize,
-    MarkerY + MarkerSize);
-  DrawPiece(ACanvas, MarkerRect, MarkerPiece, MarkerSize, Color);
+  MarkerRect := BoardSideToMoveMarkerRect(ABoardRect, ACellSize,
+    BoardSideMarkerGap, BoardSideMarkerWidth, FSideToMove, FBoardFlipped,
+    MarkerPiece);
+  DrawPiece(ACanvas, MarkerRect, MarkerPiece, ACellSize, Color);
 end;
 
 procedure TMainWindow.DrawPiece(ACanvas: TCanvas; const ASquare: TRect;
@@ -4323,69 +3276,10 @@ begin
   end;
 end;
 
-procedure CopyMove(const ASource: TMove; out ADest: TMove);
-var
-  I: Integer;
-begin
-  SetLength(ADest.Squares, Length(ASource.Squares));
-  SetLength(ADest.Captures, Length(ASource.Captures));
-  for I := 0 to High(ASource.Squares) do
-    ADest.Squares[I] := ASource.Squares[I];
-  for I := 0 to High(ASource.Captures) do
-    ADest.Captures[I] := ASource.Captures[I];
-  ADest.Promotes := ASource.Promotes;
-end;
-
-procedure ApplyMoveToBoard(var ABoard: TBoard; var ASide: TSide; const AMove: TMove);
-var
-  CaptureIndex: Integer;
-  FromSquare: Integer;
-  Piece: TPiece;
-  ToSquare: Integer;
-begin
-  if Length(AMove.Squares) < 2 then
-    Exit;
-
-  FromSquare := AMove.Squares[0];
-  ToSquare := AMove.Squares[High(AMove.Squares)];
-  Piece := ABoard[FromSquare];
-  ABoard[FromSquare] := pcNone;
-  for CaptureIndex := 0 to High(AMove.Captures) do
-    ABoard[AMove.Captures[CaptureIndex]] := pcNone;
-  if AMove.Promotes then
-    case Piece of
-      pcWhiteMan: Piece := pcWhiteKing;
-      pcBlackMan: Piece := pcBlackKing;
-    end;
-  ABoard[ToSquare] := Piece;
-  if ASide = sideWhite then
-    ASide := sideBlack
-  else
-    ASide := sideWhite;
-end;
-
-function MoveIsReversibleOnBoard(const ABoard: TBoard; const AMove: TMove): Boolean;
-var
-  FromSquare: Integer;
-begin
-  Result := False;
-  if Length(AMove.Squares) < 2 then
-    Exit;
-
-  FromSquare := AMove.Squares[0];
-  Result := (Length(AMove.Captures) = 0) and (not AMove.Promotes) and
-    (ABoard[FromSquare] in [pcWhiteKing, pcBlackKing]);
-end;
-
 procedure TMainWindow.ResetHistoryFromCurrentPosition;
 begin
-  FHistoryBaseBoard := FBoard;
-  FHistoryBaseSide := FSideToMove;
-  FCurrentPly := 0;
   FLastMoveTargetSquare := 0;
-  SetLength(FHistoryMoves, 0);
-  SetLength(FHistoryMoveAnnotations, 0);
-  SetLength(FHistoryClockSnapshots, 0);
+  FHistory.ResetFromPosition(FBoard, FSideToMove);
 end;
 
 procedure TMainWindow.MarkGameDirty;
@@ -4395,38 +3289,13 @@ end;
 
 procedure TMainWindow.RecordPlayedMove(const AMove: TMove; const AAnnotation: String);
 var
-  Annotation: String;
-  MoveIndex: Integer;
+  Snapshot: TClockSnapshot;
 begin
-  UpdateGameClock;
-
-  if FCurrentPly < Length(FHistoryMoves) then
-  begin
-    SetLength(FHistoryMoves, FCurrentPly);
-    SetLength(FHistoryMoveAnnotations, FCurrentPly);
-    SetLength(FHistoryClockSnapshots, FCurrentPly);
-  end;
-
-  SetLength(FHistoryMoves, Length(FHistoryMoves) + 1);
-  SetLength(FHistoryMoveAnnotations, Length(FHistoryMoves));
-  SetLength(FHistoryClockSnapshots, Length(FHistoryMoves));
-  CopyMove(AMove, FHistoryMoves[High(FHistoryMoves)]);
-  MoveIndex := High(FHistoryMoves);
-  Annotation := AAnnotation;
-  if AMove.Promotes then
-  begin
-    if Annotation <> '' then
-      Annotation += ' ';
-    Annotation += 'K';
-  end;
-  FHistoryMoveAnnotations[MoveIndex] := Annotation;
-  FHistoryClockSnapshots[MoveIndex].HasClock := FPlayGameActive;
-  if FHistoryClockSnapshots[MoveIndex].HasClock then
-  begin
-    FHistoryClockSnapshots[MoveIndex].WhiteSeconds := FWhiteClockSeconds;
-    FHistoryClockSnapshots[MoveIndex].BlackSeconds := FBlackClockSeconds;
-  end;
-  FCurrentPly := Length(FHistoryMoves);
+  if FPlayClock <> nil then
+    Snapshot := FPlayClock.Snapshot(FPlayGameActive)
+  else
+    Snapshot.HasClock := False;
+  FHistory.AddMove(AMove, AAnnotation, Snapshot);
   MarkGameDirty;
   if not FSuppressBoardUpdates then
     UpdateHistoryList;
@@ -4436,9 +3305,20 @@ procedure TMainWindow.LogPlayedMoveToEngineWindows(const AMove: TMove;
   AActorEngineIndex: Integer);
 var
   ActorName: String;
+  MoverSide: TSide;
   MoveText: String;
+  TimeUsedSeconds: Integer;
 begin
   MoveText := MoveToString(AMove);
+  TimeUsedSeconds := 0;
+  if FPlayGameActive and (FPlayClock <> nil) then
+  begin
+    if FSideToMove = sideWhite then
+      MoverSide := sideBlack
+    else
+      MoverSide := sideWhite;
+    TimeUsedSeconds := Trunc(FPlayClock.SecondsUsedForSide(MoverSide));
+  end;
   case AActorEngineIndex of
     1: ActorName := FEngines[1].DisplayName;
     2: ActorName := FEngines[2].DisplayName;
@@ -4448,96 +3328,27 @@ begin
 
   if (AActorEngineIndex <> 1) and EngineIsRunning then
   begin
-    AppendEngineLog('[' + ActorName + ' played ' + MoveText + ']' +
+    AppendEngineSlotLog(1, '[' + ActorName + ' played ' + MoveText + ']' +
       LineEnding);
     if FPlayGameActive and EngineIsDxp(1) and
       (((FPlayGameWhiteIsEngine and (FPlayGameWhiteEngineIndex = 1)) or
       (FPlayGameBlackIsEngine and (FPlayGameBlackEngineIndex = 1)))) then
-      SendDxpMoveToEngine(1, AMove);
+      SendDxpMoveToEngine(1, AMove, TimeUsedSeconds);
   end;
   if (AActorEngineIndex <> 2) and SecondEngineIsRunning then
   begin
-    AppendEngine2Log('[' + ActorName + ' played ' + MoveText + ']' +
+    AppendEngineSlotLog(2, '[' + ActorName + ' played ' + MoveText + ']' +
       LineEnding);
     if FPlayGameActive and EngineIsDxp(2) and
       (((FPlayGameWhiteIsEngine and (FPlayGameWhiteEngineIndex = 2)) or
       (FPlayGameBlackIsEngine and (FPlayGameBlackEngineIndex = 2)))) then
-      SendDxpMoveToEngine(2, AMove);
+      SendDxpMoveToEngine(2, AMove, TimeUsedSeconds);
   end;
-end;
-
-function TMainWindow.PositionKeyFor(const ABoard: TBoard; ASide: TSide): String;
-var
-  Square: Integer;
-begin
-  if ASide = sideWhite then
-    Result := 'W|'
-  else
-    Result := 'B|';
-
-  for Square := Low(ABoard) to High(ABoard) do
-    case ABoard[Square] of
-      pcWhiteMan: Result += 'w';
-      pcWhiteKing: Result += 'W';
-      pcBlackMan: Result += 'b';
-      pcBlackKing: Result += 'B';
-    else
-      Result += 'e';
-    end;
 end;
 
 function TMainWindow.CurrentPositionRepetitionCount: Integer;
-var
-  Board: TBoard;
-  I: Integer;
-  Key: String;
-  Side: TSide;
-  TargetKey: String;
-
-  procedure ApplyMoveTo(var ABoard: TBoard; var ASide: TSide; const AMove: TMove);
-  var
-    CaptureIndex: Integer;
-    FromSquare: Integer;
-    Piece: TPiece;
-    ToSquare: Integer;
-  begin
-    if Length(AMove.Squares) < 2 then
-      Exit;
-
-    FromSquare := AMove.Squares[0];
-    ToSquare := AMove.Squares[High(AMove.Squares)];
-    Piece := ABoard[FromSquare];
-    ABoard[FromSquare] := pcNone;
-    for CaptureIndex := 0 to High(AMove.Captures) do
-      ABoard[AMove.Captures[CaptureIndex]] := pcNone;
-    if AMove.Promotes then
-      case Piece of
-        pcWhiteMan: Piece := pcWhiteKing;
-        pcBlackMan: Piece := pcBlackKing;
-      end;
-    ABoard[ToSquare] := Piece;
-    if ASide = sideWhite then
-      ASide := sideBlack
-    else
-      ASide := sideWhite;
-  end;
-
 begin
-  Result := 0;
-  TargetKey := PositionKeyFor(FBoard, FSideToMove);
-  Board := FHistoryBaseBoard;
-  Side := FHistoryBaseSide;
-  Key := PositionKeyFor(Board, Side);
-  if Key = TargetKey then
-    Inc(Result);
-
-  for I := 0 to Min(FCurrentPly, Length(FHistoryMoves)) - 1 do
-  begin
-    ApplyMoveTo(Board, Side, FHistoryMoves[I]);
-    Key := PositionKeyFor(Board, Side);
-    if Key = TargetKey then
-      Inc(Result);
-  end;
+  Result := FHistory.RepetitionCountForPosition(FBoard, FSideToMove);
 end;
 
 function TMainWindow.CheckDrawByRepetition: Boolean;
@@ -4549,59 +3360,125 @@ begin
     Exit;
 
   Result := True;
-  FGameResult := '1-1';
-  FAutoPlayActive := False;
-  SetGuiState(gsGameOver, 'draw by repetition');
-  MarkGameDirty;
-  AppendEngineLog('[game drawn by repetition]' + LineEnding);
-  if SecondEngineIsRunning then
-    AppendEngine2Log('[game drawn by repetition]' + LineEnding);
-  SendDxpGameEndToPlayingDxpEngines;
-  LeavePlayGameMode;
-  UpdateHistoryList;
+  EndCurrentGame(gerRepetition, '1-1');
   SendStopToAllEngines;
 end;
 
-procedure TMainWindow.SetTerminalResult;
+function TMainWindow.CheckDrawByTwentyFiveMoveRule: Boolean;
+const
+  TwentyFiveMovesInPlies = 50;
+begin
+  Result := False;
+  if (not FPlayGameActive) and (not FAutoPlayActive) then
+    Exit;
+  if FHistory.ConsecutiveReversiblePlyCount < TwentyFiveMovesInPlies then
+    Exit;
+
+  Result := True;
+  EndCurrentGame(gerTwentyFiveMoveRule, '1-1');
+  SendStopToAllEngines;
+end;
+
+procedure TMainWindow.AppendEngineSlotLogOrMain(AEngineIndex: Integer;
+  const AText: String);
+begin
+  if EngineSlotIndexValid(AEngineIndex) then
+    AppendEngineSlotLog(AEngineIndex, AText)
+  else
+    AppendEngineSlotLog(1, AText);
+end;
+
+procedure TMainWindow.LogGameEventToRelevantEngines(const AText: String;
+  AOriginEngineIndex: Integer);
+begin
+  if AText = '' then
+    Exit;
+
+  if AOriginEngineIndex = 2 then
+    AppendEngineSlotLog(2, AText + LineEnding)
+  else if AOriginEngineIndex = 1 then
+    AppendEngineSlotLog(1, AText + LineEnding)
+  else
+  begin
+    AppendEngineSlotLog(1, AText + LineEnding);
+    if SecondEngineIsRunning then
+      AppendEngineSlotLog(2, AText + LineEnding);
+  end;
+end;
+
+procedure TMainWindow.EndCurrentGame(AReason: TGameEndReason;
+  const AResult: String; AOriginEngineIndex: Integer;
+  ARestartAnalyze: Boolean);
+var
+  GuiReason: String;
+  LogText: String;
+  ResultText: String;
+begin
+  ResultText := GameEndResultForReason(AReason, AResult, FSideToMove);
+  if ResultText <> '' then
+    FGameResult := ResultText;
+  FGameResultReason := GameEndTournamentReasonText(AReason, FSideToMove,
+    ResultText);
+  GameEndReasonDetails(AReason, FSideToMove, GuiReason, LogText);
+  SetGuiState(gsGameOver, GuiReason);
+
+  FAutoPlayActive := False;
+  StopGameClocks;
+  MarkGameDirty;
+  NotifyDxpPlayGameEnd(AOriginEngineIndex);
+  FinishPlayGameMode(True, ARestartAnalyze);
+  LogGameEventToRelevantEngines(LogText, AOriginEngineIndex);
+end;
+
+procedure TMainWindow.StopModeBecause(AEngineIndex: Integer;
+  AMode: TStoppedMode; const AReason: String);
+var
+  LogText: String;
+begin
+  case AMode of
+    smAutoPlay:
+      begin
+        FAutoPlayActive := False;
+        SetGuiState(gsIdle, 'auto-play ' + AReason);
+      end;
+    smPlayGame:
+      LeavePlayGameMode;
+  end;
+
+  LogText := '[' + StoppedModeText(AMode) + ' stopped: ' + AReason + ']' +
+    LineEnding;
+  AppendEngineSlotLogOrMain(AEngineIndex, LogText);
+end;
+
+procedure TMainWindow.StopAutoPlayBecause(AEngineIndex: Integer;
+  const AReason: String);
+begin
+  StopModeBecause(AEngineIndex, smAutoPlay, AReason);
+end;
+
+procedure TMainWindow.StopPlayGameBecause(AEngineIndex: Integer;
+  const AReason: String);
+begin
+  StopModeBecause(AEngineIndex, smPlayGame, AReason);
+end;
+
+procedure TMainWindow.EndGameIfTerminalPosition;
 begin
   if Length(FMoves) <> 0 then
     Exit;
 
-  if FSideToMove = sideWhite then
-    FGameResult := '0-2'
-  else
-    FGameResult := '2-0';
-  SetGuiState(gsGameOver, 'terminal position');
-  MarkGameDirty;
-  SendDxpGameEndToPlayingDxpEngines;
-  UpdateHistoryList;
+  EndCurrentGame(gerTerminalPosition);
 end;
 
 procedure TMainWindow.RebuildPositionToPly(APly: Integer);
-var
-  I: Integer;
 begin
+  if APly > Length(FHistory.Moves) then
+    APly := Length(FHistory.Moves);
   if APly < 0 then
     APly := 0;
-  if APly > Length(FHistoryMoves) then
-    APly := Length(FHistoryMoves);
 
-  FBoard := FHistoryBaseBoard;
-  FSideToMove := FHistoryBaseSide;
-  FCurrentPly := 0;
-  FLastMoveTargetSquare := 0;
-  FSuppressBoardUpdates := True;
-  try
-    for I := 0 to APly - 1 do
-    begin
-      ApplyMove(FHistoryMoves[I]);
-      Inc(FCurrentPly);
-    end;
-  finally
-    FSuppressBoardUpdates := False;
-  end;
-
-  FCurrentPly := APly;
+  FHistory.PositionAtPly(APly, FBoard, FSideToMove, FLastMoveTargetSquare);
+  FHistory.CurrentPly := APly;
   UpdateMoveList;
   UpdateHistoryList;
   InvalidateBoard;
@@ -4626,26 +3503,18 @@ end;
 procedure TMainWindow.HistoryMemoClick(Sender: TObject);
 var
   Caret: Integer;
-  I: Integer;
   Ply: Integer;
 begin
   if FHistoryMemo = nil then
     Exit;
 
   Caret := FHistoryMemo.SelStart;
-  Ply := 0;
-  for I := 0 to High(FHistoryMoveStarts) do
-    if (FHistoryMoveLengths[I] > 0) and (Caret >= FHistoryMoveStarts[I]) and
-      (Caret <= FHistoryMoveStarts[I] + FHistoryMoveLengths[I]) then
-    begin
-      Ply := I;
-      Break;
-    end;
+  Ply := FHistory.PlyAtTextOffset(Caret);
 
-  if (Ply > 0) and (Ply <= Length(FHistoryMoves)) then
+  if (Ply > 0) and (Ply <= Length(FHistory.Moves)) then
     NavigateHistoryToPly(Ply)
   else
-    SelectHistoryPly(FCurrentPly);
+    SelectHistoryPly(FHistory.CurrentPly);
 end;
 
 procedure TMainWindow.HistoryMemoKeyDown(Sender: TObject; var Key: Word;
@@ -4654,12 +3523,12 @@ begin
   case Key of
     VK_RIGHT:
     begin
-      NavigateHistoryToPly(Min(FCurrentPly + 1, Length(FHistoryMoves)));
+      NavigateHistoryToPly(Min(FHistory.CurrentPly + 1, Length(FHistory.Moves)));
       Key := 0;
     end;
     VK_LEFT:
     begin
-      NavigateHistoryToPly(Max(FCurrentPly - 1, 0));
+      NavigateHistoryToPly(Max(FHistory.CurrentPly - 1, 0));
       Key := 0;
     end;
   end;
@@ -4688,6 +3557,35 @@ begin
   SetAnalyzePvLocked(Length(FAnalyzePvMoves) > 0);
   RebuildAnalyzePvPositionToPly(Ply);
   SelectAnalyzePvPly(Ply);
+end;
+
+procedure TMainWindow.AnalyzePvEngineComboChange(Sender: TObject);
+var
+  Mode: TEngineSearchMode;
+begin
+  if FPvEngineCombo = nil then
+    Exit;
+
+  if FPvEngineCombo.ItemIndex = 1 then
+    FSelectedPvEngineIndex := 2
+  else
+    FSelectedPvEngineIndex := 1;
+
+  SetAnalyzePvLocked(False);
+  ShowAnalyzePvFromEngine(FSelectedPvEngineIndex);
+
+  if (not FEngineAnalyzeEnabled) or FAutoPlayActive then
+    Exit;
+  if FPlayGameActive and IsPlayGameEngineTurn then
+    Exit;
+
+  if FPlayGameActive and HasPlayGameEnginePlayer and HasPlayGameHumanPlayer then
+    Mode := esmPlayGameAnalyze
+  else
+    Mode := esmAnalyze;
+
+  RequestOrSendAnalyzeToEngineSlot(FSelectedPvEngineIndex, Mode,
+    'stopping previous search before selected PV analysis');
 end;
 
 procedure TMainWindow.AnalyzePvMemoKeyDown(Sender: TObject; var Key: Word;
@@ -4748,10 +3646,10 @@ begin
     Exit;
   end;
 
-  if (APly <= High(FHistoryMoveStarts)) and (FHistoryMoveLengths[APly] > 0) then
+  if (APly <= High(FHistory.MoveStarts)) and (FHistory.MoveLengths[APly] > 0) then
   begin
-    FHistoryMemo.SelStart := FHistoryMoveStarts[APly];
-    FHistoryMemo.SelLength := FHistoryMoveLengths[APly];
+    FHistoryMemo.SelStart := FHistory.MoveStarts[APly];
+    FHistoryMemo.SelLength := FHistory.MoveLengths[APly];
   end;
 end;
 
@@ -4818,9 +3716,9 @@ begin
 
   FAnalyzePvLocked := ALocked;
   if FAnalyzePvLocked then
-    AppendEngineLog('[PV locked]' + LineEnding)
+    AppendEngineSlotLog(1, '[PV locked]' + LineEnding)
   else
-    AppendEngineLog('[PV unlocked]' + LineEnding);
+    AppendEngineSlotLog(1, '[PV unlocked]' + LineEnding);
 end;
 
 procedure TMainWindow.UnlockAnalyzePv;
@@ -4829,32 +3727,79 @@ begin
     Exit;
 
   SetAnalyzePvLocked(False);
-  SelectAnalyzePvPly(FAnalyzePvBrowsePly);
+  ShowAnalyzePvFromEngine(FSelectedPvEngineIndex);
+end;
+
+procedure TMainWindow.ClearAnalyzeBoardHighlights;
+begin
+  if (FAnalyzeBestSourceSquare <> 0) or (FAnalyzeHintSourceSquare <> 0) then
+  begin
+    FAnalyzeBestSourceSquare := 0;
+    FAnalyzeHintSourceSquare := 0;
+    InvalidateBoard;
+  end;
+end;
+
+procedure TMainWindow.ClearAnalyzePvForEngine(AEngineIndex: Integer);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  FEngines[AEngineIndex].AnalyzePvText := '';
+  FEngines[AEngineIndex].AnalyzePvBasePly := 0;
+  FEngines[AEngineIndex].AnalyzePvHasBase := False;
+end;
+
+procedure TMainWindow.ClearAnalyzePvForAllEngines;
+var
+  I: Integer;
+begin
+  for I := Low(FEngines) to High(FEngines) do
+    ClearAnalyzePvForEngine(I);
+end;
+
+procedure TMainWindow.ClearSearchAnalysisDisplay;
+begin
+  FLastEngineInfoAnnotation := '';
+  FLastEngineInfoLine := '';
+  ClearAnalyzePvForAllEngines;
+  SetLength(FAnalyzePvMoves, 0);
+  FAnalyzePvHasBase := False;
+  FAnalyzePvLocked := False;
+  FAnalyzePvBrowsePly := 0;
+  FAnalyzeHintMove := '';
+  FAnalyzeHintSourceSquare := 0;
+  UpdateAnalyzePvList;
+  if FHistoryPvMiniBoardPaintBox <> nil then
+    FHistoryPvMiniBoardPaintBox.Invalidate;
+  if FAnalysisBoardPaintBox <> nil then
+    FAnalysisBoardPaintBox.Invalidate;
+  FAnalyzeBestSourceSquare := 0;
+  InvalidateBoard;
+end;
+
+procedure TMainWindow.HandleTerminalSearchPosition(AEngineIndex: Integer;
+  AStopAutoPlay, ALeavePlayGame: Boolean);
+var
+  LogText: String;
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  if ALeavePlayGame and FPlayGameActive then
+    LeavePlayGameMode;
+  if AStopAutoPlay then
+    FAutoPlayActive := False;
+
+  FinishEngineSlotSearch(AEngineIndex);
+  LogText := '[' + EngineLogName(AEngineIndex) +
+    ' not starting search: terminal position]' + LineEnding;
+  AppendEngineSlotLog(AEngineIndex, LogText);
 end;
 
 function TMainWindow.SquareAtPoint(X, Y: Integer): Integer;
-var
-  CellSize: Integer;
-  Col: Integer;
-  Row: Integer;
 begin
-  Result := 0;
-  if (FBoardRect.Right <= FBoardRect.Left) or (FBoardRect.Bottom <= FBoardRect.Top) then
-    Exit;
-  if (X < FBoardRect.Left) or (X >= FBoardRect.Right) or
-    (Y < FBoardRect.Top) or (Y >= FBoardRect.Bottom) then
-    Exit;
-
-  CellSize := (FBoardRect.Right - FBoardRect.Left) div BoardSize;
-  if CellSize <= 0 then
-    Exit;
-
-  Col := (X - FBoardRect.Left) div CellSize;
-  Row := (Y - FBoardRect.Top) div CellSize;
-  if (Row < 0) or (Row >= BoardSize) or (Col < 0) or (Col >= BoardSize) then
-    Exit;
-
-  Result := BoardSquareAtCell(Row, Col);
+  Result := BoardGeometry.BoardSquareAtPoint(FBoardRect, X, Y, FBoardFlipped);
 end;
 
 procedure TMainWindow.SelectBoardSquare(ASquare: Integer);
@@ -4935,216 +3880,209 @@ begin
   if (AMoveIndex < 0) or (AMoveIndex > High(FMoves)) then
     Exit;
 
-  UpdateGameClock;
   CopyMove(FMoves[AMoveIndex], PlayedMove);
   ClearBoardSelection;
 
   if FPlayGameActive and (not IsPlayGameHumanTurn) then
   begin
-    AppendEngineLog('[not your turn]' + LineEnding);
+    AppendEngineSlotLog(1, '[not your turn]' + LineEnding);
     Exit;
   end;
+
+  if FPlayGameActive then
+    PauseGameClocks;
 
   ApplyMove(PlayedMove);
   RecordPlayedMove(PlayedMove);
   LogPlayedMoveToEngineWindows(PlayedMove, 0);
-  if CheckDrawByRepetition then
-    Exit;
 
   if FPlayGameActive then
   begin
-    AppendEngineLog('[human move ' + MoveToString(PlayedMove) + ']' +
+    AppendEngineSlotLog(1, '[human move ' + MoveToString(PlayedMove) + ']' +
       LineEnding);
-    ContinuePlayGameSearch;
+    ContinueGameFlowAfterPositionChange(gfrHumanMove, 0);
   end
   else if AContinueEngine and EngineIsRunning and
     FEngines[1].Ready then
   begin
-    AppendEngineLog('[played move ' + MoveToString(PlayedMove) +
+    AppendEngineSlotLog(1, '[played move ' + MoveToString(PlayedMove) +
       '; restarting analysis]' + LineEnding);
     RestartEngineAnalyze;
   end;
 end;
 
-function PrefixLogLines(const AText, APrefix: String): String;
-var
-  LineBody: String;
-  LineEnd: String;
-  LineStart: Integer;
-  P: Integer;
-
-  procedure AppendLine(const ALine: String);
-  begin
-    if Trim(ALine) <> '' then
-      Result += APrefix + ALine
-    else
-      Result += ALine;
-  end;
-
+procedure TMainWindow.AppendEngineSlotLog(AEngineIndex: Integer;
+  const AText: String);
 begin
-  Result := '';
-  LineStart := 1;
-  P := 1;
-  while P <= Length(AText) do
-  begin
-    if AText[P] in [#10, #13] then
-    begin
-      LineBody := Copy(AText, LineStart, P - LineStart);
-      LineEnd := AText[P];
-      if (AText[P] = #13) and (P < Length(AText)) and (AText[P + 1] = #10) then
-      begin
-        LineEnd += AText[P + 1];
-        Inc(P);
-      end;
-      AppendLine(LineBody + LineEnd);
-      LineStart := P + 1;
-    end;
-    Inc(P);
-  end;
-
-  if LineStart <= Length(AText) then
-    AppendLine(Copy(AText, LineStart, MaxInt));
+  if not EngineSlotIndexValid(AEngineIndex) then
+    AEngineIndex := 1;
+  AppendEngineGuiLog(FEngines[AEngineIndex].LogMemo, AText,
+    FEngineLogShowTimestamps);
 end;
 
-procedure TMainWindow.AppendEngineRawLog(const AText: String);
+procedure TMainWindow.AppendEngineSlotRawLog(AEngineIndex: Integer;
+  const AText: String);
 begin
-  if AText = '' then
-    Exit;
-  FEngines[1].LogMemo.SelStart := Length(FEngines[1].LogMemo.Text);
-  FEngines[1].LogMemo.SelText := AText;
-  FEngines[1].LogMemo.SelStart := Length(FEngines[1].LogMemo.Text);
-end;
-
-procedure TMainWindow.AppendEngineLog(const AText: String);
-begin
-  AppendEngineRawLog(PrefixLogLines(AText, EngineLogPrefix('GUI')));
-end;
-
-procedure TMainWindow.AppendEngine2RawLog(const AText: String);
-begin
-  if AText = '' then
-    Exit;
-  if FEngines[2].LogMemo = nil then
-    Exit;
-
-  FEngines[2].LogMemo.SelStart := Length(FEngines[2].LogMemo.Text);
-  FEngines[2].LogMemo.SelText := AText;
-  FEngines[2].LogMemo.SelStart := Length(FEngines[2].LogMemo.Text);
-end;
-
-procedure TMainWindow.AppendEngine2Log(const AText: String);
-begin
-  AppendEngine2RawLog(PrefixLogLines(AText, EngineLogPrefix('GUI')));
-end;
-
-function EngineLogTimestamp: String;
-begin
-  Result := FormatDateTime('hh:nn:ss.zzz', Now);
-end;
-
-function ClockTimestampSeconds: Double;
-begin
-  {$IFDEF MSWINDOWS}
-  Result := GetTickCount64 / 1000.0;
-  {$ELSE}
-  Result := Now * 24 * 60 * 60;
-  {$ENDIF}
+  if not EngineSlotIndexValid(AEngineIndex) then
+    AEngineIndex := 1;
+  AppendEngineRawLog(FEngines[AEngineIndex].LogMemo, AText);
 end;
 
 function TMainWindow.EngineIsRunning: Boolean;
 begin
-  {$IFDEF MSWINDOWS}
-  Result := FEngines[1].Running and (FEngines[1].ProcessInfo.hProcess <> 0) and
-    (WaitForSingleObject(FEngines[1].ProcessInfo.hProcess, 0) = WAIT_TIMEOUT);
-  if not Result then
-    FEngines[1].Running := False;
-  {$ELSE}
-  Result := (FEngines[1].Process <> nil) and FEngines[1].Process.Running;
-  {$ENDIF}
-end;
-
-function TMainWindow.EngineLogPrefix(const AName: String): String;
-begin
-  if FEngineLogShowTimestamps then
-    Result := '[' + AName + ' ' + EngineLogTimestamp + '] '
-  else
-    Result := '[' + AName + '] ';
+  Result := EngineSlotIndexValid(1) and
+    (FEngines[1].PlatformProcess <> nil) and
+    FEngines[1].PlatformProcess.IsRunning;
 end;
 
 function TMainWindow.EngineOutputLogText(const AText: String;
   AEngineIndex: Integer): String;
-var
-  LineBody: String;
-  LineEnd: String;
-  LineStart: Integer;
-  P: Integer;
-
-  procedure AppendLine(const ALine: String);
-  var
-    TrimmedLine: String;
-  begin
-    TrimmedLine := Trim(ALine);
-    if TrimmedLine <> '' then
-      Result += EngineLogPrefix(EngineLogName(AEngineIndex)) + '< ' + ALine
-    else
-      Result += ALine;
-  end;
-
 begin
-  Result := '';
-  LineStart := 1;
-  P := 1;
-  while P <= Length(AText) do
-  begin
-    if AText[P] in [#10, #13] then
-    begin
-      LineBody := Copy(AText, LineStart, P - LineStart);
-      LineEnd := AText[P];
-      if (AText[P] = #13) and (P < Length(AText)) and (AText[P + 1] = #10) then
-      begin
-        LineEnd += AText[P + 1];
-        Inc(P);
-      end;
-      AppendLine(LineBody + LineEnd);
-      LineStart := P + 1;
-    end;
-    Inc(P);
-  end;
-
-  if LineStart <= Length(AText) then
-    AppendLine(Copy(AText, LineStart, MaxInt));
+  Result := FormatEngineOutputLog(AText, EngineLogName(AEngineIndex),
+    FEngineLogShowTimestamps);
 end;
 
 function TMainWindow.SecondEngineIsRunning: Boolean;
 begin
-  {$IFDEF MSWINDOWS}
-  Result := FEngines[2].Running and (FEngines[2].ProcessInfo.hProcess <> 0) and
-    (WaitForSingleObject(FEngines[2].ProcessInfo.hProcess, 0) = WAIT_TIMEOUT);
-  if not Result then
-    FEngines[2].Running := False;
-  {$ELSE}
-  Result := (FEngines[2].Process <> nil) and FEngines[2].Process.Running;
-  {$ENDIF}
+  Result := EngineSlotIndexValid(2) and
+    (FEngines[2].PlatformProcess <> nil) and
+    FEngines[2].PlatformProcess.IsRunning;
 end;
 
-function TMainWindow.EngineSlotAvailableForPlay(AEngineIndex: Integer): Boolean;
+function TMainWindow.EngineSlotIsRunning(AEngineIndex: Integer): Boolean;
 begin
-  Result := False;
-  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
-    Exit;
-
-  if EngineIsDxp(AEngineIndex) then
-  begin
-    Result := FEngines[AEngineIndex].DxpSocket <> nil;
-    Exit;
-  end;
-
   case AEngineIndex of
     1: Result := EngineIsRunning;
     2: Result := SecondEngineIsRunning;
   else
     Result := False;
   end;
+end;
+
+function TMainWindow.EngineSlotIndexValid(AEngineIndex: Integer): Boolean;
+begin
+  Result := (AEngineIndex >= Low(FEngines)) and
+    (AEngineIndex <= High(FEngines));
+end;
+
+function TMainWindow.EngineSlotConfigured(AEngineIndex: Integer): Boolean;
+begin
+  Result := False;
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  Result := (FEngines[AEngineIndex].FileName <> '') or
+    (FEngines[AEngineIndex].ParamsFileName <> '') or
+    FEngines[AEngineIndex].Ready or EngineSlotProcessHandlePresent(AEngineIndex) or
+    (FEngines[AEngineIndex].DxpSocket <> nil);
+end;
+
+function TMainWindow.EngineSlotDxpSocketOpen(AEngineIndex: Integer): Boolean;
+begin
+  Result := False;
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  Result := FEngines[AEngineIndex].DxpSocket <> nil;
+  if not Result then
+    Exit;
+
+  if EngineSlotProcessHandlePresent(AEngineIndex) and
+    (not EngineSlotIsRunning(AEngineIndex)) then
+  begin
+    CloseDxpSocket(AEngineIndex, 'engine process is not running');
+    Result := False;
+  end;
+end;
+
+function TMainWindow.EngineSlotDxpConnectionActive(
+  AEngineIndex: Integer): Boolean;
+begin
+  Result := EngineSlotIndexValid(AEngineIndex) and
+    ((FEngines[AEngineIndex].DxpThread <> nil) or
+     EngineSlotDxpSocketOpen(AEngineIndex));
+end;
+
+procedure TMainWindow.CloseDxpSocket(AEngineIndex: Integer;
+  const AReason: String);
+var
+  LogText: String;
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  if FEngines[AEngineIndex].DxpSocket = nil then
+    Exit;
+
+  if AReason <> '' then
+  begin
+    LogText := '[DXP socket closed: ' + AReason + ']' + LineEnding;
+    AppendEngineSlotLog(AEngineIndex, LogText);
+  end;
+
+  FreeAndNil(FEngines[AEngineIndex].DxpSocket);
+  SetDxpGameState(AEngineIndex, dgsIdle, 'DXP socket closed');
+end;
+
+function TMainWindow.EngineSlotCanReceiveCommand(AEngineIndex: Integer;
+  ARequireReady: Boolean): TEngineCommandGate;
+var
+  EngineReady: Boolean;
+  SlotValid: Boolean;
+begin
+  SlotValid := EngineSlotIndexValid(AEngineIndex);
+  EngineReady := SlotValid and FEngines[AEngineIndex].Ready;
+  Result := EngineReceiveCommandGate(EngineLogName(AEngineIndex), SlotValid,
+    EngineSlotIsRunning(AEngineIndex), ARequireReady, EngineReady);
+end;
+
+function TMainWindow.EngineSlotCanStartHubSearch(AEngineIndex: Integer;
+  const AGoCommand: String; ARequireMctsSupport: Boolean): TEngineCommandGate;
+begin
+  Result := HubSearchGate(EngineSlotCanReceiveCommand(AEngineIndex, True),
+    AGoCommand, EngineLogName(AEngineIndex), EngineIsDxp(AEngineIndex),
+    ARequireMctsSupport, EngineSupportsMcts(AEngineIndex));
+end;
+
+function TMainWindow.EngineSlotCanSendDxpPacket(AEngineIndex: Integer;
+  const APacketName: String; ACheckGameEndSent: Boolean): TEngineCommandGate;
+var
+  GameEndAlreadySent: Boolean;
+  SlotValid: Boolean;
+begin
+  SlotValid := EngineSlotIndexValid(AEngineIndex);
+  GameEndAlreadySent := SlotValid and FEngines[AEngineIndex].DxpGameEndSent;
+  Result := DxpPacketGate(APacketName, SlotValid, EngineIsDxp(AEngineIndex),
+    ACheckGameEndSent, GameEndAlreadySent,
+    EngineSlotDxpSocketOpen(AEngineIndex));
+end;
+
+function TMainWindow.EngineSlotCanSendDxpGameEnd(
+  AEngineIndex: Integer): TEngineCommandGate;
+begin
+  Result := EngineSlotCanSendDxpPacket(AEngineIndex, 'DXP_GAMEEND', True);
+end;
+
+function TMainWindow.LogEngineGateFailure(AEngineIndex: Integer;
+  const AGate: TEngineCommandGate): Boolean;
+begin
+  Result := not AGate.Allowed;
+  if Result and (AGate.Reason <> '') and EngineSlotIndexValid(AEngineIndex) then
+    AppendEngineSlotLog(AEngineIndex, AGate.Reason);
+end;
+
+function TMainWindow.EngineSlotAvailableForPlay(AEngineIndex: Integer): Boolean;
+begin
+  Result := False;
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  if EngineIsDxp(AEngineIndex) then
+  begin
+    Result := EngineSlotDxpSocketOpen(AEngineIndex);
+    Exit;
+  end;
+
+  Result := EngineSlotIsRunning(AEngineIndex);
   if not Result then
     Exit;
   Result := FEngines[AEngineIndex].Ready;
@@ -5153,16 +4091,21 @@ end;
 procedure TMainWindow.UpdateEnginePollTimer;
 var
   HasEngineProcess: Boolean;
+  I: Integer;
 begin
   if FEnginePollTimer = nil then
     Exit;
 
-  {$IFDEF MSWINDOWS}
   HasEngineProcess := False;
-  {$ELSE}
-  HasEngineProcess := (FEngines[1].Process <> nil) or
-    (FEngines[2].Process <> nil);
-  {$ENDIF}
+  for I := Low(FEngines) to High(FEngines) do
+    if (FEngines[I] <> nil) and
+      (FEngines[I].PlatformProcess <> nil) and
+      FEngines[I].PlatformProcess.HasProcess and
+      FEngines[I].PlatformProcess.NeedsPolling then
+    begin
+      HasEngineProcess := True;
+      Break;
+    end;
 
   FEnginePollTimer.Enabled := HasEngineProcess;
 end;
@@ -5170,31 +4113,44 @@ end;
 function TMainWindow.EngineParamsFileNameForDisplayName(
   const ADisplayName: String; const AEngineFileName: String): String;
 var
-  BaseName: String;
-  I: Integer;
-  SafeName: String;
+  DefaultDirectory: String;
 begin
-  if AEngineFileName <> '' then
-    SafeName := ChangeFileExt(ExtractFileName(AEngineFileName), '')
+  if FEngines[1].FileName <> '' then
+    DefaultDirectory := ExtractFilePath(FEngines[1].FileName)
   else
-    SafeName := Trim(ADisplayName);
-  for I := 1 to Length(SafeName) do
-    if not (SafeName[I] in ['A'..'Z', 'a'..'z', '0'..'9', '_', '-', '.']) then
-      SafeName[I] := '_';
+    DefaultDirectory := ExtractFilePath(ParamStr(0));
+  Result := EngineConfigParamsFileName(ADisplayName, AEngineFileName,
+    DefaultDirectory);
+end;
 
-  while Pos('__', SafeName) > 0 do
-    SafeName := StringReplace(SafeName, '__', '_', [rfReplaceAll]);
-  SafeName := Trim(SafeName);
-  if SafeName = '' then
-    SafeName := 'engine';
+function TMainWindow.EngineCanonicalParamsFileName(
+  const AEngineFileName: String): String;
+begin
+  Result := EngineParamsFileNameForDisplayName('', AEngineFileName);
+end;
 
-  if AEngineFileName <> '' then
-    BaseName := ExtractFilePath(AEngineFileName)
-  else if FEngines[1].FileName <> '' then
-    BaseName := ExtractFilePath(FEngines[1].FileName)
+procedure TMainWindow.LoadEngineParamsForProtocol(AEngineIndex: Integer;
+  const AEngineFileName, AProtocol: String);
+var
+  SectionName: String;
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  FEngines[AEngineIndex].ParamsFileName :=
+    EngineCanonicalParamsFileName(AEngineFileName);
+
+  SectionName := LowerCase(Trim(AProtocol));
+  if (SectionName = 'hub') or (SectionName = 'dxp') then
+    LoadParamsFromJson(FEngines[AEngineIndex].ParamsFileName, SectionName,
+      FEngines[AEngineIndex].Params)
   else
-    BaseName := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0)));
-  Result := BaseName + SafeName + '.params.json';
+    LoadParamsFromJson(FEngines[AEngineIndex].ParamsFileName,
+      FEngines[AEngineIndex].Params);
+
+  if (SectionName = 'hub') or (SectionName = 'dxp') then
+    AddOrUpdateParam(FEngines[AEngineIndex].Params, EngineTypeParamName,
+      'string', SectionName, False);
 end;
 
 procedure TMainWindow.ClockTimerTimer(Sender: TObject);
@@ -5202,101 +4158,43 @@ begin
   UpdateGameClock;
 end;
 
-procedure TMainWindow.UpdateGameClock;
-var
-  ElapsedSeconds: Double;
+procedure TMainWindow.ApplicationIdle(Sender: TObject; var Done: Boolean);
 begin
-  if not FClocksActive then
-    Exit;
-
-  ElapsedSeconds := ClockTimestampSeconds - FClockLastTick;
-  FClockLastTick := ClockTimestampSeconds;
-  if ElapsedSeconds <= 0 then
-    Exit;
-  if ElapsedSeconds > 10 then
-    ElapsedSeconds := 0;
-
-  if FSideToMove = sideWhite then
+  if (FPlayClock <> nil) and FPlayClock.Active then
   begin
-    FWhiteClockSeconds := Max(0, FWhiteClockSeconds - ElapsedSeconds);
-    if FWhiteClockSeconds = 0 then
-    begin
-      FGameResult := '0-2';
-      MarkGameDirty;
-      SendDxpGameEndToPlayingDxpEngines;
-      LeavePlayGameMode;
-      AppendEngineLog('[white clock expired]' + LineEnding);
-      UpdateHistoryList;
-      RestartEngineAnalyze;
-    end;
-  end
-  else
-  begin
-    FBlackClockSeconds := Max(0, FBlackClockSeconds - ElapsedSeconds);
-    if FBlackClockSeconds = 0 then
-    begin
-      FGameResult := '2-0';
-      MarkGameDirty;
-      SendDxpGameEndToPlayingDxpEngines;
-      LeavePlayGameMode;
-      AppendEngineLog('[black clock expired]' + LineEnding);
-      UpdateHistoryList;
-      RestartEngineAnalyze;
-    end;
+    if FPlayClock.NeedsIdleUpdate then
+      UpdateGameClock;
+    Done := False;
   end;
+end;
+
+procedure TMainWindow.HandleClockExpired;
+begin
+  EndCurrentGame(gerClockExpired, '', 0, True);
+end;
+
+procedure TMainWindow.UpdateGameClock;
+begin
+  if (FPlayClock = nil) or (not FPlayClock.Active) then
+    Exit;
+
+  if FPlayClock.Update(FSideToMove) then
+    HandleClockExpired;
 
   UpdateClockLabels;
 end;
 
-function FormatClockSeconds(ASeconds: Double): String;
-var
-  WholeSeconds: Integer;
-begin
-  WholeSeconds := Ceil(Max(0, ASeconds));
-  Result := Format('%2.2d:%2.2d', [WholeSeconds div 60, WholeSeconds mod 60]);
-end;
-
-function FormatClockAnnotationSeconds(ASeconds: Double): String;
-var
-  WholeSeconds: Integer;
-begin
-  WholeSeconds := Ceil(Max(0, ASeconds));
-  Result := Format('%2.2d:%2.2d:%2.2d',
-    [WholeSeconds div 3600, (WholeSeconds div 60) mod 60, WholeSeconds mod 60]);
-end;
-
-function HubDoneResultIsDraw(const AResult: String): Boolean;
-var
-  ResultText: String;
-begin
-  ResultText := LowerCase(Trim(AResult));
-  Result := (ResultText = 'draw') or (ResultText = '1-1') or
-    (ResultText = '1/2-1/2') or (ResultText = '0.5-0.5');
-end;
-
 procedure TMainWindow.ResetClocks;
 begin
-  FWhiteClockSeconds := 0;
-  FBlackClockSeconds := 0;
-  FInitialWhiteClockSeconds := 0;
-  FInitialBlackClockSeconds := 0;
+  if FPlayClock <> nil then
+    FPlayClock.Reset;
   StopGameClocks;
 end;
 
 procedure TMainWindow.StartGameClocks(AGameMinutes: Double);
 begin
-  FWhiteClockSeconds := Max(0, AGameMinutes * 60);
-  FBlackClockSeconds := Max(0, AGameMinutes * 60);
-  FInitialWhiteClockSeconds := FWhiteClockSeconds;
-  FInitialBlackClockSeconds := FBlackClockSeconds;
-  FClockLastTick := ClockTimestampSeconds;
-  FClocksActive := False;
-  if FClockTimer <> nil then
-    {$IFDEF MSWINDOWS}
-    FClockTimer.Enabled := False;
-    {$ELSE}
-    FClockTimer.Enabled := False;
-    {$ENDIF}
+  if FPlayClock <> nil then
+    FPlayClock.Start(AGameMinutes);
   UpdateClockLabels;
 end;
 
@@ -5305,22 +4203,37 @@ begin
   if not FPlayGameActive then
     Exit;
 
-  FClockLastTick := ClockTimestampSeconds;
-  FClocksActive := (FWhiteClockSeconds > 0) and (FBlackClockSeconds > 0);
-  if FClockTimer <> nil then
-    {$IFDEF MSWINDOWS}
-    FClockTimer.Enabled := False;
-    {$ELSE}
-    FClockTimer.Enabled := FClocksActive;
-    {$ENDIF}
+  if FPlayClock <> nil then
+    FPlayClock.Activate;
+  UpdateClockLabels;
+end;
+
+procedure TMainWindow.PauseGameClocks;
+begin
+  if FPlayClock <> nil then
+    FPlayClock.Pause(FSideToMove);
+  UpdateClockLabels;
+end;
+
+procedure TMainWindow.PauseGameClocksAt(AReceivedAtSeconds: Double);
+begin
+  if (AReceivedAtSeconds <= 0) or (FPlayClock = nil) then
+  begin
+    PauseGameClocks;
+    Exit;
+  end;
+
+  if FPlayClock.Active then
+    FPlayClock.PauseAt(FSideToMove, AReceivedAtSeconds)
+  else
+    FPlayClock.Pause(FSideToMove);
   UpdateClockLabels;
 end;
 
 procedure TMainWindow.StopGameClocks;
 begin
-  FClocksActive := False;
-  if FClockTimer <> nil then
-    FClockTimer.Enabled := False;
+  if FPlayClock <> nil then
+    FPlayClock.Stop;
   UpdateClockLabels;
 end;
 
@@ -5339,147 +4252,197 @@ begin
   UpdateAnalyzeMenuItems;
 end;
 
+procedure TMainWindow.FinishPlayGameMode(AUpdateHistory: Boolean;
+  ARestartAnalyze: Boolean);
+begin
+  LeavePlayGameMode;
+  if AUpdateHistory then
+    UpdateHistoryList;
+  if ARestartAnalyze then
+    RestartEngineAnalyze;
+end;
+
 procedure TMainWindow.RestoreClockSnapshot(APly: Integer);
 begin
   if APly <= 0 then
-  begin
-    FWhiteClockSeconds := FInitialWhiteClockSeconds;
-    FBlackClockSeconds := FInitialBlackClockSeconds;
-  end
-  else if (APly <= Length(FHistoryClockSnapshots)) and
-    FHistoryClockSnapshots[APly - 1].HasClock then
-  begin
-    FWhiteClockSeconds := FHistoryClockSnapshots[APly - 1].WhiteSeconds;
-    FBlackClockSeconds := FHistoryClockSnapshots[APly - 1].BlackSeconds;
-  end
+    FPlayClock.RestoreInitial
+  else if (APly <= Length(FHistory.ClockSnapshots)) and
+    FHistory.ClockSnapshots[APly - 1].HasClock then
+    FPlayClock.RestoreSnapshot(FHistory.ClockSnapshots[APly - 1])
   else
     Exit;
 
-  FClockLastTick := ClockTimestampSeconds;
-  FClocksActive := FPlayGameActive and (FWhiteClockSeconds > 0) and
-    (FBlackClockSeconds > 0);
-  if FClockTimer <> nil then
-    {$IFDEF MSWINDOWS}
-    FClockTimer.Enabled := False;
-    {$ELSE}
-    FClockTimer.Enabled := FClocksActive;
-    {$ENDIF}
+  if FPlayGameActive then
+    FPlayClock.Activate
+  else
+    FPlayClock.Stop;
   UpdateClockLabels;
-  AppendEngineLog('[restored clocks ' + FormatClockSeconds(FWhiteClockSeconds) +
-    ' / ' + FormatClockSeconds(FBlackClockSeconds) + ']' + LineEnding);
+  AppendEngineSlotLog(1, ClockRestoreLogText(FPlayClock.WhiteSeconds,
+    FPlayClock.BlackSeconds));
 end;
 
 procedure TMainWindow.UpdateClockLabels;
-
-  procedure SetClockLabel(ALabel: TLabel; const AName: String; ASeconds: Double);
+  function ClockPlayerName(const AName, AFallback: String): String;
   begin
-    if ALabel = nil then
-      Exit;
-
-    ALabel.Caption := AName + '  ' + FormatClockSeconds(ASeconds);
-    if FClocksActive and (ASeconds > 0) then
-      ALabel.Font.Color := clGreen
-    else
-      ALabel.Font.Color := clRed;
+    Result := Trim(AName);
+    if Result = '' then
+      Result := AFallback;
   end;
 
+var
+  BlackClockName: String;
+  WhiteClockName: String;
 begin
+  if FPlayClock = nil then
+    Exit;
+
+  WhiteClockName := ClockPlayerName(FGameWhiteName, 'White');
+  BlackClockName := ClockPlayerName(FGameBlackName, 'Black');
+
   if FBoardFlipped then
   begin
-    SetClockLabel(FBoardTopClockLabel, 'White', FWhiteClockSeconds);
-    SetClockLabel(FBoardBottomClockLabel, 'Black', FBlackClockSeconds);
+    ApplyClockLabel(FBoardTopClockLabel, WhiteClockName, FPlayClock.WhiteSeconds,
+      FPlayClock.Active);
+    ApplyClockLabel(FBoardBottomClockLabel, BlackClockName, FPlayClock.BlackSeconds,
+      FPlayClock.Active);
   end
   else
   begin
-    SetClockLabel(FBoardTopClockLabel, 'Black', FBlackClockSeconds);
-    SetClockLabel(FBoardBottomClockLabel, 'White', FWhiteClockSeconds);
+    ApplyClockLabel(FBoardTopClockLabel, BlackClockName, FPlayClock.BlackSeconds,
+      FPlayClock.Active);
+    ApplyClockLabel(FBoardBottomClockLabel, WhiteClockName, FPlayClock.WhiteSeconds,
+      FPlayClock.Active);
   end;
 end;
 
 procedure TMainWindow.CloseEngine;
 begin
-  if FEnginePollTimer <> nil then
-    FEnginePollTimer.Enabled := False;
-  StopDxpConnection(1);
-  {$IFDEF MSWINDOWS}
-  if FEngines[1].Running then
+  CloseEngineSlot(1);
+end;
+
+procedure TMainWindow.CloseEngineSlot(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  CloseEngineSlotProcess(AEngineIndex);
+  ResetEngineSlotAfterClose(AEngineIndex);
+  RefreshEngineUiAfterSlotChange;
+end;
+
+procedure TMainWindow.ResetEngineSlotAfterClose(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  ResetEngineRuntimeForClose(AEngineIndex);
+end;
+
+procedure TMainWindow.ResetEngineRuntimeForLaunch(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  ResetEngineSlotRuntime(AEngineIndex);
+end;
+
+procedure TMainWindow.ResetEngineRuntimeForClose(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  if AEngineIndex = 1 then
+    ResetPrimaryEngineAfterClose
+  else
+    ResetSecondaryEngineAfterClose;
+end;
+
+procedure TMainWindow.ResetEngineRuntimeAfterProcessExit(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  FEngines[AEngineIndex].Ready := False;
+  if AEngineIndex = 1 then
   begin
-    if not EngineIsDxp(1) then
-    begin
-      AppendEngineLog('> quit' + LineEnding);
-      SendEngineCommand('quit');
-      WaitForSingleObject(FEngines[1].ProcessInfo.hProcess, 1000);
-    end;
-    if EngineIsRunning then
-      TerminateProcess(FEngines[1].ProcessInfo.hProcess, 0);
-  end;
-  if FEngines[1].InputWriteHandle <> 0 then
-  begin
-    CloseHandle(FEngines[1].InputWriteHandle);
-    FEngines[1].InputWriteHandle := 0;
-  end;
-  if FEngines[1].OutputReadHandle <> 0 then
-  begin
-    CloseHandle(FEngines[1].OutputReadHandle);
-    FEngines[1].OutputReadHandle := 0;
-  end;
-  if FEngines[1].ReaderThread <> nil then
-  begin
-    FEngines[1].ReaderThread.Terminate;
-    FEngines[1].ReaderThread.WaitFor;
-    FreeAndNil(FEngines[1].ReaderThread);
-  end;
-  if FEngines[1].ProcessInfo.hThread <> 0 then
-  begin
-    CloseHandle(FEngines[1].ProcessInfo.hThread);
-    FEngines[1].ProcessInfo.hThread := 0;
-  end;
-  if FEngines[1].ProcessInfo.hProcess <> 0 then
-  begin
-    CloseHandle(FEngines[1].ProcessInfo.hProcess);
-    FEngines[1].ProcessInfo.hProcess := 0;
-  end;
-  FEngines[1].Running := False;
-  {$ELSE}
-  if FEngines[1].Process <> nil then
-  begin
-    if FEngines[1].Process.Running then
-    begin
-      if not EngineIsDxp(1) then
-      begin
-        AppendEngineLog('> quit' + LineEnding);
-        SendEngineCommand('quit');
-        FEngines[1].Process.WaitOnExit(1000);
-      end;
-      if FEngines[1].Process.Running then
-        FEngines[1].Process.Terminate(0);
-    end;
-    FreeAndNil(FEngines[1].Process);
-  end;
-  {$ENDIF}
+    FAutoPlayActive := False;
+    ClearEngineSlotPendingAction(1);
+    LeavePlayGameMode;
+  end
+  else
+    ClearEngineSlotPendingAction(AEngineIndex);
+
+  FinishEngineSlotSearch(AEngineIndex);
+end;
+
+procedure TMainWindow.ResetPrimaryEngineAfterClose;
+begin
   FAutoPlayActive := False;
   FAutoPlayPlyCount := 0;
   FEngineEvalScoreWhite := 0.0;
-  FPendingAutoPlayStart := False;
-  FPendingAnalyzeStart := False;
-  FPendingMctsStart := False;
-  FPendingPlayGameStart := False;
   FPendingPlayGameWhiteIsEngine := False;
   FPendingPlayGameBlackIsEngine := False;
-  FPendingThinkStart := False;
   LeavePlayGameMode;
-  if FAutoPlayButton <> nil then
-    FAutoPlayButton.Enabled := False;
-  if FGoButton <> nil then
-    FGoButton.Enabled := False;
-  if FMctsButton <> nil then
-    FMctsButton.Enabled := False;
-  if FStopButton <> nil then
-    FStopButton.Enabled := False;
-  FEngineSearching := False;
-  FinishEngineSlotSearch(1);
+  ResetEngineSlotRuntime(1);
+  ClearEngineSlotPendingAction(2);
+end;
+
+procedure TMainWindow.ResetSecondaryEngineAfterClose;
+begin
+  ResetEngineSlotRuntime(2);
+end;
+
+procedure TMainWindow.RefreshEngineUiAfterSlotChange;
+begin
   UpdateEnginePollTimer;
+  UpdateEngineCommandButtons;
   UpdateEnginePopupMenuItems;
+  UpdateEngineStateLabels;
+end;
+
+procedure TMainWindow.CloseEngineSlotProcess(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  if FEnginePollTimer <> nil then
+    FEnginePollTimer.Enabled := False;
+  StopDxpConnection(AEngineIndex);
+  RequestEngineSlotProcessExit(AEngineIndex);
+  TerminateEngineSlotProcessIfRunning(AEngineIndex);
+  CloseEngineSlotProcessHandles(AEngineIndex);
+end;
+
+procedure TMainWindow.RequestEngineSlotProcessExit(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  if (FEngines[AEngineIndex].PlatformProcess <> nil) and
+    FEngines[AEngineIndex].PlatformProcess.IsRunning and
+    (not EngineIsDxp(AEngineIndex)) then
+  begin
+    LogEngineSlotCommandSent(AEngineIndex, 'quit');
+    FEngines[AEngineIndex].PlatformProcess.RequestQuit('quit', 1000);
+  end;
+end;
+
+procedure TMainWindow.TerminateEngineSlotProcessIfRunning(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  if FEngines[AEngineIndex].PlatformProcess <> nil then
+    FEngines[AEngineIndex].PlatformProcess.Terminate(1000);
+end;
+
+procedure TMainWindow.CloseEngineSlotProcessHandles(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  if FEngines[AEngineIndex].PlatformProcess <> nil then
+    FEngines[AEngineIndex].PlatformProcess.Close;
 end;
 
 procedure TMainWindow.CloseSecondEngine;
@@ -5493,91 +4456,81 @@ begin
   else
     FirstEngineFileName := '';
 
-  StopDxpConnection(2);
-  {$IFDEF MSWINDOWS}
-  if FEngines[2].Running then
-  begin
-    if not EngineIsDxp(2) then
-    begin
-      AppendEngine2Log('> quit' + LineEnding);
-      SendSecondEngineCommand('quit');
-      WaitForSingleObject(FEngines[2].ProcessInfo.hProcess, 1000);
-    end;
-    if SecondEngineIsRunning then
-      TerminateProcess(FEngines[2].ProcessInfo.hProcess, 0);
-  end;
-  if FEngines[2].InputWriteHandle <> 0 then
-  begin
-    CloseHandle(FEngines[2].InputWriteHandle);
-    FEngines[2].InputWriteHandle := 0;
-  end;
-  if FEngines[2].OutputReadHandle <> 0 then
-  begin
-    CloseHandle(FEngines[2].OutputReadHandle);
-    FEngines[2].OutputReadHandle := 0;
-  end;
-  if FEngines[2].ReaderThread <> nil then
-  begin
-    FEngines[2].ReaderThread.Terminate;
-    FEngines[2].ReaderThread.WaitFor;
-    FreeAndNil(FEngines[2].ReaderThread);
-  end;
-  if FEngines[2].ProcessInfo.hThread <> 0 then
-  begin
-    CloseHandle(FEngines[2].ProcessInfo.hThread);
-    FEngines[2].ProcessInfo.hThread := 0;
-  end;
-  if FEngines[2].ProcessInfo.hProcess <> 0 then
-  begin
-    CloseHandle(FEngines[2].ProcessInfo.hProcess);
-    FEngines[2].ProcessInfo.hProcess := 0;
-  end;
-  FEngines[2].Running := False;
-  {$ELSE}
-  if FEngines[2].Process <> nil then
-  begin
-    if FEngines[2].Process.Running then
-    begin
-      if not EngineIsDxp(2) then
-      begin
-        AppendEngine2Log('> quit' + LineEnding);
-        SendSecondEngineCommand('quit');
-        FEngines[2].Process.WaitOnExit(1000);
-      end;
-      if FEngines[2].Process.Running then
-        FEngines[2].Process.Terminate(0);
-    end;
-    FreeAndNil(FEngines[2].Process);
-  end;
-  {$ENDIF}
-  ResetEngineSlotRuntime(2);
-  UpdateEnginePollTimer;
+  CloseEngineSlot(2);
 
   if FirstEngineWasRunning and (FirstEngineFileName <> '') and
     (not EngineIsRunning) then
   begin
-    AppendEngineLog('[engine 1 stopped while closing engine 2; restarting]' +
+    AppendEngineSlotLog(1, '[engine 1 stopped while closing engine 2; restarting]' +
       LineEnding);
     StartEngine(FirstEngineFileName, True);
   end;
 end;
 
-procedure TMainWindow.CloseEngineMenuItemClick(Sender: TObject);
+function TMainWindow.EngineSlotIndexFromSender(Sender: TObject): Integer;
 begin
-  if SecondEngineIsRunning then
+  Result := 1;
+  if Sender = FEngines[2].OpenMenuItem then
+    Exit(2);
+  if Sender = FEngines[2].ParamsMenuItem then
+    Exit(2);
+  if Sender = FEngines[2].CloseMenuItem then
+    Exit(2);
+  if Sender = FEngines[2].SaveLogMenuItem then
+    Exit(2);
+  if Sender = FEngines[1].OpenMenuItem then
+    Exit(1);
+  if Sender = FEngines[1].ParamsMenuItem then
+    Exit(1);
+  if Sender = FEngines[1].CloseMenuItem then
+    Exit(1);
+  if Sender = FEngines[1].SaveLogMenuItem then
+    Exit(1);
+  if Sender is TComponent then
+    Result := TComponent(Sender).Tag;
+  if not EngineSlotIndexValid(Result) then
+    Result := 1;
+end;
+
+procedure TMainWindow.CloseEngineMenuItemClick(Sender: TObject);
+var
+  EngineIndex: Integer;
+begin
+  EngineIndex := EngineSlotIndexFromSender(Sender);
+  if EngineIndex = 1 then
   begin
-    AppendEngineLog('[please close engine 2 first]' + LineEnding);
+    if SecondEngineIsRunning then
+    begin
+      AppendEngineSlotLog(1, '[please close engine 2 first]' + LineEnding);
+      Exit;
+    end;
+
+    CloseEngine;
+    AppendEngineSlotLog(1, '[' + EngineLogName(1) + ' closed]' + LineEnding);
     Exit;
   end;
 
-  CloseEngine;
-  AppendEngineLog('[' + EngineLogName(1) + ' closed]' + LineEnding);
+  CloseSecondEngine;
+  AppendEngineSlotLog(2, '[' + EngineLogName(2) + ' closed]' + LineEnding);
 end;
 
-procedure TMainWindow.CloseSecondEngineMenuItemClick(Sender: TObject);
+procedure TMainWindow.CenterMainWindowOnScreen;
+var
+  WorkArea: TRect;
 begin
-  CloseSecondEngine;
-  AppendEngine2Log('[' + EngineLogName(2) + ' closed]' + LineEnding);
+  Position := poDesigned;
+  WorkArea := Monitor.WorkareaRect;
+  Left := WorkArea.Left + ((WorkArea.Right - WorkArea.Left - Width) div 2);
+  Top := WorkArea.Top + ((WorkArea.Bottom - WorkArea.Top - Height) div 2);
+
+  if Left < WorkArea.Left then
+    Left := WorkArea.Left;
+  if Top < WorkArea.Top then
+    Top := WorkArea.Top;
+  if Left + Width > WorkArea.Right then
+    Left := Max(WorkArea.Left, WorkArea.Right - Width);
+  if Top + Height > WorkArea.Bottom then
+    Top := Max(WorkArea.Top, WorkArea.Bottom - Height);
 end;
 
 procedure TMainWindow.CenterDialogOnMainWindow(ADialog: TCustomForm);
@@ -5604,23 +4557,10 @@ end;
 
 function TMainWindow.RegisteredEnginesFileName: String;
 begin
-  Result := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) +
-    'engines.json';
+  Result := RegisteredEnginesFileNameForApplication(ParamStr(0));
 end;
 
 procedure TMainWindow.RegisterEngineExecutable(const AFileName: String);
-var
-  AlreadyRegistered: Boolean;
-  Data: TJSONArray;
-  DidChange: Boolean;
-  ExistingData: TJSONData;
-  FileName: String;
-  I: Integer;
-  Item: TJSONObject;
-  Lines: TStringList;
-  PathText: String;
-  ExeText: String;
-
   function CurrentHubId: String;
   begin
     Result := '';
@@ -5654,191 +4594,30 @@ begin
   if AFileName = '' then
     Exit;
 
-  PathText := ExcludeTrailingPathDelimiter(ExtractFilePath(AFileName));
-  ExeText := ExtractFileName(AFileName);
-  FileName := RegisteredEnginesFileName;
-  Data := TJSONArray.Create;
-  DidChange := False;
   try
-    try
-      if FileExists(FileName) then
-      begin
-        Lines := TStringList.Create;
-        try
-          Lines.LoadFromFile(FileName);
-          ExistingData := GetJSON(Lines.Text);
-        finally
-          Lines.Free;
-        end;
-        try
-          if ExistingData.JSONType = jtArray then
-            for I := 0 to TJSONArray(ExistingData).Count - 1 do
-              if TJSONArray(ExistingData).Items[I].JSONType = jtObject then
-              begin
-                Item := TJSONObject.Create;
-                Item.Add('path', TJSONObject(TJSONArray(ExistingData).Items[I]).Get('path', ''));
-                Item.Add('executable',
-                  TJSONObject(TJSONArray(ExistingData).Items[I]).Get('executable', ''));
-                Item.Add('hub_id',
-                  TJSONObject(TJSONArray(ExistingData).Items[I]).Get('hub_id', ''));
-                Item.Add('dxp_id',
-                  TJSONObject(TJSONArray(ExistingData).Items[I]).Get('dxp_id', ''));
-                if (Item.Get('hub_id', '') = '') and
-                  SameText(TJSONObject(TJSONArray(ExistingData).Items[I]).Get('protocol', ''),
-                  'hub') then
-                  Item.Strings['hub_id'] :=
-                    TJSONObject(TJSONArray(ExistingData).Items[I]).Get('reported_id',
-                    TJSONObject(TJSONArray(ExistingData).Items[I]).Get('id', ''));
-                if (Item.Get('dxp_id', '') = '') and
-                  SameText(TJSONObject(TJSONArray(ExistingData).Items[I]).Get('protocol', ''),
-                  'dxp') then
-                  Item.Strings['dxp_id'] :=
-                    TJSONObject(TJSONArray(ExistingData).Items[I]).Get('reported_id',
-                    TJSONObject(TJSONArray(ExistingData).Items[I]).Get('id', ''));
-                Data.Add(Item);
-              end;
-        finally
-          ExistingData.Free;
-        end;
-      end;
-
-      AlreadyRegistered := False;
-      for I := 0 to Data.Count - 1 do
-        if (Data.Items[I].JSONType = jtObject) and
-          SameText(TJSONObject(Data.Items[I]).Get('path', ''), PathText) and
-          SameText(TJSONObject(Data.Items[I]).Get('executable', ''), ExeText) then
-        begin
-          AlreadyRegistered := True;
-          Break;
-        end;
-
-      if not AlreadyRegistered then
-      begin
-        Item := TJSONObject.Create;
-        Item.Add('path', PathText);
-        Item.Add('executable', ExeText);
-        Item.Add('hub_id', CurrentHubId);
-        Item.Add('dxp_id', CurrentDxpId);
-        Data.Add(Item);
-        DidChange := True;
-      end;
-
-      if DidChange then
-      begin
-        Lines := TStringList.Create;
-        try
-          Lines.Text := Data.FormatJSON([], 2) + LineEnding;
-          Lines.SaveToFile(FileName);
-        finally
-          Lines.Free;
-        end;
-      end;
-    except
-      on E: Exception do
-        AppendEngineLog('[could not update engines.json: ' + E.Message + ']' +
-          LineEnding);
-    end;
-  finally
-    Data.Free;
+    AddRegisteredEngineExecutable(RegisteredEnginesFileName, AFileName,
+      CurrentHubId, CurrentDxpId);
+  except
+    on E: Exception do
+      AppendEngineSlotLog(1, '[could not update engines.json: ' + E.Message + ']' +
+        LineEnding);
   end;
 end;
 
 procedure TMainWindow.UpdateRegisteredEngineId(const AFileName,
   AEngineId: String; const AProtocol: String);
-var
-  DidChange: Boolean;
-  Data: TJSONArray;
-  ExistingData: TJSONData;
-  FileName: String;
-  I: Integer;
-  Item: TJSONObject;
-  Lines: TStringList;
-  PathText: String;
-  ExeText: String;
 begin
   if (AFileName = '') or (AEngineId = '') then
     Exit;
 
-  PathText := ExcludeTrailingPathDelimiter(ExtractFilePath(AFileName));
-  ExeText := ExtractFileName(AFileName);
-  FileName := RegisteredEnginesFileName;
-  if not FileExists(FileName) then
-    Exit;
-
-  Lines := TStringList.Create;
   try
-    Lines.LoadFromFile(FileName);
-    ExistingData := GetJSON(Lines.Text);
-  finally
-    Lines.Free;
-  end;
-
-  Data := TJSONArray.Create;
-  DidChange := False;
-  try
-    try
-      if ExistingData.JSONType = jtArray then
-        for I := 0 to TJSONArray(ExistingData).Count - 1 do
-          if TJSONArray(ExistingData).Items[I].JSONType = jtObject then
-          begin
-            Item := TJSONObject.Create;
-            Item.Add('path', TJSONObject(TJSONArray(ExistingData).Items[I]).Get('path', ''));
-            Item.Add('executable',
-              TJSONObject(TJSONArray(ExistingData).Items[I]).Get('executable', ''));
-            Item.Add('hub_id',
-              TJSONObject(TJSONArray(ExistingData).Items[I]).Get('hub_id', ''));
-            Item.Add('dxp_id',
-              TJSONObject(TJSONArray(ExistingData).Items[I]).Get('dxp_id', ''));
-            if (Item.Get('hub_id', '') = '') and
-              SameText(TJSONObject(TJSONArray(ExistingData).Items[I]).Get('protocol', ''),
-              'hub') then
-              Item.Strings['hub_id'] :=
-                TJSONObject(TJSONArray(ExistingData).Items[I]).Get('reported_id',
-                TJSONObject(TJSONArray(ExistingData).Items[I]).Get('id', ''));
-            if (Item.Get('dxp_id', '') = '') and
-              SameText(TJSONObject(TJSONArray(ExistingData).Items[I]).Get('protocol', ''),
-              'dxp') then
-              Item.Strings['dxp_id'] :=
-                TJSONObject(TJSONArray(ExistingData).Items[I]).Get('reported_id',
-                TJSONObject(TJSONArray(ExistingData).Items[I]).Get('id', ''));
-            if SameText(Item.Get('path', ''), PathText) and
-              SameText(Item.Get('executable', ''), ExeText) then
-            begin
-              if SameText(AProtocol, 'hub') and
-                (Item.Get('hub_id', '') <> AEngineId) then
-              begin
-                Item.Strings['hub_id'] := AEngineId;
-                DidChange := True;
-              end
-              else if SameText(AProtocol, 'dxp') and
-                (Item.Get('dxp_id', '') <> AEngineId) then
-              begin
-                Item.Strings['dxp_id'] := AEngineId;
-                DidChange := True;
-              end;
-            end;
-            Data.Add(Item);
-          end;
-    finally
-      ExistingData.Free;
-    end;
-
-    if DidChange then
-    begin
-      Lines := TStringList.Create;
-      try
-        Lines.Text := Data.FormatJSON([], 2) + LineEnding;
-        Lines.SaveToFile(FileName);
-      finally
-        Lines.Free;
-      end;
-    end;
+    UpdateRegisteredEngineProtocolId(RegisteredEnginesFileName, AFileName,
+      AEngineId, AProtocol);
   except
     on E: Exception do
-      AppendEngineLog('[could not update engine id in engines.json: ' +
+      AppendEngineSlotLog(1, '[could not update engine id in engines.json: ' +
         E.Message + ']' + LineEnding);
   end;
-  Data.Free;
 end;
 
 procedure TMainWindow.UpdateRegisteredEngineProtocol(const AFileName,
@@ -5872,153 +4651,38 @@ end;
 
 procedure TMainWindow.NormalizeRegisteredEngineIdsInGrid(AGrid: TStringGrid);
 var
-  BaseIds: array of String;
-  BaseText: String;
-  Counts: TStringList;
+  Engines: TRegisteredEngineArray;
   I: Integer;
-  Seen: TStringList;
-  SeenCount: Integer;
-
-  procedure IncValue(AList: TStringList; const AKey: String);
-  begin
-    AList.Values[AKey] := IntToStr(StrToIntDef(AList.Values[AKey], 0) + 1);
-  end;
-
-  function StripNumericSuffix(const AText: String): String;
-  var
-    P: Integer;
-    Suffix: String;
-  begin
-    Result := AText;
-    P := Length(Result);
-    while (P > 0) and (Result[P] in ['0'..'9']) do
-      Dec(P);
-    if (P > 1) and (Result[P] = '_') and (P < Length(Result)) then
-    begin
-      Suffix := Copy(Result, P + 1, Length(Result) - P);
-      if StrToIntDef(Suffix, -1) > 0 then
-        Result := Copy(Result, 1, P - 1);
-    end;
-  end;
+  Row: Integer;
 
 begin
   if AGrid = nil then
     Exit;
 
-  SetLength(BaseIds, AGrid.RowCount);
-  Counts := TStringList.Create;
-  Seen := TStringList.Create;
-  try
-    for I := 1 to AGrid.RowCount - 1 do
-      if (AGrid.Cells[1, I] <> '') and (AGrid.Cells[1, I] <> '(none)') then
-      begin
-        if AGrid.ColCount > 4 then
-          BaseText := Trim(AGrid.Cells[4, I])
-        else if AGrid.ColCount > 3 then
-          BaseText := Trim(AGrid.Cells[3, I])
-        else
-          BaseText := '';
-        if BaseText = '' then
-          BaseText := StripNumericSuffix(Trim(AGrid.Cells[0, I]));
-        if BaseText = '' then
-          BaseText := ChangeFileExt(ExtractFileName(AGrid.Cells[1, I]), '');
-        if BaseText = '' then
-          BaseText := Trim(AGrid.Cells[1, I]);
-        BaseIds[I] := BaseText;
-        IncValue(Counts, BaseText);
-      end;
-
-    for I := 1 to AGrid.RowCount - 1 do
-      if BaseIds[I] <> '' then
-      begin
-        if StrToIntDef(Counts.Values[BaseIds[I]], 0) > 1 then
-        begin
-          SeenCount := StrToIntDef(Seen.Values[BaseIds[I]], 0) + 1;
-          Seen.Values[BaseIds[I]] := IntToStr(SeenCount);
-          AGrid.Cells[0, I] := BaseIds[I] + '_' + IntToStr(SeenCount);
-        end
-        else
-          AGrid.Cells[0, I] := BaseIds[I];
-      end;
-  finally
-    Counts.Free;
-    Seen.Free;
-  end;
-end;
-
-procedure TMainWindow.NormalizeRegisteredEngineIdsInJson(AData: TJSONArray);
-var
-  BaseIds: array of String;
-  BaseText: String;
-  Counts: TStringList;
-  I: Integer;
-  Item: TJSONObject;
-  Seen: TStringList;
-  SeenCount: Integer;
-
-  procedure IncValue(AList: TStringList; const AKey: String);
+  Engines := nil;
+  SetLength(Engines, AGrid.RowCount - 1);
+  for I := 0 to High(Engines) do
   begin
-    AList.Values[AKey] := IntToStr(StrToIntDef(AList.Values[AKey], 0) + 1);
+    Row := I + 1;
+    Engines[I].Executable := Trim(AGrid.Cells[0, Row]);
+    Engines[I].Path := Trim(AGrid.Cells[1, Row]);
+    if AGrid.ColCount > 2 then
+      Engines[I].HubId := Trim(AGrid.Cells[2, Row])
+    else
+      Engines[I].HubId := '';
+    if AGrid.ColCount > 3 then
+      Engines[I].DxpId := Trim(AGrid.Cells[3, Row])
+    else
+      Engines[I].DxpId := '';
   end;
 
-  function StripNumericSuffix(const AText: String): String;
-  var
-    P: Integer;
-    Suffix: String;
+  NormalizeRegisteredEngineEntries(Engines);
+
+  for I := 0 to High(Engines) do
   begin
-    Result := AText;
-    P := Length(Result);
-    while (P > 0) and (Result[P] in ['0'..'9']) do
-      Dec(P);
-    if (P > 1) and (Result[P] = '_') and (P < Length(Result)) then
-    begin
-      Suffix := Copy(Result, P + 1, Length(Result) - P);
-      if StrToIntDef(Suffix, -1) > 0 then
-        Result := Copy(Result, 1, P - 1);
-    end;
-  end;
-
-begin
-  if AData = nil then
-    Exit;
-
-  SetLength(BaseIds, AData.Count);
-  Counts := TStringList.Create;
-  Seen := TStringList.Create;
-  try
-    for I := 0 to AData.Count - 1 do
-      if AData.Items[I].JSONType = jtObject then
-      begin
-        Item := TJSONObject(AData.Items[I]);
-        BaseText := Trim(Item.Get('reported_id', ''));
-        if BaseText = '' then
-          BaseText := StripNumericSuffix(Trim(Item.Get('id', '')));
-        if BaseText = '' then
-          BaseText := ChangeFileExt(ExtractFileName(Item.Get('executable', '')), '');
-        if BaseText = '' then
-          BaseText := Trim(Item.Get('executable', ''));
-        Item.Strings['reported_id'] := BaseText;
-        BaseIds[I] := BaseText;
-        if BaseText <> '' then
-          IncValue(Counts, BaseText);
-      end;
-
-    for I := 0 to AData.Count - 1 do
-      if (AData.Items[I].JSONType = jtObject) and (BaseIds[I] <> '') then
-      begin
-        Item := TJSONObject(AData.Items[I]);
-        if StrToIntDef(Counts.Values[BaseIds[I]], 0) > 1 then
-        begin
-          SeenCount := StrToIntDef(Seen.Values[BaseIds[I]], 0) + 1;
-          Seen.Values[BaseIds[I]] := IntToStr(SeenCount);
-          Item.Strings['id'] := BaseIds[I] + '_' + IntToStr(SeenCount);
-        end
-        else
-          Item.Strings['id'] := BaseIds[I];
-      end;
-  finally
-    Counts.Free;
-    Seen.Free;
+    Row := I + 1;
+    if (Engines[I].Path <> '') and (Engines[I].Path <> '(none)') then
+      AGrid.Cells[0, Row] := Engines[I].Executable;
   end;
 end;
 
@@ -6027,18 +4691,19 @@ var
   Data: TJSONArray;
   DxpId: String;
   DxpParams: TEngineParamArray;
+  Entry: TRegisteredEngine;
   Grid: TStringGrid;
   HubId: String;
   HubParams: TEngineParamArray;
   I: Integer;
-  Item: TJSONObject;
-  Lines: TStringList;
   ParamsFileName: String;
 begin
   if (ADialog = nil) or
     (not (ADialog.FindComponent('RegisteredEnginesGrid') is TStringGrid)) then
     Exit;
 
+  HubParams := nil;
+  DxpParams := nil;
   Grid := TStringGrid(ADialog.FindComponent('RegisteredEnginesGrid'));
   Data := TJSONArray.Create;
   try
@@ -6052,12 +4717,11 @@ begin
         if Grid.ColCount > 3 then
           DxpId := Trim(Grid.Cells[3, I]);
 
-        Item := TJSONObject.Create;
-        Item.Add('executable', Grid.Cells[0, I]);
-        Item.Add('path', Grid.Cells[1, I]);
-        Item.Add('hub_id', HubId);
-        Item.Add('dxp_id', DxpId);
-        Data.Add(Item);
+        Entry.Executable := Grid.Cells[0, I];
+        Entry.Path := Grid.Cells[1, I];
+        Entry.HubId := HubId;
+        Entry.DxpId := DxpId;
+        Data.Add(RegisteredEngineToJson(Entry));
 
         ParamsFileName := EngineParamsFileNameForDisplayName('',
           IncludeTrailingPathDelimiter(Grid.Cells[1, I]) + Grid.Cells[0, I]);
@@ -6076,13 +4740,7 @@ begin
           SaveParamsToJson(ParamsFileName, 'dxp', DxpParams);
         end;
       end;
-    Lines := TStringList.Create;
-    try
-      Lines.Text := Data.FormatJSON([], 2) + LineEnding;
-      Lines.SaveToFile(RegisteredEnginesFileName);
-    finally
-      Lines.Free;
-    end;
+    SaveRegisteredEngines(RegisteredEnginesFileName, Data);
   finally
     Data.Free;
   end;
@@ -6092,37 +4750,15 @@ procedure TMainWindow.RegisteredEnginesMenuItemClick(Sender: TObject);
 var
   BottomPanel: TPanel;
   CloseButton: TButton;
-  Data: TJSONData;
+  Data: TJSONArray;
   Dialog: TForm;
+  Entry: TRegisteredEngine;
   Grid: TStringGrid;
   I: Integer;
-  Lines: TStringList;
   ParamsFileName: String;
   Params: TEngineParamArray;
   Row: Integer;
   SaveButton: TButton;
-
-  function ParamValue(const AParams: TEngineParamArray;
-    const AName: String): String;
-  var
-    P: Integer;
-  begin
-    Result := '';
-    for P := 0 to High(AParams) do
-      if SameText(AParams[P].Name, AName) then
-        Exit(AParams[P].Value);
-  end;
-
-  function ParamExists(const AParams: TEngineParamArray;
-    const AName: String): Boolean;
-  var
-    P: Integer;
-  begin
-    Result := False;
-    for P := 0 to High(AParams) do
-      if SameText(AParams[P].Name, AName) then
-        Exit(True);
-  end;
 
   procedure SortGridById;
   var
@@ -6143,6 +4779,7 @@ var
           end;
   end;
 begin
+  Params := nil;
   Dialog := TForm.Create(Self);
   Dialog.Caption := 'Registered engines';
   Dialog.Width := 820;
@@ -6170,65 +4807,43 @@ begin
 
   if FileExists(RegisteredEnginesFileName) then
   begin
-    Lines := TStringList.Create;
+    Data := LoadRegisteredEngines(RegisteredEnginesFileName);
     try
-      Lines.LoadFromFile(RegisteredEnginesFileName);
-      Data := GetJSON(Lines.Text);
-    finally
-      Lines.Free;
-    end;
-    try
-      if Data.JSONType = jtArray then
-      begin
-        Grid.RowCount := Max(2, TJSONArray(Data).Count + 1);
-        Row := 1;
-        for I := 0 to TJSONArray(Data).Count - 1 do
-          if TJSONArray(Data).Items[I].JSONType = jtObject then
+      Grid.RowCount := Max(2, Data.Count + 1);
+      Row := 1;
+      for I := 0 to Data.Count - 1 do
+        if Data.Items[I].JSONType = jtObject then
+        begin
+          Entry := RegisteredEngineFromJson(TJSONObject(Data.Items[I]));
+          Grid.Cells[0, Row] := Entry.Executable;
+          Grid.Cells[1, Row] := Entry.Path;
+          Grid.Cells[2, Row] := Entry.HubId;
+          Grid.Cells[3, Row] := Entry.DxpId;
+          ParamsFileName := EngineParamsFileNameForDisplayName('',
+            IncludeTrailingPathDelimiter(Grid.Cells[1, Row]) +
+            Grid.Cells[0, Row]);
+          SetLength(Params, 0);
+          LoadParamsFromJson(ParamsFileName, 'hub', Params);
+          if (Grid.Cells[2, Row] = '') and (Length(Params) > 0) then
           begin
-            Grid.Cells[0, Row] :=
-              TJSONObject(TJSONArray(Data).Items[I]).Get('executable', '');
-            Grid.Cells[1, Row] :=
-              TJSONObject(TJSONArray(Data).Items[I]).Get('path', '');
-            Grid.Cells[2, Row] :=
-              TJSONObject(TJSONArray(Data).Items[I]).Get('hub_id', '');
-            Grid.Cells[3, Row] :=
-              TJSONObject(TJSONArray(Data).Items[I]).Get('dxp_id', '');
+            Grid.Cells[2, Row] := EngineConfigParamValue(Params,
+              HubIdParamName, '');
             if (Grid.Cells[2, Row] = '') and
-              SameText(TJSONObject(TJSONArray(Data).Items[I]).Get('protocol', ''),
-              'hub') then
-              Grid.Cells[2, Row] :=
-                TJSONObject(TJSONArray(Data).Items[I]).Get('reported_id',
-                TJSONObject(TJSONArray(Data).Items[I]).Get('id', ''));
-            if (Grid.Cells[3, Row] = '') and
-              SameText(TJSONObject(TJSONArray(Data).Items[I]).Get('protocol', ''),
-              'dxp') then
-              Grid.Cells[3, Row] :=
-                TJSONObject(TJSONArray(Data).Items[I]).Get('reported_id',
-                TJSONObject(TJSONArray(Data).Items[I]).Get('id', ''));
-            ParamsFileName := EngineParamsFileNameForDisplayName('',
-              IncludeTrailingPathDelimiter(Grid.Cells[1, Row]) +
-              Grid.Cells[0, Row]);
-            SetLength(Params, 0);
-            LoadParamsFromJson(ParamsFileName, 'hub', Params);
-            if (Grid.Cells[2, Row] = '') and (Length(Params) > 0) then
-            begin
-              Grid.Cells[2, Row] := ParamValue(Params, HubIdParamName);
-              if (Grid.Cells[2, Row] = '') and
-                (not ParamExists(Params, HubIdParamName)) then
-                Grid.Cells[2, Row] := 'Hub' + IntToStr(Row);
-            end;
-            SetLength(Params, 0);
-            LoadParamsFromJson(ParamsFileName, 'dxp', Params);
-            if (Grid.Cells[3, Row] = '') and (Length(Params) > 0) then
-            begin
-              Grid.Cells[3, Row] := ParamValue(Params, DxpIdParamName);
-              if (Grid.Cells[3, Row] = '') and
-                (not ParamExists(Params, DxpIdParamName)) then
-                Grid.Cells[3, Row] := 'DXP' + IntToStr(Row);
-            end;
-            Inc(Row);
+              (not EngineConfigParamExists(Params, HubIdParamName)) then
+              Grid.Cells[2, Row] := 'Hub' + IntToStr(Row);
           end;
-      end;
+          SetLength(Params, 0);
+          LoadParamsFromJson(ParamsFileName, 'dxp', Params);
+          if (Grid.Cells[3, Row] = '') and (Length(Params) > 0) then
+          begin
+            Grid.Cells[3, Row] := EngineConfigParamValue(Params,
+              DxpIdParamName, '');
+            if (Grid.Cells[3, Row] = '') and
+              (not EngineConfigParamExists(Params, DxpIdParamName)) then
+              Grid.Cells[3, Row] := 'DXP' + IntToStr(Row);
+          end;
+          Inc(Row);
+        end;
     finally
       Data.Free;
     end;
@@ -6359,16 +4974,13 @@ var
   BrowseButton: TButton;
   CancelButton: TButton;
   Data: TJSONData;
+  EngineObject: TJSONObject;
   Dialog: TForm;
   EngineFileName: String;
   EngineList: TListBox;
-  ExeText: String;
-  HubId: String;
-  DxpId: String;
   I: Integer;
   Lines: TStringList;
   OKButton: TButton;
-  PathText: String;
   Protocols: TStringList;
   SelectedIndex: Integer;
 
@@ -6399,6 +5011,7 @@ begin
     EngineList := TListBox.Create(Dialog);
     EngineList.Parent := Dialog;
     EngineList.SetBounds(12, 12, 596, 260);
+    EngineList.OnDblClick := @EngineLauncherListDblClick;
 
     Lines := TStringList.Create;
     try
@@ -6412,20 +5025,17 @@ begin
             for I := 0 to TJSONArray(Data).Count - 1 do
               if TJSONArray(Data).Items[I].JSONType = jtObject then
               begin
-                PathText := TJSONObject(TJSONArray(Data).Items[I]).Get('path', '');
-                ExeText := TJSONObject(TJSONArray(Data).Items[I]).Get('executable', '');
-                if (PathText = '') or (ExeText = '') then
+                EngineObject := TJSONObject(TJSONArray(Data).Items[I]);
+                EngineFileName := RegisteredEngineFileName(EngineObject);
+                if EngineFileName = '' then
                   Continue;
-                EngineFileName := IncludeTrailingPathDelimiter(PathText) + ExeText;
-                HubId := Trim(TJSONObject(TJSONArray(Data).Items[I]).Get('hub_id', ''));
-                DxpId := Trim(TJSONObject(TJSONArray(Data).Items[I]).Get('dxp_id', ''));
 
-                if HubId <> '' then
-                  AddRegisteredEngine(HubId + ' (Engine ' + IntToStr(I + 1) +
-                    ' Hub mode)', EngineFileName, 'hub');
-                if DxpId <> '' then
-                  AddRegisteredEngine(DxpId + ' (Engine ' + IntToStr(I + 1) +
-                    ' DXP mode)', EngineFileName, 'dxp');
+                if RegisteredEngineSupportsProtocol(EngineObject, 'hub') then
+                  AddRegisteredEngine(RegisteredEngineProtocolDisplayName(
+                    EngineObject, I + 1, 'hub'), EngineFileName, 'hub');
+                if RegisteredEngineSupportsProtocol(EngineObject, 'dxp') then
+                  AddRegisteredEngine(RegisteredEngineProtocolDisplayName(
+                    EngineObject, I + 1, 'dxp'), EngineFileName, 'dxp');
               end;
         finally
           Data.Free;
@@ -6467,9 +5077,8 @@ begin
               SelectedIndex := EngineList.ItemIndex;
               if (SelectedIndex < 0) or (SelectedIndex >= Lines.Count) then
               begin
-                MessageDlg('Open engine',
-                  'Please select a registered engine, or use Browse...',
-                  mtInformation, [mbOK], 0);
+                ShowGuiOkDialog(Self, 'Open engine',
+                  'Please select a registered engine, or use Browse...');
                 Continue;
               end;
               AFileName := Lines[SelectedIndex];
@@ -6518,6 +5127,7 @@ var
   IniFileName: String;
   IniLabel: TLabel;
   IniMemo: TMemo;
+  IniText: String;
   IpEdit: TEdit;
   IpLabel: TLabel;
   LaunchEdit: TEdit;
@@ -6527,8 +5137,10 @@ var
   ProtocolGroup: TRadioGroup;
   RoleCombo: TComboBox;
   RoleLabel: TLabel;
+  SaveSection: String;
   SocketEdit: TSpinEdit;
   SocketLabel: TLabel;
+  DxpModeMessage: String;
 
   function DxpPortUsedByOtherEngine(APort: Integer; const AIpAddress: String;
     out AOtherEngineIndex: Integer): Boolean;
@@ -6541,8 +5153,6 @@ var
     for I := Low(FEngines) to High(FEngines) do
       if (I <> AEngineIndex) and (FEngines[I] <> nil) and
         (FEngines[I].Protocol = epDxp) and
-        (FEngines[I].DxpRole = edrClient) and
-        ((FEngines[I].DxpThread <> nil) or (FEngines[I].DxpSocket <> nil)) and
         SameText(FEngines[I].DxpIpAddress, AIpAddress) and
         (StrToIntDef(FEngines[I].DxpSocketNumber, 0) = APort) then
       begin
@@ -6551,41 +5161,16 @@ var
       end;
   end;
 
-  function ParamValue(const AParams: TEngineParamArray;
-    const AName, ADefault: String): String;
-  var
-    I: Integer;
-  begin
-    Result := ADefault;
-    for I := 0 to High(AParams) do
-      if SameText(AParams[I].Name, AName) then
-        Exit(AParams[I].Value);
-  end;
-
-  function ParamExists(const AParams: TEngineParamArray;
-    const AName: String): Boolean;
-  var
-    I: Integer;
-  begin
-    Result := False;
-    for I := 0 to High(AParams) do
-      if SameText(AParams[I].Name, AName) then
-        Exit(True);
-  end;
-
   function NextDefaultProtocolId(const APrefix, ASection,
     AParamName: String): String;
   var
-    Data: TJSONData;
+    Data: TJSONArray;
+    Entry: TRegisteredEngine;
     EngineFileName: String;
-    ExeText: String;
     I: Integer;
-    Item: TJSONObject;
-    Lines: TStringList;
     MaxId: Integer;
     Params: TEngineParamArray;
     ParamsFileName: String;
-    PathText: String;
     P: Integer;
     Suffix: String;
     SupportedCount: Integer;
@@ -6594,52 +5179,43 @@ var
   begin
     MaxId := 0;
     SupportedCount := 0;
+    Params := nil;
     if FileExists(RegisteredEnginesFileName) then
     begin
-      Lines := TStringList.Create;
+      Data := LoadRegisteredEngines(RegisteredEnginesFileName);
       try
-        Lines.LoadFromFile(RegisteredEnginesFileName);
-        Data := GetJSON(Lines.Text);
-      finally
-        Lines.Free;
-      end;
-      try
-        if Data.JSONType = jtArray then
-          for I := 0 to TJSONArray(Data).Count - 1 do
-            if TJSONArray(Data).Items[I].JSONType = jtObject then
+        for I := 0 to Data.Count - 1 do
+          if Data.Items[I].JSONType = jtObject then
+          begin
+            Value := RegisteredEngineProtocolId(TJSONObject(Data.Items[I]),
+              ASection);
+            if Value = '' then
             begin
-              Item := TJSONObject(TJSONArray(Data).Items[I]);
-              if SameText(ASection, 'dxp') then
-                Value := Trim(Item.Get('dxp_id', ''))
-              else
-                Value := Trim(Item.Get('hub_id', ''));
-              if Value = '' then
+              Entry := RegisteredEngineFromJson(TJSONObject(Data.Items[I]));
+              if (Entry.Path <> '') and (Entry.Executable <> '') then
               begin
-                PathText := Item.Get('path', '');
-                ExeText := Item.Get('executable', '');
-                if (PathText <> '') and (ExeText <> '') then
-                begin
-                  EngineFileName := IncludeTrailingPathDelimiter(PathText) + ExeText;
-                  ParamsFileName := EngineParamsFileNameForDisplayName('',
-                    EngineFileName);
-                  SetLength(Params, 0);
-                  LoadParamsFromJson(ParamsFileName, ASection, Params);
-                  Value := Trim(ParamValue(Params, AParamName, ''));
-                  if (Value = '') and ParamExists(Params, AParamName) then
-                    Continue;
-                end;
+                EngineFileName := IncludeTrailingPathDelimiter(Entry.Path) +
+                  Entry.Executable;
+                ParamsFileName := EngineParamsFileNameForDisplayName('',
+                  EngineFileName);
+                SetLength(Params, 0);
+                LoadParamsFromJson(ParamsFileName, ASection, Params);
+                Value := Trim(EngineConfigParamValue(Params, AParamName, ''));
+                if (Value = '') and EngineConfigParamExists(Params, AParamName) then
+                  Continue;
               end;
-              if Value = '' then
-                Continue;
-              Inc(SupportedCount);
-              if not AnsiStartsText(APrefix, Value) then
-                Continue;
-              Suffix := Copy(Value, Length(APrefix) + 1,
-                Length(Value) - Length(APrefix));
-              P := StrToIntDef(Suffix, 0);
-              if P > MaxId then
-                MaxId := P;
             end;
+            if Value = '' then
+              Continue;
+            Inc(SupportedCount);
+            if not AnsiStartsText(APrefix, Value) then
+              Continue;
+            Suffix := Copy(Value, Length(APrefix) + 1,
+              Length(Value) - Length(APrefix));
+            P := StrToIntDef(Suffix, 0);
+            if P > MaxId then
+              MaxId := P;
+          end;
       finally
         Data.Free;
       end;
@@ -6648,143 +5224,9 @@ var
   end;
 
   function RegisteredProtocolIdForCurrentEngine(const AProtocol: String): String;
-  var
-    Data: TJSONData;
-    EngineFileName: String;
-    ExeText: String;
-    I: Integer;
-    Item: TJSONObject;
-    Lines: TStringList;
-    PathText: String;
-    SelectedFileName: String;
   begin
-    Result := '';
-    if not FileExists(RegisteredEnginesFileName) then
-      Exit;
-
-    SelectedFileName := ExpandFileName(FEngines[AEngineIndex].FileName);
-    Lines := TStringList.Create;
-    try
-      Lines.LoadFromFile(RegisteredEnginesFileName);
-      Data := GetJSON(Lines.Text);
-    finally
-      Lines.Free;
-    end;
-    try
-      if Data.JSONType <> jtArray then
-        Exit;
-      for I := 0 to TJSONArray(Data).Count - 1 do
-        if TJSONArray(Data).Items[I].JSONType = jtObject then
-        begin
-          Item := TJSONObject(TJSONArray(Data).Items[I]);
-          PathText := Item.Get('path', '');
-          ExeText := Item.Get('executable', '');
-          if (PathText = '') or (ExeText = '') then
-            Continue;
-          EngineFileName := ExpandFileName(IncludeTrailingPathDelimiter(PathText) +
-            ExeText);
-          if not SameText(EngineFileName, SelectedFileName) then
-            Continue;
-          if SameText(AProtocol, 'dxp') then
-            Result := Trim(Item.Get('dxp_id', ''))
-          else
-            Result := Trim(Item.Get('hub_id', ''));
-          Exit;
-        end;
-    finally
-      Data.Free;
-    end;
-  end;
-
-  function RegisteredDxpPortUsed(APort: Integer; const AIpAddress: String): Boolean;
-  var
-    Data: TJSONData;
-    EngineFileName: String;
-    ExeText: String;
-    I: Integer;
-    IdText: String;
-    Item: TJSONObject;
-    Lines: TStringList;
-    Params: TEngineParamArray;
-    ParamsFileName: String;
-    PathText: String;
-    RegisteredFileName: String;
-    ReportedIdText: String;
-    SelectedFileName: String;
-
-    function FindParamsFile: String;
-    begin
-      Result := '';
-      if IdText <> '' then
-      begin
-        Result := EngineParamsFileNameForDisplayName(IdText, EngineFileName);
-        if FileExists(Result) then
-          Exit;
-      end;
-      if ReportedIdText <> '' then
-      begin
-        Result := EngineParamsFileNameForDisplayName(ReportedIdText,
-          EngineFileName);
-        if FileExists(Result) then
-          Exit;
-      end;
-      Result := EngineParamsFileNameForDisplayName(
-        ChangeFileExt(ExeText, ''), EngineFileName);
-      if not FileExists(Result) then
-        Result := '';
-    end;
-
-  begin
-    Result := False;
-    RegisteredFileName := RegisteredEnginesFileName;
-    if not FileExists(RegisteredFileName) then
-      Exit;
-
-    SelectedFileName := ExpandFileName(FEngines[AEngineIndex].FileName);
-    Lines := TStringList.Create;
-    try
-      Lines.LoadFromFile(RegisteredFileName);
-      Data := GetJSON(Lines.Text);
-    finally
-      Lines.Free;
-    end;
-    try
-      if Data.JSONType <> jtArray then
-        Exit;
-
-      for I := 0 to TJSONArray(Data).Count - 1 do
-        if TJSONArray(Data).Items[I].JSONType = jtObject then
-        begin
-          Item := TJSONObject(TJSONArray(Data).Items[I]);
-          PathText := Item.Get('path', '');
-          ExeText := Item.Get('executable', '');
-          if (PathText = '') or (ExeText = '') then
-            Continue;
-          EngineFileName := ExpandFileName(IncludeTrailingPathDelimiter(PathText) +
-            ExeText);
-          if SameText(EngineFileName, SelectedFileName) then
-            Continue;
-
-          IdText := Item.Get('id', '');
-          ReportedIdText := Item.Get('reported_id', '');
-          ParamsFileName := FindParamsFile;
-          if ParamsFileName = '' then
-            Continue;
-
-          SetLength(Params, 0);
-          LoadParamsFromJson(ParamsFileName, Params);
-          if SameText(ParamValue(Params, EngineTypeParamName, ''), 'dxp') and
-            (SameText(ParamValue(Params, DxpRoleParamName, ''), 'connect') or
-            SameText(ParamValue(Params, DxpRoleParamName, ''), 'client')) and
-            SameText(ParamValue(Params, DxpIpParamName, DxpDefaultIp),
-              AIpAddress) and
-            (StrToIntDef(ParamValue(Params, DxpSocketParamName, ''), 0) =
-              APort) then
-            Exit(True);
-        end;
-    finally
-      Data.Free;
-    end;
+    Result := RegisteredEngineProtocolIdForFileName(RegisteredEnginesFileName,
+      FEngines[AEngineIndex].FileName, AProtocol);
   end;
 
   function NextAvailableDxpPort(AStartPort: Integer; const AIpAddress: String): Integer;
@@ -6797,7 +5239,8 @@ var
 
     while (Result <= 65535) and
       (DxpPortUsedByOtherEngine(Result, AIpAddress, OtherEngineIndex) or
-      RegisteredDxpPortUsed(Result, AIpAddress)) do
+      RegisteredDxpPortUsed(RegisteredEnginesFileName,
+      FEngines[AEngineIndex].FileName, AIpAddress, Result)) do
       Inc(Result);
     if Result > 65535 then
       Result := AStartPort;
@@ -6816,19 +5259,49 @@ var
       AOtherEngineIndex);
   end;
 
-  function DxpLaunchModeLooksInconsistent: Boolean;
+  function DxpLaunchModeInconsistencyMessage: String;
   var
     LaunchText: String;
+
+    function LaunchHasToken(const AToken1, AToken2: String): Boolean;
+    var
+      I: Integer;
+      Token: String;
+      Tokens: TStringList;
+    begin
+      Result := False;
+      Tokens := TStringList.Create;
+      try
+        ExtractStrings([' ', #9, #10, #13, ',', ';'], ['"'],
+          PChar(LaunchText), Tokens);
+        for I := 0 to Tokens.Count - 1 do
+        begin
+          Token := LowerCase(Trim(Tokens[I]));
+          if (Token = AToken1) or (Token = AToken2) then
+            Exit(True);
+        end;
+      finally
+        Tokens.Free;
+      end;
+    end;
+
   begin
-    Result := False;
+    Result := '';
     if ProtocolGroup.ItemIndex <> 1 then
-      Exit;
-    if RoleCombo.ItemIndex <> 0 then
       Exit;
 
     LaunchText := LowerCase(LaunchEdit.Text);
-    Result := (Pos('dxp_client', LaunchText) > 0) or
-      (Pos('dxp-client', LaunchText) > 0);
+    if (RoleCombo.ItemIndex = 0) and
+      LaunchHasToken('dxp_client', 'dxp-client') then
+      Result :=
+        'These DXP launch args look like they start an engine that connects ' +
+        'to the GUI. Please set Socket mode to "GUI listens for engine ' +
+        'connection".'
+    else if (RoleCombo.ItemIndex = 1) and
+      LaunchHasToken('dxp_server', 'dxp-server') then
+      Result :=
+        'These DXP launch args look like they start an engine socket listener. ' +
+        'Please set Socket mode to "GUI connects to engine listener".';
   end;
 
   function FindIniFileForEngine(const AEngineFileName: String): String;
@@ -6886,8 +5359,18 @@ var
       Result := Length(AParams) > 0;
       if not Result then
         Exit;
-      if ParamExists(AParams, AIdParamName) then
-        Result := Trim(ParamValue(AParams, AIdParamName, '')) <> '';
+      if EngineConfigParamExists(AParams, AIdParamName) then
+        Result := Trim(EngineConfigParamValue(AParams, AIdParamName, '')) <> '';
+    end;
+
+    procedure UseDialogParams(const AParams: TEngineParamArray);
+    var
+      I: Integer;
+    begin
+      SetLength(FEngines[AEngineIndex].Params, Length(AParams));
+      for I := 0 to High(AParams) do
+        FEngines[AEngineIndex].Params[I] := AParams[I];
+      LoadHubLaunchArgumentFromParams(AEngineIndex);
     end;
 
   begin
@@ -6896,19 +5379,42 @@ var
     if not FileExists(FEngines[AEngineIndex].ParamsFileName) then
       Exit;
 
+    HubParams := nil;
+    DxpParams := nil;
     SetLength(HubParams, 0);
     SetLength(DxpParams, 0);
     LoadParamsFromJson(FEngines[AEngineIndex].ParamsFileName, 'hub', HubParams);
     LoadParamsFromJson(FEngines[AEngineIndex].ParamsFileName, 'dxp', DxpParams);
 
-    if SectionSupportsProtocol(HubParams, HubIdParamName) then
-      FEngines[AEngineIndex].Params := HubParams
-    else if SectionSupportsProtocol(DxpParams, DxpIdParamName) then
-      FEngines[AEngineIndex].Params := DxpParams
-    else
+    if SameText(APreferredProtocol, 'dxp') and
+      SectionSupportsProtocol(DxpParams, DxpIdParamName) then
+    begin
+      UseDialogParams(DxpParams);
       Exit;
+    end;
+    if SameText(APreferredProtocol, 'hub') and
+      SectionSupportsProtocol(HubParams, HubIdParamName) then
+    begin
+      UseDialogParams(HubParams);
+      Exit;
+    end;
+    if (FEngines[AEngineIndex].Protocol = epDxp) and
+      SectionSupportsProtocol(DxpParams, DxpIdParamName) then
+    begin
+      UseDialogParams(DxpParams);
+      Exit;
+    end;
+    if (FEngines[AEngineIndex].Protocol = epHub) and
+      SectionSupportsProtocol(HubParams, HubIdParamName) then
+    begin
+      UseDialogParams(HubParams);
+      Exit;
+    end;
 
-    LoadHubLaunchArgumentFromParams(AEngineIndex);
+    if SectionSupportsProtocol(HubParams, HubIdParamName) then
+      UseDialogParams(HubParams)
+    else if SectionSupportsProtocol(DxpParams, DxpIdParamName) then
+      UseDialogParams(DxpParams);
   end;
 begin
   Result := False;
@@ -7075,7 +5581,11 @@ begin
     IniMemo.ScrollBars := ssBoth;
     IniMemo.WordWrap := False;
     IniMemo.SetBounds(168, 404, 384, 140);
-    if (IniFileName <> '') and FileExists(IniFileName) then
+    IniText := EngineSlotParamValue(AEngineIndex, EngineIniContentParamName,
+      '');
+    if IniText <> '' then
+      IniMemo.Lines.Text := IniText
+    else if (IniFileName <> '') and FileExists(IniFileName) then
     begin
       try
         IniMemo.Lines.LoadFromFile(IniFileName);
@@ -7112,23 +5622,19 @@ begin
       if Dialog.ShowModal <> mrOK then
         Exit;
 
-      if DxpLaunchModeLooksInconsistent then
+      DxpModeMessage := DxpLaunchModeInconsistencyMessage;
+      if DxpModeMessage <> '' then
       begin
-        MessageDlg('Open engine',
-          'These DXP launch args look like they start an engine that connects ' +
-          'to the GUI. Please set Socket mode to "GUI listens for engine ' +
-          'connection".',
-          mtError, [mbOK], 0);
+        ShowGuiOkDialog(Self, 'Open engine', DxpModeMessage);
         Continue;
       end;
 
       if DxpPortConflictsWithOtherEngine(OtherEngineIndex) then
       begin
-        MessageDlg('Open engine',
+        ShowGuiOkDialog(Self, 'Open engine',
           EngineLogName(OtherEngineIndex) +
           ' has already been configured for DXP port ' +
-          IntToStr(SocketEdit.Value) + '. Please select another port.',
-          mtError, [mbOK], 0);
+          IntToStr(SocketEdit.Value) + '. Please select another port.');
         Continue;
       end;
 
@@ -7161,20 +5667,43 @@ begin
     if IniFileName = '(none found)' then
       IniFileName := '';
     FEngines[AEngineIndex].IniFileName := IniFileName;
+    IniText := IniMemo.Lines.Text;
     if IniFileName <> '' then
     begin
       try
-        IniMemo.Lines.SaveToFile(IniFileName);
+        with TStringList.Create do
+        try
+          Text := StringReplace(IniText, '{ip}',
+            FEngines[AEngineIndex].DxpIpAddress, [rfReplaceAll, rfIgnoreCase]);
+          Text := StringReplace(Text, '{port}',
+            FEngines[AEngineIndex].DxpSocketNumber,
+            [rfReplaceAll, rfIgnoreCase]);
+          SaveToFile(IniFileName);
+        finally
+          Free;
+        end;
       except
         on E: Exception do
-          MessageDlg('Could not save INI file:' + LineEnding + IniFileName +
-            LineEnding + E.Message, mtError, [mbOK], 0);
+          ShowGuiOkDialog(Self, 'Could not save INI file',
+            IniFileName + LineEnding + E.Message);
       end;
     end;
     SyncHubLaunchArgumentParam(AEngineIndex);
+    if IniFileName <> '' then
+      AddOrUpdateParam(FEngines[AEngineIndex].Params,
+        EngineIniContentParamName, 'string', IniText, False);
     if FEngines[AEngineIndex].ParamsFileName <> '' then
-      SaveParamsToJson(FEngines[AEngineIndex].ParamsFileName,
+    begin
+      if FEngines[AEngineIndex].Protocol = epDxp then
+        SaveSection := 'dxp'
+      else
+        SaveSection := 'hub';
+      SaveParamsToJson(FEngines[AEngineIndex].ParamsFileName, SaveSection,
         FEngines[AEngineIndex].Params);
+      AppendEngineSlotLog(AEngineIndex, '[saved ' + SaveSection +
+        ' launch options to ' + FEngines[AEngineIndex].ParamsFileName + ']' +
+        LineEnding);
+    end;
     Result := True;
   finally
     Dialog.Free;
@@ -7183,40 +5712,39 @@ end;
 
 procedure TMainWindow.OpenEngineMenuItemClick(Sender: TObject);
 var
+  EngineIndex: Integer;
   FileName: String;
   PreferredProtocol: String;
 begin
-  if ShowEngineLauncherDialog(1, FileName, PreferredProtocol) then
+  EngineIndex := EngineSlotIndexFromSender(Sender);
+  if (EngineIndex = 2) and (not EngineSlotConfigured(1)) then
+  begin
+    AppendEngineSlotLog(2, '[please load engine 1 first; engine1 file="' +
+      FEngines[1].FileName + '" params="' + FEngines[1].ParamsFileName +
+      '" ready=' + BoolToStr(FEngines[1].Ready, True) + ' running=' +
+      BoolToStr(EngineSlotProcessHandlePresent(1), True) + ' dxp-socket=' +
+      BoolToStr(FEngines[1].DxpSocket <> nil, True) + ']' + LineEnding);
+    Exit;
+  end;
+
+  if ShowEngineLauncherDialog(EngineIndex, FileName, PreferredProtocol) then
   begin
     try
-      StartEngine(FileName, False, True, PreferredProtocol);
+      if EngineIndex = 1 then
+        StartEngine(FileName, False, True, PreferredProtocol)
+      else
+        StartSecondEngine(FileName, False, True, PreferredProtocol);
     except
       on E: Exception do
-        MessageDlg('Open engine', E.Message, mtError, [mbOK], 0);
+        ShowGuiOkDialog(Self, 'Open engine', E.Message);
     end;
   end;
 end;
 
-procedure TMainWindow.OpenSecondEngineMenuItemClick(Sender: TObject);
-var
-  FileName: String;
-  PreferredProtocol: String;
+procedure TMainWindow.EngineLauncherListDblClick(Sender: TObject);
 begin
-  if not EngineIsRunning then
-  begin
-    AppendEngine2Log('[please load engine 1 first]' + LineEnding);
-    Exit;
-  end;
-
-  if ShowEngineLauncherDialog(2, FileName, PreferredProtocol) then
-  begin
-    try
-      StartSecondEngine(FileName, False, True, PreferredProtocol);
-    except
-      on E: Exception do
-        MessageDlg('Open engine', E.Message, mtError, [mbOK], 0);
-    end;
-  end;
+  if (Sender is TListBox) and (TListBox(Sender).Parent is TCustomForm) then
+    TCustomForm(TListBox(Sender).Parent).ModalResult := mrOK;
 end;
 
 procedure TMainWindow.EnginePopupMenuPopup(Sender: TObject);
@@ -7225,692 +5753,611 @@ begin
 end;
 
 procedure TMainWindow.EditEngineParamsMenuItemClick(Sender: TObject);
-var
-  Dialog: TEngineParamDialog;
 begin
-  Dialog := TEngineParamDialog.Create(Self);
-  SyncHubLaunchArgumentParam(1);
-  SyncSendStartingPositionParam(1);
-  SyncSingleCapturesIncludeCapturedSquareParam(1);
-  RemoveAnalyzeSendsInfoParam(1);
-  SyncEngineSupportsMctsParam(1);
-  SyncScorePerspectiveParam(1);
-  SyncEvaluationDepthMinParam(1);
-  SyncEvaluationBarMaxParam(1);
-  Dialog.SetParams(FEngines[1].Params);
-  Dialog.LoadIniFromEngineFile(FEngines[1].FileName);
-  Dialog.OnHide := @EngineParamsDialogHide;
-  CenterDialogOnMainWindow(Dialog);
-  Dialog.Show;
-end;
-
-procedure TMainWindow.EditSecondEngineParamsMenuItemClick(Sender: TObject);
-var
-  Dialog: TEngineParamDialog;
-begin
-  Dialog := TEngineParamDialog.Create(Self);
-  SyncHubLaunchArgumentParam(2);
-  SyncSendStartingPositionParam(2);
-  SyncSingleCapturesIncludeCapturedSquareParam(2);
-  RemoveAnalyzeSendsInfoParam(2);
-  SyncEngineSupportsMctsParam(2);
-  SyncScorePerspectiveParam(2);
-  SyncEvaluationDepthMinParam(2);
-  SyncEvaluationBarMaxParam(2);
-  Dialog.SetParams(FEngines[2].Params);
-  Dialog.LoadIniFromEngineFile(FEngines[2].FileName);
-  Dialog.OnHide := @Engine2ParamsDialogHide;
-  CenterDialogOnMainWindow(Dialog);
-  Dialog.Show;
+  ShowEngineSlotParamsDialog(EngineSlotIndexFromSender(Sender));
 end;
 
 procedure TMainWindow.EngineParamsDialogHide(Sender: TObject);
 var
   Dialog: TEngineParamDialog;
-  RestartAfterSave: Boolean;
-  RestartFileName: String;
+  EngineIndex: Integer;
 begin
   if not (Sender is TEngineParamDialog) then
     Exit;
 
   Dialog := TEngineParamDialog(Sender);
-  if Dialog.ModalResult = mrOK then
-  begin
-    RestartAfterSave := EngineIsRunning and (FEngines[1].FileName <> '');
-    RestartFileName := FEngines[1].FileName;
-    FEngines[1].Params := Dialog.Params;
-    LoadHubLaunchArgumentFromParams(1);
-    SyncHubLaunchArgumentParam(1);
-    SyncSendStartingPositionParam(1);
-    SyncSingleCapturesIncludeCapturedSquareParam(1);
-    RemoveAnalyzeSendsInfoParam(1);
-    SyncEngineSupportsMctsParam(1);
-    SyncScorePerspectiveParam(1);
-    SyncEvaluationDepthMinParam(1);
-    SyncEvaluationBarMaxParam(1);
-    if FEngines[1].ParamsFileName = '' then
-      FEngines[1].ParamsFileName :=
-        EngineParamsFileNameForDisplayName(FEngines[1].DisplayName,
-          FEngines[1].FileName);
-    SaveParamsToJson(FEngines[1].ParamsFileName, FEngines[1].Params);
-    AppendEngineLog('[saved engine parameters to ' + FEngines[1].ParamsFileName + ']' +
-      LineEnding);
-    if RestartAfterSave then
-    begin
-      AppendEngineLog('[restarting engine after parameter change]' + LineEnding);
-      StartEngine(RestartFileName, True);
-    end;
-  end;
+  EngineIndex := Dialog.Tag;
+  if not EngineSlotIndexValid(EngineIndex) then
+    EngineIndex := 1;
+  HandleEngineSlotParamsDialogHide(EngineIndex, Dialog);
   Dialog.Release;
 end;
 
-procedure TMainWindow.Engine2ParamsDialogHide(Sender: TObject);
+procedure TMainWindow.ShowEngineSlotParamsDialog(AEngineIndex: Integer);
+var
+  Dialog: TEngineParamDialog;
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  Dialog := TEngineParamDialog.Create(Self);
+  SyncEngineSlotGuiParams(AEngineIndex);
+  Dialog.SetParams(FEngines[AEngineIndex].Params);
+  Dialog.LoadIniFromEngineFile(FEngines[AEngineIndex].FileName);
+  Dialog.Tag := AEngineIndex;
+  Dialog.OnHide := @EngineParamsDialogHide;
+  CenterDialogOnMainWindow(Dialog);
+  Dialog.Show;
+end;
+
+procedure TMainWindow.HandleEngineSlotParamsDialogHide(AEngineIndex: Integer;
+  ADialog: TObject);
 var
   Dialog: TEngineParamDialog;
   RestartAfterSave: Boolean;
   RestartFileName: String;
 begin
-  if not (Sender is TEngineParamDialog) then
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) or
+    (ADialog = nil) then
+    Exit;
+  if not (ADialog is TEngineParamDialog) then
     Exit;
 
-  Dialog := TEngineParamDialog(Sender);
-  if Dialog.ModalResult = mrOK then
+  Dialog := TEngineParamDialog(ADialog);
+  if Dialog.ModalResult <> mrOK then
+    Exit;
+
+  RestartFileName := FEngines[AEngineIndex].FileName;
+  RestartAfterSave := RestartFileName <> '';
+  FEngines[AEngineIndex].Params := Dialog.Params;
+  SyncEngineSlotGuiParams(AEngineIndex);
+  if FEngines[AEngineIndex].ParamsFileName = '' then
+    FEngines[AEngineIndex].ParamsFileName :=
+      EngineCanonicalParamsFileName(FEngines[AEngineIndex].FileName);
+  SaveParamsToJson(FEngines[AEngineIndex].ParamsFileName,
+    FEngines[AEngineIndex].Params);
+  AppendEngineSlotLog(AEngineIndex, '[saved engine parameters to ' +
+    FEngines[AEngineIndex].ParamsFileName + ']' + LineEnding);
+  if RestartAfterSave then
   begin
-    RestartAfterSave := SecondEngineIsRunning and (FEngines[2].FileName <> '');
-    RestartFileName := FEngines[2].FileName;
-    FEngines[2].Params := Dialog.Params;
-    LoadHubLaunchArgumentFromParams(2);
-    SyncHubLaunchArgumentParam(2);
-    SyncSendStartingPositionParam(2);
-    SyncSingleCapturesIncludeCapturedSquareParam(2);
-    RemoveAnalyzeSendsInfoParam(2);
-    SyncEngineSupportsMctsParam(2);
-    SyncScorePerspectiveParam(2);
-    SyncEvaluationDepthMinParam(2);
-    SyncEvaluationBarMaxParam(2);
-    if FEngines[2].ParamsFileName = '' then
-      FEngines[2].ParamsFileName :=
-        EngineParamsFileNameForDisplayName(FEngines[2].DisplayName, FEngines[2].FileName);
-    SaveParamsToJson(FEngines[2].ParamsFileName, FEngines[2].Params);
-    AppendEngine2Log('[saved engine parameters to ' + FEngines[2].ParamsFileName + ']' +
-      LineEnding);
-    if RestartAfterSave then
+    AppendEngineSlotLog(AEngineIndex,
+      '[launching engine after parameter change]' + LineEnding);
+    if AEngineIndex = 2 then
+      StartSecondEngine(RestartFileName, True)
+    else
+      StartEngine(RestartFileName, True);
+  end;
+end;
+
+procedure TMainWindow.SyncEngineSlotGuiParams(AEngineIndex: Integer);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  LoadHubLaunchArgumentFromParams(AEngineIndex);
+  SyncHubLaunchArgumentParam(AEngineIndex);
+  SyncSendStartingPositionParam(AEngineIndex);
+  SyncSingleCapturesIncludeCapturedSquareParam(AEngineIndex);
+  RemoveAnalyzeSendsInfoParam(AEngineIndex);
+  SyncEngineSupportsMctsParam(AEngineIndex);
+  SyncScorePerspectiveParam(AEngineIndex);
+  SyncEvaluationDepthMinParam(AEngineIndex);
+  SyncEvaluationBarMaxParam(AEngineIndex);
+end;
+
+procedure TMainWindow.HandleEngineSlotIdLine(AEngineIndex: Integer;
+  const ALine: String);
+var
+  NewDisplayName: String;
+  NameText: String;
+  VersionText: String;
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  NameText := ExtractHubArgument(ALine, 'name');
+  VersionText := ExtractHubArgument(ALine, 'version');
+
+  if NameText = '' then
+    Exit;
+
+  NewDisplayName := NameText;
+  if VersionText <> '' then
+    NewDisplayName += '_' + VersionText;
+
+  if (NewDisplayName = FEngines[AEngineIndex].DisplayName) and
+    (NewDisplayName = FEngines[AEngineIndex].HubId) then
+    Exit;
+
+  FEngines[AEngineIndex].DisplayName := NewDisplayName;
+  if FEngines[AEngineIndex].Protocol = epHub then
+  begin
+    FEngines[AEngineIndex].HubId := NewDisplayName;
+    AddOrUpdateParam(FEngines[AEngineIndex].Params, HubIdParamName, 'string',
+      FEngines[AEngineIndex].HubId, False);
+    if FEngines[AEngineIndex].ParamsFileName <> '' then
+      SaveParamsToJson(FEngines[AEngineIndex].ParamsFileName, 'hub',
+        FEngines[AEngineIndex].Params);
+    UpdateRegisteredEngineId(FEngines[AEngineIndex].FileName,
+      FEngines[AEngineIndex].HubId, 'hub');
+  end;
+  AppendEngineSlotLog(AEngineIndex, '[' + EngineLogName(AEngineIndex) +
+    ' name: ' + FEngines[AEngineIndex].DisplayName + ']' + LineEnding);
+end;
+
+procedure TMainWindow.HandleEngineSlotParamLine(AEngineIndex: Integer;
+  const ALine: String);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  AddOrUpdateParam(FEngines[AEngineIndex].Params,
+    ExtractHubArgument(ALine, 'name'), ExtractHubArgument(ALine, 'type'),
+    ExtractHubArgument(ALine, 'value'), True);
+end;
+
+procedure TMainWindow.HandleEngineSlotInfoLine(AEngineIndex: Integer;
+  const ALine: String);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  if AEngineIndex = 1 then
+  begin
+    FLastEngineInfoLine := ALine;
+    FLastEngineInfoAnnotation := EngineInfoAnnotation(ALine);
+    UpdateEngineEvalFromInfo(ALine);
+  end;
+  UpdateAnalyzeBestMoveFromInfo(AEngineIndex, ALine);
+end;
+
+procedure TMainWindow.HandleEngineSlotErrorLine(AEngineIndex: Integer;
+  const ALine: String);
+var
+  ErrorText: String;
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  ErrorText := ExtractHubArgument(ALine, 'message');
+  if ErrorText = '' then
+    ErrorText := ALine;
+  AppendEngineSlotLog(AEngineIndex, '[' + EngineLogName(AEngineIndex) +
+    ' error: ' + ErrorText + ']' + LineEnding);
+end;
+
+procedure TMainWindow.HandleEngineSlotWaitLine(AEngineIndex: Integer);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+  if FEngines[AEngineIndex].WaitingForInit then
+    Exit;
+
+  FEngines[AEngineIndex].WaitingForInit := True;
+  SendEngineSlotParams(AEngineIndex);
+  LogEngineSlotCommandSent(AEngineIndex, 'init');
+  SendEngineSlotCommand(AEngineIndex, 'init');
+end;
+
+procedure TMainWindow.HandleEngineSlotReadyLine(AEngineIndex: Integer);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  FEngines[AEngineIndex].Ready := True;
+  FEngines[AEngineIndex].WaitingForInit := False;
+  UpdateEngineSlotReadyUi(AEngineIndex);
+  AppendEngineSlotLog(AEngineIndex, '[' + EngineLogName(AEngineIndex) +
+    ' ready]' + LineEnding);
+  if FEngines[AEngineIndex].ParamsFileName <> '' then
+    SaveParamsToJson(FEngines[AEngineIndex].ParamsFileName,
+      FEngines[AEngineIndex].Params);
+
+  if AEngineIndex = 1 then
+  begin
+    if FEngineStartAfterReady then
     begin
-      AppendEngine2Log('[restarting engine after parameter change]' + LineEnding);
-      StartSecondEngine(RestartFileName, True);
+      FEngineStartAfterReady := False;
+      if FPlayGameActive then
+        ContinuePlayGameSearch
+      else
+        SendGoAnalyzeToEngine;
     end;
+    Exit;
   end;
-  Dialog.Release;
+
+  if RunPendingEngineSlotAction(2, '') then
+    Exit;
+  if FEngineAnalyzeEnabled and (FEngines[1].State = esAnalyzing) and
+    (FEngines[1].SearchMode in [esmAnalyze, esmPlayGameAnalyze]) then
+  begin
+    AppendEngineSlotLog(2, '[' + EngineLogName(2) +
+      ' catching up to current analysis]' + LineEnding);
+    SendGoAnalyzeToEngineSlot(2, FEngines[1].SearchMode);
+  end;
 end;
 
-procedure TMainWindow.HandleEngineIdLine(const ALine: String);
+procedure TMainWindow.HandleEngineSlotDoneLine(AEngineIndex: Integer;
+  const ALine: String);
 var
-  NewDisplayName: String;
-  NameText: String;
-  VersionText: String;
+  MoveText: String;
+  ResultText: String;
 begin
-  NameText := ExtractHubArgument(ALine, 'name');
-  VersionText := ExtractHubArgument(ALine, 'version');
-
-  if NameText = '' then
+  if not EngineSlotIndexValid(AEngineIndex) then
     Exit;
 
-  NewDisplayName := NameText;
-  if VersionText <> '' then
-    NewDisplayName += '_' + VersionText;
+  MoveText := ExtractHubArgument(ALine, 'move');
+  ResultText := ExtractHubArgument(ALine, 'result');
+  LogEngineTimingDiagnostic(AEngineIndex, 'Hub', ALine,
+    PlatformTimestampSeconds);
 
-  if (NewDisplayName = FEngines[1].DisplayName) and
-    (NewDisplayName = FEngines[1].HubId) then
-    Exit;
-
-  FEngines[1].DisplayName := NewDisplayName;
-  if FEngines[1].Protocol = epHub then
+  if HandleHubDoneDrawResult(AEngineIndex, ResultText) then
   begin
-    FEngines[1].HubId := NewDisplayName;
-    AddOrUpdateParam(FEngines[1].Params, HubIdParamName, 'string',
-      FEngines[1].HubId, False);
-    if FEngines[1].ParamsFileName <> '' then
-      SaveParamsToJson(FEngines[1].ParamsFileName, 'hub', FEngines[1].Params);
-    UpdateRegisteredEngineId(FEngines[1].FileName, FEngines[1].HubId, 'hub');
+    ClearEngineTiming(AEngineIndex);
+    Exit;
   end;
-  AppendEngineLog('[' + EngineLogName(1) + ' name: ' +
-    FEngines[1].DisplayName + ']' + LineEnding);
+
+  if AEngineIndex = 1 then
+  begin
+    FLastEngineDoneLine := ALine;
+    if FLastEngineInfoLine <> '' then
+      UpdateEngineEvalFromInfo(FLastEngineInfoLine, True);
+  end;
+
+  if RunPendingEngineSlotAction(AEngineIndex, MoveText) then
+    Exit;
+
+  if HandleStoppedSearchDone(AEngineIndex, MoveText) then
+    Exit;
+
+  if AEngineIndex = 1 then
+    HandleEngine1DoneMove(MoveText)
+  else
+    HandleEngine2DoneMove(MoveText, FEngines[2].SearchMode);
 end;
 
-procedure TMainWindow.HandleEngine2IdLine(const ALine: String);
-var
-  NewDisplayName: String;
-  NameText: String;
-  VersionText: String;
+function TMainWindow.HandleHubDoneDrawResult(AEngineIndex: Integer;
+  const AResultText: String): Boolean;
 begin
-  NameText := ExtractHubArgument(ALine, 'name');
-  VersionText := ExtractHubArgument(ALine, 'version');
+  Result := FPlayGameActive and HubDoneResultIsDraw(AResultText);
+  if Result then
+    EndCurrentGame(gerAgreedDraw, '1-1', AEngineIndex);
+end;
 
-  if NameText = '' then
+function TMainWindow.HandleStoppedSearchDone(AEngineIndex: Integer;
+  const AMoveText: String): Boolean;
+begin
+  Result := False;
+  if not EngineSlotIndexValid(AEngineIndex) then
     Exit;
 
-  NewDisplayName := NameText;
-  if VersionText <> '' then
-    NewDisplayName += '_' + VersionText;
-
-  if (NewDisplayName = FEngines[2].DisplayName) and
-    (NewDisplayName = FEngines[2].HubId) then
-    Exit;
-
-  FEngines[2].DisplayName := NewDisplayName;
-  if FEngines[2].Protocol = epHub then
+  if AEngineIndex = 1 then
   begin
-    FEngines[2].HubId := NewDisplayName;
-    AddOrUpdateParam(FEngines[2].Params, HubIdParamName, 'string',
-      FEngines[2].HubId, False);
-    if FEngines[2].ParamsFileName <> '' then
-      SaveParamsToJson(FEngines[2].ParamsFileName, 'hub', FEngines[2].Params);
-    UpdateRegisteredEngineId(FEngines[2].FileName, FEngines[2].HubId, 'hub');
+    if not FEngines[1].IgnoreNextDoneMove then
+      Exit;
+    FEngines[1].IgnoreNextDoneMove := False;
+    if FEngines[1].SearchMode = esmIdle then
+      SetEngineSlotState(1, esIdle);
+  end
+  else
+  begin
+    if not FEngines[AEngineIndex].IgnoreNextDoneMove then
+      Exit;
+    FEngines[AEngineIndex].IgnoreNextDoneMove := False;
+    if FEngines[AEngineIndex].SearchMode = esmIdle then
+      SetEngineSlotState(AEngineIndex, esIdle);
   end;
-  AppendEngine2Log('[' + EngineLogName(2) + ' name: ' +
-    FEngines[2].DisplayName + ']' + LineEnding);
+
+  if AMoveText <> '' then
+    AppendEngineSlotLog(AEngineIndex, '[ignored stopped-search move ' +
+      AMoveText + ']' + LineEnding)
+  else
+    AppendEngineSlotLog(AEngineIndex, '[ignored stopped-search done]' +
+      LineEnding);
+  ClearEngineTiming(AEngineIndex);
+  Result := True;
+end;
+
+procedure TMainWindow.HandleEngine1DoneMove(const AMoveText: String);
+begin
+  HandleEngineDoneMove(AMoveText);
+end;
+
+procedure TMainWindow.HandleEngine2DoneMove(const AMoveText: String;
+  ASearchMode: TEngineSearchMode);
+begin
+  FinishEngineSlotSearch(2);
+  if FPlayGameActive and IsPlayGameSecondEngineTurn and
+    (ASearchMode = esmPlayGameThink) and (AMoveText <> '') then
+    HandleEngineMoveForSearchMode(2, AMoveText, ASearchMode)
+  else if AMoveText <> '' then
+    AppendEngineSlotLog(2, '[analysis move ignored: ' + AMoveText + ']' + LineEnding)
+  else
+    AppendEngineSlotLog(2, '[' + EngineLogName(2) + ' done]' + LineEnding);
+end;
+
+function TMainWindow.PrepareEngineSlotForLaunch(AEngineIndex: Integer;
+  const AFileName: String; AUseCurrentParams, AShowLaunchOptions: Boolean;
+  const APreferredProtocol: String): Boolean;
+begin
+  Result := False;
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  LoadEngineSlotLaunchParams(AEngineIndex, AFileName, AUseCurrentParams);
+  if not ConfirmEngineSlotLaunchOptions(AEngineIndex, AShowLaunchOptions,
+    APreferredProtocol) then
+    Exit;
+  PrepareEngineSlotLaunchLog(AEngineIndex, AFileName);
+  FinalizeEngineSlotLaunchPreparation(AEngineIndex);
+  Result := True;
+end;
+
+procedure TMainWindow.PrepareEngineSlotLaunchLog(AEngineIndex: Integer;
+  const AFileName: String);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  if FEngines[AEngineIndex].LogMemo <> nil then
+  begin
+    FEngines[AEngineIndex].LogMemo.Clear;
+    AppendEngineSlotLog(AEngineIndex, '[engine executable: ' + AFileName +
+      ']' + LineEnding);
+  end;
+end;
+
+procedure TMainWindow.LoadEngineSlotLaunchParams(AEngineIndex: Integer;
+  const AFileName: String; AUseCurrentParams: Boolean);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  FEngines[AEngineIndex].FileName := AFileName;
+  if not AUseCurrentParams then
+  begin
+    FEngines[AEngineIndex].DisplayName :=
+      ChangeFileExt(ExtractFileName(AFileName), '');
+    FEngines[AEngineIndex].ParamsFileName :=
+      EngineCanonicalParamsFileName(FEngines[AEngineIndex].FileName);
+    LoadParamsFromJson(FEngines[AEngineIndex].ParamsFileName,
+      FEngines[AEngineIndex].Params);
+  end;
+
+  SyncEngineSlotGuiParams(AEngineIndex);
+end;
+
+function TMainWindow.ConfirmEngineSlotLaunchOptions(AEngineIndex: Integer;
+  AShowLaunchOptions: Boolean; const APreferredProtocol: String): Boolean;
+begin
+  Result := False;
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  if (not AShowLaunchOptions) or
+    ShowEngineLaunchOptionsDialog(AEngineIndex, APreferredProtocol) then
+    Result := True;
+end;
+
+procedure TMainWindow.FinalizeEngineSlotLaunchPreparation(
+  AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  if (Length(FEngines[AEngineIndex].Params) > 0) and
+    (FEngines[AEngineIndex].LogMemo <> nil) then
+    FEngines[AEngineIndex].LogMemo.Lines.Add(
+      EngineLoadedParametersLogText(FEngines[AEngineIndex].ParamsFileName));
+
+  ResetEngineRuntimeForLaunch(AEngineIndex);
+end;
+
+function TMainWindow.EnsureDxpListenerReadyForLaunch(
+  AEngineIndex: Integer): Boolean;
+var
+  OtherEngineIndex: Integer;
+begin
+  Result := True;
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit(False);
+
+  if (FEngines[AEngineIndex].Protocol <> epDxp) or
+    (FEngines[AEngineIndex].DxpRole <> edrClient) then
+    Exit;
+
+  if DxpListenerPortInUse(AEngineIndex, OtherEngineIndex) then
+    raise Exception.Create(EngineLogName(OtherEngineIndex) +
+      ' has already been configured for DXP port ' +
+      FEngines[AEngineIndex].DxpSocketNumber + '. Please select another port.');
+
+  if not StartDxpConnection(AEngineIndex) then
+  begin
+    AppendEngineSlotLog(AEngineIndex, EngineLaunchAbortedLogText(
+      'DXP listener is not ready'));
+    Result := False;
+  end;
+end;
+
+procedure TMainWindow.LogEngineSlotLaunch(AEngineIndex: Integer;
+  ALaunchArgs: TStringList);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  AppendEngineSlotLog(AEngineIndex,
+    EngineLaunchLogText(FEngines[AEngineIndex].ParamsFileName,
+      FEngines[AEngineIndex].Protocol, FEngines[AEngineIndex].DxpId,
+      ALaunchArgs.DelimitedText));
+end;
+
+procedure TMainWindow.LaunchEngineSlotProcess(AEngineIndex: Integer;
+  const AFileName: String; ALaunchArgs: TStringList);
+var
+  CurrentDir: String;
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  CurrentDir := ExtractFilePath(AFileName);
+  AppendEngineSlotLog(AEngineIndex,
+    EngineExecuteBeginLogText(EngineLogName(AEngineIndex)));
+  AppendEngineSlotLog(AEngineIndex,
+    EngineExecuteCwdLogText(EngineLogName(AEngineIndex), CurrentDir));
+  FEngines[AEngineIndex].PlatformProcess.Start(AFileName, ALaunchArgs, CurrentDir);
+end;
+
+procedure TMainWindow.FinalizeEngineSlotLaunch(AEngineIndex: Integer;
+  const AFileName: String);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  UpdateEnginePollTimer;
+  AppendEngineSlotLog(AEngineIndex,
+    EngineExecuteReturnedLogText(EngineLogName(AEngineIndex),
+      EngineSlotIsRunning(AEngineIndex)));
+
+  RegisterLaunchedEngineSlot(AEngineIndex, AFileName);
+  if FEngines[AEngineIndex].Protocol = epDxp then
+    FinalizeDxpEngineSlotLaunch(AEngineIndex)
+  else
+    FinalizeHubEngineSlotLaunch(AEngineIndex);
+  UpdateEnginePopupMenuItems;
+end;
+
+procedure TMainWindow.RegisterLaunchedEngineSlot(AEngineIndex: Integer;
+  const AFileName: String);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  RegisterEngineExecutable(AFileName);
+  if (FEngines[AEngineIndex].Protocol = epDxp) and
+    (Trim(FEngines[AEngineIndex].DxpId) <> '') then
+    UpdateRegisteredEngineId(AFileName, Trim(FEngines[AEngineIndex].DxpId), 'dxp')
+  else if (FEngines[AEngineIndex].Protocol = epHub) and
+    (Trim(FEngines[AEngineIndex].HubId) <> '') then
+    UpdateRegisteredEngineId(AFileName, Trim(FEngines[AEngineIndex].HubId), 'hub');
+end;
+
+procedure TMainWindow.FinalizeDxpEngineSlotLaunch(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  if Trim(FEngines[AEngineIndex].DxpId) <> '' then
+    FEngines[AEngineIndex].DisplayName := Trim(FEngines[AEngineIndex].DxpId);
+  UpdateEngineCommandButtons;
+  AppendEngineSlotLog(AEngineIndex, EngineDxpLaunchDetailsLogText(
+    FEngines[AEngineIndex].DxpId, FEngines[AEngineIndex].DxpRole,
+    FEngines[AEngineIndex].DxpIpAddress,
+    FEngines[AEngineIndex].DxpSocketNumber,
+    FEngines[AEngineIndex].DxpLaunchArguments));
+  if FEngines[AEngineIndex].DxpRole = edrListener then
+    StartDxpConnection(AEngineIndex);
+end;
+
+procedure TMainWindow.FinalizeHubEngineSlotLaunch(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  AppendEngineSlotLog(AEngineIndex, EngineHubLaunchDetailsLogText(
+    FEngines[AEngineIndex].HubLaunchArgument));
+  LogEngineSlotCommandSent(AEngineIndex, 'hub');
+  SendEngineSlotCommand(AEngineIndex, 'hub');
 end;
 
 procedure TMainWindow.StartEngine(const AFileName: String; AUseCurrentParams: Boolean;
   AShowLaunchOptions: Boolean; const APreferredProtocol: String);
-{$IFDEF MSWINDOWS}
-var
-  Child2ParentRead: THandle;
-  Child2ParentWrite: THandle;
-  CommandLine: String;
-  CurrentDir: String;
-  Parent2ChildRead: THandle;
-  Parent2ChildWrite: THandle;
-  Security: TSecurityAttributes;
-  StartupInfo: TStartupInfo;
-{$ENDIF}
-var
-  I: Integer;
-  LaunchArgs: TStringList;
-  OtherEngineIndex: Integer;
 begin
   CloseEngine;
-  FEngines[1].LogMemo.Clear;
-  FEngines[1].LogMemo.Lines.Add('Engine: ' + AFileName);
-  FEngines[1].FileName := AFileName;
-  if not AUseCurrentParams then
-  begin
-    FEngines[1].DisplayName := ChangeFileExt(ExtractFileName(AFileName), '');
-    FEngines[1].ParamsFileName := EngineParamsFileNameForDisplayName(
-      FEngines[1].DisplayName, FEngines[1].FileName);
-    LoadParamsFromJson(FEngines[1].ParamsFileName, FEngines[1].Params);
-  end;
-  LoadHubLaunchArgumentFromParams(1);
-  SyncSendStartingPositionParam(1);
-  SyncSingleCapturesIncludeCapturedSquareParam(1);
-  RemoveAnalyzeSendsInfoParam(1);
-  SyncEngineSupportsMctsParam(1);
-  SyncScorePerspectiveParam(1);
-  SyncEvaluationDepthMinParam(1);
-  SyncEvaluationBarMaxParam(1);
-  if AShowLaunchOptions and
-    (not ShowEngineLaunchOptionsDialog(1, APreferredProtocol)) then
-    Exit;
-  if Length(FEngines[1].Params) > 0 then
-    FEngines[1].LogMemo.Lines.Add('Loaded parameters: ' + FEngines[1].ParamsFileName);
-  FEngines[1].Ready := False;
-  if FAutoPlayButton <> nil then
-    FAutoPlayButton.Enabled := False;
-  if FGoButton <> nil then
-    FGoButton.Enabled := False;
-  if FMctsButton <> nil then
-    FMctsButton.Enabled := False;
-  if FStopButton <> nil then
-    FStopButton.Enabled := False;
-  FAutoPlayActive := False;
-  FAutoPlayPlyCount := 0;
-  FPendingAutoPlayStart := False;
-  FPendingAnalyzeStart := False;
-  FPendingMctsStart := False;
-  FPendingPlayGameStart := False;
-  FPendingThinkStart := False;
-  LeavePlayGameMode;
-  FEngineSearching := False;
-  ResetEngineSlotRuntime(1);
-  FEngineStartAfterReady := True;
-  FEngineStopRequested := False;
-  FIgnoreNextDoneMove := False;
-  if (FEngines[1].Protocol = epDxp) and (FEngines[1].DxpRole = edrClient) then
-  begin
-    if DxpListenerPortInUse(1, OtherEngineIndex) then
-      raise Exception.Create(EngineLogName(OtherEngineIndex) +
-        ' has already been configured for DXP port ' +
-        FEngines[1].DxpSocketNumber + '. Please select another port.');
-    if not StartDxpConnection(1) then
-    begin
-      AppendEngineLog('[engine launch aborted: DXP listener is not ready]' +
-        LineEnding);
-      Exit;
-    end;
-  end;
-
-  LaunchArgs := TStringList.Create;
-  try
-    EngineLaunchArguments(FEngines[1], LaunchArgs);
-    AppendEngineLog('[launch params file: ' + FEngines[1].ParamsFileName + ']' +
-      LineEnding);
-    if FEngines[1].Protocol = epDxp then
-      AppendEngineLog('[launch protocol: DXP]' + LineEnding +
-        '[launch DXP id: ' + FEngines[1].DxpId + ']' + LineEnding +
-        '[launch DXP args: ' + LaunchArgs.DelimitedText + ']' + LineEnding)
-    else
-      AppendEngineLog('[launch protocol: HUB]' + LineEnding +
-        '[launch HUB args: ' + LaunchArgs.DelimitedText + ']' + LineEnding);
-  {$IFDEF MSWINDOWS}
-  Parent2ChildRead := 0;
-  Parent2ChildWrite := 0;
-  Child2ParentRead := 0;
-  Child2ParentWrite := 0;
-
-  FillChar(Security, SizeOf(Security), 0);
-  Security.nLength := SizeOf(Security);
-  Security.bInheritHandle := True;
-
-  if not CreatePipe(Parent2ChildRead, Parent2ChildWrite, @Security, 0) then
-    RaiseLastOSError;
-  if not SetHandleInformation(Parent2ChildWrite, HANDLE_FLAG_INHERIT, 0) then
-    RaiseLastOSError;
-  if not CreatePipe(Child2ParentRead, Child2ParentWrite, @Security, 0) then
-    RaiseLastOSError;
-  if not SetHandleInformation(Child2ParentRead, HANDLE_FLAG_INHERIT, 0) then
-    RaiseLastOSError;
-
-  FillChar(FEngines[1].ProcessInfo, SizeOf(FEngines[1].ProcessInfo), 0);
-  FillChar(StartupInfo, SizeOf(StartupInfo), 0);
-  StartupInfo.cb := SizeOf(StartupInfo);
-  StartupInfo.hStdError := Child2ParentWrite;
-  StartupInfo.hStdInput := Parent2ChildRead;
-  StartupInfo.hStdOutput := Child2ParentWrite;
-  StartupInfo.dwFlags := STARTF_USESTDHANDLES;
-
-  CommandLine := '"' + AFileName + '"';
-  for I := 0 to LaunchArgs.Count - 1 do
-    CommandLine += ' ' + CommandLineQuote(LaunchArgs[I]);
-  CurrentDir := ExtractFilePath(AFileName);
-  AppendEngineLog('[' + EngineLogName(1) + ' execute begin]' +
-    LineEnding);
-  AppendEngineLog('[' + EngineLogName(1) + ' cwd ' + CurrentDir + ']' + LineEnding);
-  if not CreateProcess(nil, PChar(CommandLine), nil, nil, True,
-    CREATE_NO_WINDOW, nil, PChar(CurrentDir), StartupInfo,
-    FEngines[1].ProcessInfo) then
-    RaiseLastOSError;
-
-  CloseHandle(Parent2ChildRead);
-  Parent2ChildRead := 0;
-  CloseHandle(Child2ParentWrite);
-  Child2ParentWrite := 0;
-  FEngines[1].InputWriteHandle := Parent2ChildWrite;
-  FEngines[1].OutputReadHandle := Child2ParentRead;
-  FEngines[1].Running := True;
-  FEngines[1].ReaderThread := TEngineReaderThread.Create(Self, FEngines[1].OutputReadHandle, 1);
-  {$ELSE}
-  FEngines[1].Process := TProcess.Create(Self);
-  FEngines[1].Process.Executable := AFileName;
-  for I := 0 to LaunchArgs.Count - 1 do
-    FEngines[1].Process.Parameters.Add(LaunchArgs[I]);
-  FEngines[1].Process.CurrentDirectory := ExtractFilePath(AFileName);
-  FEngines[1].Process.Options := [poUsePipes, poStderrToOutput];
-  FEngines[1].Process.ShowWindow := swoHIDE;
-  AppendEngineLog('[' + EngineLogName(1) + ' execute begin]' +
-    LineEnding);
-  AppendEngineLog('[' + EngineLogName(1) + ' cwd ' + FEngines[1].Process.CurrentDirectory + ']' +
-    LineEnding);
-  FEngines[1].Process.Execute;
-  {$ENDIF}
-  UpdateEnginePollTimer;
-  AppendEngineLog('[' + EngineLogName(1) + ' execute returned' +
-    ' running=' + BoolToStr(EngineIsRunning, True) + ']' + LineEnding);
-  RegisterEngineExecutable(AFileName);
-  if (FEngines[1].Protocol = epDxp) and (Trim(FEngines[1].DxpId) <> '') then
-    UpdateRegisteredEngineId(AFileName, Trim(FEngines[1].DxpId), 'dxp')
-  else if (FEngines[1].Protocol = epHub) and (Trim(FEngines[1].HubId) <> '') then
-    UpdateRegisteredEngineId(AFileName, Trim(FEngines[1].HubId), 'hub');
-
-  if FEngines[1].Protocol = epDxp then
-  begin
-    if Trim(FEngines[1].DxpId) <> '' then
-      FEngines[1].DisplayName := Trim(FEngines[1].DxpId);
-    if FAutoPlayButton <> nil then
-      FAutoPlayButton.Enabled := False;
-    if FGoButton <> nil then
-      FGoButton.Enabled := True;
-    if FMctsButton <> nil then
-      FMctsButton.Enabled := True;
-    if FStopButton <> nil then
-      FStopButton.Enabled := True;
-    if FEngines[1].DxpId <> '' then
-      AppendEngineLog('[DXP id=' + FEngines[1].DxpId + ']' + LineEnding);
-    if FEngines[1].DxpRole = edrClient then
-      AppendEngineLog('[DXP socket mode=listen ip=' + FEngines[1].DxpIpAddress +
-        ' socket=' + FEngines[1].DxpSocketNumber + ']' + LineEnding)
-    else
-      AppendEngineLog('[DXP socket mode=connect ip=' + FEngines[1].DxpIpAddress +
-        ' socket=' + FEngines[1].DxpSocketNumber + ']' + LineEnding);
-    if FEngines[1].DxpLaunchArguments <> '' then
-      AppendEngineLog('[DXP launch arguments: ' + FEngines[1].DxpLaunchArguments +
-        ']' + LineEnding);
-    if FEngines[1].DxpRole = edrListener then
-      StartDxpConnection(1);
-  end
-  else
-  begin
-    if FEngines[1].HubLaunchArgument <> '' then
-      AppendEngineLog('[hub launch argument: ' + FEngines[1].HubLaunchArgument +
-      ']' + LineEnding);
-    AppendEngineLog('> hub' + LineEnding);
-    SendEngineCommand('hub');
-  end;
-  {$IFDEF MSWINDOWS}
-  if Parent2ChildRead <> 0 then
-    CloseHandle(Parent2ChildRead);
-  if Child2ParentWrite <> 0 then
-    CloseHandle(Child2ParentWrite);
-  {$ENDIF}
-  finally
-    LaunchArgs.Free;
-  end;
-  UpdateEnginePopupMenuItems;
+  StartEngineSlot(1, AFileName, AUseCurrentParams, AShowLaunchOptions,
+    APreferredProtocol);
 end;
 
 procedure TMainWindow.StartSecondEngine(const AFileName: String;
   AUseCurrentParams: Boolean; AShowLaunchOptions: Boolean;
   const APreferredProtocol: String);
-{$IFDEF MSWINDOWS}
-var
-  Child2ParentRead: THandle;
-  Child2ParentWrite: THandle;
-  CommandLine: String;
-  CurrentDir: String;
-  Parent2ChildRead: THandle;
-  Parent2ChildWrite: THandle;
-  Security: TSecurityAttributes;
-  StartupInfo: TStartupInfo;
-{$ENDIF}
-var
-  I: Integer;
-  LaunchArgs: TStringList;
-  OtherEngineIndex: Integer;
 begin
   CloseSecondEngine;
-  FEngines[2].LogMemo.Clear;
-  FEngines[2].LogMemo.Lines.Add('Engine 2: ' + AFileName);
-  FEngines[2].FileName := AFileName;
-  if not AUseCurrentParams then
-  begin
-    FEngines[2].DisplayName := ChangeFileExt(ExtractFileName(AFileName), '');
-    FEngines[2].ParamsFileName := EngineParamsFileNameForDisplayName(FEngines[2].DisplayName,
-      FEngines[2].FileName);
-    LoadParamsFromJson(FEngines[2].ParamsFileName, FEngines[2].Params);
-  end;
-  LoadHubLaunchArgumentFromParams(2);
-  SyncSendStartingPositionParam(2);
-  SyncSingleCapturesIncludeCapturedSquareParam(2);
-  RemoveAnalyzeSendsInfoParam(2);
-  SyncEngineSupportsMctsParam(2);
-  SyncScorePerspectiveParam(2);
-  SyncEvaluationDepthMinParam(2);
-  SyncEvaluationBarMaxParam(2);
-  if AShowLaunchOptions and
-    (not ShowEngineLaunchOptionsDialog(2, APreferredProtocol)) then
+  StartEngineSlot(2, AFileName, AUseCurrentParams, AShowLaunchOptions,
+    APreferredProtocol);
+end;
+
+procedure TMainWindow.StartEngineSlot(AEngineIndex: Integer;
+  const AFileName: String; AUseCurrentParams, AShowLaunchOptions: Boolean;
+  const APreferredProtocol: String);
+var
+  LaunchArgs: TStringList;
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
     Exit;
-  if Length(FEngines[2].Params) > 0 then
-    FEngines[2].LogMemo.Lines.Add('Loaded parameters: ' + FEngines[2].ParamsFileName);
-  ResetEngineSlotRuntime(2);
-  if (FEngines[2].Protocol = epDxp) and (FEngines[2].DxpRole = edrClient) then
-  begin
-    if DxpListenerPortInUse(2, OtherEngineIndex) then
-      raise Exception.Create(EngineLogName(OtherEngineIndex) +
-        ' has already been configured for DXP port ' +
-        FEngines[2].DxpSocketNumber + '. Please select another port.');
-    if not StartDxpConnection(2) then
-    begin
-      AppendEngine2Log('[engine launch aborted: DXP listener is not ready]' +
-        LineEnding);
-      Exit;
-    end;
-  end;
+
+  if not PrepareEngineSlotForLaunch(AEngineIndex, AFileName, AUseCurrentParams,
+    AShowLaunchOptions, APreferredProtocol) then
+    Exit;
+
+  PrepareUiForEngineSlotStart(AEngineIndex);
+  if not EnsureDxpListenerReadyForLaunch(AEngineIndex) then
+    Exit;
 
   LaunchArgs := TStringList.Create;
   try
-    EngineLaunchArguments(FEngines[2], LaunchArgs);
-    AppendEngine2Log('[launch params file: ' + FEngines[2].ParamsFileName + ']' +
-      LineEnding);
-    if FEngines[2].Protocol = epDxp then
-      AppendEngine2Log('[launch protocol: DXP]' + LineEnding +
-        '[launch DXP id: ' + FEngines[2].DxpId + ']' + LineEnding +
-        '[launch DXP args: ' + LaunchArgs.DelimitedText + ']' + LineEnding)
-    else
-      AppendEngine2Log('[launch protocol: HUB]' + LineEnding +
-        '[launch HUB args: ' + LaunchArgs.DelimitedText + ']' + LineEnding);
-  {$IFDEF MSWINDOWS}
-  Parent2ChildRead := 0;
-  Parent2ChildWrite := 0;
-  Child2ParentRead := 0;
-  Child2ParentWrite := 0;
-
-  FillChar(Security, SizeOf(Security), 0);
-  Security.nLength := SizeOf(Security);
-  Security.bInheritHandle := True;
-
-  if not CreatePipe(Parent2ChildRead, Parent2ChildWrite, @Security, 0) then
-    RaiseLastOSError;
-  if not SetHandleInformation(Parent2ChildWrite, HANDLE_FLAG_INHERIT, 0) then
-    RaiseLastOSError;
-  if not CreatePipe(Child2ParentRead, Child2ParentWrite, @Security, 0) then
-    RaiseLastOSError;
-  if not SetHandleInformation(Child2ParentRead, HANDLE_FLAG_INHERIT, 0) then
-    RaiseLastOSError;
-
-  FillChar(FEngines[2].ProcessInfo, SizeOf(FEngines[2].ProcessInfo), 0);
-  FillChar(StartupInfo, SizeOf(StartupInfo), 0);
-  StartupInfo.cb := SizeOf(StartupInfo);
-  StartupInfo.hStdError := Child2ParentWrite;
-  StartupInfo.hStdInput := Parent2ChildRead;
-  StartupInfo.hStdOutput := Child2ParentWrite;
-  StartupInfo.dwFlags := STARTF_USESTDHANDLES;
-
-  CommandLine := '"' + AFileName + '"';
-  for I := 0 to LaunchArgs.Count - 1 do
-    CommandLine += ' ' + CommandLineQuote(LaunchArgs[I]);
-  CurrentDir := ExtractFilePath(AFileName);
-  AppendEngine2Log('[' + EngineLogName(2) + ' execute begin]' +
-    LineEnding);
-  AppendEngine2Log('[' + EngineLogName(2) + ' cwd ' + CurrentDir + ']' + LineEnding);
-  if not CreateProcess(nil, PChar(CommandLine), nil, nil, True,
-    CREATE_NO_WINDOW, nil, PChar(CurrentDir), StartupInfo,
-    FEngines[2].ProcessInfo) then
-    RaiseLastOSError;
-
-  CloseHandle(Parent2ChildRead);
-  Parent2ChildRead := 0;
-  CloseHandle(Child2ParentWrite);
-  Child2ParentWrite := 0;
-  FEngines[2].InputWriteHandle := Parent2ChildWrite;
-  FEngines[2].OutputReadHandle := Child2ParentRead;
-  FEngines[2].Running := True;
-  FEngines[2].ReaderThread := TEngineReaderThread.Create(Self, FEngines[2].OutputReadHandle, 2);
-  {$ELSE}
-  FEngines[2].Process := TProcess.Create(Self);
-  FEngines[2].Process.Executable := AFileName;
-  for I := 0 to LaunchArgs.Count - 1 do
-    FEngines[2].Process.Parameters.Add(LaunchArgs[I]);
-  FEngines[2].Process.CurrentDirectory := ExtractFilePath(AFileName);
-  FEngines[2].Process.Options := [poUsePipes, poStderrToOutput];
-  FEngines[2].Process.ShowWindow := swoHIDE;
-  AppendEngine2Log('[' + EngineLogName(2) + ' execute begin]' +
-    LineEnding);
-  AppendEngine2Log('[' + EngineLogName(2) + ' cwd ' + FEngines[2].Process.CurrentDirectory + ']' +
-    LineEnding);
-  FEngines[2].Process.Execute;
-  {$ENDIF}
-  UpdateEnginePollTimer;
-  AppendEngine2Log('[' + EngineLogName(2) + ' execute returned' +
-    ' running=' + BoolToStr(SecondEngineIsRunning, True) + ']' + LineEnding);
-  RegisterEngineExecutable(AFileName);
-  if (FEngines[2].Protocol = epDxp) and (Trim(FEngines[2].DxpId) <> '') then
-    UpdateRegisteredEngineId(AFileName, Trim(FEngines[2].DxpId), 'dxp')
-  else if (FEngines[2].Protocol = epHub) and (Trim(FEngines[2].HubId) <> '') then
-    UpdateRegisteredEngineId(AFileName, Trim(FEngines[2].HubId), 'hub');
-
-  if FEngines[2].Protocol = epDxp then
-  begin
-    if Trim(FEngines[2].DxpId) <> '' then
-      FEngines[2].DisplayName := Trim(FEngines[2].DxpId);
-    if FEngines[2].DxpId <> '' then
-      AppendEngine2Log('[DXP id=' + FEngines[2].DxpId + ']' + LineEnding);
-    if FEngines[2].DxpRole = edrClient then
-      AppendEngine2Log('[DXP socket mode=listen ip=' + FEngines[2].DxpIpAddress +
-        ' socket=' + FEngines[2].DxpSocketNumber + ']' + LineEnding)
-    else
-      AppendEngine2Log('[DXP socket mode=connect ip=' + FEngines[2].DxpIpAddress +
-        ' socket=' + FEngines[2].DxpSocketNumber + ']' + LineEnding);
-    if FEngines[2].DxpLaunchArguments <> '' then
-      AppendEngine2Log('[DXP launch arguments: ' + FEngines[2].DxpLaunchArguments +
-        ']' + LineEnding);
-  end
-  else
-  begin
-    if FEngines[2].HubLaunchArgument <> '' then
-      AppendEngine2Log('[hub launch argument: ' + FEngines[2].HubLaunchArgument +
-      ']' + LineEnding);
-    AppendEngine2Log('> hub' + LineEnding);
-    SendSecondEngineCommand('hub');
-  end;
-  {$IFDEF MSWINDOWS}
-  if Parent2ChildRead <> 0 then
-    CloseHandle(Parent2ChildRead);
-  if Child2ParentWrite <> 0 then
-    CloseHandle(Child2ParentWrite);
-  {$ENDIF}
+    EngineLaunchArguments(FEngines[AEngineIndex], LaunchArgs);
+    LogEngineSlotLaunch(AEngineIndex, LaunchArgs);
+    LaunchEngineSlotProcess(AEngineIndex, AFileName, LaunchArgs);
+    FinalizeEngineSlotLaunch(AEngineIndex, AFileName);
   finally
     LaunchArgs.Free;
   end;
-  UpdateEnginePopupMenuItems;
 end;
 
-procedure TMainWindow.SendEngineCommand(const ACommand: String);
-var
-  {$IFDEF MSWINDOWS}
-  BytesWritten: DWORD;
-  {$ENDIF}
-  CommandText: String;
+procedure TMainWindow.PrepareUiForEngineSlotStart(AEngineIndex: Integer);
 begin
-  if not EngineIsRunning then
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  if AEngineIndex = 1 then
+    ResetPrimaryStateBeforeEngineStart
+  else
+    ResetSecondaryStateBeforeEngineStart;
+  RefreshEngineUiAfterSlotChange;
+end;
+
+procedure TMainWindow.ResetPrimaryStateBeforeEngineStart;
+begin
+  FAutoPlayActive := False;
+  FAutoPlayPlyCount := 0;
+  FEngineStartAfterReady := True;
+  FEngines[1].IgnoreNextDoneMove := False;
+  ClearEngineSlotPendingAction(1);
+  ClearEngineSlotPendingAction(2);
+  LeavePlayGameMode;
+end;
+
+procedure TMainWindow.ResetSecondaryStateBeforeEngineStart;
+begin
+  ClearEngineSlotPendingAction(2);
+end;
+
+procedure TMainWindow.SendEngineSlotCommand(AEngineIndex: Integer;
+  const ACommand: String);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+  if not EngineSlotIsRunning(AEngineIndex) then
     Exit;
 
-  CommandText := ACommand + LineEnding;
-  if CommandText <> '' then
-  begin
-    {$IFDEF MSWINDOWS}
-    if (FEngines[1].InputWriteHandle <> 0) and
-      (not WriteFile(FEngines[1].InputWriteHandle, CommandText[1],
-        Length(CommandText), BytesWritten, nil)) then
-      RaiseLastOSError;
-    {$ELSE}
-    FEngines[1].Process.Input.WriteBuffer(CommandText[1], Length(CommandText));
-    {$ENDIF}
-  end;
+  if FEngines[AEngineIndex].PlatformProcess <> nil then
+    FEngines[AEngineIndex].PlatformProcess.WriteLine(ACommand);
 end;
 
-procedure TMainWindow.SendSecondEngineCommand(const ACommand: String);
-var
-  {$IFDEF MSWINDOWS}
-  BytesWritten: DWORD;
-  {$ENDIF}
-  CommandText: String;
+procedure TMainWindow.LogEngineSlotCommandSent(AEngineIndex: Integer;
+  const ACommand: String);
 begin
-  if not SecondEngineIsRunning then
+  if not EngineSlotIndexValid(AEngineIndex) then
     Exit;
-
-  CommandText := ACommand + LineEnding;
-  if CommandText <> '' then
-  begin
-    {$IFDEF MSWINDOWS}
-    if (FEngines[2].InputWriteHandle <> 0) and
-      (not WriteFile(FEngines[2].InputWriteHandle, CommandText[1],
-        Length(CommandText), BytesWritten, nil)) then
-      RaiseLastOSError;
-    {$ELSE}
-    FEngines[2].Process.Input.WriteBuffer(CommandText[1], Length(CommandText));
-    {$ENDIF}
-  end;
-end;
-
-function EngineStateText(AState: TEngineState): String;
-begin
-  case AState of
-    esIdle: Result := 'idle';
-    esAnalyzing: Result := 'analyzing';
-    esMcts: Result := 'mcts';
-    esThinking: Result := 'thinking';
-    esWaitingForOtherEngine: Result := 'waiting for other engine';
-  else
-    Result := 'unknown';
-  end;
-end;
-
-function TMainWindow.EngineStateCaption(AState: TEngineState): String;
-begin
-  case AState of
-    esIdle: Result := 'Idle';
-    esAnalyzing: Result := 'Analyzing';
-    esMcts: Result := 'MCTS';
-    esThinking: Result := 'Thinking';
-    esWaitingForOtherEngine: Result := 'Waiting';
-  else
-    Result := 'Unknown';
-  end;
-end;
-
-function TMainWindow.GuiStateText(AState: TGuiState): String;
-begin
-  case AState of
-    gsIdle: Result := 'Idle';
-    gsAnalyzing: Result := 'Analyzing';
-    gsMcts: Result := 'MCTS';
-    gsAutoPlaying: Result := 'Auto-playing';
-    gsPlayGameHumanTurn: Result := 'Play-game human turn';
-    gsPlayGameEngineTurn: Result := 'Play-game engine turn';
-    gsTournamentRunning: Result := 'Tournament running';
-    gsStopping: Result := 'Stopping';
-    gsGameOver: Result := 'Game over';
-  else
-    Result := 'Unknown';
-  end;
-end;
-
-function EngineStateNeedsStop(AState: TEngineState): Boolean;
-begin
-  Result := AState in [esAnalyzing, esMcts, esThinking];
-end;
-
-function CommandLineQuote(const AText: String): String;
-var
-  I: Integer;
-  NeedsQuotes: Boolean;
-begin
-  NeedsQuotes := AText = '';
-  for I := 1 to Length(AText) do
-    if AText[I] in [' ', #9, '"'] then
-      NeedsQuotes := True;
-
-  if not NeedsQuotes then
-    Exit(AText);
-
-  Result := '"';
-  for I := 1 to Length(AText) do
-  begin
-    if AText[I] = '"' then
-      Result += '\"'
-    else
-      Result += AText[I];
-  end;
-  Result += '"';
+  AppendEngineSlotLog(AEngineIndex, EngineCommandSentLogText(ACommand));
 end;
 
 procedure SplitLaunchArguments(const AText: String; AArgs: TStrings);
@@ -7991,103 +6438,47 @@ begin
     SplitLaunchArguments(AEngine.HubLaunchArgument, AArgs);
 end;
 
-procedure RemoveEngineParam(var AParams: TEngineParamArray; const AName: String);
-var
-  I: Integer;
-  J: Integer;
-begin
-  for I := 0 to High(AParams) do
-    if SameText(AParams[I].Name, AName) then
-    begin
-      for J := I to High(AParams) - 1 do
-        AParams[J] := AParams[J + 1];
-      SetLength(AParams, Length(AParams) - 1);
-      Exit;
-  end;
-end;
-
 procedure TMainWindow.SyncHubLaunchArgumentParam(AEngineIndex: Integer);
 var
-  ProtocolText: String;
-  RoleText: String;
+  Config: TEngineProtocolConfig;
 begin
   if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
     Exit;
-  if FEngines[AEngineIndex].Protocol = epDxp then
-    ProtocolText := 'dxp'
-  else
-    ProtocolText := 'hub';
-  if FEngines[AEngineIndex].DxpRole = edrClient then
-    RoleText := 'connect'
-  else
-    RoleText := 'listen';
-  AddOrUpdateParam(FEngines[AEngineIndex].Params, EngineTypeParamName,
-    'string', ProtocolText, False);
+
   if Trim(FEngines[AEngineIndex].HubId) = '' then
     FEngines[AEngineIndex].HubId := 'Hub' + IntToStr(AEngineIndex);
-  AddOrUpdateParam(FEngines[AEngineIndex].Params, HubIdParamName,
-    'string', FEngines[AEngineIndex].HubId, False);
-  AddOrUpdateParam(FEngines[AEngineIndex].Params, EngineIniFileParamName,
-    'string', FEngines[AEngineIndex].IniFileName, False);
-  AddOrUpdateParam(FEngines[AEngineIndex].Params, HubLaunchArgumentParamName,
-    'string', FEngines[AEngineIndex].HubLaunchArgument, False);
   if Trim(FEngines[AEngineIndex].DxpId) = '' then
     FEngines[AEngineIndex].DxpId := 'DXP' + IntToStr(AEngineIndex);
-  AddOrUpdateParam(FEngines[AEngineIndex].Params, DxpIdParamName,
-    'string', FEngines[AEngineIndex].DxpId, False);
-  AddOrUpdateParam(FEngines[AEngineIndex].Params, DxpIpParamName,
-    'string', FEngines[AEngineIndex].DxpIpAddress, False);
-  AddOrUpdateParam(FEngines[AEngineIndex].Params, DxpSocketParamName,
-    'int', FEngines[AEngineIndex].DxpSocketNumber, False);
-  AddOrUpdateParam(FEngines[AEngineIndex].Params, DxpLaunchArgumentsParamName,
-    'string', FEngines[AEngineIndex].DxpLaunchArguments, False);
-  AddOrUpdateParam(FEngines[AEngineIndex].Params, DxpRoleParamName,
-    'string', RoleText, False);
-  RemoveEngineParam(FEngines[AEngineIndex].Params, OldHubLaunchArgumentParamName);
-  RemoveEngineParam(FEngines[AEngineIndex].Params, OldLaunchWithHubArgumentParamName);
+
+  Config.Protocol := FEngines[AEngineIndex].Protocol;
+  Config.HubId := FEngines[AEngineIndex].HubId;
+  Config.IniFileName := FEngines[AEngineIndex].IniFileName;
+  Config.HubLaunchArgument := FEngines[AEngineIndex].HubLaunchArgument;
+  Config.DxpId := FEngines[AEngineIndex].DxpId;
+  Config.DxpIpAddress := FEngines[AEngineIndex].DxpIpAddress;
+  Config.DxpSocketNumber := FEngines[AEngineIndex].DxpSocketNumber;
+  Config.DxpLaunchArguments := FEngines[AEngineIndex].DxpLaunchArguments;
+  Config.DxpRole := FEngines[AEngineIndex].DxpRole;
+  SaveEngineProtocolConfig(FEngines[AEngineIndex].Params, Config);
 end;
 
 procedure TMainWindow.SyncSendStartingPositionParam(AEngineIndex: Integer);
-var
-  I: Integer;
 begin
   if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
     Exit;
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-    if SameText(FEngines[AEngineIndex].Params[I].Name,
-      OldSendStartingPositionParamName) then
-    begin
-      AddOrUpdateParam(FEngines[AEngineIndex].Params,
-        SendStartingPositionParamName, 'bool',
-        FEngines[AEngineIndex].Params[I].Value, False);
-      RemoveEngineParam(FEngines[AEngineIndex].Params,
-        OldSendStartingPositionParamName);
-      Exit;
-    end;
-  AddOrUpdateParam(FEngines[AEngineIndex].Params, SendStartingPositionParamName,
-    'bool', 'true', True);
+  SyncEngineParamWithLegacy(FEngines[AEngineIndex].Params,
+    SendStartingPositionParamName, OldSendStartingPositionParamName, 'bool',
+    'true');
 end;
 
 procedure TMainWindow.SyncSingleCapturesIncludeCapturedSquareParam(
   AEngineIndex: Integer);
-var
-  I: Integer;
 begin
   if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
     Exit;
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-    if SameText(FEngines[AEngineIndex].Params[I].Name,
-      OldSingleCapturesIncludeCapturedSquareParamName) then
-    begin
-      AddOrUpdateParam(FEngines[AEngineIndex].Params,
-        SingleCapturesIncludeCapturedSquareParamName, 'bool',
-        FEngines[AEngineIndex].Params[I].Value, False);
-      RemoveEngineParam(FEngines[AEngineIndex].Params,
-        OldSingleCapturesIncludeCapturedSquareParamName);
-      Exit;
-    end;
-  AddOrUpdateParam(FEngines[AEngineIndex].Params,
-    SingleCapturesIncludeCapturedSquareParamName, 'bool', 'true', True);
+  SyncEngineParamWithLegacy(FEngines[AEngineIndex].Params,
+    SingleCapturesIncludeCapturedSquareParamName,
+    OldSingleCapturesIncludeCapturedSquareParamName, 'bool', 'true');
 end;
 
 procedure TMainWindow.RemoveAnalyzeSendsInfoParam(AEngineIndex: Integer);
@@ -8115,258 +6506,138 @@ begin
 end;
 
 procedure TMainWindow.SyncEvaluationDepthMinParam(AEngineIndex: Integer);
-var
-  I: Integer;
 begin
   if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
     Exit;
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-    if SameText(FEngines[AEngineIndex].Params[I].Name,
-      OldEvaluationDepthMinParamName) then
-    begin
-      AddOrUpdateParam(FEngines[AEngineIndex].Params,
-        EvaluationDepthMinParamName, 'int',
-        FEngines[AEngineIndex].Params[I].Value, False);
-      RemoveEngineParam(FEngines[AEngineIndex].Params,
-        OldEvaluationDepthMinParamName);
-      Exit;
-    end;
-  AddOrUpdateParam(FEngines[AEngineIndex].Params, EvaluationDepthMinParamName,
-    'int', '4', True);
+  SyncEngineParamWithLegacy(FEngines[AEngineIndex].Params,
+    EvaluationDepthMinParamName, OldEvaluationDepthMinParamName, 'int', '4');
 end;
 
 procedure TMainWindow.SyncEvaluationBarMaxParam(AEngineIndex: Integer);
-var
-  I: Integer;
 begin
   if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
     Exit;
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-    if SameText(FEngines[AEngineIndex].Params[I].Name,
-      OldEvaluationBarMaxParamName) then
-    begin
-      AddOrUpdateParam(FEngines[AEngineIndex].Params,
-        EvaluationBarMaxParamName, 'int',
-        FEngines[AEngineIndex].Params[I].Value, False);
-      RemoveEngineParam(FEngines[AEngineIndex].Params,
-        OldEvaluationBarMaxParamName);
-      Exit;
-    end;
-  AddOrUpdateParam(FEngines[AEngineIndex].Params, EvaluationBarMaxParamName,
-    'int', '1000', True);
+  SyncEngineParamWithLegacy(FEngines[AEngineIndex].Params,
+    EvaluationBarMaxParamName, OldEvaluationBarMaxParamName, 'int', '1000');
 end;
 
 procedure TMainWindow.LoadHubLaunchArgumentFromParams(AEngineIndex: Integer);
 var
-  I: Integer;
-  OldBoolValue: String;
-  Value: String;
+  Config: TEngineProtocolConfig;
 begin
-  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+  if not EngineSlotIndexValid(AEngineIndex) then
     Exit;
 
-  FEngines[AEngineIndex].Protocol := epHub;
-  FEngines[AEngineIndex].HubId := 'Hub' + IntToStr(AEngineIndex);
-  FEngines[AEngineIndex].IniFileName := '';
-  FEngines[AEngineIndex].HubLaunchArgument := '';
-  FEngines[AEngineIndex].DxpId := 'DXP' + IntToStr(AEngineIndex);
-  FEngines[AEngineIndex].DxpIpAddress := DxpDefaultIp;
-  FEngines[AEngineIndex].DxpSocketNumber := DxpDefaultSocket;
-  FEngines[AEngineIndex].DxpLaunchArguments := '';
-  FEngines[AEngineIndex].DxpRole := edrListener;
-
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-  begin
-    Value := FEngines[AEngineIndex].Params[I].Value;
-    if SameText(FEngines[AEngineIndex].Params[I].Name, EngineTypeParamName) then
-    begin
-      if SameText(Value, 'dxp') then
-        FEngines[AEngineIndex].Protocol := epDxp
-      else
-        FEngines[AEngineIndex].Protocol := epHub;
-    end
-    else if SameText(FEngines[AEngineIndex].Params[I].Name,
-      HubIdParamName) then
-      FEngines[AEngineIndex].HubId := Trim(Value)
-    else if SameText(FEngines[AEngineIndex].Params[I].Name,
-      EngineIniFileParamName) then
-      FEngines[AEngineIndex].IniFileName := Trim(Value)
-    else if SameText(FEngines[AEngineIndex].Params[I].Name,
-      DxpIdParamName) then
-      FEngines[AEngineIndex].DxpId := Trim(Value)
-    else if SameText(FEngines[AEngineIndex].Params[I].Name,
-      DxpIpParamName) and (Trim(Value) <> '') then
-      FEngines[AEngineIndex].DxpIpAddress := Trim(Value)
-    else if SameText(FEngines[AEngineIndex].Params[I].Name,
-      DxpSocketParamName) and (Trim(Value) <> '') then
-      FEngines[AEngineIndex].DxpSocketNumber := Trim(Value)
-    else if SameText(FEngines[AEngineIndex].Params[I].Name,
-      DxpLaunchArgumentsParamName) then
-      FEngines[AEngineIndex].DxpLaunchArguments := Value
-    else if SameText(FEngines[AEngineIndex].Params[I].Name,
-      DxpRoleParamName) then
-    begin
-      if SameText(Value, 'client') or SameText(Value, 'connect') then
-        FEngines[AEngineIndex].DxpRole := edrClient
-      else
-        FEngines[AEngineIndex].DxpRole := edrListener;
-    end;
-  end;
-
-  if Trim(FEngines[AEngineIndex].HubId) = '' then
-    FEngines[AEngineIndex].HubId := 'Hub' + IntToStr(AEngineIndex);
-  if Trim(FEngines[AEngineIndex].DxpId) = '' then
-    FEngines[AEngineIndex].DxpId := 'DXP' + IntToStr(AEngineIndex);
-
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-    if SameText(FEngines[AEngineIndex].Params[I].Name,
-      HubLaunchArgumentParamName) then
-    begin
-      FEngines[AEngineIndex].HubLaunchArgument := FEngines[AEngineIndex].Params[I].Value;
-      SyncHubLaunchArgumentParam(AEngineIndex);
-      Exit;
-    end;
-
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-    if SameText(FEngines[AEngineIndex].Params[I].Name,
-      OldHubLaunchArgumentParamName) then
-    begin
-      FEngines[AEngineIndex].HubLaunchArgument := FEngines[AEngineIndex].Params[I].Value;
-      SyncHubLaunchArgumentParam(AEngineIndex);
-      Exit;
-    end;
-
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-    if SameText(FEngines[AEngineIndex].Params[I].Name,
-      OldLaunchWithHubArgumentParamName) then
-    begin
-      OldBoolValue := FEngines[AEngineIndex].Params[I].Value;
-      if SameText(OldBoolValue, 'true') then
-        FEngines[AEngineIndex].HubLaunchArgument := 'hub'
-      else
-        FEngines[AEngineIndex].HubLaunchArgument := '';
-      SyncHubLaunchArgumentParam(AEngineIndex);
-      Exit;
-    end;
-
+  Config := LoadEngineProtocolConfig(FEngines[AEngineIndex].Params,
+    AEngineIndex);
+  ApplyEngineSlotProtocolConfig(AEngineIndex, Config);
   SyncHubLaunchArgumentParam(AEngineIndex);
 end;
 
-function TMainWindow.EngineSendStartingPosition(AEngineIndex: Integer): Boolean;
-var
-  I: Integer;
+procedure TMainWindow.ApplyEngineSlotProtocolConfig(AEngineIndex: Integer;
+  const AConfig: TEngineProtocolConfig);
 begin
-  Result := True;
-  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+  if not EngineSlotIndexValid(AEngineIndex) then
     Exit;
 
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-    if SameText(FEngines[AEngineIndex].Params[I].Name,
-      SendStartingPositionParamName) then
-    begin
-      Result := not SameText(FEngines[AEngineIndex].Params[I].Value, 'false');
-      Exit;
-    end;
+  FEngines[AEngineIndex].Protocol := AConfig.Protocol;
+  FEngines[AEngineIndex].HubId := AConfig.HubId;
+  FEngines[AEngineIndex].IniFileName := AConfig.IniFileName;
+  FEngines[AEngineIndex].HubLaunchArgument := AConfig.HubLaunchArgument;
+  FEngines[AEngineIndex].DxpId := AConfig.DxpId;
+  FEngines[AEngineIndex].DxpIpAddress := AConfig.DxpIpAddress;
+  FEngines[AEngineIndex].DxpSocketNumber := AConfig.DxpSocketNumber;
+  FEngines[AEngineIndex].DxpLaunchArguments := AConfig.DxpLaunchArguments;
+  FEngines[AEngineIndex].DxpRole := AConfig.DxpRole;
+end;
+
+procedure TMainWindow.ResetEngineSlotProtocolConfig(AEngineIndex: Integer);
+begin
+  ApplyEngineSlotProtocolConfig(AEngineIndex,
+    DefaultEngineProtocolConfig(AEngineIndex));
+end;
+
+function TMainWindow.EngineSlotParamValue(AEngineIndex: Integer; const AName,
+  ADefault: String): String;
+begin
+  Result := ADefault;
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  Result := EngineConfigParamValue(FEngines[AEngineIndex].Params, AName,
+    ADefault);
+end;
+
+function TMainWindow.EngineSlotParamBool(AEngineIndex: Integer;
+  const AName: String; ADefault: Boolean): Boolean;
+begin
+  Result := ADefault;
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  Result := EngineConfigParamBool(FEngines[AEngineIndex].Params, AName,
+    ADefault);
+end;
+
+function TMainWindow.EngineSlotParamInt(AEngineIndex: Integer;
+  const AName: String; ADefault: Integer): Integer;
+begin
+  Result := ADefault;
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  Result := EngineConfigParamInt(FEngines[AEngineIndex].Params, AName,
+    ADefault);
+end;
+
+function TMainWindow.EngineSlotParamFloat(AEngineIndex: Integer;
+  const AName: String; ADefault: Double): Double;
+begin
+  Result := ADefault;
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  Result := EngineConfigParamFloat(FEngines[AEngineIndex].Params, AName,
+    ADefault);
+end;
+
+function TMainWindow.EngineSendStartingPosition(AEngineIndex: Integer): Boolean;
+begin
+  Result := EngineSlotParamBool(AEngineIndex, SendStartingPositionParamName,
+    True);
 end;
 
 function TMainWindow.EngineSingleCapturesIncludeCapturedSquare(
   AEngineIndex: Integer): Boolean;
-var
-  I: Integer;
 begin
-  Result := True;
-  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
-    Exit;
-
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-    if SameText(FEngines[AEngineIndex].Params[I].Name,
-      SingleCapturesIncludeCapturedSquareParamName) then
-    begin
-      Result := not SameText(FEngines[AEngineIndex].Params[I].Value, 'false');
-      Exit;
-    end;
+  Result := EngineSlotParamBool(AEngineIndex,
+    SingleCapturesIncludeCapturedSquareParamName, True);
 end;
 
 function TMainWindow.EngineSupportsMcts(AEngineIndex: Integer): Boolean;
-var
-  I: Integer;
 begin
-  Result := False;
-  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
-    Exit;
-
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-    if SameText(FEngines[AEngineIndex].Params[I].Name,
-      EngineSupportsMctsParamName) then
-    begin
-      Result := SameText(FEngines[AEngineIndex].Params[I].Value, 'true');
-      Exit;
-    end;
+  Result := EngineSlotParamBool(AEngineIndex, EngineSupportsMctsParamName,
+    False);
 end;
 
 function TMainWindow.EngineScorePerspective(AEngineIndex: Integer): String;
-var
-  I: Integer;
 begin
-  Result := 'side-to-move';
-  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
-    Exit;
-
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-    if SameText(FEngines[AEngineIndex].Params[I].Name,
-      ScorePerspectiveParamName) then
-    begin
-      Result := LowerCase(Trim(FEngines[AEngineIndex].Params[I].Value));
-      if Result = '' then
-        Result := 'side-to-move';
-      Exit;
-    end;
+  Result := LowerCase(Trim(EngineSlotParamValue(AEngineIndex,
+    ScorePerspectiveParamName, 'side-to-move')));
+  if Result = '' then
+    Result := 'side-to-move';
 end;
 
 function TMainWindow.EngineEvaluationDepthMin(AEngineIndex: Integer): Double;
-var
-  FormatSettings: TFormatSettings;
-  I: Integer;
-  Value: Double;
 begin
-  Result := 4.0;
-  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
-    Exit;
-
-  FormatSettings := DefaultFormatSettings;
-  FormatSettings.DecimalSeparator := '.';
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-    if SameText(FEngines[AEngineIndex].Params[I].Name,
-      EvaluationDepthMinParamName) then
-    begin
-      if TryStrToFloat(FEngines[AEngineIndex].Params[I].Value, Value,
-        FormatSettings) and (Value >= 0.0) then
-        Result := Value;
-      Exit;
-    end;
+  Result := EngineSlotParamFloat(AEngineIndex, EvaluationDepthMinParamName, 4.0);
+  if Result < 0.0 then
+    Result := 4.0;
 end;
 
 function TMainWindow.EngineEvaluationBarMax(AEngineIndex: Integer): Double;
-var
-  FormatSettings: TFormatSettings;
-  I: Integer;
-  Value: Double;
 begin
-  Result := EvalBarDefaultMaxScore;
-  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
-    Exit;
-
-  FormatSettings := DefaultFormatSettings;
-  FormatSettings.DecimalSeparator := '.';
-  for I := 0 to High(FEngines[AEngineIndex].Params) do
-    if SameText(FEngines[AEngineIndex].Params[I].Name,
-      EvaluationBarMaxParamName) then
-    begin
-      if TryStrToFloat(FEngines[AEngineIndex].Params[I].Value, Value,
-        FormatSettings) and (Value > 0.0) then
-        Result := Value;
-      Exit;
-    end;
+  Result := EngineSlotParamFloat(AEngineIndex, EvaluationBarMaxParamName,
+    EvalBarDefaultMaxScore);
+  if Result <= 0.0 then
+    Result := EvalBarDefaultMaxScore;
 end;
 
 function TMainWindow.EngineLogName(AEngineIndex: Integer): String;
@@ -8382,24 +6653,6 @@ begin
       Result := 'Engine';
 end;
 
-function TMainWindow.EngineStateLogText(AState: TEngineState): String;
-begin
-  if AState = esWaitingForOtherEngine then
-    Result := 'wait for ' + PlayerNameToMove
-  else
-    Result := EngineStateText(AState);
-end;
-
-procedure TMainWindow.SetEngineState(AState: TEngineState);
-begin
-  SetEngineSlotState(1, AState);
-end;
-
-procedure TMainWindow.SetSecondEngineState(AState: TEngineState);
-begin
-  SetEngineSlotState(2, AState);
-end;
-
 procedure TMainWindow.SetGuiState(AState: TGuiState; const AReason: String);
 var
   Line: String;
@@ -8412,16 +6665,124 @@ begin
   if OldState <> AState then
     Line += ' -> ' + GuiStateText(AState);
   Line += '; ' + EngineLogName(1) + ': ' +
-    EngineStateLogText(FEngines[1].State);
+    EngineStateLogText(FEngines[1].State, PlayerNameToMove);
   Line += '; ' + EngineLogName(2) + ': ' +
-    EngineStateLogText(FEngines[2].State);
+    EngineStateLogText(FEngines[2].State, PlayerNameToMove);
   if AReason <> '' then
     Line += '; reason=' + AReason;
   Line += ']' + LineEnding;
 
-  AppendEngineLog(Line);
+  AppendEngineSlotLog(1, Line);
   if SecondEngineIsRunning then
-    AppendEngine2Log(Line);
+    AppendEngineSlotLog(2, Line);
+end;
+
+function TMainWindow.EngineSlotPendingAction(
+  AEngineIndex: Integer): TPendingEngineAction;
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit(peaNone);
+
+  Result := FEngines[AEngineIndex].PendingAction;
+end;
+
+procedure TMainWindow.ClearEngineSlotPendingAction(AEngineIndex: Integer);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  FEngines[AEngineIndex].PendingAction := peaNone;
+  FEngines[AEngineIndex].PendingMode := esmIdle;
+end;
+
+procedure TMainWindow.SetEngineSlotPendingAction(AEngineIndex: Integer;
+  AAction: TPendingEngineAction; AMode: TEngineSearchMode);
+var
+  OldAction: TPendingEngineAction;
+  LogLine: String;
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  OldAction := EngineSlotPendingAction(AEngineIndex);
+  FEngines[AEngineIndex].PendingAction := AAction;
+  FEngines[AEngineIndex].PendingMode := AMode;
+  if OldAction <> AAction then
+  begin
+    LogLine := '[' + EngineLogName(AEngineIndex) + ' pending action: ' +
+      PendingEngineActionText(OldAction) + ' -> ' +
+      PendingEngineActionText(AAction) + '; GUI: ' + GuiStateText(FGuiState) +
+      ']' + LineEnding;
+    AppendEngineSlotLog(AEngineIndex, LogLine);
+  end;
+end;
+
+procedure TMainWindow.RequestEngineSlotActionAfterStop(AEngineIndex: Integer;
+  AAction: TPendingEngineAction; AMode: TEngineSearchMode;
+  const AReason: String);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  SetEngineSlotPendingAction(AEngineIndex, AAction, AMode);
+  if AReason <> '' then
+    AppendEngineSlotLog(AEngineIndex, '[' + AReason + ']' + LineEnding);
+  SendStopToEngineSlot(AEngineIndex);
+end;
+
+function TMainWindow.RunPendingEngineSlotAction(AEngineIndex: Integer;
+  const AStoppedMoveText: String): Boolean;
+var
+  PendingAction: TPendingEngineAction;
+  PendingMode: TEngineSearchMode;
+begin
+  Result := False;
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  PendingAction := EngineSlotPendingAction(AEngineIndex);
+  if PendingAction = peaNone then
+    Exit;
+
+  PendingMode := FEngines[AEngineIndex].PendingMode;
+  if AEngineIndex = 1 then
+  begin
+    FEngines[1].IgnoreNextDoneMove := False;
+  end
+  else
+    FEngines[AEngineIndex].IgnoreNextDoneMove := False;
+
+  FinishEngineSlotSearch(AEngineIndex);
+  if AStoppedMoveText <> '' then
+    AppendEngineSlotLog(AEngineIndex, '[ignored previous-search move ' +
+      AStoppedMoveText + ']' + LineEnding)
+  else
+    AppendEngineSlotLog(AEngineIndex, '[previous search stopped]' +
+      LineEnding);
+
+  ClearEngineSlotPendingAction(AEngineIndex);
+  case PendingAction of
+    peaAutoPlay:
+      if AEngineIndex = 1 then
+        BeginAutoPlay;
+    peaAnalyze:
+      if AEngineIndex = 1 then
+        SendGoAnalyzeToEngine(PendingMode)
+      else
+        SendGoAnalyzeToEngineSlot(2, PendingMode);
+    peaMcts:
+      SendGoMctsToEngine;
+    peaThink:
+      SendGoThinkToEngineSlot(AEngineIndex, PendingMode);
+    peaPlayGame:
+      if AEngineIndex = 1 then
+        BeginPlayGame(FPendingPlayGameWhiteIsEngine,
+          FPendingPlayGameBlackIsEngine, FPendingPlayGameWhiteName,
+          FPendingPlayGameBlackName, FPendingPlayGameMinutes,
+          FPendingPlayGameFromCurrent, True, FPendingPlayGameWhiteEngineIndex,
+          FPendingPlayGameBlackEngineIndex);
+  end;
+  Result := True;
 end;
 
 procedure TMainWindow.SetEngineSlotState(AEngineIndex: Integer;
@@ -8440,14 +6801,10 @@ begin
   OldState := Slot.State;
   Slot.State := AState;
   UpdateEngineStateLabels;
-  if AEngineIndex = 2 then
-    AppendEngine2Log('[' + EngineLogName(AEngineIndex) + ' state: ' +
-      EngineStateLogText(OldState) + ' -> ' + EngineStateLogText(Slot.State) +
-      '; GUI: ' + GuiStateText(FGuiState) + ']' + LineEnding)
-  else
-    AppendEngineLog('[' + EngineLogName(AEngineIndex) + ' state: ' +
-      EngineStateLogText(OldState) + ' -> ' + EngineStateLogText(Slot.State) +
-      '; GUI: ' + GuiStateText(FGuiState) + ']' + LineEnding);
+  AppendEngineSlotLog(AEngineIndex, '[' + EngineLogName(AEngineIndex) +
+    ' state: ' + EngineStateLogText(OldState, PlayerNameToMove) + ' -> ' +
+    EngineStateLogText(Slot.State, PlayerNameToMove) + '; GUI: ' + GuiStateText(FGuiState) +
+    ']' + LineEnding);
 end;
 
 procedure TMainWindow.BeginEngineSlotSearch(AEngineIndex: Integer;
@@ -8465,14 +6822,10 @@ begin
   if OldState <> AState then
   begin
     UpdateEngineStateLabels;
-    if AEngineIndex = 2 then
-      AppendEngine2Log('[' + EngineLogName(AEngineIndex) + ' state: ' +
-        EngineStateLogText(OldState) + ' -> ' + EngineStateLogText(Slot.State) +
-        '; GUI: ' + GuiStateText(FGuiState) + ']' + LineEnding)
-    else
-      AppendEngineLog('[' + EngineLogName(AEngineIndex) + ' state: ' +
-        EngineStateLogText(OldState) + ' -> ' + EngineStateLogText(Slot.State) +
-        '; GUI: ' + GuiStateText(FGuiState) + ']' + LineEnding);
+    AppendEngineSlotLog(AEngineIndex, '[' + EngineLogName(AEngineIndex) +
+      ' state: ' + EngineStateLogText(OldState, PlayerNameToMove) + ' -> ' +
+      EngineStateLogText(Slot.State, PlayerNameToMove) + '; GUI: ' + GuiStateText(FGuiState) +
+      ']' + LineEnding);
   end;
 end;
 
@@ -8488,14 +6841,9 @@ begin
   Slot.FinishSearch;
   UpdateEngineStateLabels;
   if OldState <> esIdle then
-    if AEngineIndex = 2 then
-      AppendEngine2Log('[' + EngineLogName(AEngineIndex) + ' state: ' +
-        EngineStateLogText(OldState) + ' -> idle; GUI: ' +
-        GuiStateText(FGuiState) + ']' + LineEnding)
-    else
-      AppendEngineLog('[' + EngineLogName(AEngineIndex) + ' state: ' +
-        EngineStateLogText(OldState) + ' -> idle; GUI: ' +
-        GuiStateText(FGuiState) + ']' + LineEnding);
+    AppendEngineSlotLog(AEngineIndex, '[' + EngineLogName(AEngineIndex) +
+      ' state: ' + EngineStateLogText(OldState, PlayerNameToMove) + ' -> idle; GUI: ' +
+      GuiStateText(FGuiState) + ']' + LineEnding);
 end;
 
 procedure TMainWindow.ResetEngineSlotRuntime(AEngineIndex: Integer);
@@ -8506,45 +6854,97 @@ begin
   UpdateEngineStateLabels;
 end;
 
-function TMainWindow.DxpGameStateText(AState: TDxpGameState): String;
-begin
-  case AState of
-    dgsIdle: Result := 'idle';
-    dgsGameRequested: Result := 'game requested';
-    dgsWaitingForMoveOrGameEnd: Result := 'waiting for DXP_MOVE or DXP_GAMEEND';
-    dgsGameEnding: Result := 'game ending';
-    dgsWaitingForNextGame: Result := 'waiting for DXP_GAMEREQ';
-  else
-    Result := 'unknown';
-  end;
-end;
-
 procedure TMainWindow.SetDxpGameState(AEngineIndex: Integer;
-  AState: TDxpGameState);
+  AState: TDxpGameState; const AReason: String);
 var
+  LogText: String;
+  OldState: TDxpGameState;
   Slot: TEngineSlot;
 begin
   if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
     Exit;
   Slot := FEngines[AEngineIndex];
   if Slot.DxpGameState = AState then
+  begin
+    if AReason <> '' then
+      AppendEngineSlotLog(AEngineIndex, '[DXP state: ' +
+        DxpGameStateText(AState) + '; reason=' + AReason + ']' +
+        LineEnding);
     Exit;
+  end;
 
+  OldState := Slot.DxpGameState;
   Slot.DxpGameState := AState;
-  if AEngineIndex = 2 then
-    AppendEngine2Log('[DXP state: ' + DxpGameStateText(AState) + ']' +
-      LineEnding)
-  else
-    AppendEngineLog('[DXP state: ' + DxpGameStateText(AState) + ']' +
-      LineEnding);
+  LogText := '[DXP state: ' + DxpGameStateText(OldState) + ' -> ' +
+    DxpGameStateText(AState) + '; GUI: ' + GuiStateText(FGuiState);
+  if AReason <> '' then
+    LogText += '; reason=' + AReason;
+  LogText += ']' + LineEnding;
+  AppendEngineSlotLog(AEngineIndex, LogText);
+end;
+
+procedure TMainWindow.BeginDxpGameRequest(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  FEngines[AEngineIndex].DxpGameEndSent := False;
+  SetDxpGameState(AEngineIndex, dgsGameRequested, 'GAMEREQ build started');
+end;
+
+procedure TMainWindow.CancelDxpGameRequest(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  SetDxpGameState(AEngineIndex, dgsIdle, 'GAMEREQ cancelled');
+end;
+
+procedure TMainWindow.MarkDxpWaitingForProtocolReply(AEngineIndex: Integer;
+  const AReason: String; const ALogText: String);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  SetDxpGameState(AEngineIndex, dgsWaitingForMoveOrGameEnd, AReason);
+  if ALogText <> '' then
+    AppendEngineSlotLog(AEngineIndex, ALogText + LineEnding);
+end;
+
+procedure TMainWindow.MarkDxpGameRequestSent(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  SetDxpGameState(AEngineIndex, dgsGameRequested,
+    'GAMEREQ sent; waiting for DXP_GAMEACC');
+  AppendEngineSlotLog(AEngineIndex, '[Waiting for DXP_GAMEACC]' + LineEnding);
+end;
+
+procedure TMainWindow.MarkDxpMoveSent(AEngineIndex: Integer);
+begin
+  MarkDxpWaitingForProtocolReply(AEngineIndex, 'MOVE sent');
+end;
+
+procedure TMainWindow.MarkDxpGameEndSent(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  FEngines[AEngineIndex].DxpGameEndSent := True;
+  SetDxpGameState(AEngineIndex, dgsGameEnding, 'GAMEEND sent');
+end;
+
+procedure TMainWindow.MarkDxpGameEndArrived(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  FinishEngineSlotSearch(AEngineIndex);
+  SetDxpGameState(AEngineIndex, dgsWaitingForNextGame, 'GAMEEND received');
+  AppendEngineSlotLog(AEngineIndex, '[DXP_GAMEEND received]' + LineEnding);
 end;
 
 procedure TMainWindow.MarkDxpWaitingForReply(AEngineIndex: Integer;
-  AMode: TEngineSearchMode);
+  AMode: TEngineSearchMode; const AReason: String);
 begin
   if AMode = esmPlayGameThink then
     ActivateGameClocks;
-  SetDxpGameState(AEngineIndex, dgsWaitingForMoveOrGameEnd);
+  MarkDxpWaitingForProtocolReply(AEngineIndex, AReason);
   BeginEngineSlotSearch(AEngineIndex, AMode, esThinking);
 end;
 
@@ -8561,6 +6961,118 @@ begin
     Result := FAutoPlayActive
   else
     Result := FPlayGameActive;
+end;
+
+function TMainWindow.DxpShouldAcceptGameEnd(AEngineIndex: Integer): Boolean;
+begin
+  Result := False;
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  if FEngines[AEngineIndex].DxpGameState = dgsGameEnding then
+    Exit(True);
+
+  Result := (FEngines[AEngineIndex].DxpGameState =
+    dgsWaitingForMoveOrGameEnd) and
+    (FEngines[AEngineIndex].SearchMode <> esmIdle);
+end;
+
+procedure TMainWindow.ClearEngineTiming(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  FEngines[AEngineIndex].DxpTimingActive := False;
+  FEngines[AEngineIndex].DxpTimingLabel := '';
+  FEngines[AEngineIndex].DxpTimingSendClockSeconds := 0;
+  FEngines[AEngineIndex].DxpTimingSendWallSeconds := 0;
+end;
+
+procedure TMainWindow.StoreEngineTimingStart(AEngineIndex: Integer;
+  const ALabel: String);
+var
+  Slot: TEngineSlot;
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  Slot := FEngines[AEngineIndex];
+  Slot.DxpTimingActive := True;
+  Slot.DxpTimingLabel := ALabel;
+  Slot.DxpTimingSendSide := FSideToMove;
+  Slot.DxpTimingSendWallSeconds := PlatformTimestampSeconds;
+  if FPlayClock <> nil then
+    Slot.DxpTimingSendClockSeconds := FPlayClock.SecondsForSide(FSideToMove)
+  else
+    Slot.DxpTimingSendClockSeconds := 0;
+end;
+
+procedure TMainWindow.StoreDxpTimingStart(AEngineIndex: Integer;
+  const ALabel: String);
+begin
+  StoreEngineTimingStart(AEngineIndex, ALabel);
+end;
+
+procedure TMainWindow.LogEngineTimingDiagnostic(AEngineIndex: Integer;
+  const AProtocolName, AReceivedMessage: String; AReceivedAtSeconds: Double);
+var
+  ClockDelta: Double;
+  ClockText: String;
+  ReceiveClock: Double;
+  ReceiveSeconds: Double;
+  SideText: String;
+  Slot: TEngineSlot;
+  WallDelta: Double;
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  Slot := FEngines[AEngineIndex];
+  if not Slot.DxpTimingActive then
+    Exit;
+
+  ReceiveSeconds := AReceivedAtSeconds;
+  if ReceiveSeconds <= 0 then
+    ReceiveSeconds := PlatformTimestampSeconds;
+  WallDelta := ReceiveSeconds - Slot.DxpTimingSendWallSeconds;
+  if WallDelta < 0 then
+    WallDelta := 0;
+
+  if FPlayClock <> nil then
+    ReceiveClock := FPlayClock.SecondsForSideAt(Slot.DxpTimingSendSide,
+      FSideToMove, ReceiveSeconds)
+  else
+    ReceiveClock := 0;
+  ClockDelta := Slot.DxpTimingSendClockSeconds - ReceiveClock;
+  if ClockDelta < 0 then
+    ClockDelta := 0;
+
+  if Slot.DxpTimingSendSide = sideWhite then
+    SideText := 'white'
+  else
+    SideText := 'black';
+
+  if FPlayGameActive and (FPlayClock <> nil) then
+    ClockText := '; ' + SideText + ' clock send=' +
+      FormatFloat('0.000', Slot.DxpTimingSendClockSeconds) +
+      ' recv=' + FormatFloat('0.000', ReceiveClock) +
+      ' delta=' + FormatFloat('0.000', ClockDelta)
+  else
+    ClockText := '; ' + SideText +
+      ' clock delta unavailable: game clock no longer active';
+
+  AppendEngineSlotLog(AEngineIndex, '[' + AProtocolName + ' timing: sent ' +
+    Slot.DxpTimingLabel + '; received ' + AReceivedMessage +
+    '; wall send=' + FormatFloat('0.000', Slot.DxpTimingSendWallSeconds) +
+    ' recv=' + FormatFloat('0.000', ReceiveSeconds) +
+    ' delta=' + FormatFloat('0.000', WallDelta) + ClockText + ']' +
+    LineEnding);
+end;
+
+procedure TMainWindow.LogDxpTimingDiagnostic(AEngineIndex: Integer;
+  const AReceivedMessage: String; AReceivedAtSeconds: Double);
+begin
+  LogEngineTimingDiagnostic(AEngineIndex, 'DXP', AReceivedMessage,
+    AReceivedAtSeconds);
 end;
 
 function TMainWindow.DxpListenerPortInUse(AEngineIndex: Integer;
@@ -8580,7 +7092,7 @@ begin
     if (I <> AEngineIndex) and (FEngines[I] <> nil) and
       (FEngines[I].Protocol = epDxp) and
       (FEngines[I].DxpRole = edrClient) and
-      ((FEngines[I].DxpThread <> nil) or (FEngines[I].DxpSocket <> nil)) and
+      EngineSlotDxpConnectionActive(I) and
       SameText(FEngines[I].DxpIpAddress, FEngines[AEngineIndex].DxpIpAddress) and
       (StrToIntDef(FEngines[I].DxpSocketNumber, 0) =
        StrToIntDef(FEngines[AEngineIndex].DxpSocketNumber, 0)) then
@@ -8611,10 +7123,7 @@ begin
   begin
     LogText := '[invalid DXP socket: ' + FEngines[AEngineIndex].DxpSocketNumber +
       ']' + LineEnding;
-    if AEngineIndex = 2 then
-      AppendEngine2Log(LogText)
-    else
-      AppendEngineLog(LogText);
+    AppendEngineSlotLog(AEngineIndex, LogText);
     Exit;
   end;
 
@@ -8623,31 +7132,30 @@ begin
     LogText := '[' + EngineLogName(OtherEngineIndex) +
       ' has already been configured for DXP port ' + IntToStr(Port) +
       '. Please select another port]' + LineEnding;
-    if AEngineIndex = 2 then
-      AppendEngine2Log(LogText)
-    else
-      AppendEngineLog(LogText);
+    AppendEngineSlotLog(AEngineIndex, LogText);
     Exit;
   end;
 
   FEngines[AEngineIndex].Ready := False;
-  FEngines[AEngineIndex].DxpThread := TEngineDxpConnectionThread.Create(Self,
+  FEngines[AEngineIndex].DxpThread := TEngineDxpConnectionThread.Create(
     AEngineIndex, FEngines[AEngineIndex].DxpIpAddress, Word(Port),
-    FEngines[AEngineIndex].DxpRole);
+    FEngines[AEngineIndex].DxpRole, @DxpConnectionMessage,
+    @DxpConnectionConnected, @DxpConnectionError,
+    @DxpConnectionAttemptFailed);
 
   if FEngines[AEngineIndex].DxpRole = edrClient then
   begin
     for I := 1 to 200 do
     begin
       if (FEngines[AEngineIndex].DxpThread = nil) or
-        FEngines[AEngineIndex].DxpThread.Listening then
+        TEngineDxpConnectionThread(FEngines[AEngineIndex].DxpThread).Listening then
         Break;
       CheckSynchronize(0);
       Sleep(25);
     end;
 
     if (FEngines[AEngineIndex].DxpThread <> nil) and
-      FEngines[AEngineIndex].DxpThread.Listening then
+      TEngineDxpConnectionThread(FEngines[AEngineIndex].DxpThread).Listening then
     begin
       LogText := '[listening for DXP socket connection on 0.0.0.0:' +
         IntToStr(Port) + ' target-ip=' + FEngines[AEngineIndex].DxpIpAddress +
@@ -8658,10 +7166,7 @@ begin
     begin
       LogText := '[DXP listener did not confirm listening on 0.0.0.0:' +
         IntToStr(Port) + ']' + LineEnding;
-      if AEngineIndex = 2 then
-        AppendEngine2Log(LogText)
-      else
-        AppendEngineLog(LogText);
+      AppendEngineSlotLog(AEngineIndex, LogText);
       StopDxpConnection(AEngineIndex);
       Exit;
     end;
@@ -8674,10 +7179,7 @@ begin
     Result := True;
   end;
 
-  if AEngineIndex = 2 then
-    AppendEngine2Log(LogText)
-  else
-    AppendEngineLog(LogText);
+  AppendEngineSlotLog(AEngineIndex, LogText);
 end;
 
 procedure TMainWindow.StopDxpConnection(AEngineIndex: Integer);
@@ -8685,132 +7187,69 @@ begin
   if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
     Exit;
 
-  if (FEngines[AEngineIndex].DxpThread <> nil) or
-    (FEngines[AEngineIndex].DxpSocket <> nil) then
-    if AEngineIndex = 2 then
-      AppendEngine2Log('[stopping DXP connection]' + LineEnding)
-    else
-      AppendEngineLog('[stopping DXP connection]' + LineEnding);
+  if EngineSlotDxpConnectionActive(AEngineIndex) then
+    AppendEngineSlotLog(AEngineIndex, '[stopping DXP connection]' +
+      LineEnding);
 
   if FEngines[AEngineIndex].DxpThread <> nil then
   begin
-    FEngines[AEngineIndex].DxpThread.StopConnection;
+    TEngineDxpConnectionThread(FEngines[AEngineIndex].DxpThread).StopConnection;
     FEngines[AEngineIndex].DxpThread.WaitFor;
     FreeAndNil(FEngines[AEngineIndex].DxpThread);
   end;
 
-  if FEngines[AEngineIndex].DxpSocket <> nil then
-    FreeAndNil(FEngines[AEngineIndex].DxpSocket);
-  SetDxpGameState(AEngineIndex, dgsIdle);
+  CloseDxpSocket(AEngineIndex, '');
+  SetDxpGameState(AEngineIndex, dgsIdle, 'DXP connection stopped');
+end;
+
+procedure TMainWindow.StartDxpGameForSlot(AEngineIndex: Integer;
+  AEngineSide: TSide; AGameMinutes: Double);
+begin
+  if not EngineIsDxp(AEngineIndex) then
+    Exit;
+  SendDxpGameReqToEngine(AEngineIndex, AEngineSide, AGameMinutes);
+end;
+
+procedure TMainWindow.StartDxpPlayGameSessions(AGameMinutes: Double);
+begin
+  if FPlayGameWhiteIsEngine then
+    StartDxpGameForSlot(FPlayGameWhiteEngineIndex, sideWhite, AGameMinutes);
+  if FPlayGameBlackIsEngine and
+    (FPlayGameBlackEngineIndex <> FPlayGameWhiteEngineIndex) then
+    StartDxpGameForSlot(FPlayGameBlackEngineIndex, sideBlack, AGameMinutes);
 end;
 
 procedure TMainWindow.SendDxpGameReqToEngine(AEngineIndex: Integer;
   AEngineSide: TSide; AGameMinutes: Double);
 var
-  BoardText: String;
-  EngineColourText: Char;
-  GameMoves: Integer;
-  GameTime: Integer;
-  I: Integer;
+  Gate: TEngineCommandGate;
   MessageText: String;
-  NameText: String;
-  PieceText: Char;
-  SideText: Char;
-
-  function ParamInt(const AName: String; ADefault: Integer): Integer;
-  var
-    P: Integer;
-  begin
-    Result := ADefault;
-    for P := 0 to High(FEngines[AEngineIndex].Params) do
-      if SameText(FEngines[AEngineIndex].Params[P].Name, AName) then
-      begin
-        Result := StrToIntDef(FEngines[AEngineIndex].Params[P].Value, ADefault);
-        Exit;
-      end;
-  end;
-
-  function Dxp3(AValue: Integer): String;
-  begin
-    if AValue < 0 then
-      AValue := 0;
-    if AValue > 999 then
-      AValue := 999;
-    Result := Format('%.3d', [AValue]);
-  end;
 begin
-  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
-    Exit;
-  if not EngineIsDxp(AEngineIndex) then
-    Exit;
-  FEngines[AEngineIndex].DxpGameEndSent := False;
-  SetDxpGameState(AEngineIndex, dgsGameRequested);
+  Gate := EngineSlotCanSendDxpPacket(AEngineIndex, 'DXP_GAMEREQ');
+  BeginDxpGameRequest(AEngineIndex);
 
-  if FEngines[AEngineIndex].DxpSocket = nil then
+  if not EngineSlotIndexValid(AEngineIndex) then
   begin
-    SetDxpGameState(AEngineIndex, dgsIdle);
-    if AEngineIndex = 2 then
-      AppendEngine2Log('[DXP_GAMEREQ not sent: no DXP socket]' + LineEnding)
-    else
-      AppendEngineLog('[DXP_GAMEREQ not sent: no DXP socket]' + LineEnding);
+    CancelDxpGameRequest(AEngineIndex);
     Exit;
   end;
 
-  NameText := 'International Draughts GUI';
-  if Length(NameText) > 32 then
-    SetLength(NameText, 32);
-  while Length(NameText) < 32 do
-    NameText += ' ';
-
-  if AEngineSide = sideWhite then
-    EngineColourText := 'W'
-  else
-    EngineColourText := 'Z';
-
-  GameTime := Round(AGameMinutes);
-  if GameTime <= 0 then
-    GameTime := 1;
-  GameMoves := ParamInt('dxp_game_moves', 75);
-
-  if FSideToMove = sideWhite then
-    SideText := 'W'
-  else
-    SideText := 'Z';
-
-  BoardText := '';
-  for I := Low(FBoard) to High(FBoard) do
+  MessageText := BuildDxpGameReqCommand(FBoard, FSideToMove, AEngineSide,
+    AGameMinutes, FEngines[AEngineIndex].Params);
+  if MessageText = '' then
   begin
-    case FBoard[I] of
-      pcWhiteMan: PieceText := 'w';
-      pcWhiteKing: PieceText := 'W';
-      pcBlackMan: PieceText := 'z';
-      pcBlackKing: PieceText := 'Z';
-    else
-      PieceText := 'e';
-    end;
-    BoardText += PieceText;
+    CancelDxpGameRequest(AEngineIndex);
+    Exit;
   end;
 
-  MessageText := 'R' + '01' + NameText + EngineColourText + Dxp3(GameTime) +
-    Dxp3(GameMoves) + 'B' + SideText + BoardText + #0;
-
-  if AEngineIndex = 2 then
-    AppendEngine2Log('[Engine is a DXP follower]' + LineEnding)
-  else
-    AppendEngineLog('[Engine is a DXP follower]' + LineEnding);
-
-  FEngines[AEngineIndex].DxpSocket.WriteBuffer(MessageText[1],
-    Length(MessageText));
-  SetDxpGameState(AEngineIndex, dgsWaitingForMoveOrGameEnd);
-
-  if AEngineIndex = 2 then
-    AppendEngine2Log('> DXP_GAMEREQ ' + Copy(MessageText, 1,
-      Length(MessageText) - 1) + LineEnding +
-      '[Waiting for DXP_MOVE or DXP_GAMEEND]' + LineEnding)
-  else
-    AppendEngineLog('> DXP_GAMEREQ ' + Copy(MessageText, 1,
-      Length(MessageText) - 1) + LineEnding +
-      '[Waiting for DXP_MOVE or DXP_GAMEEND]' + LineEnding);
+  AppendEngineSlotLog(AEngineIndex, '[Engine is a DXP follower]' + LineEnding);
+  if not SendDxpPacketAfterGate(AEngineIndex, 'DXP_GAMEREQ', MessageText,
+    Gate) then
+  begin
+    CancelDxpGameRequest(AEngineIndex);
+    Exit;
+  end;
+  MarkDxpGameRequestSent(AEngineIndex);
 end;
 
 function TMainWindow.DxpGameEndCodeForEngine(AEngineIndex: Integer): Char;
@@ -8831,12 +7270,7 @@ begin
   else
     Exit('0');
 
-  if ((EngineSide = sideWhite) and (FGameResult = '2-0')) or
-    ((EngineSide = sideBlack) and (FGameResult = '0-2')) then
-    Result := '1'
-  else if ((EngineSide = sideWhite) and (FGameResult = '0-2')) or
-    ((EngineSide = sideBlack) and (FGameResult = '2-0')) then
-    Result := '3';
+  Result := DxpGameEndCodeForResult(FGameResult, EngineSide);
 end;
 
 function TMainWindow.DxpResultFromGameEnd(AEngineIndex: Integer;
@@ -8858,71 +7292,31 @@ begin
   else
     Exit('*');
 
-  case ACode of
-    '1':
-      if EngineSide = sideWhite then
-        Result := '0-2'
-      else
-        Result := '2-0';
-    '3':
-      if EngineSide = sideWhite then
-        Result := '2-0'
-      else
-        Result := '0-2';
-  end;
+  Result := DxpResultFromGameEndCode(ACode, EngineSide);
 end;
 
 procedure TMainWindow.SendDxpGameEndToEngine(AEngineIndex: Integer; ACode: Char);
 var
+  Gate: TEngineCommandGate;
   MessageText: String;
 begin
-  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
-    Exit;
-  if not EngineIsDxp(AEngineIndex) then
-    Exit;
-  if FEngines[AEngineIndex].DxpGameEndSent then
-  begin
-    if AEngineIndex = 2 then
-      AppendEngine2Log('[DXP_GAMEEND not sent: already sent]' + LineEnding)
-    else
-      AppendEngineLog('[DXP_GAMEEND not sent: already sent]' + LineEnding);
-    Exit;
-  end;
-  if FEngines[AEngineIndex].DxpSocket = nil then
-  begin
-    if AEngineIndex = 2 then
-      AppendEngine2Log('[DXP_GAMEEND not sent: no DXP socket]' + LineEnding)
-    else
-      AppendEngineLog('[DXP_GAMEEND not sent: no DXP socket]' + LineEnding);
-    Exit;
-  end;
-
-  if not (ACode in ['0'..'3']) then
-    ACode := '0';
-  MessageText := 'E' + ACode + '0' + #0;
-  FEngines[AEngineIndex].DxpSocket.WriteBuffer(MessageText[1],
-    Length(MessageText));
-  FEngines[AEngineIndex].DxpGameEndSent := True;
-  SetDxpGameState(AEngineIndex, dgsGameEnding);
-
-  if AEngineIndex = 2 then
-    AppendEngine2Log('> DXP_GAMEEND ' + Copy(MessageText, 1,
-      Length(MessageText) - 1) + LineEnding)
-  else
-    AppendEngineLog('> DXP_GAMEEND ' + Copy(MessageText, 1,
-      Length(MessageText) - 1) + LineEnding);
+  Gate := EngineSlotCanSendDxpGameEnd(AEngineIndex);
+  MessageText := BuildDxpGameEndCommand(ACode);
+  if SendDxpPacketAfterGate(AEngineIndex, 'DXP_GAMEEND', MessageText,
+    Gate) then
+    MarkDxpGameEndSent(AEngineIndex);
 end;
 
-procedure TMainWindow.SendDxpGameEndToPlayingDxpEngines(
+procedure TMainWindow.NotifyDxpPlayGameEnd(
   AExcludeEngineIndex: Integer);
 begin
   if not FPlayGameActive then
   begin
     if EngineIsRunning and EngineIsDxp(1) then
-      AppendEngineLog('[DXP_GAMEEND not sent: no active play game]' +
+      AppendEngineSlotLog(1, '[DXP_GAMEEND not sent: no active play game]' +
         LineEnding);
     if SecondEngineIsRunning and EngineIsDxp(2) then
-      AppendEngine2Log('[DXP_GAMEEND not sent: no active play game]' +
+      AppendEngineSlotLog(2, '[DXP_GAMEEND not sent: no active play game]' +
         LineEnding);
     Exit;
   end;
@@ -8938,237 +7332,272 @@ begin
       DxpGameEndCodeForEngine(FPlayGameBlackEngineIndex));
 end;
 
-procedure TMainWindow.SendDxpMoveToEngine(AEngineIndex: Integer;
-  const AMove: TMove; ATimeUsedSeconds: Integer);
+procedure TMainWindow.StopNonOriginSearchAfterGameEnd(
+  AOriginEngineIndex: Integer);
+begin
+  if AOriginEngineIndex = 2 then
+    SendStopToEngineSlot(1)
+  else if SecondEngineIsRunning then
+    SendStopToEngineSlot(2);
+end;
+
+procedure TMainWindow.HandleDxpGameEndReceived(AEngineIndex: Integer;
+  ACode: Char);
 var
-  I: Integer;
-  MessageText: String;
-
-  function Dxp2(AValue: Integer): String;
-  begin
-    if AValue < 0 then
-      AValue := 0;
-    if AValue > 99 then
-      AValue := 99;
-    Result := Format('%.2d', [AValue]);
-  end;
-
-  function Dxp4(AValue: Integer): String;
-  begin
-    if AValue < 0 then
-      AValue := 0;
-    if AValue > 9999 then
-      AValue := 9999;
-    Result := Format('%.4d', [AValue]);
-  end;
+  ResultText: String;
 begin
   if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
     Exit;
-  if not EngineIsDxp(AEngineIndex) then
-    Exit;
-  if Length(AMove.Squares) < 2 then
-    Exit;
 
-  if FEngines[AEngineIndex].DxpSocket = nil then
+  if not DxpShouldAcceptGameEnd(AEngineIndex) then
   begin
-    if AEngineIndex = 2 then
-      AppendEngine2Log('[DXP_MOVE not sent: no DXP socket]' + LineEnding)
-    else
-      AppendEngineLog('[DXP_MOVE not sent: no DXP socket]' + LineEnding);
+    AppendEngineSlotLog(AEngineIndex, '[ignored late DXP_GAMEEND while state: ' +
+      DxpGameStateText(FEngines[AEngineIndex].DxpGameState) + ']' +
+      LineEnding);
     Exit;
   end;
 
-  MessageText := 'M' + Dxp4(ATimeUsedSeconds) + Dxp2(AMove.Squares[0]) +
-    Dxp2(AMove.Squares[High(AMove.Squares)]) + Dxp2(Length(AMove.Captures));
-  for I := 0 to High(AMove.Captures) do
-    MessageText += Dxp2(AMove.Captures[I]);
-  MessageText += #0;
+  MarkDxpGameEndArrived(AEngineIndex);
 
-  FEngines[AEngineIndex].DxpSocket.WriteBuffer(MessageText[1],
-    Length(MessageText));
-  SetDxpGameState(AEngineIndex, dgsWaitingForMoveOrGameEnd);
+  if (ACode <> #0) and (not FEngines[AEngineIndex].DxpGameEndSent) then
+  begin
+    SendDxpGameEndToEngine(AEngineIndex, ACode);
+    SetDxpGameState(AEngineIndex, dgsWaitingForNextGame,
+      'GAMEEND reply sent');
+  end;
 
-  if AEngineIndex = 2 then
-    AppendEngine2Log('> DXP_MOVE ' + Copy(MessageText, 1,
-      Length(MessageText) - 1) + LineEnding)
-  else
-    AppendEngineLog('> DXP_MOVE ' + Copy(MessageText, 1,
-      Length(MessageText) - 1) + LineEnding);
+  if FPlayGameActive then
+  begin
+    if ACode <> #0 then
+      ResultText := DxpResultFromGameEnd(AEngineIndex, ACode)
+    else
+      ResultText := '*';
+    EndCurrentGame(gerDxpGameEnd, ResultText, AEngineIndex);
+    StopNonOriginSearchAfterGameEnd(AEngineIndex);
+  end;
+  ClearEngineTiming(AEngineIndex);
 end;
 
-function DxpMoveMessageToText(const AMessage: String; out AMoveText: String): Boolean;
+procedure TMainWindow.SendDxpMoveToEngine(AEngineIndex: Integer;
+  const AMove: TMove; ATotalTimeUsedSeconds: Integer);
 var
-  CaptureCount: Integer;
-  FromSquare: Integer;
-  I: Integer;
-  Offset: Integer;
-  ToSquare: Integer;
+  Gate: TEngineCommandGate;
+  MessageText: String;
+begin
+  Gate := EngineSlotCanSendDxpPacket(AEngineIndex, 'DXP_MOVE');
+
+  MessageText := BuildDxpMoveCommand(AMove, ATotalTimeUsedSeconds);
+  if SendDxpPacketAfterGate(AEngineIndex, 'DXP_MOVE', MessageText, Gate) then
+  begin
+    if FPlayGameActive and (CurrentPlayGameEngineIndex = AEngineIndex) then
+      MarkDxpWaitingForReply(AEngineIndex, esmPlayGameThink,
+        'MOVE sent; waiting for engine reply')
+    else
+      MarkDxpMoveSent(AEngineIndex);
+  end;
+end;
+
+function TMainWindow.SendDxpPacketAfterGate(AEngineIndex: Integer;
+  const APacketName, APacketText: String;
+  const AGate: TEngineCommandGate): Boolean;
 begin
   Result := False;
-  AMoveText := '';
-  if (Length(AMessage) < 11) or (AMessage[1] <> 'M') then
+  if LogEngineGateFailure(AEngineIndex, AGate) then
+    Exit;
+  if APacketText = '' then
+    Exit;
+  Result := SendDxpPacketToEngine(AEngineIndex, APacketName, APacketText);
+end;
+
+function TMainWindow.SendDxpPacketToEngine(AEngineIndex: Integer;
+  const APacketName, APacketText: String): Boolean;
+begin
+  Result := False;
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  if (APacketText = '') or (not EngineSlotDxpSocketOpen(AEngineIndex)) then
     Exit;
 
-  FromSquare := StrToIntDef(Copy(AMessage, 6, 2), 0);
-  ToSquare := StrToIntDef(Copy(AMessage, 8, 2), 0);
-  CaptureCount := StrToIntDef(Copy(AMessage, 10, 2), -1);
-  if (FromSquare < 1) or (FromSquare > 50) or
-    (ToSquare < 1) or (ToSquare > 50) or (CaptureCount < 0) then
-    Exit;
-  if Length(AMessage) < 11 + 2 * CaptureCount then
-    Exit;
-
-  if CaptureCount = 0 then
-    AMoveText := IntToStr(FromSquare) + '-' + IntToStr(ToSquare)
-  else
-  begin
-    AMoveText := IntToStr(FromSquare) + 'x' + IntToStr(ToSquare);
-    Offset := 12;
-    for I := 1 to CaptureCount do
+  try
+    FEngines[AEngineIndex].DxpSocket.WriteBuffer(APacketText[1],
+      Length(APacketText));
+    AppendEngineSlotLog(AEngineIndex, '> ' + APacketName + ' ' +
+      Copy(APacketText, 1, Length(APacketText) - 1) + LineEnding);
+    if SameText(APacketName, 'DXP_MOVE') or
+      (SameText(APacketName, 'DXP_GAMEREQ') and FPlayGameActive and
+      (CurrentPlayGameEngineIndex = AEngineIndex)) then
+      StoreDxpTimingStart(AEngineIndex, APacketName + ' ' +
+        Copy(APacketText, 1, Length(APacketText) - 1));
+    Result := True;
+  except
+    on E: Exception do
     begin
-      AMoveText += 'x' + IntToStr(StrToIntDef(Copy(AMessage, Offset, 2), 0));
-      Inc(Offset, 2);
+      AppendEngineSlotLog(AEngineIndex, '[' + APacketName +
+        ' not sent: DXP socket write failed: ' + E.Message + ']' +
+        LineEnding);
+      CloseDxpSocket(AEngineIndex, 'write failed');
     end;
   end;
+end;
 
-  Result := True;
+procedure TMainWindow.DxpConnectionMessage(AEngineIndex: Integer;
+  const AMessage: String; AReceivedAtSeconds: Double);
+begin
+  ProcessDxpMessage(AEngineIndex, AMessage, AReceivedAtSeconds);
+end;
+
+procedure TMainWindow.DxpConnectionConnected(AEngineIndex: Integer;
+  ASocket: TSocketStream; ARole: TEngineDxpRole; const AIpAddress: String;
+  APort: Word; AConnectAttemptCount, AConnectElapsedMs: QWord);
+var
+  DetailText: String;
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  FEngines[AEngineIndex].DxpSocket := ASocket;
+  FEngines[AEngineIndex].Ready := True;
+
+  DetailText := '';
+  if (ARole = edrListener) and (AConnectAttemptCount > 0) then
+    DetailText := ' after ' + IntToStr(AConnectAttemptCount) +
+      ' attempt';
+  if DetailText <> '' then
+  begin
+    if AConnectAttemptCount <> 1 then
+      DetailText += 's';
+    DetailText += ' in ' + FormatFloat('0.000', AConnectElapsedMs / 1000) +
+      ' seconds';
+  end;
+
+  if ARole = edrClient then
+    AppendEngineSlotLog(AEngineIndex,
+      '[Connected to DXP socket peer]' + LineEnding)
+  else
+    AppendEngineSlotLog(AEngineIndex,
+      '[Connected to DXP socket listener on IP ' + AIpAddress +
+      ' and port ' + IntToStr(APort) + DetailText + ']' + LineEnding);
+end;
+
+procedure TMainWindow.DxpConnectionError(AEngineIndex: Integer;
+  const AMessage: String);
+begin
+  AppendEngineSlotLog(AEngineIndex,
+    '[DXP connection error: ' + AMessage + ']' + LineEnding);
+end;
+
+procedure TMainWindow.DxpConnectionAttemptFailed(AEngineIndex: Integer;
+  const AIpAddress: String; APort: Word; const AMessage: String);
+begin
+  AppendEngineSlotLog(AEngineIndex,
+    '[connect to DXP socket listener on IP ' + AIpAddress + ' and port ' +
+    IntToStr(APort) + ' failed. ' + AMessage + ']' + LineEnding);
 end;
 
 procedure TMainWindow.ProcessDxpMessage(AEngineIndex: Integer;
-  const AMessage: String);
+  const AMessage: String; AReceivedAtSeconds: Double);
 var
-  MoveText: String;
-  SearchMode: TEngineSearchMode;
+  Packet: TDxpReceivedPacket;
 begin
   if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
     Exit;
   if AMessage = '' then
     Exit;
 
-  if AEngineIndex = 2 then
-    AppendEngine2Log('[' + EngineLogName(2) + '] < ' + AMessage + LineEnding)
-  else
-    AppendEngineLog('[' + EngineLogName(1) + '] < ' + AMessage + LineEnding);
+  AppendEngineSlotLog(AEngineIndex, '[' + EngineLogName(AEngineIndex) +
+    '] < ' + AMessage + LineEnding);
+  LogDxpTimingDiagnostic(AEngineIndex, AMessage, AReceivedAtSeconds);
 
-  case AMessage[1] of
-    'A':
-      begin
-        if AEngineIndex = 2 then
-          AppendEngine2Log('[DXP_GAMEACC accepted]' + LineEnding)
-        else
-          AppendEngineLog('[DXP_GAMEACC accepted]' + LineEnding);
-      end;
-    'M':
-      begin
-        if not DxpMoveMessageToText(AMessage, MoveText) then
-        begin
-          if AEngineIndex = 2 then
-            AppendEngine2Log('[could not parse DXP_MOVE]' + LineEnding)
-          else
-            AppendEngineLog('[could not parse DXP_MOVE]' + LineEnding);
-          Exit;
-        end;
-
-        SearchMode := FEngines[AEngineIndex].SearchMode;
-        FinishEngineSlotSearch(AEngineIndex);
-        if not DxpShouldAcceptMove(AEngineIndex, SearchMode) then
-        begin
-          if AEngineIndex = 2 then
-            AppendEngine2Log('[ignored late DXP_MOVE ' + MoveText + ']' +
-              LineEnding)
-          else
-            AppendEngineLog('[ignored late DXP_MOVE ' + MoveText + ']' +
-              LineEnding);
-          Exit;
-        end;
-
-        if PlayEngineMove(MoveText, AEngineIndex) then
-        begin
-          if SearchMode = esmAutoPlay then
-          begin
-            if not FAutoPlayActive then
-              Exit;
-            Inc(FAutoPlayPlyCount);
-            if Length(FMoves) = 0 then
-            begin
-              FAutoPlayActive := False;
-              SetTerminalResult;
-              AppendEngineLog('[auto-play stopped: terminal position]' +
-                LineEnding);
-            end
-            else if FAutoPlayPlyCount >= 255 then
-            begin
-              FAutoPlayActive := False;
-              AppendEngineLog('[auto-play stopped: 255 moves reached]' +
-                LineEnding);
-            end
-            else
-              SendGoThinkToEngine(esmAutoPlay);
-          end
-          else if FPlayGameActive then
-          begin
-            if Length(FMoves) = 0 then
-            begin
-              SetTerminalResult;
-              LeavePlayGameMode;
-              if AEngineIndex = 2 then
-                AppendEngine2Log('[play game stopped: terminal position]' +
-                  LineEnding)
-              else
-                AppendEngineLog('[play game stopped: terminal position]' +
-                  LineEnding);
-            end
-            else
-            begin
-              if (AEngineIndex = 1) and IsPlayGameSecondEngineTurn then
-                SetEngineState(esWaitingForOtherEngine)
-              else if (AEngineIndex = 2) and IsPlayGameEngineTurn and
-                (not IsPlayGameSecondEngineTurn) then
-                SetSecondEngineState(esWaitingForOtherEngine);
-              ContinuePlayGameSearch;
-            end;
-          end;
-        end
-        else
-        begin
-          if FPlayGameActive then
-            LeavePlayGameMode;
-          if AEngineIndex = 2 then
-            AppendEngine2Log('[play game stopped: ' + EngineLogName(2) +
-              ' DXP move could not be played]' + LineEnding)
-          else
-            AppendEngineLog('[play game stopped: ' + EngineLogName(1) +
-              ' DXP move could not be played]' + LineEnding);
-        end;
-      end;
-    'E':
-      begin
-        FinishEngineSlotSearch(AEngineIndex);
-        SetDxpGameState(AEngineIndex, dgsWaitingForNextGame);
-        if AEngineIndex = 2 then
-          AppendEngine2Log('[DXP_GAMEEND received]' + LineEnding)
-        else
-          AppendEngineLog('[DXP_GAMEEND received]' + LineEnding);
-        if (Length(AMessage) >= 2) and
-          (not FEngines[AEngineIndex].DxpGameEndSent) then
-          SendDxpGameEndToEngine(AEngineIndex, AMessage[2]);
-        if FPlayGameActive then
-        begin
-          if Length(AMessage) >= 2 then
-            FGameResult := DxpResultFromGameEnd(AEngineIndex, AMessage[2])
-          else
-            FGameResult := '*';
-          MarkGameDirty;
-          UpdateHistoryList;
-          SendDxpGameEndToPlayingDxpEngines(AEngineIndex);
-          LeavePlayGameMode;
-          if AEngineIndex = 2 then
-            SendStopToEngine
-          else if SecondEngineIsRunning then
-            SendStopToSecondEngine;
-        end;
-      end;
+  Packet := DispatchDxpMessage(AMessage);
+  case Packet.Kind of
+    drpGameAcc:
+      HandleDxpGameAccPacket(AEngineIndex);
+    drpMove:
+      if Packet.MoveParseOk then
+        HandleDxpMovePacket(AEngineIndex, Packet.MoveText, AReceivedAtSeconds)
+      else
+        AppendEngineSlotLog(AEngineIndex, '[could not parse DXP_MOVE]' +
+          LineEnding);
+    drpGameEnd:
+      HandleDxpGameEndReceived(AEngineIndex, Packet.GameEndCode);
   end;
+end;
+
+procedure TMainWindow.HandleDxpGameAccPacket(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  if FEngines[AEngineIndex].DxpGameState <> dgsGameRequested then
+  begin
+    AppendEngineSlotLog(AEngineIndex, '[ignored unexpected DXP_GAMEACC while state: ' +
+      DxpGameStateText(FEngines[AEngineIndex].DxpGameState) + ']' +
+      LineEnding);
+    Exit;
+  end;
+
+  AppendEngineSlotLog(AEngineIndex, '[DXP_GAMEACC accepted]' + LineEnding);
+  MarkDxpWaitingForProtocolReply(AEngineIndex, 'GAMEACC accepted',
+    '[Waiting for DXP_MOVE or DXP_GAMEEND]');
+end;
+
+procedure TMainWindow.HandleDxpMovePacket(AEngineIndex: Integer;
+  const AMoveText: String; AReceivedAtSeconds: Double);
+var
+  SearchMode: TEngineSearchMode;
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  SearchMode := FEngines[AEngineIndex].SearchMode;
+  if not DxpShouldAcceptMove(AEngineIndex, SearchMode) then
+  begin
+    AppendEngineSlotLog(AEngineIndex, '[ignored late DXP_MOVE ' +
+      AMoveText + ']' + LineEnding);
+    Exit;
+  end;
+
+  FinishEngineSlotSearch(AEngineIndex);
+  HandleEngineMoveForSearchMode(AEngineIndex, AMoveText, SearchMode,
+    AReceivedAtSeconds);
+end;
+
+function TMainWindow.EngineSlotSupportsAutoPlay(AEngineIndex: Integer): Boolean;
+begin
+  Result := (AEngineIndex = 1) and EngineSlotIsRunning(AEngineIndex) and
+    FEngines[AEngineIndex].Ready and (not EngineIsDxp(AEngineIndex));
+end;
+
+function TMainWindow.EngineSlotCommandUiAvailable(AEngineIndex: Integer): Boolean;
+begin
+  Result := EngineSlotIsRunning(AEngineIndex) and
+    (FEngines[AEngineIndex].Ready or EngineIsDxp(AEngineIndex));
+end;
+
+procedure TMainWindow.UpdateEngineCommandButtons;
+var
+  AnyAvailable: Boolean;
+begin
+  AnyAvailable := EngineSlotCommandUiAvailable(1) or
+    EngineSlotCommandUiAvailable(2);
+
+  if FAutoPlayButton <> nil then
+    FAutoPlayButton.Enabled := EngineSlotSupportsAutoPlay(1);
+  if FGoButton <> nil then
+    FGoButton.Enabled := AnyAvailable;
+  if FMctsButton <> nil then
+    FMctsButton.Enabled := AnyAvailable;
+  if FStopButton <> nil then
+    FStopButton.Enabled := EngineSlotIsRunning(1) or EngineSlotIsRunning(2);
+end;
+
+procedure TMainWindow.UpdateEngineSlotReadyUi(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  UpdateEngineCommandButtons;
+  UpdateEngineStateLabels;
+  UpdateEnginePopupMenuItems;
 end;
 
 procedure TMainWindow.UpdateEngineStateLabels;
@@ -9179,247 +7608,120 @@ begin
     FEngines[2].StateLabel.Caption := EngineStateCaption(FEngines[2].State);
 end;
 
-procedure TMainWindow.SendEngineParams;
+procedure TMainWindow.SendEngineSlotParams(AEngineIndex: Integer);
 var
   Command: String;
   I: Integer;
+  ParamName: String;
 begin
-  for I := 0 to High(FEngines[1].Params) do
-  begin
-    if FEngines[1].Params[I].Name = '' then
-      Continue;
-    if AnsiStartsText('gui-', FEngines[1].Params[I].Name) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name, HubLaunchArgumentParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name, OldHubLaunchArgumentParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name, OldLaunchWithHubArgumentParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name, SendStartingPositionParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name, OldSendStartingPositionParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name,
-      SingleCapturesIncludeCapturedSquareParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name,
-      OldSingleCapturesIncludeCapturedSquareParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name, AnalyzeSendsInfoParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name, OldAnalyzeSendsInfoParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name, EngineSupportsMctsParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name, ScorePerspectiveParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name, EvaluationDepthMinParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name, OldEvaluationDepthMinParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name, EvaluationBarMaxParamName) then
-      Continue;
-    if SameText(FEngines[1].Params[I].Name, OldEvaluationBarMaxParamName) then
-      Continue;
-    Command := 'set-param name=' + HubQuote(FEngines[1].Params[I].Name) +
-      ' value=' + HubQuote(FEngines[1].Params[I].Value);
-    AppendEngineLog('> ' + Command + LineEnding);
-    SendEngineCommand(Command);
-  end;
-end;
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
 
-procedure TMainWindow.SendSecondEngineParams;
-var
-  Command: String;
-  I: Integer;
-begin
-  for I := 0 to High(FEngines[2].Params) do
+  for I := 0 to High(FEngines[AEngineIndex].Params) do
   begin
-    if FEngines[2].Params[I].Name = '' then
+    ParamName := FEngines[AEngineIndex].Params[I].Name;
+    if not EngineParamShouldSendToHub(ParamName) then
       Continue;
-    if AnsiStartsText('gui-', FEngines[2].Params[I].Name) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name, HubLaunchArgumentParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name, OldHubLaunchArgumentParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name, OldLaunchWithHubArgumentParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name, SendStartingPositionParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name, OldSendStartingPositionParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name,
-      SingleCapturesIncludeCapturedSquareParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name,
-      OldSingleCapturesIncludeCapturedSquareParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name, AnalyzeSendsInfoParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name, OldAnalyzeSendsInfoParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name, EngineSupportsMctsParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name, ScorePerspectiveParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name, EvaluationDepthMinParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name, OldEvaluationDepthMinParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name, EvaluationBarMaxParamName) then
-      Continue;
-    if SameText(FEngines[2].Params[I].Name, OldEvaluationBarMaxParamName) then
-      Continue;
-    Command := 'set-param name=' + HubQuote(FEngines[2].Params[I].Name) +
-      ' value=' + HubQuote(FEngines[2].Params[I].Value);
-    AppendEngine2Log('> ' + Command + LineEnding);
-    SendSecondEngineCommand(Command);
+    Command := 'set-param name=' + HubQuote(ParamName) +
+      ' value=' + HubQuote(FEngines[AEngineIndex].Params[I].Value);
+    LogEngineSlotCommandSent(AEngineIndex, Command);
+    SendEngineSlotCommand(AEngineIndex, Command);
   end;
 end;
 
 procedure TMainWindow.EngineProcessReadData(Sender: TObject);
-var
-  Buffer: array[0..4095] of Byte;
-  {$IFDEF MSWINDOWS}
-  Available: DWORD;
-  BytesReadWin: DWORD;
-  {$ENDIF}
-  BytesRead: LongInt;
-  Chunk: String;
 begin
-  {$IFDEF MSWINDOWS}
-  if FEngines[1].OutputReadHandle = 0 then
-    Exit;
-
-  while True do
-  begin
-    Available := 0;
-    if not PeekNamedPipe(FEngines[1].OutputReadHandle, nil, 0, nil, @Available, nil) then
-      Break;
-    if Available = 0 then
-      Break;
-
-    if not FEngines[1].FirstReadSeen then
-    begin
-      FEngines[1].FirstReadSeen := True;
-      AppendEngineLog('[' + EngineLogName(1) + ' first read available=' +
-        IntToStr(Available) + ']' + LineEnding);
-    end;
-
-    BytesReadWin := 0;
-    if not ReadFile(FEngines[1].OutputReadHandle, Buffer[0], SizeOf(Buffer),
-      BytesReadWin, nil) then
-      Break;
-    if BytesReadWin = 0 then
-      Break;
-
-    SetString(Chunk, PChar(@Buffer[0]), BytesReadWin);
-    AppendEngineRawLog(EngineOutputLogText(Chunk, 1));
-    ProcessEngineOutput(Chunk);
-  end;
-  {$ELSE}
-  if FEngines[1].Process = nil then
-    Exit;
-
-  while (FEngines[1].Process.Output <> nil) and
-    (FEngines[1].Process.Output.NumBytesAvailable > 0) do
-  begin
-    if not FEngines[1].FirstReadSeen then
-    begin
-      FEngines[1].FirstReadSeen := True;
-      AppendEngineLog('[' + EngineLogName(1) + ' first read available=' +
-        IntToStr(FEngines[1].Process.Output.NumBytesAvailable) + ']' +
-        LineEnding);
-    end;
-    BytesRead := FEngines[1].Process.Output.Read(Buffer, SizeOf(Buffer));
-    if BytesRead <= 0 then
-      Break;
-
-    SetString(Chunk, PChar(@Buffer[0]), BytesRead);
-    AppendEngineRawLog(EngineOutputLogText(Chunk, 1));
-    ProcessEngineOutput(Chunk);
-  end;
-  {$ENDIF}
+  if Sender <> nil then ;
+  ReadEngineSlotData(1);
 end;
 
 procedure TMainWindow.EngineProcessReadSecondEngineData;
-{$IFNDEF MSWINDOWS}
-var
-  Buffer: array[0..4095] of Byte;
-  BytesRead: LongInt;
-  Chunk: String;
-{$ENDIF}
 begin
-  {$IFNDEF MSWINDOWS}
-  if FEngines[2].Process = nil then
+  ReadEngineSlotData(2);
+end;
+
+procedure TMainWindow.PlatformProcessData(Sender: TObject; const AText: String);
+var
+  EngineIndex: Integer;
+begin
+  if not (Sender is TPlatformProcess) then
     Exit;
 
-  if not FEngines[2].FirstReadSeen then
+  EngineIndex := TPlatformProcess(Sender).SlotIndex;
+  if not EngineSlotIndexValid(EngineIndex) then
+    Exit;
+
+  if not FEngines[EngineIndex].FirstReadSeen then
   begin
-    FEngines[2].FirstReadSeen := True;
-    AppendEngine2Log('[' + EngineLogName(2) + ' first read available=' +
-      IntToStr(FEngines[2].Process.Output.NumBytesAvailable) + ']' +
-      LineEnding);
+    FEngines[EngineIndex].FirstReadSeen := True;
+    AppendEngineSlotLog(EngineIndex, EngineFirstReadLogText(
+      EngineLogName(EngineIndex), Length(AText)));
   end;
-  BytesRead := FEngines[2].Process.Output.Read(Buffer, SizeOf(Buffer));
-  if BytesRead <= 0 then
+
+  AppendEngineSlotRawLog(EngineIndex,
+    EngineOutputLogText(AText, EngineIndex));
+  ProcessEngineSlotOutput(EngineIndex, AText);
+end;
+
+procedure TMainWindow.ReadEngineSlotData(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
     Exit;
 
-  SetString(Chunk, PChar(@Buffer[0]), BytesRead);
-  AppendEngine2RawLog(EngineOutputLogText(Chunk, 2));
-  ProcessSecondEngineOutput(Chunk);
-  {$ENDIF}
+  if FEngines[AEngineIndex].PlatformProcess <> nil then
+    FEngines[AEngineIndex].PlatformProcess.ReadAvailable;
 end;
 
 procedure TMainWindow.EnginePollTimerTimer(Sender: TObject);
+var
+  I: Integer;
 begin
-  {$IFDEF MSWINDOWS}
-  if (FEngines[1].ProcessInfo.hProcess = 0) and (FEngines[2].ProcessInfo.hProcess = 0) then
-  begin
-    if FEnginePollTimer <> nil then
-      FEnginePollTimer.Enabled := False;
-    Exit;
-  end;
-  if (FEngines[1].ProcessInfo.hProcess <> 0) and (not EngineIsRunning) then
-  begin
-    HandleEngineProcessTerminated(1);
-  end;
-  if (FEngines[2].ProcessInfo.hProcess <> 0) and (not SecondEngineIsRunning) then
-  begin
-    HandleEngineProcessTerminated(2);
-  end;
-  if FEngines[1].ProcessInfo.hProcess <> 0 then
-    EngineProcessReadData(Sender);
-  {$ELSE}
-  if (FEngines[1].Process = nil) and (FEngines[2].Process = nil) then
+  if Sender <> nil then ;
+
+  if not AnyEngineSlotProcessHandlePresent then
   begin
     if FEnginePollTimer <> nil then
       FEnginePollTimer.Enabled := False;
     Exit;
   end;
 
-  if (FEngines[1].Process <> nil) and (not FEngines[1].Process.Running) then
-  begin
-    HandleEngineProcessTerminated(1);
-  end
-  else if FEngines[1].Process <> nil then
-    EngineProcessReadData(Sender);
+  for I := 1 to 2 do
+    PollEngineSlot(I);
+end;
 
-  if (FEngines[2].Process <> nil) and (not FEngines[2].Process.Running) then
+function TMainWindow.AnyEngineSlotProcessHandlePresent: Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to 2 do
+    if EngineSlotProcessHandlePresent(I) then
+      Exit(True);
+end;
+
+function TMainWindow.EngineSlotShouldReadInPoll(AEngineIndex: Integer): Boolean;
+begin
+  Result := False;
+  if not EngineSlotProcessHandlePresent(AEngineIndex) then
+    Exit;
+
+  Result := (FEngines[AEngineIndex].PlatformProcess <> nil) and
+    FEngines[AEngineIndex].PlatformProcess.NeedsPolling;
+end;
+
+procedure TMainWindow.PollEngineSlot(AEngineIndex: Integer);
+begin
+  if not EngineSlotProcessHandlePresent(AEngineIndex) then
+    Exit;
+
+  if not EngineSlotIsRunning(AEngineIndex) then
   begin
-    HandleEngineProcessTerminated(2);
-  end
-  else if FEngines[2].Process <> nil then
-  begin
-    while (FEngines[2].Process.Output <> nil) and
-      (FEngines[2].Process.Output.NumBytesAvailable > 0) do
-    begin
-      EngineProcessReadSecondEngineData;
-    end;
+    HandleEngineProcessTerminated(AEngineIndex);
+    Exit;
   end;
-  {$ENDIF}
+
+  if EngineSlotShouldReadInPoll(AEngineIndex) then
+    ReadEngineSlotData(AEngineIndex);
 end;
 
 procedure TMainWindow.EngineProcessTerminate(Sender: TObject);
@@ -9432,136 +7734,54 @@ begin
   if (AEngineIndex < 1) or (AEngineIndex > 2) then
     Exit;
 
-  {$IFDEF MSWINDOWS}
-  if FEngines[AEngineIndex].ProcessInfo.hProcess = 0 then
+  if not EngineSlotProcessHandlePresent(AEngineIndex) then
     Exit;
-  {$ELSE}
-  if FEngines[AEngineIndex].Process = nil then
+
+  DrainEngineSlotOutputAfterExit(AEngineIndex);
+  ResetEngineRuntimeAfterProcessExit(AEngineIndex);
+  LogEngineSlotProcessTerminated(AEngineIndex);
+  CloseTerminatedEngineSlotProcess(AEngineIndex);
+  RefreshEngineUiAfterSlotChange;
+end;
+
+function TMainWindow.EngineSlotProcessHandlePresent(
+  AEngineIndex: Integer): Boolean;
+begin
+  Result := False;
+  if not EngineSlotIndexValid(AEngineIndex) then
     Exit;
-  {$ENDIF}
+
+  Result := (FEngines[AEngineIndex].PlatformProcess <> nil) and
+    FEngines[AEngineIndex].PlatformProcess.HasProcess;
+end;
+
+procedure TMainWindow.DrainEngineSlotOutputAfterExit(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
 
   if AEngineIndex = 1 then
-  begin
-    EngineProcessReadData(nil);
-    FEngines[1].Ready := False;
-    FAutoPlayActive := False;
-    FPendingAutoPlayStart := False;
-    FPendingMctsStart := False;
-    FPendingAnalyzeStart := False;
-    FPendingPlayGameStart := False;
-    FPendingThinkStart := False;
-    LeavePlayGameMode;
-    FinishEngineSlotSearch(1);
-    if FAutoPlayButton <> nil then
-      FAutoPlayButton.Enabled := False;
-    if FGoButton <> nil then
-      FGoButton.Enabled := False;
-    if FMctsButton <> nil then
-      FMctsButton.Enabled := False;
-    if FStopButton <> nil then
-      FStopButton.Enabled := False;
-    AppendEngineLog(LineEnding + '[' + EngineLogName(1) +
-      ' process terminated]' + LineEnding);
-  end
+    EngineProcessReadData(nil)
   else
-  begin
     EngineProcessReadSecondEngineData;
-    FEngines[2].Ready := False;
-    FinishEngineSlotSearch(2);
-    AppendEngine2Log(LineEnding + '[' + EngineLogName(2) +
-      ' process terminated]' + LineEnding);
-  end;
-
-  {$IFDEF MSWINDOWS}
-  FEngines[AEngineIndex].Running := False;
-  if FEngines[AEngineIndex].ReaderThread <> nil then
-  begin
-    FEngines[AEngineIndex].ReaderThread.Terminate;
-  end;
-  if FEngines[AEngineIndex].InputWriteHandle <> 0 then
-  begin
-    CloseHandle(FEngines[AEngineIndex].InputWriteHandle);
-    FEngines[AEngineIndex].InputWriteHandle := 0;
-  end;
-  if FEngines[AEngineIndex].ProcessInfo.hThread <> 0 then
-  begin
-    CloseHandle(FEngines[AEngineIndex].ProcessInfo.hThread);
-    FEngines[AEngineIndex].ProcessInfo.hThread := 0;
-  end;
-  if FEngines[AEngineIndex].ProcessInfo.hProcess <> 0 then
-  begin
-    CloseHandle(FEngines[AEngineIndex].ProcessInfo.hProcess);
-    FEngines[AEngineIndex].ProcessInfo.hProcess := 0;
-  end;
-  {$ELSE}
-  FreeAndNil(FEngines[AEngineIndex].Process);
-  {$ENDIF}
-
-  UpdateEnginePollTimer;
 end;
 
-procedure AppendInteger(var AValues: TIntegerArray; AValue: Integer);
+procedure TMainWindow.LogEngineSlotProcessTerminated(AEngineIndex: Integer);
 begin
-  SetLength(AValues, Length(AValues) + 1);
-  AValues[High(AValues)] := AValue;
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  AppendEngineSlotLog(AEngineIndex,
+    EngineProcessTerminatedLogText(EngineLogName(AEngineIndex)));
 end;
 
-function ParseMoveNumbers(const AMoveText: String; out ANumbers: TIntegerArray;
-  out AIsCapture: Boolean): Boolean;
-var
-  I: Integer;
-  NumberStart: Integer;
+procedure TMainWindow.CloseTerminatedEngineSlotProcess(AEngineIndex: Integer);
 begin
-  Result := True;
-  SetLength(ANumbers, 0);
-  AIsCapture := Pos('x', AMoveText) > 0;
-  I := 1;
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
 
-  while I <= Length(AMoveText) do
-  begin
-    if AMoveText[I] in ['0'..'9'] then
-    begin
-      NumberStart := I;
-      while (I <= Length(AMoveText)) and (AMoveText[I] in ['0'..'9']) do
-        Inc(I);
-      AppendInteger(ANumbers, StrToIntDef(Copy(AMoveText, NumberStart,
-        I - NumberStart), 0));
-    end
-    else
-      Inc(I);
-  end;
-
-  Result := Length(ANumbers) >= 2;
-end;
-
-procedure ParsePvMoveText(const APvText: String; out AMoves: TTextArray);
-var
-  Ch: Char;
-  I: Integer;
-  MoveText: String;
-
-  procedure AppendMove;
-  begin
-    MoveText := Trim(MoveText);
-    if MoveText = '' then
-      Exit;
-    SetLength(AMoves, Length(AMoves) + 1);
-    AMoves[High(AMoves)] := MoveText;
-    MoveText := '';
-  end;
-
-begin
-  SetLength(AMoves, 0);
-  MoveText := '';
-  for I := 1 to Length(APvText) do
-  begin
-    Ch := APvText[I];
-    if Ch in [' ', #9, #10, #13] then
-      AppendMove
-    else
-      MoveText += Ch;
-  end;
-  AppendMove;
+  if FEngines[AEngineIndex].PlatformProcess <> nil then
+    FEngines[AEngineIndex].PlatformProcess.Close;
 end;
 
 function SameIntegerSet(const ALeft: array of Integer; const ARight: array of Integer): Boolean;
@@ -9601,7 +7821,7 @@ var
   Numbers: TIntegerArray;
   PathMatches: Boolean;
 begin
-  if (not ParseMoveNumbers(AEngineMove, Numbers, IsCapture)) or
+  if (not ParseHubMoveNumbers(AEngineMove, Numbers, IsCapture)) or
     (Length(ALegalMove.Squares) < 2) then
     Exit(False);
 
@@ -9658,7 +7878,7 @@ begin
 end;
 
 function TMainWindow.PlayEngineMove(const AEngineMove: String;
-  AEngineIndex: Integer): Boolean;
+  AEngineIndex: Integer; ADxpReceivedAtSeconds: Double): Boolean;
 var
   Annotation: String;
   MoveIndex: Integer;
@@ -9668,11 +7888,17 @@ begin
   MoveIndex := EngineMoveIndex(AEngineMove);
   if MoveIndex >= 0 then
   begin
-    if AEngineIndex = 2 then
-      AppendEngine2Log('[' + EngineLogName(2) + ' executing move ' + AEngineMove + ']' + LineEnding)
+    AppendEngineSlotLog(AEngineIndex, '[' + EngineLogName(AEngineIndex) +
+      ' executing move ' + AEngineMove + ']' + LineEnding);
+    if FPlayGameActive then
+    begin
+      if EngineIsDxp(AEngineIndex) then
+        PauseGameClocksAt(ADxpReceivedAtSeconds)
+      else
+        PauseGameClocks
+    end
     else
-      AppendEngineLog('[' + EngineLogName(1) + ' executing move ' + AEngineMove + ']' + LineEnding);
-    UpdateGameClock;
+      UpdateGameClock;
     Annotation := FLastEngineInfoAnnotation;
     FLastEngineInfoAnnotation := '';
     FLastEngineInfoLine := '';
@@ -9681,100 +7907,41 @@ begin
     RecordPlayedMove(MoveToPlay, Annotation);
     LogPlayedMoveToEngineWindows(MoveToPlay, AEngineIndex);
     SysUtils.Beep;
-    CheckDrawByRepetition;
     Exit(True);
   end;
 
-  if AEngineIndex = 2 then
-    AppendEngine2Log('[' + EngineLogName(2) + ' move is not legal here: ' + AEngineMove + ']' +
-      LineEnding)
-  else
-    AppendEngineLog('[' + EngineLogName(1) + ' move is not legal here: ' + AEngineMove + ']' +
-      LineEnding);
+  AppendEngineSlotLog(AEngineIndex, '[' + EngineLogName(AEngineIndex) +
+    ' move is not legal here: ' + AEngineMove + ']' + LineEnding);
 end;
 
 procedure TMainWindow.HandleEngineDoneMove(const AMoveText: String);
 var
   SearchMode: TEngineSearchMode;
 begin
-  FEngineSearching := False;
-  FEngineStopRequested := False;
   SearchMode := FEngines[1].SearchMode;
   FinishEngineSlotSearch(1);
   case SearchMode of
   esmAutoPlay:
-  begin
-    if PlayEngineMove(AMoveText) then
-    begin
-      if not FAutoPlayActive then
-        Exit;
-      Inc(FAutoPlayPlyCount);
-      if Length(FMoves) = 0 then
-      begin
-        FAutoPlayActive := False;
-        SetTerminalResult;
-        AppendEngineLog('[auto-play stopped: terminal position]' + LineEnding);
-      end
-      else if FAutoPlayPlyCount >= 255 then
-      begin
-        FAutoPlayActive := False;
-        SetGuiState(gsIdle, 'auto-play 255 moves reached');
-        AppendEngineLog('[auto-play stopped: 255 moves reached]' + LineEnding);
-      end
-      else
-        SendGoThinkToEngine(esmAutoPlay);
-    end
-    else
-    begin
-      FAutoPlayActive := False;
-      SetGuiState(gsIdle, 'auto-play move could not be played');
-      AppendEngineLog('[auto-play stopped: ' + EngineLogName(1) + ' move could not be played]' +
-        LineEnding);
-    end;
-  end;
+    HandleEngineMoveForSearchMode(1, AMoveText, SearchMode);
   esmPlayGameThink:
-  begin
-    if PlayEngineMove(AMoveText) then
-    begin
-      if not FPlayGameActive then
-        Exit;
-      if Length(FMoves) = 0 then
-      begin
-        SetTerminalResult;
-        LeavePlayGameMode;
-        AppendEngineLog('[play game stopped: terminal position]' + LineEnding);
-      end
-      else
-      begin
-        if IsPlayGameSecondEngineTurn then
-          SetEngineState(esWaitingForOtherEngine);
-        ContinuePlayGameSearch;
-      end;
-    end
-    else
-    begin
-      LeavePlayGameMode;
-      AppendEngineLog('[play game stopped: ' + EngineLogName(1) + ' move could not be played]' +
-        LineEnding);
-    end;
-  end;
+    HandleEngineMoveForSearchMode(1, AMoveText, SearchMode);
   esmAnalyze, esmPlayGameAnalyze:
   begin
     if AMoveText <> '' then
     begin
       UpdateAnalyzeBestMoveFromMoveText(AMoveText);
-      AppendEngineLog('[analysis move ignored: ' + AMoveText + ']' + LineEnding)
+      AppendEngineSlotLog(1, '[analysis move ignored: ' + AMoveText + ']' + LineEnding)
     end
     else
-      AppendEngineLog('[analysis done]' + LineEnding);
+      AppendEngineSlotLog(1, '[analysis done]' + LineEnding);
   end;
   esmMcts:
   begin
     if ExtractHubArgument(FLastEngineDoneLine, 'result') <> '' then
-      AppendEngineLog('[mcts done: result=' +
+      AppendEngineSlotLog(1, '[mcts done: result=' +
         ExtractHubArgument(FLastEngineDoneLine, 'result') + ']' + LineEnding)
     else
-      AppendEngineLog('[mcts done: nshootouts=' +
+      AppendEngineSlotLog(1, '[mcts done: nshootouts=' +
         ExtractHubArgument(FLastEngineDoneLine, 'nshootouts') + ' nwon=' +
         ExtractHubArgument(FLastEngineDoneLine, 'nwon') + ' ndraw=' +
         ExtractHubArgument(FLastEngineDoneLine, 'ndraw') + ' nlost=' +
@@ -9784,390 +7951,93 @@ begin
     if (AMoveText <> '') and FAutoPlayActive and
       (EngineMoveIndex(AMoveText) >= 0) then
     begin
-      AppendEngineLog('[recovering auto-play move in idle state]' + LineEnding);
+      AppendEngineSlotLog(1, '[recovering auto-play move in idle state]' + LineEnding);
       BeginEngineSlotSearch(1, esmAutoPlay, esThinking);
       HandleEngineDoneMove(AMoveText);
     end
     else if AMoveText <> '' then
-      AppendEngineLog('[' + EngineLogName(1) + ' move ignored: ' + AMoveText + ']' + LineEnding)
+      AppendEngineSlotLog(1, '[' + EngineLogName(1) + ' move ignored: ' + AMoveText + ']' + LineEnding)
     else
-      AppendEngineLog('[' + EngineLogName(1) + ' done]' + LineEnding);
+      AppendEngineSlotLog(1, '[' + EngineLogName(1) + ' done]' + LineEnding);
   end;
 end;
 
-procedure TMainWindow.ProcessEngineOutput(const AText: String);
+procedure TMainWindow.ProcessEngineSlotOutput(AEngineIndex: Integer;
+  const AText: String);
 var
-  ErrorText: String;
   Line: String;
+  DelimiterLength: Integer;
   LineEnd: Integer;
-  MoveText: String;
-  ResultText: String;
 begin
-  if EngineIsDxp(1) then
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  if EngineIsDxp(AEngineIndex) then
   begin
-    FEngines[1].TextBuffer := '';
+    FEngines[AEngineIndex].TextBuffer := '';
     Exit;
   end;
 
-  FEngines[1].TextBuffer += AText;
+  FEngines[AEngineIndex].TextBuffer += AText;
 
   while True do
   begin
-    LineEnd := Pos(LineEnding, FEngines[1].TextBuffer);
+    DelimiterLength := Length(LineEnding);
+    LineEnd := Pos(LineEnding, FEngines[AEngineIndex].TextBuffer);
     if LineEnd = 0 then
-      LineEnd := Pos(#10, FEngines[1].TextBuffer);
+    begin
+      LineEnd := Pos(#10, FEngines[AEngineIndex].TextBuffer);
+      DelimiterLength := 1;
+    end;
     if LineEnd = 0 then
       Break;
 
-    Line := Trim(Copy(FEngines[1].TextBuffer, 1, LineEnd - 1));
-    Delete(FEngines[1].TextBuffer, 1, LineEnd);
+    Line := Trim(Copy(FEngines[AEngineIndex].TextBuffer, 1, LineEnd - 1));
+    Delete(FEngines[AEngineIndex].TextBuffer, 1,
+      LineEnd + DelimiterLength - 1);
 
-    if Line = 'wait' then
-    begin
-      if not FEngines[1].WaitingForInit then
-      begin
-        FEngines[1].WaitingForInit := True;
-        SendEngineParams;
-        AppendEngineLog('> init' + LineEnding);
-        SendEngineCommand('init');
-      end;
-    end
-    else if Line = 'ready' then
-    begin
-      FEngines[1].Ready := True;
-      FEngines[1].WaitingForInit := False;
-      if FAutoPlayButton <> nil then
-        FAutoPlayButton.Enabled := not EngineIsDxp(1);
-      if FGoButton <> nil then
-        FGoButton.Enabled := True;
-      if FMctsButton <> nil then
-        FMctsButton.Enabled := True;
-      if FStopButton <> nil then
-        FStopButton.Enabled := True;
-      AppendEngineLog('[' + EngineLogName(1) + ' ready]' + LineEnding);
-      if FEngines[1].ParamsFileName <> '' then
-        SaveParamsToJson(FEngines[1].ParamsFileName, FEngines[1].Params);
-      if FEngineStartAfterReady then
-      begin
-        FEngineStartAfterReady := False;
-        if FPlayGameActive then
-          ContinuePlayGameSearch
-        else
-          SendGoAnalyzeToEngine;
-      end;
-    end
-    else if StartsText('param ', Line) then
-      AddOrUpdateParam(FEngines[1].Params, ExtractHubArgument(Line, 'name'),
-        ExtractHubArgument(Line, 'type'), ExtractHubArgument(Line, 'value'), True)
-    else if StartsText('id ', Line) then
-      HandleEngineIdLine(Line)
-    else if StartsText('info ', Line) then
-    begin
-      FLastEngineInfoLine := Line;
-      FLastEngineInfoAnnotation := EngineInfoAnnotation(Line);
-      UpdateEngineEvalFromInfo(Line);
-      UpdateAnalyzeBestMoveFromInfo(Line);
-    end
-    else if StartsText('error ', Line) then
-    begin
-      ErrorText := ExtractHubArgument(Line, 'message');
-      if ErrorText = '' then
-        ErrorText := Line;
-      AppendEngineLog('[' + EngineLogName(1) + ' error: ' + ErrorText + ']' + LineEnding);
-    end
-    else if StartsText('done ', Line) or (Line = 'done') then
-    begin
-      FLastEngineDoneLine := Line;
-      MoveText := ExtractHubArgument(Line, 'move');
-      ResultText := ExtractHubArgument(Line, 'result');
-      if FLastEngineInfoLine <> '' then
-        UpdateEngineEvalFromInfo(FLastEngineInfoLine, True);
-      if FPlayGameActive and HubDoneResultIsDraw(ResultText) then
-      begin
-        FGameResult := '1-1';
-        SetGuiState(gsGameOver, 'agreed draw');
-        MarkGameDirty;
-        SendDxpGameEndToPlayingDxpEngines;
-        LeavePlayGameMode;
-        UpdateHistoryList;
-        AppendEngineLog('[play game stopped: agreed draw]' + LineEnding);
-        Continue;
-      end;
-      if FPendingAutoPlayStart then
-      begin
-        FIgnoreNextDoneMove := False;
-        FEngineSearching := False;
-        FEngineStopRequested := False;
-        FinishEngineSlotSearch(1);
-        if MoveText <> '' then
-          AppendEngineLog('[ignored previous-search move ' + MoveText + ']' +
-            LineEnding)
-        else
-          AppendEngineLog('[previous search stopped]' + LineEnding);
-        BeginAutoPlay;
-      end
-      else if FPendingAnalyzeStart then
-      begin
-        FIgnoreNextDoneMove := False;
-        FEngineSearching := False;
-        FEngineStopRequested := False;
-        FinishEngineSlotSearch(1);
-        if MoveText <> '' then
-          AppendEngineLog('[ignored previous-search move ' + MoveText + ']' +
-            LineEnding)
-        else
-          AppendEngineLog('[previous search stopped]' + LineEnding);
-        FPendingAnalyzeStart := False;
-        SendGoAnalyzeToEngine(FPendingAnalyzeMode);
-      end
-      else if FPendingMctsStart then
-      begin
-        FIgnoreNextDoneMove := False;
-        FEngineSearching := False;
-        FEngineStopRequested := False;
-        FinishEngineSlotSearch(1);
-        if MoveText <> '' then
-          AppendEngineLog('[ignored previous-search move ' + MoveText + ']' +
-            LineEnding)
-        else
-          AppendEngineLog('[previous search stopped]' + LineEnding);
-        FPendingMctsStart := False;
-        SendGoMctsToEngine;
-      end
-      else if FPendingThinkStart then
-      begin
-        FIgnoreNextDoneMove := False;
-        FEngineSearching := False;
-        FEngineStopRequested := False;
-        FinishEngineSlotSearch(1);
-        if MoveText <> '' then
-          AppendEngineLog('[ignored previous-search move ' + MoveText + ']' +
-            LineEnding)
-        else
-          AppendEngineLog('[previous search stopped]' + LineEnding);
-        FPendingThinkStart := False;
-        SendGoThinkToEngine(FPendingThinkMode);
-      end
-      else if FPendingPlayGameStart then
-      begin
-        FIgnoreNextDoneMove := False;
-        FEngineSearching := False;
-        FEngineStopRequested := False;
-        FinishEngineSlotSearch(1);
-        if MoveText <> '' then
-          AppendEngineLog('[ignored previous-search move ' + MoveText + ']' +
-            LineEnding)
-        else
-          AppendEngineLog('[previous search stopped]' + LineEnding);
-        BeginPlayGame(FPendingPlayGameWhiteIsEngine,
-          FPendingPlayGameBlackIsEngine, FPendingPlayGameWhiteName,
-          FPendingPlayGameBlackName, FPendingPlayGameMinutes,
-          FPendingPlayGameFromCurrent, True, FPendingPlayGameWhiteEngineIndex,
-          FPendingPlayGameBlackEngineIndex);
-      end
-      else if FIgnoreNextDoneMove then
-      begin
-        FIgnoreNextDoneMove := False;
-        FEngineStopRequested := False;
-        if FEngines[1].SearchMode = esmIdle then
-        begin
-          FEngineSearching := False;
-          SetEngineState(esIdle);
-        end;
-        if MoveText <> '' then
-          AppendEngineLog('[ignored stopped-search move ' + MoveText + ']' + LineEnding)
-        else
-          AppendEngineLog('[ignored stopped-search done]' + LineEnding);
-      end
-      else
-        HandleEngineDoneMove(MoveText);
-    end;
+    DispatchEngineSlotReceivedLine(AEngineIndex, Line);
   end;
 end;
 
-procedure TMainWindow.ProcessSecondEngineOutput(const AText: String);
-var
-  ErrorText: String;
-  Line: String;
-  LineEnd: Integer;
-  MoveText: String;
-  ResultText: String;
-  SearchMode: TEngineSearchMode;
+procedure TMainWindow.DispatchEngineSlotReceivedLine(AEngineIndex: Integer;
+  const ALine: String);
 begin
-  if EngineIsDxp(2) then
-  begin
-    FEngines[2].TextBuffer := '';
+  if not EngineSlotIndexValid(AEngineIndex) then
     Exit;
-  end;
 
-  FEngines[2].TextBuffer += AText;
-
-  while True do
-  begin
-    LineEnd := Pos(LineEnding, FEngines[2].TextBuffer);
-    if LineEnd = 0 then
-      LineEnd := Pos(#10, FEngines[2].TextBuffer);
-    if LineEnd = 0 then
-      Break;
-
-    Line := Trim(Copy(FEngines[2].TextBuffer, 1, LineEnd - 1));
-    Delete(FEngines[2].TextBuffer, 1, LineEnd);
-
-    if Line = 'wait' then
-    begin
-      if not FEngines[2].WaitingForInit then
-      begin
-        FEngines[2].WaitingForInit := True;
-        SendSecondEngineParams;
-        AppendEngine2Log('> init' + LineEnding);
-        SendSecondEngineCommand('init');
-      end;
-    end
-    else if Line = 'ready' then
-    begin
-      FEngines[2].Ready := True;
-      FEngines[2].WaitingForInit := False;
-      AppendEngine2Log('[' + EngineLogName(2) + ' ready]' + LineEnding);
-      if FEngines[2].ParamsFileName <> '' then
-        SaveParamsToJson(FEngines[2].ParamsFileName, FEngines[2].Params);
-      if FEngines[2].PendingThinkStart then
-      begin
-        FEngines[2].IgnoreNextDoneMove := False;
-        FEngines[2].PendingThinkStart := False;
-        FinishEngineSlotSearch(2);
-        AppendEngine2Log('[previous search stopped]' + LineEnding);
-        SendGoThinkToSecondEngine;
-        Continue;
-      end;
-      if FEngineAnalyzeEnabled and (FEngines[1].State = esAnalyzing) and
-        (FEngines[1].SearchMode in [esmAnalyze, esmPlayGameAnalyze]) then
-      begin
-        AppendEngine2Log('[' + EngineLogName(2) + ' catching up to current analysis]' + LineEnding);
-        SendGoAnalyzeToSecondEngine(FEngines[1].SearchMode);
-      end;
-    end
-    else if StartsText('param ', Line) then
-      AddOrUpdateParam(FEngines[2].Params, ExtractHubArgument(Line, 'name'),
-        ExtractHubArgument(Line, 'type'), ExtractHubArgument(Line, 'value'), True)
-    else if StartsText('id ', Line) then
-      HandleEngine2IdLine(Line)
-    else if StartsText('error ', Line) then
-    begin
-      ErrorText := ExtractHubArgument(Line, 'message');
-      if ErrorText = '' then
-        ErrorText := Line;
-      AppendEngine2Log('[' + EngineLogName(2) + ' error: ' + ErrorText + ']' + LineEnding);
-    end
-    else if StartsText('done ', Line) or (Line = 'done') then
-    begin
-      MoveText := ExtractHubArgument(Line, 'move');
-      ResultText := ExtractHubArgument(Line, 'result');
-      if FPlayGameActive and HubDoneResultIsDraw(ResultText) then
-      begin
-        FGameResult := '1-1';
-        SetGuiState(gsGameOver, 'agreed draw');
-        MarkGameDirty;
-        SendDxpGameEndToPlayingDxpEngines;
-        LeavePlayGameMode;
-        UpdateHistoryList;
-        AppendEngine2Log('[play game stopped: agreed draw]' + LineEnding);
-        Continue;
-      end;
-      if FEngines[2].PendingThinkStart then
-      begin
-        FEngines[2].IgnoreNextDoneMove := False;
-        FEngines[2].PendingThinkStart := False;
-        FinishEngineSlotSearch(2);
-        if MoveText <> '' then
-          AppendEngine2Log('[ignored previous-search move ' +
-            MoveText + ']' + LineEnding)
-        else
-          AppendEngine2Log('[previous search stopped]' + LineEnding);
-        SendGoThinkToSecondEngine;
-        Continue;
-      end;
-      if FEngines[2].IgnoreNextDoneMove then
-      begin
-        FEngines[2].IgnoreNextDoneMove := False;
-        if FEngines[2].SearchMode = esmIdle then
-          SetSecondEngineState(esIdle);
-        if MoveText <> '' then
-          AppendEngine2Log('[ignored stopped-search move ' +
-            MoveText + ']' + LineEnding)
-        else
-          AppendEngine2Log('[ignored stopped-search done]' + LineEnding);
-        Continue;
-      end;
-      SearchMode := FEngines[2].SearchMode;
-      FinishEngineSlotSearch(2);
-      if FPlayGameActive and IsPlayGameSecondEngineTurn and
-        (SearchMode = esmPlayGameThink) and (MoveText <> '') then
-      begin
-        if PlayEngineMove(MoveText, 2) then
-        begin
-          if not FPlayGameActive then
-            Exit;
-          if Length(FMoves) = 0 then
-          begin
-            SetTerminalResult;
-            LeavePlayGameMode;
-            AppendEngine2Log('[play game stopped: terminal position]' + LineEnding);
-          end
-          else
-          begin
-            if IsPlayGameEngineTurn and (not IsPlayGameSecondEngineTurn) then
-              SetSecondEngineState(esWaitingForOtherEngine);
-            ContinuePlayGameSearch;
-          end;
-        end
-        else
-        begin
-          LeavePlayGameMode;
-          AppendEngine2Log('[play game stopped: ' + EngineLogName(2) + ' move could not be played]' +
-            LineEnding);
-        end;
-      end
-      else
-      begin
-        if MoveText <> '' then
-          AppendEngine2Log('[analysis move ignored: ' +
-            MoveText + ']' + LineEnding)
-        else
-          AppendEngine2Log('[' + EngineLogName(2) + ' done]' + LineEnding);
-      end;
-    end;
-  end;
+  if ALine = 'wait' then
+    HandleEngineSlotWaitLine(AEngineIndex)
+  else if ALine = 'ready' then
+    HandleEngineSlotReadyLine(AEngineIndex)
+  else if StartsText('param ', ALine) then
+    HandleEngineSlotParamLine(AEngineIndex, ALine)
+  else if StartsText('id ', ALine) then
+    HandleEngineSlotIdLine(AEngineIndex, ALine)
+  else if StartsText('info ', ALine) then
+    HandleEngineSlotInfoLine(AEngineIndex, ALine)
+  else if StartsText('error ', ALine) then
+    HandleEngineSlotErrorLine(AEngineIndex, ALine)
+  else if StartsText('done ', ALine) or (ALine = 'done') then
+    HandleEngineSlotDoneLine(AEngineIndex, ALine);
 end;
 
 procedure TMainWindow.GoButtonClick(Sender: TObject);
 begin
-  FAutoPlayActive := False;
-  FPendingAutoPlayStart := False;
-  FPendingMctsStart := False;
-  FPendingPlayGameStart := False;
-  FPendingThinkStart := False;
-  LeavePlayGameMode;
-  FPendingAnalyzeStart := False;
-  AppendEngineLog('[manual Analyze: starting analysis]' + LineEnding);
+  PrepareManualEngineCommand(True, True);
+  AppendEngineSlotLog(1, '[manual Analyze: starting analysis]' + LineEnding);
   SetGuiState(gsAnalyzing, 'manual analyze');
-  SendStopToAllEngines;
-  SendGoAnalyzeToEngine(esmAnalyze);
+  SendProtocolCommandToAllEngines(epcStop);
+  SendProtocolCommandToAllEngines(epcAnalyze, esmAnalyze);
 end;
 
 procedure TMainWindow.MctsButtonClick(Sender: TObject);
 begin
-  FAutoPlayActive := False;
-  FPendingAutoPlayStart := False;
-  FPendingMctsStart := False;
-  FPendingPlayGameStart := False;
-  FPendingThinkStart := False;
-  LeavePlayGameMode;
-  FPendingAnalyzeStart := False;
-  FPendingMctsStart := False;
-  AppendEngineLog('[manual MCTS: starting mcts]' + LineEnding);
+  PrepareManualEngineCommand(True, True);
+  AppendEngineSlotLog(1, '[manual MCTS: starting mcts]' + LineEnding);
   SetGuiState(gsMcts, 'manual mcts');
-  SendStopToAllEngines;
-  SendGoMctsToEngine;
+  SendProtocolCommandToAllEngines(epcStop);
+  SendProtocolCommandToAllEngines(epcMcts);
 end;
 
 procedure TMainWindow.AutoPlayButtonClick(Sender: TObject);
@@ -10176,29 +8046,22 @@ begin
     Exit;
   if EngineIsDxp(1) then
   begin
-    AppendEngineLog('[auto-play not supported for DXP engines]' + LineEnding);
+    AppendEngineSlotLog(1, '[auto-play not supported for DXP engines]' + LineEnding);
     Exit;
   end;
 
-  if FCurrentPly < Length(FHistoryMoves) then
+  if FHistory.CurrentPly < Length(FHistory.Moves) then
   begin
-    SetLength(FHistoryMoves, FCurrentPly);
-    SetLength(FHistoryMoveAnnotations, FCurrentPly);
-    SetLength(FHistoryClockSnapshots, FCurrentPly);
+    FHistory.TruncateToCurrentPly;
     UpdateHistoryList;
   end;
   UpdateHistoryList;
   if EngineStateNeedsStop(FEngines[1].State) then
   begin
-    FPendingAutoPlayStart := True;
-    FPendingMctsStart := False;
-    FPendingAnalyzeStart := False;
-    FPendingPlayGameStart := False;
-    LeavePlayGameMode;
-    FAutoPlayActive := False;
+    PrepareManualEngineCommand(False, True);
     FAutoPlayPlyCount := 0;
-    AppendEngineLog('[stopping previous search before auto-play]' + LineEnding);
-    SendStopToEngine;
+    RequestEngineSlotActionAfterStop(1, peaAutoPlay, esmIdle,
+      'stopping previous search before auto-play');
     Exit;
   end;
 
@@ -10207,24 +8070,120 @@ end;
 
 procedure TMainWindow.BeginAutoPlay;
 begin
-  FPendingAutoPlayStart := False;
-  FPendingAnalyzeStart := False;
-  FPendingMctsStart := False;
-  FPendingPlayGameStart := False;
-  FIgnoreNextDoneMove := False;
+  ClearEngineSlotPendingAction(1);
+  ClearEngineSlotPendingAction(2);
+  FEngines[1].IgnoreNextDoneMove := False;
   LeavePlayGameMode;
   FAutoPlayActive := True;
   FAutoPlayPlyCount := 0;
   SetGuiState(gsAutoPlaying, 'auto-play started');
-  AppendEngineLog('[auto-play started]' + LineEnding);
+  AppendEngineSlotLog(1, '[auto-play started]' + LineEnding);
   if EngineIsDxp(1) then
   begin
     FAutoPlayActive := False;
     SetGuiState(gsIdle, 'auto-play not supported for DXP');
-    AppendEngineLog('[auto-play not supported for DXP engines]' + LineEnding);
+    AppendEngineSlotLog(1, '[auto-play not supported for DXP engines]' + LineEnding);
     Exit;
   end;
-  SendGoThinkToEngine(esmAutoPlay);
+  SendProtocolCommandToEngineSlot(1, epcThink, esmAutoPlay);
+end;
+
+procedure TMainWindow.PrepareManualEngineCommand(AClearPendingActions,
+  ALeavePlayGameMode: Boolean);
+begin
+  FAutoPlayActive := False;
+  if AClearPendingActions then
+  begin
+    ClearEngineSlotPendingAction(1);
+    ClearEngineSlotPendingAction(2);
+  end;
+  if ALeavePlayGameMode then
+    LeavePlayGameMode;
+end;
+
+procedure TMainWindow.StorePendingPlayGameOptions(AWhiteIsEngine,
+  ABlackIsEngine: Boolean; const AWhiteName, ABlackName: String;
+  AGameMinutes: Double; AStartFromCurrent: Boolean; AWhiteEngineIndex,
+  ABlackEngineIndex: Integer);
+begin
+  FPendingPlayGameWhiteIsEngine := AWhiteIsEngine;
+  FPendingPlayGameBlackIsEngine := ABlackIsEngine;
+  FPendingPlayGameWhiteName := AWhiteName;
+  FPendingPlayGameBlackName := ABlackName;
+  FPendingPlayGameMinutes := AGameMinutes;
+  FPendingPlayGameFromCurrent := AStartFromCurrent;
+  FPendingPlayGameWhiteEngineIndex := AWhiteEngineIndex;
+  FPendingPlayGameBlackEngineIndex := ABlackEngineIndex;
+end;
+
+procedure TMainWindow.PendingActionForPlayGameStart(
+  out AAction: TPendingEngineAction; out AMode: TEngineSearchMode);
+begin
+  AAction := peaNone;
+  AMode := esmIdle;
+
+  if IsPlayGameEngineTurn then
+  begin
+    AAction := peaThink;
+    AMode := esmPlayGameThink;
+    Exit;
+  end;
+
+  if FPlayGameWhiteIsEngine and FPlayGameBlackIsEngine then
+    Exit;
+
+  if (FPlayGameWhiteIsEngine or FPlayGameBlackIsEngine) and
+    FEngineAnalyzeEnabled then
+  begin
+    AAction := peaAnalyze;
+    AMode := esmPlayGameAnalyze;
+    Exit;
+  end;
+
+  if FEngineAnalyzeEnabled then
+  begin
+    AAction := peaAnalyze;
+    AMode := esmAnalyze;
+  end;
+end;
+
+procedure TMainWindow.RequestPlayGameStartAfterEngine1Stop;
+var
+  PendingAction: TPendingEngineAction;
+  PendingMode: TEngineSearchMode;
+begin
+  ClearEngineSlotPendingAction(1);
+  PendingActionForPlayGameStart(PendingAction, PendingMode);
+  FAutoPlayActive := False;
+
+  if EngineStateNeedsStop(FEngines[2].State) then
+    SendStopToEngineSlot(2);
+
+  if PendingAction = peaNone then
+  begin
+    AppendEngineSlotLog(1, '[stopping previous search before starting game]' +
+      LineEnding);
+    SendStopToEngineSlot(1);
+    Exit;
+  end;
+
+  RequestEngineSlotActionAfterStop(1, PendingAction, PendingMode,
+    'stopping previous search before starting game');
+end;
+
+procedure TMainWindow.HandleEngine2StopBeforePlayGameStart;
+begin
+  FAutoPlayActive := False;
+  if FPlayGameActive and IsPlayGameSecondEngineTurn then
+    RequestEngineSlotActionAfterStop(2, peaThink, esmPlayGameThink,
+      'stopping previous search before starting game')
+  else
+  begin
+    AppendEngineSlotLog(2, '[stopping previous search before starting game]' +
+      LineEnding);
+    SendStopToEngineSlot(2);
+    ContinuePlayGameSearch;
+  end;
 end;
 
 procedure TMainWindow.StartPlayGameFromOptions(AWhiteIsEngine,
@@ -10240,69 +8199,18 @@ begin
     BeginPlayGame(AWhiteIsEngine, ABlackIsEngine, AWhiteName, ABlackName,
       AGameMinutes, AStartFromCurrent, False, AWhiteEngineIndex,
       ABlackEngineIndex);
-    FAutoPlayActive := False;
-    if FPlayGameActive and IsPlayGameSecondEngineTurn then
-      FEngines[2].PendingThinkStart := True;
-    AppendEngine2Log('[stopping previous search before starting game]' +
-      LineEnding);
-    SendStopToSecondEngine;
-    if not (FPlayGameActive and IsPlayGameSecondEngineTurn) then
-      ContinuePlayGameSearch;
+    HandleEngine2StopBeforePlayGameStart;
     Exit;
   end;
   if EngineStateNeedsStop(FEngines[1].State) then
   begin
+    StorePendingPlayGameOptions(AWhiteIsEngine, ABlackIsEngine, AWhiteName,
+      ABlackName, AGameMinutes, AStartFromCurrent, AWhiteEngineIndex,
+      ABlackEngineIndex);
     BeginPlayGame(AWhiteIsEngine, ABlackIsEngine, AWhiteName, ABlackName,
       AGameMinutes,
       AStartFromCurrent, False, AWhiteEngineIndex, ABlackEngineIndex);
-    FPendingAutoPlayStart := False;
-    FPendingMctsStart := False;
-    FPendingPlayGameStart := False;
-    FPendingPlayGameWhiteIsEngine := AWhiteIsEngine;
-    FPendingPlayGameBlackIsEngine := ABlackIsEngine;
-    FPendingPlayGameWhiteName := AWhiteName;
-    FPendingPlayGameBlackName := ABlackName;
-    FPendingPlayGameWhiteEngineIndex := AWhiteEngineIndex;
-    FPendingPlayGameBlackEngineIndex := ABlackEngineIndex;
-    if not IsPlayGameEngineTurn then
-    begin
-      if AWhiteIsEngine and ABlackIsEngine then
-      begin
-        FPendingAnalyzeStart := False;
-        FPendingThinkStart := False;
-      end
-      else if (AWhiteIsEngine or ABlackIsEngine) and FEngineAnalyzeEnabled then
-      begin
-        FPendingAnalyzeMode := esmPlayGameAnalyze;
-        FPendingAnalyzeStart := True;
-        FPendingThinkStart := False;
-      end
-      else if FEngineAnalyzeEnabled then
-      begin
-        FPendingAnalyzeMode := esmAnalyze;
-        FPendingAnalyzeStart := True;
-        FPendingThinkStart := False;
-      end
-      else
-      begin
-        FPendingAnalyzeStart := False;
-        FPendingThinkStart := False;
-      end;
-    end
-    else
-    begin
-      FPendingAnalyzeStart := False;
-      FPendingThinkMode := esmPlayGameThink;
-      FPendingThinkStart := True;
-    end;
-    FAutoPlayActive := False;
-    AppendEngineLog('[stopping previous search before starting game]' + LineEnding);
-    if EngineStateNeedsStop(FEngines[2].State) then
-      SendStopToSecondEngine;
-    SendStopToEngine;
-    if FPlayGameActive and IsPlayGameEngineTurn and
-      (not IsPlayGameSecondEngineTurn) then
-      FPendingThinkStart := True;
+    RequestPlayGameStartAfterEngine1Stop;
     Exit;
   end;
 
@@ -10316,12 +8224,8 @@ procedure TMainWindow.BeginPlayGame(AWhiteIsEngine, ABlackIsEngine: Boolean;
   AStartFromCurrent: Boolean; AStartSearch: Boolean; AWhiteEngineIndex: Integer;
   ABlackEngineIndex: Integer);
 begin
-  FPendingAutoPlayStart := False;
-  FPendingAnalyzeStart := False;
-  FPendingMctsStart := False;
-  FPendingPlayGameStart := False;
-  FPendingThinkStart := False;
-  FIgnoreNextDoneMove := False;
+  ClearEngineSlotPendingAction(1);
+  FEngines[1].IgnoreNextDoneMove := False;
   ResetClocks;
   FPlayGameWhiteIsEngine := AWhiteIsEngine;
   FPlayGameBlackIsEngine := ABlackIsEngine;
@@ -10351,8 +8255,8 @@ begin
   begin
     FEngineAnalyzeAutoDisabled := FEngineAnalyzeEnabled;
     FEngineAnalyzeEnabled := False;
-    FPendingAnalyzeStart := False;
-    AppendEngineLog('[analysis disabled for engine-vs-engine game]' + LineEnding);
+    ClearEngineSlotPendingAction(1);
+    AppendEngineSlotLog(1, '[analysis disabled for engine-vs-engine game]' + LineEnding);
   end
   else if FEngineAnalyzeAutoDisabled then
   begin
@@ -10369,6 +8273,7 @@ begin
   else
     FGameBlackName := 'Human';
   FGameResult := '*';
+  FGameResultReason := '';
   if not AStartFromCurrent then
     ParseFen('W:W31-50:B1-20');
   ResetHistoryFromCurrentPosition;
@@ -10381,14 +8286,11 @@ begin
   UpdateMoveList;
   UpdateHistoryList;
   InvalidateBoard;
-  AppendEngineLog('[play game started: white=' + FGameWhiteName + ', black=' +
+  AppendEngineSlotLog(1, '[play game started: white=' + FGameWhiteName + ', black=' +
     FGameBlackName + ', minutes=' + FormatFloat('0.###', AGameMinutes) + ']' +
     LineEnding);
 
-  if FPlayGameWhiteIsEngine and EngineIsDxp(FPlayGameWhiteEngineIndex) then
-    SendDxpGameReqToEngine(FPlayGameWhiteEngineIndex, sideWhite, AGameMinutes);
-  if FPlayGameBlackIsEngine and EngineIsDxp(FPlayGameBlackEngineIndex) then
-    SendDxpGameReqToEngine(FPlayGameBlackEngineIndex, sideBlack, AGameMinutes);
+  StartDxpPlayGameSessions(AGameMinutes);
 
   if not AStartSearch then
     Exit;
@@ -10418,9 +8320,11 @@ var
   Dialog: TForm;
   GameMinutes: Double;
   BlackIsEngine: Boolean;
+  BlackEngineIndex: Integer;
   BlackName: String;
   StartFromCurrent: Boolean;
   WhiteIsEngine: Boolean;
+  WhiteEngineIndex: Integer;
   WhiteName: String;
 begin
   if Sender is TForm then
@@ -10437,13 +8341,27 @@ begin
     BlackIsEngine := (FPlayGameBlackPlayerCombo <> nil) and
       (FPlayGameBlackPlayerCombo.ItemIndex > 0);
     if WhiteIsEngine then
-      WhiteName := FPlayGameWhitePlayerCombo.Text
+    begin
+      WhiteName := FPlayGameWhitePlayerCombo.Text;
+      WhiteEngineIndex := PtrInt(FPlayGameWhitePlayerCombo.Items.Objects[
+        FPlayGameWhitePlayerCombo.ItemIndex]);
+    end
     else
+    begin
       WhiteName := 'Human';
+      WhiteEngineIndex := 0;
+    end;
     if BlackIsEngine then
-      BlackName := FPlayGameBlackPlayerCombo.Text
+    begin
+      BlackName := FPlayGameBlackPlayerCombo.Text;
+      BlackEngineIndex := PtrInt(FPlayGameBlackPlayerCombo.Items.Objects[
+        FPlayGameBlackPlayerCombo.ItemIndex]);
+    end
     else
+    begin
       BlackName := 'Human';
+      BlackEngineIndex := 0;
+    end;
     StartFromCurrent := (FPlayGameCurrentPositionRadio <> nil) and
       FPlayGameCurrentPositionRadio.Checked;
     if FPlayGameMinutesSpin <> nil then
@@ -10455,6 +8373,8 @@ begin
   begin
     WhiteIsEngine := False;
     BlackIsEngine := False;
+    WhiteEngineIndex := 0;
+    BlackEngineIndex := 0;
     WhiteName := 'Human';
     BlackName := 'Human';
     StartFromCurrent := False;
@@ -10472,7 +8392,8 @@ begin
 
   if Accepted then
     StartPlayGameFromOptions(WhiteIsEngine, BlackIsEngine, WhiteName,
-      BlackName, GameMinutes, StartFromCurrent);
+      BlackName, GameMinutes, StartFromCurrent, WhiteEngineIndex,
+      BlackEngineIndex);
 end;
 
 procedure TMainWindow.ShowPlayGameDialog;
@@ -10501,6 +8422,16 @@ var
       Result := 'HUB';
   end;
 
+  function PlayGameEngineLabel(AEngineIndex: Integer): String;
+  begin
+    Result := FEngines[AEngineIndex].DisplayName + ' (Engine ' +
+      IntToStr(AEngineIndex) + ' ';
+    if EngineIsDxp(AEngineIndex) then
+      Result += 'DXP Mode)'
+    else
+      Result += 'Hub mode)';
+  end;
+
   procedure LogSlotAvailability(AEngineIndex: Integer);
   var
     LogText: String;
@@ -10512,10 +8443,7 @@ var
       ' dxp-socket=' + BoolText(FEngines[AEngineIndex].DxpSocket <> nil) +
       ' available=' + BoolText(EngineSlotAvailableForPlay(AEngineIndex)) +
       ']' + LineEnding;
-    if AEngineIndex = 2 then
-      AppendEngine2Log(LogText)
-    else
-      AppendEngineLog(LogText);
+    AppendEngineSlotLog(AEngineIndex, LogText);
   end;
 begin
   if FPlayGameDialog <> nil then
@@ -10530,7 +8458,7 @@ begin
   Dialog := TForm.Create(Self);
   Dialog.BorderStyle := bsDialog;
   Dialog.Caption := 'Play game';
-  Dialog.ClientWidth := 300;
+  Dialog.ClientWidth := 420;
   Dialog.ClientHeight := 280;
   Dialog.Color := clBtnFace;
   Dialog.Position := poOwnerFormCenter;
@@ -10545,13 +8473,15 @@ begin
 
   FPlayGameWhitePlayerCombo := TComboBox.Create(Dialog);
   FPlayGameWhitePlayerCombo.Parent := Dialog;
-  FPlayGameWhitePlayerCombo.SetBounds(96, 14, 160, 28);
+  FPlayGameWhitePlayerCombo.SetBounds(96, 14, 304, 28);
   FPlayGameWhitePlayerCombo.Style := csDropDownList;
   FPlayGameWhitePlayerCombo.Items.Add('Human');
   if EngineSlotAvailableForPlay(1) then
-    FPlayGameWhitePlayerCombo.Items.Add(FEngines[1].DisplayName);
+    FPlayGameWhitePlayerCombo.Items.AddObject(PlayGameEngineLabel(1),
+      TObject(PtrInt(1)));
   if EngineSlotAvailableForPlay(2) then
-    FPlayGameWhitePlayerCombo.Items.Add(FEngines[2].DisplayName);
+    FPlayGameWhitePlayerCombo.Items.AddObject(PlayGameEngineLabel(2),
+      TObject(PtrInt(2)));
   FPlayGameWhitePlayerCombo.ItemIndex := 0;
 
   BlackLabel := TLabel.Create(Dialog);
@@ -10562,13 +8492,15 @@ begin
 
   FPlayGameBlackPlayerCombo := TComboBox.Create(Dialog);
   FPlayGameBlackPlayerCombo.Parent := Dialog;
-  FPlayGameBlackPlayerCombo.SetBounds(96, 50, 160, 28);
+  FPlayGameBlackPlayerCombo.SetBounds(96, 50, 304, 28);
   FPlayGameBlackPlayerCombo.Style := csDropDownList;
   FPlayGameBlackPlayerCombo.Items.Add('Human');
   if EngineSlotAvailableForPlay(1) then
-    FPlayGameBlackPlayerCombo.Items.Add(FEngines[1].DisplayName);
+    FPlayGameBlackPlayerCombo.Items.AddObject(PlayGameEngineLabel(1),
+      TObject(PtrInt(1)));
   if EngineSlotAvailableForPlay(2) then
-    FPlayGameBlackPlayerCombo.Items.Add(FEngines[2].DisplayName);
+    FPlayGameBlackPlayerCombo.Items.AddObject(PlayGameEngineLabel(2),
+      TObject(PtrInt(2)));
   FPlayGameBlackPlayerCombo.ItemIndex := 0;
 
   PositionLabel := TLabel.Create(Dialog);
@@ -10578,18 +8510,18 @@ begin
 
   PositionGroup := TPanel.Create(Dialog);
   PositionGroup.Parent := Dialog;
-  PositionGroup.SetBounds(16, 126, 268, 60);
+  PositionGroup.SetBounds(16, 126, 388, 60);
   PositionGroup.BevelOuter := bvLowered;
 
   StandardPositionRadio := TRadioButton.Create(PositionGroup);
   StandardPositionRadio.Parent := PositionGroup;
-  StandardPositionRadio.SetBounds(12, 6, 250, 24);
+  StandardPositionRadio.SetBounds(12, 6, 360, 24);
   StandardPositionRadio.Caption := 'Beginning';
   StandardPositionRadio.Checked := True;
 
   FPlayGameCurrentPositionRadio := TRadioButton.Create(PositionGroup);
   FPlayGameCurrentPositionRadio.Parent := PositionGroup;
-  FPlayGameCurrentPositionRadio.SetBounds(12, 32, 250, 24);
+  FPlayGameCurrentPositionRadio.SetBounds(12, 32, 360, 24);
   FPlayGameCurrentPositionRadio.Caption := 'Current position';
 
   MinutesLabel := TLabel.Create(Dialog);
@@ -10619,7 +8551,7 @@ begin
   OKButton.Caption := 'OK';
   OKButton.ModalResult := mrOK;
   OKButton.OnClick := @PlayGameDialogButtonClick;
-  OKButton.SetBounds(122, 8, 80, 26);
+  OKButton.SetBounds(242, 8, 80, 26);
   Dialog.DefaultControl := OKButton;
 
   CancelButton := TButton.Create(ButtonPanel);
@@ -10627,7 +8559,7 @@ begin
   CancelButton.Caption := 'Cancel';
   CancelButton.ModalResult := mrCancel;
   CancelButton.OnClick := @PlayGameDialogButtonClick;
-  CancelButton.SetBounds(208, 8, 80, 26);
+  CancelButton.SetBounds(328, 8, 80, 26);
   Dialog.CancelControl := CancelButton;
 
   FPlayGameDialog := Dialog;
@@ -10638,19 +8570,14 @@ end;
 procedure TMainWindow.StopButtonClick(Sender: TObject);
 begin
   SetGuiState(gsStopping, 'manual stop');
-  FAutoPlayActive := False;
-  FPendingAutoPlayStart := False;
-  FPendingAnalyzeStart := False;
-  FPendingMctsStart := False;
-  FPendingPlayGameStart := False;
-  FPendingThinkStart := False;
+  PrepareManualEngineCommand(True, False);
   if EngineIsRunning then
-    AppendEngineLog('[manual STOP]' + LineEnding);
+    AppendEngineSlotLog(1, '[manual STOP]' + LineEnding);
   if SecondEngineIsRunning then
-    AppendEngine2Log('[manual STOP]' + LineEnding);
-  SendDxpGameEndToPlayingDxpEngines;
-  LeavePlayGameMode;
-  SendStopToAllEngines;
+    AppendEngineSlotLog(2, '[manual STOP]' + LineEnding);
+  NotifyDxpPlayGameEnd;
+  FinishPlayGameMode;
+  SendProtocolCommandToAllEngines(epcStop);
 end;
 
 function TMainWindow.HubPositionString: String;
@@ -10658,83 +8585,21 @@ begin
   Result := HubPositionStringFor(FBoard, FSideToMove);
 end;
 
-function TMainWindow.HubPositionStringFor(const ABoard: TBoard; ASide: TSide): String;
-var
-  Square: Integer;
-begin
-  if ASide = sideWhite then
-    Result := 'W'
-  else
-    Result := 'B';
-
-  for Square := Low(ABoard) to High(ABoard) do
-    case ABoard[Square] of
-      pcWhiteMan: Result += 'w';
-      pcBlackMan: Result += 'b';
-      pcWhiteKing: Result += 'W';
-      pcBlackKing: Result += 'B';
-    else
-      Result += 'e';
-    end;
-end;
-
 function TMainWindow.HubPositionCommand(AEngineIndex: Integer): String;
-var
-  Board: TBoard;
-  I: Integer;
-  IncludeSingleCaptureSquare: Boolean;
-  MoveText: String;
-  MoveStart: Integer;
-  Reversible: Boolean;
-  RootBoard: TBoard;
-  RootSide: TSide;
-  Side: TSide;
 begin
-  Board := FHistoryBaseBoard;
-  Side := FHistoryBaseSide;
-  RootBoard := Board;
-  RootSide := Side;
-  MoveStart := 0;
-
-  if not EngineSendStartingPosition(AEngineIndex) then
-    for I := 0 to Min(FCurrentPly, Length(FHistoryMoves)) - 1 do
-    begin
-      Reversible := MoveIsReversibleOnBoard(Board, FHistoryMoves[I]);
-      ApplyMoveToBoard(Board, Side, FHistoryMoves[I]);
-      if not Reversible then
-      begin
-        MoveStart := I + 1;
-        RootBoard := Board;
-        RootSide := Side;
-      end;
-    end
-  else
-  begin
-    RootBoard := FHistoryBaseBoard;
-    RootSide := FHistoryBaseSide;
-  end;
-
-  Result := 'pos pos=' + HubPositionStringFor(RootBoard, RootSide);
-  IncludeSingleCaptureSquare := EngineSingleCapturesIncludeCapturedSquare(AEngineIndex);
-  MoveText := '';
-  for I := MoveStart to Min(FCurrentPly, Length(FHistoryMoves)) - 1 do
-  begin
-    if MoveText <> '' then
-      MoveText += ' ';
-    MoveText += MoveToHubString(FHistoryMoves[I], IncludeSingleCaptureSquare);
-  end;
-  if MoveText <> '' then
-    Result += ' moves=' + HubQuote(MoveText);
+  Result := BuildHubPositionCommand(FHistory,
+    EngineSendStartingPosition(AEngineIndex),
+    EngineSingleCapturesIncludeCapturedSquare(AEngineIndex));
 end;
 
 function TMainWindow.CurrentEngineRemainingTimeSeconds: Double;
 begin
   UpdateGameClock;
 
-  if FSideToMove = sideWhite then
-    Result := FWhiteClockSeconds
+  if FPlayClock <> nil then
+    Result := FPlayClock.SecondsForSide(FSideToMove)
   else
-    Result := FBlackClockSeconds;
+    Result := 0;
 
   if Result < 0 then
     Result := 0;
@@ -10752,25 +8617,27 @@ begin
 
   IncludeSingleCaptureSquare :=
     EngineSingleCapturesIncludeCapturedSquare(AEngineIndex);
-  if FCurrentPly <= 0 then
+  if FHistory.CurrentPly <= 0 then
     LogText := '[DXP start position: ' + HubPositionString + ']'
   else
   begin
-    LastMoveText := MoveToHubString(FHistoryMoves[FCurrentPly - 1],
+    LastMoveText := MoveToHubString(FHistory.Moves[FHistory.CurrentPly - 1],
       IncludeSingleCaptureSquare);
     LogText := '[DXP send move: ' + LastMoveText + ']';
   end;
 
-  if AEngineIndex = 2 then
+  AppendEngineSlotLog(AEngineIndex, LogText + LineEnding +
+    '[waiting for DXP answer]' + LineEnding);
+
+  if (FHistory.CurrentPly <= 0) and
+    (FEngines[AEngineIndex].DxpGameState = dgsGameRequested) then
   begin
-    AppendEngine2Log(LogText + LineEnding);
-    AppendEngine2Log('[waiting for DXP answer]' + LineEnding);
-  end
-  else
-  begin
-    AppendEngineLog(LogText + LineEnding);
-    AppendEngineLog('[waiting for DXP answer]' + LineEnding);
+    if AMode = esmPlayGameThink then
+      ActivateGameClocks;
+    BeginEngineSlotSearch(AEngineIndex, AMode, esThinking);
+    Exit;
   end;
+
   MarkDxpWaitingForReply(AEngineIndex, AMode);
 end;
 
@@ -10821,185 +8688,234 @@ begin
     Result := 'Human';
 end;
 
-procedure TMainWindow.ContinuePlayGameSearch;
+procedure TMainWindow.ContinueAutoPlayAfterPositionChange;
+begin
+  if not FAutoPlayActive then
+    Exit;
+
+  Inc(FAutoPlayPlyCount);
+
+  if FAutoPlayPlyCount >= 255 then
+  begin
+    StopAutoPlayBecause(0, '255 moves reached');
+    Exit;
+  end;
+
+  RequestOrSendThinkToEngineSlot(1, esmAutoPlay,
+    'stopping previous search before auto-play');
+end;
+
+procedure TMainWindow.MarkPlayGameWaitingEngine(AActorEngineIndex: Integer);
+begin
+  if (AActorEngineIndex = 1) and IsPlayGameSecondEngineTurn then
+    SetEngineSlotState(1, esWaitingForOtherEngine)
+  else if (AActorEngineIndex = 2) and IsPlayGameEngineTurn and
+    (not IsPlayGameSecondEngineTurn) then
+    SetEngineSlotState(2, esWaitingForOtherEngine);
+end;
+
+procedure TMainWindow.ContinuePlayGameAfterPositionChange(
+  AActorEngineIndex: Integer);
 begin
   if not FPlayGameActive then
     Exit;
 
-  if IsPlayGameEngineTurn then
+  MarkPlayGameWaitingEngine(AActorEngineIndex);
+  ContinuePlayGameSearch;
+end;
+
+function TMainWindow.HandleTerminalPositionAfterFlowChange(
+  AReason: TGameFlowReason): Boolean;
+begin
+  Result := Length(FMoves) = 0;
+  if not Result then
+    Exit;
+
+  AppendEngineSlotLog(1, '[terminal position after ' + GameFlowReasonText(AReason) +
+    ']' + LineEnding);
+  EndCurrentGame(gerTerminalPosition);
+end;
+
+procedure TMainWindow.ContinueGameFlowAfterPositionChange(
+  AReason: TGameFlowReason; AActorEngineIndex: Integer);
+begin
+  if CheckDrawByRepetition then
+    Exit;
+  if CheckDrawByTwentyFiveMoveRule then
+    Exit;
+  if HandleTerminalPositionAfterFlowChange(AReason) then
+    Exit;
+
+  case AReason of
+    gfrAutoPlayMove:
+      ContinueAutoPlayAfterPositionChange;
+    gfrHumanMove, gfrEngineMove:
+      ContinuePlayGameAfterPositionChange(AActorEngineIndex);
+  end;
+end;
+
+procedure TMainWindow.HandleEngineMoveForSearchMode(AEngineIndex: Integer;
+  const AMoveText: String; ASearchMode: TEngineSearchMode;
+  ADxpReceivedAtSeconds: Double);
+begin
+  if not ApplyEngineMoveForSearchMode(AEngineIndex, AMoveText, ASearchMode,
+    ADxpReceivedAtSeconds) then
   begin
-    SetGuiState(gsPlayGameEngineTurn, 'continue play-game search');
-    if IsPlayGameSecondEngineTurn then
-    begin
-      AppendEngine2Log('[' + EngineLogName(2) + ' to move; starting think]' + LineEnding);
-      if EngineIsDxp(2) then
-      begin
-        SendDxpStartOrMoveToEngine(2, esmPlayGameThink);
-        if EngineStateNeedsStop(FEngines[1].State) then
-          SendStopToEngine;
-        Exit;
-      end;
-      if EngineStateNeedsStop(FEngines[2].State) then
-      begin
-        AppendEngine2Log('[synchronizing previous search before engine think]' +
-          LineEnding);
-        SendStopToSecondEngine;
-        FEngines[2].PendingThinkStart := True;
-        if EngineStateNeedsStop(FEngines[1].State) then
-          SendStopToEngine;
-      end
-      else
-        SendGoThinkToSecondEngine;
-      Exit;
-    end;
-    AppendEngineLog('[' + EngineLogName(1) + ' to move; starting think]' + LineEnding);
-    if EngineIsDxp(1) then
-    begin
-      SendDxpStartOrMoveToEngine(1, esmPlayGameThink);
-      Exit;
-    end;
-    if EngineStateNeedsStop(FEngines[1].State) then
-    begin
-      FPendingAutoPlayStart := False;
-      FPendingAnalyzeStart := False;
-      FPendingMctsStart := False;
-      FPendingPlayGameStart := False;
-      FPendingThinkMode := esmPlayGameThink;
-      FPendingThinkStart := True;
-      AppendEngineLog('[stopping previous search before engine think]' +
-        LineEnding);
-      SendStopToEngine;
-    end
-    else
-      SendGoThinkToEngine(esmPlayGameThink);
-  end
-  else if HasPlayGameEnginePlayer and HasPlayGameHumanPlayer then
+    HandleFailedEngineMove(AEngineIndex, ASearchMode);
+    ClearEngineTiming(AEngineIndex);
+    Exit;
+  end;
+
+  ClearEngineTiming(AEngineIndex);
+  ContinueAfterEngineMove(AEngineIndex, ASearchMode);
+end;
+
+function TMainWindow.ApplyEngineMoveForSearchMode(AEngineIndex: Integer;
+  const AMoveText: String; ASearchMode: TEngineSearchMode;
+  ADxpReceivedAtSeconds: Double): Boolean;
+begin
+  case ASearchMode of
+    esmAutoPlay, esmPlayGameThink:
+      Result := PlayEngineMove(AMoveText, AEngineIndex,
+        ADxpReceivedAtSeconds);
+  else
+    Result := False;
+  end;
+end;
+
+procedure TMainWindow.HandleFailedEngineMove(AEngineIndex: Integer;
+  ASearchMode: TEngineSearchMode);
+begin
+  case ASearchMode of
+    esmAutoPlay:
+      StopAutoPlayBecause(AEngineIndex, EngineLogName(AEngineIndex) +
+        ' move could not be played');
+    esmPlayGameThink:
+      StopPlayGameBecause(AEngineIndex, EngineLogName(AEngineIndex) +
+        ' move could not be played');
+  end;
+end;
+
+procedure TMainWindow.ContinueAfterEngineMove(AEngineIndex: Integer;
+  ASearchMode: TEngineSearchMode);
+begin
+  case ASearchMode of
+    esmAutoPlay:
+      ContinueGameFlowAfterPositionChange(gfrAutoPlayMove, AEngineIndex);
+    esmPlayGameThink:
+      ContinueGameFlowAfterPositionChange(gfrEngineMove, AEngineIndex);
+  end;
+end;
+
+function TMainWindow.CurrentPlayGameEngineIndex: Integer;
+begin
+  Result := 0;
+  if not IsPlayGameEngineTurn then
+    Exit;
+
+  if (FSideToMove = sideWhite) and FPlayGameWhiteIsEngine then
+    Result := FPlayGameWhiteEngineIndex
+  else if (FSideToMove = sideBlack) and FPlayGameBlackIsEngine then
+    Result := FPlayGameBlackEngineIndex;
+end;
+
+procedure TMainWindow.ContinuePlayGameSearch;
+var
+  EngineIndex: Integer;
+begin
+  if not FPlayGameActive then
+    Exit;
+
+  EngineIndex := CurrentPlayGameEngineIndex;
+  if EngineIndex > 0 then
+    ContinuePlayGameEngineTurn(EngineIndex)
+  else
+    ContinuePlayGameHumanTurn;
+end;
+
+procedure TMainWindow.ContinuePlayGameEngineTurn(AEngineIndex: Integer);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  SetGuiState(gsPlayGameEngineTurn, 'continue play-game search');
+
+  if EngineIsDxp(AEngineIndex) and
+    (FEngines[AEngineIndex].SearchMode = esmPlayGameThink) and
+    (FEngines[AEngineIndex].DxpGameState = dgsWaitingForMoveOrGameEnd) then
   begin
-    SetGuiState(gsPlayGameHumanTurn, 'continue play-game search');
+    AppendEngineSlotLog(AEngineIndex, '[' + EngineLogName(AEngineIndex) +
+      ' to move; already waiting for DXP answer]' + LineEnding);
+    ActivateGameClocks;
+    Exit;
+  end;
+
+  AppendEngineSlotLog(AEngineIndex, '[' + EngineLogName(AEngineIndex) +
+    ' to move; starting think]' + LineEnding);
+
+  if EngineIsDxp(AEngineIndex) then
+    StartDxpPlayGameThink(AEngineIndex)
+  else
+    StartHubPlayGameThink(AEngineIndex);
+end;
+
+procedure TMainWindow.ContinuePlayGameHumanTurn;
+begin
+  SetGuiState(gsPlayGameHumanTurn, 'continue play-game search');
+  ActivateGameClocks;
+
+  if HasPlayGameEnginePlayer and HasPlayGameHumanPlayer then
+  begin
     SendPlayGameHumanTurnAnalyze
   end
   else if HasPlayGameHumanPlayer and EngineIsRunning and FEngines[1].Ready then
   begin
-    SetGuiState(gsPlayGameHumanTurn, 'continue play-game search');
     if EngineStateNeedsStop(FEngines[1].State) then
     begin
-      FPendingAutoPlayStart := False;
-      FPendingMctsStart := False;
-      FPendingAnalyzeMode := esmAnalyze;
-      FPendingAnalyzeStart := True;
-      FPendingPlayGameStart := False;
-      FPendingThinkStart := False;
-      AppendEngineLog('[stopping previous search before human-vs-human analysis]' +
-        LineEnding);
-      SendStopToEngine;
+      RequestEngineSlotActionAfterStop(1, peaAnalyze, esmAnalyze,
+        'stopping previous search before human-vs-human analysis');
     end
     else
       SendGoAnalyzeToEngine(esmAnalyze);
   end;
 end;
 
-function TMainWindow.BoardToFen(const ABoard: TBoard; ASide: TSide): String;
-var
-  BlackText: String;
-  Square: Integer;
-  WhiteText: String;
-
-  procedure AddPiece(var AText: String; ASquare: Integer; IsKing: Boolean);
-  begin
-    if AText <> '' then
-      AText += ',';
-    if IsKing then
-      AText += 'K';
-    AText += IntToStr(ASquare);
-  end;
-
+procedure TMainWindow.StartDxpPlayGameThink(AEngineIndex: Integer);
 begin
-  WhiteText := '';
-  BlackText := '';
+  SendDxpStartOrMoveToEngine(AEngineIndex, esmPlayGameThink);
+  if (AEngineIndex = 2) and EngineStateNeedsStop(FEngines[1].State) then
+    SendStopToEngineSlot(1);
+end;
 
-  for Square := Low(ABoard) to High(ABoard) do
-    case ABoard[Square] of
-      pcWhiteMan: AddPiece(WhiteText, Square, False);
-      pcWhiteKing: AddPiece(WhiteText, Square, True);
-      pcBlackMan: AddPiece(BlackText, Square, False);
-      pcBlackKing: AddPiece(BlackText, Square, True);
-    end;
-
-  if ASide = sideWhite then
-    Result := 'W'
+procedure TMainWindow.StartHubPlayGameThink(AEngineIndex: Integer);
+begin
+  if AEngineIndex = 2 then
+    RequestOrSendThinkToEngineSlot(AEngineIndex, esmPlayGameThink,
+      'synchronizing previous search before engine think')
   else
-    Result := 'B';
-  Result += ':W' + WhiteText + ':B' + BlackText;
+    RequestOrSendThinkToEngineSlot(AEngineIndex, esmPlayGameThink,
+      'stopping previous search before engine think');
+
+  if (AEngineIndex = 2) and EngineStateNeedsStop(FEngines[1].State) then
+    SendStopToEngineSlot(1);
 end;
 
 function TMainWindow.EngineInfoAnnotation(const ALine: String): String;
-var
-  DepthText: String;
-  ScoreText: String;
-  TimeText: String;
 begin
-  DepthText := ExtractHubArgument(ALine, 'depth');
-  ScoreText := ExtractHubArgument(ALine, 'score');
-  TimeText := ExtractHubArgument(ALine, 'time');
-
-  Result := '';
-  if DepthText <> '' then
-    Result := 'depth=' + DepthText;
-  if ScoreText <> '' then
-  begin
-    if Result <> '' then
-      Result += ' ';
-    Result += 'score=' + ScoreText;
-  end;
-  if TimeText <> '' then
-  begin
-    if Result <> '' then
-      Result += ' ';
-    Result += 'time=' + TimeText;
-  end;
+  Result := BuildEngineInfoAnnotation(ALine);
 end;
 
 function TMainWindow.HistoryAnnotationScoreWhite(APly: Integer;
   out AScore: Double): Boolean;
-var
-  Annotation: String;
-  FormatSettings: TFormatSettings;
-  Perspective: String;
-  ScoreText: String;
-  SideBeforeMove: TSide;
 begin
-  Result := False;
-  AScore := 0.0;
-  if (APly <= 0) or (APly > Length(FHistoryMoveAnnotations)) then
-    Exit;
-
-  Annotation := FHistoryMoveAnnotations[APly - 1];
-  ScoreText := ExtractHubArgument(Annotation, 'score');
-  if ScoreText = '' then
-    Exit;
-
-  FormatSettings := DefaultFormatSettings;
-  FormatSettings.DecimalSeparator := '.';
-  if not TryStrToFloat(ScoreText, AScore, FormatSettings) then
-    Exit;
-
-  Perspective := EngineScorePerspective(1);
-  if (Perspective = 'black') or (Perspective = 'b') then
-    AScore := -AScore
-  else if (Perspective = 'side-to-move') or (Perspective = 'stm') or
-    (Perspective = 'side') then
+  if (APly <= 0) or (APly > Length(FHistory.MoveAnnotations)) then
   begin
-    SideBeforeMove := FHistoryBaseSide;
-    if Odd(APly - 1) then
-      if SideBeforeMove = sideWhite then
-        SideBeforeMove := sideBlack
-      else
-        SideBeforeMove := sideWhite;
-    if SideBeforeMove = sideBlack then
-      AScore := -AScore;
+    AScore := 0.0;
+    Exit(False);
   end;
 
-  Result := True;
+  Result := TryAnnotationScoreWhite(FHistory.MoveAnnotations[APly - 1],
+    EngineScorePerspective(1), FHistory.BaseSide, APly, AScore);
 end;
 
 procedure TMainWindow.UpdateEngineEvalFromInfo(const ALine: String; AForce: Boolean);
@@ -11045,21 +8961,21 @@ begin
   RepaintEngineEvalBarDelta(OldScoreValue, ScoreValue);
 end;
 
-procedure TMainWindow.UpdateAnalyzeBestMoveFromInfo(const ALine: String);
+procedure TMainWindow.UpdateAnalyzeBestMoveFromInfo(AEngineIndex: Integer;
+  const ALine: String);
 var
   PvText: String;
 begin
-  if FEngines[1].SearchMode = esmIdle then
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
     Exit;
-  if FAnalyzePvLocked then
+  if FEngines[AEngineIndex].SearchMode = esmIdle then
     Exit;
 
   PvText := ExtractHubArgument(ALine, 'pv');
-  UpdateAnalyzePvFromMoveText(PvText);
-  UpdateAnalyzeBestMoveFromMoveText(PvText);
+  UpdateAnalyzePvFromMoveText(AEngineIndex, PvText);
 end;
 
-procedure TMainWindow.UpdateAnalyzePvFromMoveText(const APvText: String);
+procedure TMainWindow.ShowAnalyzePvFromEngine(AEngineIndex: Integer);
 var
   BoardAfterFirstMove: TBoard;
   FirstMoveIndex: Integer;
@@ -11070,16 +8986,26 @@ var
   ReplyMoves: TMoveArray;
   SideAfterFirstMove: TSide;
 begin
-  ParsePvMoveText(APvText, FAnalyzePvMoves);
-  FAnalyzePvHasBase := Length(FAnalyzePvMoves) > 0;
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  ParseHubPvMoveText(FEngines[AEngineIndex].AnalyzePvText, FAnalyzePvMoves);
+  FAnalyzePvHasBase := FEngines[AEngineIndex].AnalyzePvHasBase and
+    (Length(FAnalyzePvMoves) > 0);
   if FAnalyzePvHasBase then
   begin
-    FAnalyzePvBaseBoard := FBoard;
-    FAnalyzePvBaseSide := FSideToMove;
-    FAnalyzePvBasePly := FCurrentPly;
+    FAnalyzePvBaseBoard := FEngines[AEngineIndex].AnalyzePvBaseBoard;
+    FAnalyzePvBaseSide := FEngines[AEngineIndex].AnalyzePvBaseSide;
+    FAnalyzePvBasePly := FEngines[AEngineIndex].AnalyzePvBasePly;
     FAnalyzePvBrowseBoard := FAnalyzePvBaseBoard;
     FAnalyzePvBrowseSide := FAnalyzePvBaseSide;
     FAnalyzePvBrowsePly := Length(FAnalyzePvMoves);
+  end
+  else
+  begin
+    FAnalyzePvBrowseBoard := FBoard;
+    FAnalyzePvBrowseSide := FSideToMove;
+    FAnalyzePvBrowsePly := 0;
   end;
 
   if Length(FAnalyzePvMoves) >= 2 then
@@ -11127,8 +9053,33 @@ begin
     InvalidateBoardSquare(NewHintSourceSquare);
   end;
 
-  RebuildAnalyzePvPositionToPly(FAnalyzePvBrowsePly);
+  if FAnalyzePvHasBase then
+    RebuildAnalyzePvPositionToPly(FAnalyzePvBrowsePly)
+  else
+  begin
+    if FHistoryPvMiniBoardPaintBox <> nil then
+      FHistoryPvMiniBoardPaintBox.Invalidate;
+    if FAnalysisBoardPaintBox <> nil then
+      FAnalysisBoardPaintBox.Invalidate;
+  end;
   UpdateAnalyzePvList;
+  UpdateAnalyzeBestMoveFromMoveText(FEngines[AEngineIndex].AnalyzePvText);
+end;
+
+procedure TMainWindow.UpdateAnalyzePvFromMoveText(AEngineIndex: Integer;
+  const APvText: String);
+begin
+  if (AEngineIndex < Low(FEngines)) or (AEngineIndex > High(FEngines)) then
+    Exit;
+
+  FEngines[AEngineIndex].AnalyzePvText := APvText;
+  FEngines[AEngineIndex].AnalyzePvBaseBoard := FBoard;
+  FEngines[AEngineIndex].AnalyzePvBaseSide := FSideToMove;
+  FEngines[AEngineIndex].AnalyzePvBasePly := FHistory.CurrentPly;
+  FEngines[AEngineIndex].AnalyzePvHasBase := Trim(APvText) <> '';
+
+  if (AEngineIndex = FSelectedPvEngineIndex) and (not FAnalyzePvLocked) then
+    ShowAnalyzePvFromEngine(AEngineIndex);
 end;
 
 procedure TMainWindow.UpdateAnalyzeBestMoveFromMoveText(const AMoveText: String);
@@ -11140,7 +9091,15 @@ var
 begin
   MoveText := AMoveText;
   if MoveText = '' then
+  begin
+    if FAnalyzeBestSourceSquare <> 0 then
+    begin
+      OldSourceSquare := FAnalyzeBestSourceSquare;
+      FAnalyzeBestSourceSquare := 0;
+      InvalidateBoardSquare(OldSourceSquare);
+    end;
     Exit;
+  end;
   if Pos(' ', MoveText) > 0 then
     MoveText := Copy(MoveText, 1, Pos(' ', MoveText) - 1);
 
@@ -11182,20 +9141,6 @@ begin
   SelectAnalyzePvPly(FAnalyzePvBrowsePly);
 end;
 
-function TMainWindow.ClockAnnotation(APly: Integer): String;
-begin
-  Result := '';
-  if (APly <= 0) or (APly > Length(FHistoryClockSnapshots)) or
-    (not FHistoryClockSnapshots[APly - 1].HasClock) then
-    Exit;
-
-  Result := 'clock=[' +
-    FormatClockAnnotationSeconds(FHistoryClockSnapshots[APly - 1].WhiteSeconds) +
-    ', ' +
-    FormatClockAnnotationSeconds(FHistoryClockSnapshots[APly - 1].BlackSeconds) +
-    ']';
-end;
-
 function TMainWindow.BuildAnalyzePvText(AStoreRanges: Boolean): String;
 var
   AbsolutePly: Integer;
@@ -11208,7 +9153,7 @@ var
 
   function MoveNumberForAbsolutePly(APly: Integer): Integer;
   begin
-    if FHistoryBaseSide = sideWhite then
+    if FHistory.BaseSide = sideWhite then
       Result := ((APly - 1) div 2) + 1
     else
       Result := (APly div 2) + 1;
@@ -11229,7 +9174,7 @@ begin
   end
   else
   begin
-    BasePly := FCurrentPly;
+    BasePly := FHistory.CurrentPly;
     BaseSide := FSideToMove;
   end;
 
@@ -11263,78 +9208,8 @@ end;
 
 function TMainWindow.BuildPdnMoveText(const AResult: String;
   AStoreRanges: Boolean): String;
-var
-  Annotation: String;
-  Clocks: String;
-  I: Integer;
-  MoveNumber: Integer;
-  MoveText: String;
-
-  procedure AppendText(const AText: String);
-  begin
-    Result += AText;
-  end;
-
-  procedure AppendMove(APly: Integer; const APrefix, AMoveText: String);
-  begin
-    AppendText(APrefix);
-    if AStoreRanges then
-    begin
-      FHistoryMoveStarts[APly] := Length(Result);
-      FHistoryMoveLengths[APly] := Length(AMoveText);
-    end;
-    AppendText(AMoveText);
-    if (APly > 0) and (APly <= Length(FHistoryMoveAnnotations)) then
-    begin
-      Annotation := FHistoryMoveAnnotations[APly - 1];
-      Clocks := ClockAnnotation(APly);
-      if Clocks <> '' then
-      begin
-        if Annotation <> '' then
-          Annotation += ' ';
-        Annotation += Clocks;
-      end;
-      if Annotation <> '' then
-        AppendText(' {' + Annotation + '}');
-    end;
-    AppendText(' ');
-  end;
-
 begin
-  Result := '';
-  if AStoreRanges then
-  begin
-    SetLength(FHistoryMoveStarts, Length(FHistoryMoves) + 1);
-    SetLength(FHistoryMoveLengths, Length(FHistoryMoves) + 1);
-  end;
-
-  for I := 0 to High(FHistoryMoves) do
-  begin
-    MoveText := MoveToString(FHistoryMoves[I]);
-    if FHistoryBaseSide = sideWhite then
-    begin
-      MoveNumber := (I div 2) + 1;
-      if not Odd(I) then
-        AppendMove(I + 1, Format('%d. ', [MoveNumber]), MoveText)
-      else
-        AppendMove(I + 1, '', MoveText);
-    end
-    else
-    begin
-      if I = 0 then
-        AppendMove(I + 1, '1... ', MoveText)
-      else if Odd(I) then
-      begin
-        MoveNumber := (I div 2) + 2;
-        AppendMove(I + 1, Format('%d. ', [MoveNumber]), MoveText);
-      end
-      else
-        AppendMove(I + 1, '', MoveText);
-    end;
-  end;
-
-  AppendText(AResult);
-  Result := Trim(Result);
+  Result := FHistory.BuildPdnMoveText(AResult, AStoreRanges);
 end;
 
 function TMainWindow.GuessResultFromFinalPosition: String;
@@ -11346,10 +9221,10 @@ var
 begin
   SavedBoard := FBoard;
   SavedSide := FSideToMove;
-  SavedPly := FCurrentPly;
+  SavedPly := FHistory.CurrentPly;
   SavedMoves := FMoves;
   try
-    RebuildPositionToPly(Length(FHistoryMoves));
+    RebuildPositionToPly(Length(FHistory.Moves));
     if Length(FMoves) = 0 then
       if FSideToMove = sideWhite then
         Result := '0-2'
@@ -11360,7 +9235,7 @@ begin
   finally
     FBoard := SavedBoard;
     FSideToMove := SavedSide;
-    FCurrentPly := SavedPly;
+    FHistory.CurrentPly := SavedPly;
     FMoves := SavedMoves;
     UpdateMoveList;
     UpdateHistoryList;
@@ -11374,7 +9249,7 @@ var
 begin
   Fen := BoardToFen(FBoard, FSideToMove);
   Clipboard.AsText := Fen;
-  AppendEngineLog('[copied FEN ' + Fen + ']' + LineEnding);
+  AppendEngineSlotLog(1, '[copied FEN ' + Fen + ']' + LineEnding);
 end;
 
 procedure TMainWindow.PasteFenMenuItemClick(Sender: TObject);
@@ -11384,8 +9259,8 @@ begin
   Fen := Trim(Clipboard.AsText);
   if Fen = '' then
   begin
-    MessageDlg('Paste Position', 'The clipboard does not contain a FEN string.',
-      mtError, [mbOK], 0);
+    ShowGuiOkDialog(Self, 'Paste Position',
+      'The clipboard does not contain a FEN string.');
     Exit;
   end;
 
@@ -11394,6 +9269,7 @@ begin
     FGameWhiteName := 'Human';
     FGameBlackName := 'Human';
     FGameResult := '*';
+    FGameResultReason := '';
     LeavePlayGameMode;
     ResetHistoryFromCurrentPosition;
     FGameDirty := True;
@@ -11401,11 +9277,11 @@ begin
     UpdateHistoryList;
     Caption := 'International Draughts';
     InvalidateBoard;
-    AppendEngineLog('[pasted FEN ' + Fen + ']' + LineEnding);
+    AppendEngineSlotLog(1, '[pasted FEN ' + Fen + ']' + LineEnding);
     RestartEngineAnalyze;
   except
     on E: Exception do
-      MessageDlg('Paste Position', E.Message, mtError, [mbOK], 0);
+      ShowGuiOkDialog(Self, 'Paste Position', E.Message);
   end;
 end;
 
@@ -11417,7 +9293,7 @@ begin
       LoadFenFile(FOpenDialog.FileName);
     except
       on E: Exception do
-        MessageDlg('Open FEN', E.Message, mtError, [mbOK], 0);
+        ShowGuiOkDialog(Self, 'Open FEN', E.Message);
     end;
   end;
 end;
@@ -11430,7 +9306,7 @@ begin
       LoadPdnFile(FOpenPdnDialog.FileName);
     except
       on E: Exception do
-        MessageDlg('Open PDN', E.Message, mtError, [mbOK], 0);
+        ShowGuiOkDialog(Self, 'Open PDN', E.Message);
     end;
   end;
 end;
@@ -11451,6 +9327,9 @@ begin
   if FShuttingDown then
     Exit;
 
+  if (FTournamentDialog <> nil) and (not FTournamentDialog.ConfirmClose) then
+    Exit;
+
   if FGameDirty and (not FShutdownConfirmed) then
   begin
     ShowUnsavedGamePrompt;
@@ -11466,6 +9345,7 @@ begin
     Exit;
 
   FShuttingDown := True;
+  SendStopToAllEngines;
   CloseSecondEngine;
   CloseEngine;
   Application.Terminate;
@@ -11588,21 +9468,24 @@ begin
     Exit;
   if EngineIsDxp(1) then
   begin
-    AppendEngineLog('[send position not supported for DXP engines]' + LineEnding);
+    AppendEngineSlotLog(1, '[send position not supported for DXP engines]' + LineEnding);
     Exit;
   end;
   if Length(FMoves) = 0 then
   begin
-    AppendEngineLog('[not sending terminal position]' + LineEnding);
+    AppendEngineSlotLog(1, '[not sending terminal position]' + LineEnding);
     Exit;
   end;
 
   Command := HubPositionCommand(1);
-  AppendEngineLog('> ' + Command + LineEnding);
-  SendEngineCommand(Command);
+  LogEngineSlotCommandSent(1, Command);
+  SendEngineSlotCommand(1, Command);
 end;
 
 procedure TMainWindow.SendPlayGameHumanTurnAnalyze;
+var
+  I: Integer;
+  Slots: TIntegerArray;
 begin
   if not FPlayGameActive then
     Exit;
@@ -11610,409 +9493,339 @@ begin
     Exit;
   if Length(FMoves) = 0 then
   begin
-    SetTerminalResult;
-    LeavePlayGameMode;
-    AppendEngineLog('[play game stopped: terminal position]' + LineEnding);
+    EndGameIfTerminalPosition;
     Exit;
   end;
 
   ActivateGameClocks;
-  if EngineStateNeedsStop(FEngines[1].State) then
-  begin
-    FPendingAutoPlayStart := False;
-    FPendingMctsStart := False;
-    FPendingAnalyzeMode := esmPlayGameAnalyze;
-    FPendingAnalyzeStart := True;
-    FPendingPlayGameStart := False;
-    FPendingThinkStart := False;
-    AppendEngineLog('[stopping previous search before play-game analysis]' +
-    LineEnding);
-    if (FAnalyzeBestSourceSquare <> 0) or (FAnalyzeHintSourceSquare <> 0) then
-    begin
-      FAnalyzeBestSourceSquare := 0;
-      FAnalyzeHintSourceSquare := 0;
-      InvalidateBoard;
-    end;
-    SendStopToEngine;
-  end
-  else
-    SendGoAnalyzeToEngine(esmPlayGameAnalyze);
+  ClearAnalyzeBoardHighlights;
+  Slots := ReadyEngineSlotsForSearch;
+  for I := 0 to High(Slots) do
+    RequestOrSendAnalyzeToEngineSlot(Slots[I], esmPlayGameAnalyze,
+      'stopping previous search before play-game analysis');
+end;
+
+function TMainWindow.CanStartHubSearch(AEngineIndex: Integer;
+  AGoCommand: THubGoCommand; ARequireMctsSupport: Boolean): Boolean;
+var
+  Gate: TEngineCommandGate;
+begin
+  Gate := EngineSlotCanStartHubSearch(AEngineIndex, HubGoCommandText(AGoCommand),
+    ARequireMctsSupport);
+  Result := Gate.Allowed;
+  if not Result then
+    LogEngineGateFailure(AEngineIndex, Gate);
+end;
+
+function TMainWindow.EngineSlotReadyForSearch(AEngineIndex: Integer): Boolean;
+begin
+  Result := EngineSlotIndexValid(AEngineIndex) and
+    EngineSlotCanReceiveCommand(AEngineIndex, True).Allowed;
+end;
+
+function TMainWindow.ReadyEngineSlotsForSearch: TIntegerArray;
+var
+  I: Integer;
+begin
+  Result := nil;
+  SetLength(Result, 0);
+  for I := EngineFirstSlot to EngineLastSlot do
+    if EngineSlotIndexValid(I) and EngineSlotIsRunning(I) and
+      FEngines[I].Ready then
+      AddEngineSlot(Result, I);
+end;
+
+procedure TMainWindow.AppendEngineSlotLogs(const ASlots: TIntegerArray;
+  const AText: String);
+var
+  I: Integer;
+begin
+  for I := 0 to High(ASlots) do
+    AppendEngineSlotLog(ASlots[I], AText);
+end;
+
+procedure TMainWindow.HandleTerminalSearchPositions(
+  const ASlots: TIntegerArray; const APreparation: TEngineSearchPreparation);
+var
+  I: Integer;
+begin
+  for I := 0 to High(ASlots) do
+    HandleTerminalSearchPosition(ASlots[I], APreparation.TerminalAutoPlay,
+      APreparation.SendTerminalToEngine);
+end;
+
+function TMainWindow.HandleEngineSlotTerminalSearchPosition(
+  AEngineIndex: Integer; AAutoPlay, ASendTerminalToEngine: Boolean): Boolean;
+begin
+  Result := Length(FMoves) = 0;
+  if Result then
+    HandleTerminalSearchPosition(AEngineIndex, AAutoPlay, ASendTerminalToEngine);
+end;
+
+procedure TMainWindow.StartHubEngineSlotSearch(AEngineIndex: Integer;
+  ALevelCommand: THubLevelCommand; AGoCommand: THubGoCommand;
+  AMode: TEngineSearchMode; AState: TEngineState;
+  ARequireMctsSupport: Boolean);
+begin
+  if not CanStartHubSearch(AEngineIndex, AGoCommand, ARequireMctsSupport) then
+    Exit;
+  SendHubSearchToEngine(AEngineIndex, ALevelCommand, AGoCommand, AMode,
+    AState);
+end;
+
+procedure TMainWindow.SendHubSearchToEngine(AEngineIndex: Integer;
+  ALevelCommand: THubLevelCommand; AGoCommand: THubGoCommand;
+  AMode: TEngineSearchMode; AState: TEngineState);
+var
+  SearchCommand: THubSearchCommand;
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  SearchCommand := BuildHubSearchCommand(FHistory,
+    EngineSendStartingPosition(AEngineIndex),
+    EngineSingleCapturesIncludeCapturedSquare(AEngineIndex), ALevelCommand,
+    FEngineMoveTimeSpin.Value, CurrentEngineRemainingTimeSeconds, AGoCommand);
+  LogEngineSlotCommandSent(AEngineIndex, SearchCommand.PositionCommand);
+  SendEngineSlotCommand(AEngineIndex, SearchCommand.PositionCommand);
+  LogEngineSlotCommandSent(AEngineIndex, SearchCommand.LevelCommand);
+  SendEngineSlotCommand(AEngineIndex, SearchCommand.LevelCommand);
+  LogEngineSlotCommandSent(AEngineIndex, SearchCommand.GoCommand);
+  SendEngineSlotCommand(AEngineIndex, SearchCommand.GoCommand);
+  if (AGoCommand = hgcThink) and (AMode = esmPlayGameThink) then
+    StoreEngineTimingStart(AEngineIndex, SearchCommand.GoCommand);
+  BeginEngineSlotSearch(AEngineIndex, AMode, AState);
+  if AMode = esmPlayGameThink then
+    ActivateGameClocks;
 end;
 
 procedure TMainWindow.SendGoAnalyzeToEngine(AMode: TEngineSearchMode);
 var
-  CanUseFirstEngine: Boolean;
-  CanUseSecondEngine: Boolean;
-  FormatSettings: TFormatSettings;
-  LevelCommand: String;
-  PositionCommand: String;
+  Preparation: TEngineSearchPreparation;
+  Slots: TIntegerArray;
 begin
-  CanUseFirstEngine := EngineIsRunning and FEngines[1].Ready;
-  CanUseSecondEngine := SecondEngineIsRunning and FEngines[2].Ready;
-  if (FAnalyzeBestSourceSquare <> 0) or (FAnalyzeHintSourceSquare <> 0) then
-  begin
-    FAnalyzeBestSourceSquare := 0;
-    FAnalyzeHintSourceSquare := 0;
-    InvalidateBoard;
-  end;
-  if not CanUseFirstEngine and not CanUseSecondEngine then
+  Slots := ReadyEngineSlotsForSearch;
+  Preparation := EngineSearchPreparation(esiAnalyze, AMode);
+  if Preparation.ClearAnalyzeHighlights then
+    ClearAnalyzeBoardHighlights;
+  if Length(Slots) = 0 then
     Exit;
   if FPlayGameActive and IsPlayGameEngineTurn then
   begin
-    if CanUseFirstEngine then
-      AppendEngineLog('[not starting analysis: engine to move]' + LineEnding);
-    if CanUseSecondEngine then
-      AppendEngine2Log('[not starting analysis: engine to move]' + LineEnding);
+    AppendEngineSlotLogs(Slots,
+      '[not starting analysis: engine to move]' + LineEnding);
     Exit;
   end;
   if not FEngineAnalyzeEnabled then
   begin
-    if CanUseFirstEngine then
-      AppendEngineLog('[analysis disabled: not starting analysis]' + LineEnding);
-    if CanUseSecondEngine then
-      AppendEngine2Log('[analysis disabled: not starting analysis]' + LineEnding);
+    AppendEngineSlotLogs(Slots,
+      '[analysis disabled: not starting analysis]' + LineEnding);
     Exit;
   end;
 
   if Length(FMoves) = 0 then
   begin
-    if CanUseFirstEngine then
-    begin
-      AppendEngineLog('[' + EngineLogName(1) + ' not starting search: terminal position]' + LineEnding);
-      FEngineSearching := False;
-      FinishEngineSlotSearch(1);
-    end;
-    if CanUseSecondEngine then
-    begin
-      AppendEngine2Log('[' + EngineLogName(2) + ' not starting search: terminal position]' + LineEnding);
-  FinishEngineSlotSearch(2);
-  UpdateEnginePopupMenuItems;
-end;
+    HandleTerminalSearchPositions(Slots, Preparation);
     Exit;
   end;
 
-  PositionCommand := HubPositionCommand(1);
-  FormatSettings := DefaultFormatSettings;
-  FormatSettings.DecimalSeparator := '.';
-  LevelCommand := Format('level move-time=%.3f', [FEngineMoveTimeSpin.Value],
-    FormatSettings);
+  if Preparation.ClearAnalysisDisplay then
+    ClearSearchAnalysisDisplay;
 
-  FLastEngineInfoAnnotation := '';
-  FLastEngineInfoLine := '';
-  SetLength(FAnalyzePvMoves, 0);
-  FAnalyzePvHasBase := False;
-  FAnalyzePvLocked := False;
-  FAnalyzePvBrowsePly := 0;
-  FAnalyzeHintMove := '';
-  FAnalyzeHintSourceSquare := 0;
-  UpdateAnalyzePvList;
-  if FHistoryPvMiniBoardPaintBox <> nil then
-    FHistoryPvMiniBoardPaintBox.Invalidate;
-  if FAnalysisBoardPaintBox <> nil then
-    FAnalysisBoardPaintBox.Invalidate;
-  FAnalyzeBestSourceSquare := 0;
-  InvalidateBoard;
-
-  if CanUseFirstEngine then
-  begin
-    if EngineIsDxp(1) then
-    begin
-      AppendEngineLog('[go analyze not supported for DXP engines]' + LineEnding);
-    end
-    else
-    begin
-    AppendEngineLog('> ' + PositionCommand + LineEnding);
-    SendEngineCommand(PositionCommand);
-    AppendEngineLog('> ' + LevelCommand + LineEnding);
-    SendEngineCommand(LevelCommand);
-    AppendEngineLog('> go analyze' + LineEnding);
-    SendEngineCommand('go analyze');
-    FEngineSearching := True;
-    BeginEngineSlotSearch(1, AMode, esAnalyzing);
-    end;
-  end;
-
-  if CanUseSecondEngine then
-  begin
-    if EngineIsDxp(2) then
-    begin
-      AppendEngine2Log('[go analyze not supported for DXP engines]' + LineEnding);
-    end
-    else
-    begin
-    PositionCommand := HubPositionCommand(2);
-    AppendEngine2Log('> ' + PositionCommand + LineEnding);
-    SendSecondEngineCommand(PositionCommand);
-    AppendEngine2Log('> ' + LevelCommand + LineEnding);
-    SendSecondEngineCommand(LevelCommand);
-    AppendEngine2Log('> go analyze' + LineEnding);
-    SendSecondEngineCommand('go analyze');
-    BeginEngineSlotSearch(2, AMode, esAnalyzing);
-    end;
-  end;
+  SendProtocolCommandToEngineSlots(Slots, epcAnalyze, AMode);
 end;
 
-procedure TMainWindow.SendGoAnalyzeToSecondEngine(AMode: TEngineSearchMode);
+procedure TMainWindow.SendGoAnalyzeToEngineSlot(AEngineIndex: Integer;
+  AMode: TEngineSearchMode);
 var
-  FormatSettings: TFormatSettings;
-  LevelCommand: String;
-  PositionCommand: String;
+  Decision: TEngineAnalyzeDecision;
+  Preparation: TEngineSearchPreparation;
 begin
-  if not SecondEngineIsRunning then
-    Exit;
-  if not FEngines[2].Ready then
+  if not EngineSlotReadyForSearch(AEngineIndex) then
     Exit;
   if FPlayGameActive and IsPlayGameEngineTurn then
   begin
-    AppendEngine2Log('[not starting analysis: engine to move]' + LineEnding);
+    AppendEngineSlotLog(AEngineIndex,
+      '[not starting analysis: engine to move]' + LineEnding);
     Exit;
   end;
   if not FEngineAnalyzeEnabled then
   begin
-    AppendEngine2Log('[analysis disabled: not starting analysis]' + LineEnding);
+    AppendEngineSlotLog(AEngineIndex,
+      '[analysis disabled: not starting analysis]' + LineEnding);
     Exit;
   end;
-  if EngineIsDxp(2) then
-  begin
-    AppendEngine2Log('[go analyze not supported for DXP engines]' + LineEnding);
+  Preparation := EngineSearchPreparation(esiAnalyze, AMode);
+  if HandleEngineSlotTerminalSearchPosition(AEngineIndex,
+    Preparation.TerminalAutoPlay, Preparation.SendTerminalToEngine) then
     Exit;
-  end;
-  if Length(FMoves) = 0 then
-  begin
-    AppendEngine2Log('[' + EngineLogName(2) + ' not starting search: terminal position]' + LineEnding);
-    FinishEngineSlotSearch(2);
-    Exit;
-  end;
 
-  PositionCommand := HubPositionCommand(2);
-  AppendEngine2Log('> ' + PositionCommand + LineEnding);
-  SendSecondEngineCommand(PositionCommand);
+  Decision := DecideEngineAnalyze(FEngines[AEngineIndex].Protocol);
+  if Decision.LogText <> '' then
+    AppendEngineSlotLog(AEngineIndex, Decision.LogText);
+  case Decision.Route of
+    earHubAnalyze:
+      StartHubEngineSlotSearch(AEngineIndex, Decision.HubLevelCommand,
+        hgcAnalyze, AMode, esAnalyzing, False);
+    earUnsupported:
+      Exit;
+  end;
+end;
 
-  FormatSettings := DefaultFormatSettings;
-  FormatSettings.DecimalSeparator := '.';
-  LevelCommand := Format('level move-time=%.3f', [FEngineMoveTimeSpin.Value],
-    FormatSettings);
-  AppendEngine2Log('> ' + LevelCommand + LineEnding);
-  SendSecondEngineCommand(LevelCommand);
-  AppendEngine2Log('> go analyze' + LineEnding);
-  SendSecondEngineCommand('go analyze');
-  BeginEngineSlotSearch(2, AMode, esAnalyzing);
+procedure TMainWindow.RequestOrSendAnalyzeToEngineSlot(AEngineIndex: Integer;
+  AMode: TEngineSearchMode; const AStopReason: String);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  if EngineStateNeedsStop(FEngines[AEngineIndex].State) then
+    RequestEngineSlotActionAfterStop(AEngineIndex, peaAnalyze, AMode,
+      AStopReason)
+  else
+    SendGoAnalyzeToEngineSlot(AEngineIndex, AMode);
 end;
 
 procedure TMainWindow.SendGoMctsToEngine;
 var
-  CanUseFirstEngine: Boolean;
-  CanUseSecondEngine: Boolean;
-  FormatSettings: TFormatSettings;
-  LevelCommand: String;
-  PositionCommand: String;
+  Preparation: TEngineSearchPreparation;
+  Slots: TIntegerArray;
 begin
-  CanUseFirstEngine := EngineIsRunning and FEngines[1].Ready;
-  CanUseSecondEngine := SecondEngineIsRunning and FEngines[2].Ready;
-  if not CanUseFirstEngine and not CanUseSecondEngine then
+  Slots := ReadyEngineSlotsForSearch;
+  Preparation := EngineSearchPreparation(esiMcts, esmMcts);
+  if Length(Slots) = 0 then
     Exit;
 
   if Length(FMoves) = 0 then
   begin
-    if CanUseFirstEngine then
-    begin
-      AppendEngineLog('[' + EngineLogName(1) + ' not starting search: terminal position]' + LineEnding);
-      FEngineSearching := False;
-      FinishEngineSlotSearch(1);
-    end;
-    if CanUseSecondEngine then
-    begin
-      AppendEngine2Log('[' + EngineLogName(2) + ' not starting search: terminal position]' + LineEnding);
-      FinishEngineSlotSearch(2);
-    end;
+    HandleTerminalSearchPositions(Slots, Preparation);
     Exit;
   end;
 
-  FormatSettings := DefaultFormatSettings;
-  FormatSettings.DecimalSeparator := '.';
-  LevelCommand := Format('level move-time=%.3f', [FEngineMoveTimeSpin.Value],
-    FormatSettings);
+  if Preparation.ClearAnalysisDisplay then
+    ClearSearchAnalysisDisplay;
 
-  FLastEngineInfoAnnotation := '';
-  FLastEngineInfoLine := '';
-  SetLength(FAnalyzePvMoves, 0);
-  FAnalyzePvHasBase := False;
-  FAnalyzePvLocked := False;
-  FAnalyzePvBrowsePly := 0;
-  FAnalyzeHintMove := '';
-  FAnalyzeHintSourceSquare := 0;
-  UpdateAnalyzePvList;
-  if FHistoryPvMiniBoardPaintBox <> nil then
-    FHistoryPvMiniBoardPaintBox.Invalidate;
-  if FAnalysisBoardPaintBox <> nil then
-    FAnalysisBoardPaintBox.Invalidate;
-  FAnalyzeBestSourceSquare := 0;
-  InvalidateBoard;
+  SendProtocolCommandToEngineSlots(Slots, epcMcts);
+end;
 
-  if CanUseFirstEngine then
-  begin
-    if EngineIsDxp(1) then
-      AppendEngineLog('[go mcts not supported for DXP engines]' + LineEnding)
-    else if EngineSupportsMcts(1) then
-    begin
-      PositionCommand := HubPositionCommand(1);
-      AppendEngineLog('> ' + PositionCommand + LineEnding);
-      SendEngineCommand(PositionCommand);
-      AppendEngineLog('> ' + LevelCommand + LineEnding);
-      SendEngineCommand(LevelCommand);
-      AppendEngineLog('> go mcts' + LineEnding);
-      SendEngineCommand('go mcts');
-      FEngineSearching := True;
-      BeginEngineSlotSearch(1, esmMcts, esMcts);
-    end
-    else
-      AppendEngineLog('[' + EngineLogName(1) +
-        ' does not support go mcts]' + LineEnding);
-  end;
+procedure TMainWindow.SendGoMctsToEngineSlot(AEngineIndex: Integer);
+var
+  Decision: TEngineMctsDecision;
+  Preparation: TEngineSearchPreparation;
+begin
+  if not EngineSlotReadyForSearch(AEngineIndex) then
+    Exit;
+  Preparation := EngineSearchPreparation(esiMcts, esmMcts);
+  if HandleEngineSlotTerminalSearchPosition(AEngineIndex,
+    Preparation.TerminalAutoPlay, Preparation.SendTerminalToEngine) then
+    Exit;
 
-  if CanUseSecondEngine then
-  begin
-    if EngineIsDxp(2) then
-      AppendEngine2Log('[go mcts not supported for DXP engines]' + LineEnding)
-    else if EngineSupportsMcts(2) then
-    begin
-      PositionCommand := HubPositionCommand(2);
-      AppendEngine2Log('> ' + PositionCommand + LineEnding);
-      SendSecondEngineCommand(PositionCommand);
-      AppendEngine2Log('> ' + LevelCommand + LineEnding);
-      SendSecondEngineCommand(LevelCommand);
-      AppendEngine2Log('> go mcts' + LineEnding);
-      SendSecondEngineCommand('go mcts');
-      BeginEngineSlotSearch(2, esmMcts, esMcts);
-    end
-    else
-      AppendEngine2Log('[' + EngineLogName(2) +
-        ' does not support go mcts]' + LineEnding);
+  Decision := DecideEngineMcts(FEngines[AEngineIndex].Protocol,
+    EngineSupportsMcts(AEngineIndex), EngineLogName(AEngineIndex));
+  if Decision.LogText <> '' then
+    AppendEngineSlotLog(AEngineIndex, Decision.LogText);
+  case Decision.Route of
+    emrHubMcts:
+      StartHubEngineSlotSearch(AEngineIndex, Decision.HubLevelCommand,
+        hgcMcts, esmMcts, esMcts, True);
+    emrUnsupported:
+      Exit;
   end;
 end;
 
-procedure TMainWindow.SendGoThinkToEngine(AMode: TEngineSearchMode);
+procedure TMainWindow.SendGoThinkToEngineSlot(AEngineIndex: Integer;
+  AMode: TEngineSearchMode);
 var
-  FormatSettings: TFormatSettings;
-  LevelCommand: String;
-  PositionCommand: String;
+  Decision: TEngineThinkDecision;
+  Preparation: TEngineSearchPreparation;
 begin
-  if not EngineIsRunning then
+  if not EngineSlotReadyForSearch(AEngineIndex) then
     Exit;
-  if not FEngines[1].Ready then
-    Exit;
-  if EngineIsDxp(1) then
-  begin
-    if AMode = esmAutoPlay then
+
+  Decision := DecideEngineThink(FEngines[AEngineIndex].Protocol, AMode);
+  if Decision.LogText <> '' then
+    AppendEngineSlotLog(AEngineIndex, Decision.LogText);
+  case Decision.Route of
+    etrDxpThink:
     begin
-      AppendEngineLog('[DXP auto-play from current position]' + LineEnding);
-      SendDxpStartOrMoveToEngine(1, AMode);
-    end
-    else if AMode = esmPlayGameThink then
-      SendDxpStartOrMoveToEngine(1, AMode)
-    else
-      AppendEngineLog('[go think not supported for DXP engines outside game/auto-play]' +
-        LineEnding);
-    Exit;
-  end;
-  if Length(FMoves) = 0 then
-  begin
-    if FPlayGameActive then
-      LeavePlayGameMode;
-    FAutoPlayActive := False;
-    FEngineSearching := False;
-    FinishEngineSlotSearch(1);
-    AppendEngineLog('[' + EngineLogName(1) + ' not starting search: terminal position]' + LineEnding);
-    Exit;
+      SendDxpStartOrMoveToEngine(AEngineIndex, AMode);
+      Exit;
+    end;
+    etrUnsupported:
+      Exit;
   end;
 
-  PositionCommand := HubPositionCommand(1);
-  AppendEngineLog('> ' + PositionCommand + LineEnding);
-  SendEngineCommand(PositionCommand);
+  Preparation := EngineSearchPreparation(esiThink, AMode);
+  if HandleEngineSlotTerminalSearchPosition(AEngineIndex,
+    Preparation.TerminalAutoPlay, Preparation.SendTerminalToEngine) then
+    Exit;
 
-  FormatSettings := DefaultFormatSettings;
-  FormatSettings.DecimalSeparator := '.';
-  if AMode = esmPlayGameThink then
-  begin
-    ActivateGameClocks;
-    LevelCommand := Format('level time=%.3f', [CurrentEngineRemainingTimeSeconds],
-      FormatSettings)
-  end
-  else
-    LevelCommand := Format('level move-time=%.3f', [FEngineMoveTimeSpin.Value],
-      FormatSettings);
-  AppendEngineLog('> ' + LevelCommand + LineEnding);
-  SendEngineCommand(LevelCommand);
-  AppendEngineLog('> go think' + LineEnding);
-  FLastEngineInfoAnnotation := '';
-  FLastEngineInfoLine := '';
-  SetLength(FAnalyzePvMoves, 0);
-  FAnalyzePvHasBase := False;
-  FAnalyzePvLocked := False;
-  FAnalyzePvBrowsePly := 0;
-  FAnalyzeHintMove := '';
-  FAnalyzeHintSourceSquare := 0;
-  UpdateAnalyzePvList;
-  if FHistoryPvMiniBoardPaintBox <> nil then
-    FHistoryPvMiniBoardPaintBox.Invalidate;
-  if FAnalysisBoardPaintBox <> nil then
-    FAnalysisBoardPaintBox.Invalidate;
-  FIgnoreNextDoneMove := False;
-  if (FAnalyzeBestSourceSquare <> 0) or (FAnalyzeHintSourceSquare <> 0) then
-  begin
-    FAnalyzeBestSourceSquare := 0;
-    FAnalyzeHintSourceSquare := 0;
-    InvalidateBoard;
-  end
-  else
-    InvalidateBoard;
-  SendEngineCommand('go think');
-  FEngineSearching := True;
-  BeginEngineSlotSearch(1, AMode, esThinking);
+  if Preparation.ClearAnalysisDisplay then
+    ClearSearchAnalysisDisplay;
+  FEngines[AEngineIndex].IgnoreNextDoneMove := False;
+  StartHubEngineSlotSearch(AEngineIndex, Decision.HubLevelCommand, hgcThink,
+    AMode, esThinking, False);
 end;
 
-procedure TMainWindow.SendGoThinkToSecondEngine;
-var
-  FormatSettings: TFormatSettings;
-  LevelCommand: String;
-  PositionCommand: String;
+procedure TMainWindow.RequestOrSendThinkToEngineSlot(AEngineIndex: Integer;
+  AMode: TEngineSearchMode; const AStopReason: String);
 begin
-  if not SecondEngineIsRunning then
+  if not EngineSlotIndexValid(AEngineIndex) then
     Exit;
-  if not FEngines[2].Ready then
-    Exit;
-  if EngineIsDxp(2) then
-  begin
-    SendDxpStartOrMoveToEngine(2, esmPlayGameThink);
-    Exit;
-  end;
-  if Length(FMoves) = 0 then
-  begin
-    if FPlayGameActive then
-      LeavePlayGameMode;
-    FinishEngineSlotSearch(2);
-    AppendEngine2Log('[' + EngineLogName(2) + ' not starting search: terminal position]' + LineEnding);
-    Exit;
-  end;
 
-  PositionCommand := HubPositionCommand(2);
-  AppendEngine2Log('> ' + PositionCommand + LineEnding);
-  SendSecondEngineCommand(PositionCommand);
+  if EngineStateNeedsStop(FEngines[AEngineIndex].State) then
+    RequestEngineSlotActionAfterStop(AEngineIndex, peaThink, AMode,
+      AStopReason)
+  else
+    SendGoThinkToEngineSlot(AEngineIndex, AMode);
+end;
 
-  FormatSettings := DefaultFormatSettings;
-  FormatSettings.DecimalSeparator := '.';
-  ActivateGameClocks;
-  LevelCommand := Format('level time=%.3f', [CurrentEngineRemainingTimeSeconds],
-    FormatSettings);
-  AppendEngine2Log('> ' + LevelCommand + LineEnding);
-  SendSecondEngineCommand(LevelCommand);
-  AppendEngine2Log('> go think' + LineEnding);
-  FEngines[2].IgnoreNextDoneMove := False;
-  SendSecondEngineCommand('go think');
-  BeginEngineSlotSearch(2, esmPlayGameThink, esThinking);
+procedure TMainWindow.SendProtocolCommandToEngineSlot(AEngineIndex: Integer;
+  ACommand: TEngineProtocolCommand; AMode: TEngineSearchMode);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  case EngineSlotCommandAction(ACommand) of
+    escaStop:
+      SendStopToEngineSlot(AEngineIndex);
+    escaAnalyze:
+      SendGoAnalyzeToEngineSlot(AEngineIndex, AMode);
+    escaMcts:
+      SendGoMctsToEngineSlot(AEngineIndex);
+    escaThink:
+      SendGoThinkToEngineSlot(AEngineIndex, AMode);
+  end;
+end;
+
+procedure TMainWindow.SendProtocolCommandToEngineSlots(
+  const ASlots: TIntegerArray; ACommand: TEngineProtocolCommand;
+  AMode: TEngineSearchMode);
+var
+  I: Integer;
+begin
+  for I := 0 to High(ASlots) do
+    SendProtocolCommandToEngineSlot(ASlots[I], ACommand, AMode);
+end;
+
+procedure TMainWindow.SendProtocolCommandToAllEngines(
+  ACommand: TEngineProtocolCommand; AMode: TEngineSearchMode);
+begin
+  case EngineAllCommandTarget(ACommand) of
+    eactReverseSlots:
+      SendProtocolCommandToEngineSlots(EngineReverseSlots, ACommand, AMode);
+    eactAnalyzeReadySlots:
+      SendGoAnalyzeToEngine(AMode);
+    eactMctsReadySlots:
+      SendGoMctsToEngine;
+    eactPrimaryThinkSlot:
+      SendProtocolCommandToEngineSlots(EnginePrimarySlots, ACommand, AMode);
+  end;
 end;
 
 procedure TMainWindow.RestartEngineAnalyze;
+var
+  I: Integer;
+  Slots: TIntegerArray;
 begin
   if not FEngineAnalyzeEnabled then
     Exit;
@@ -12022,111 +9835,91 @@ begin
   if FAutoPlayActive or FPlayGameActive then
     Exit;
 
-  if EngineStateNeedsStop(FEngines[1].State) then
-  begin
-    FPendingAutoPlayStart := False;
-    FPendingMctsStart := False;
-    FPendingAnalyzeMode := esmAnalyze;
-    FPendingAnalyzeStart := True;
-    FPendingPlayGameStart := False;
-    FPendingThinkStart := False;
-    AppendEngineLog('[stopping previous search before analysis]' + LineEnding);
-    SendStopToEngine;
-  end
-  else
-  begin
-    if EngineStateNeedsStop(FEngines[2].State) then
-      SendStopToSecondEngine;
-    SendGoAnalyzeToEngine;
-  end;
-end;
-
-procedure TMainWindow.SendStopToEngine;
-var
-  PreviousState: TEngineState;
-begin
-  if not EngineIsRunning then
-    Exit;
-
-  PreviousState := FEngines[1].State;
-  if EngineIsDxp(1) then
-  begin
-    if FPlayGameActive then
-      SendDxpGameEndToEngine(1, DxpGameEndCodeForEngine(1));
-    FIgnoreNextDoneMove := False;
-    FEngineStopRequested := False;
-    FEngineSearching := False;
-    FEngines[1].FinishSearch;
-    if PreviousState <> esIdle then
-      AppendEngineLog('[' + EngineLogName(1) + ' state: ' +
-        EngineStateLogText(PreviousState) + ' -> idle]' + LineEnding);
-    UpdateEngineStateLabels;
-    Exit;
-  end;
-  AppendEngineLog('> stop' + LineEnding);
-  AppendEngineLog('[' + EngineLogName(1) + ' stop requested while state: ' +
-    EngineStateLogText(PreviousState) + ']' + LineEnding);
-  FIgnoreNextDoneMove := EngineStateNeedsStop(FEngines[1].State);
-  FEngineStopRequested := False;
-  FEngineSearching := False;
-  FEngines[1].FinishSearch;
-  if PreviousState <> esIdle then
-  begin
-    UpdateEngineStateLabels;
-    AppendEngineLog('[' + EngineLogName(1) + ' state: ' + EngineStateLogText(PreviousState) +
-      ' -> idle]' + LineEnding);
-  end
-  else
-    SetEngineState(esIdle);
-  SendEngineCommand('stop');
+  Slots := ReadyEngineSlotsForSearch;
+  ClearAnalyzeBoardHighlights;
+  for I := 0 to High(Slots) do
+    RequestOrSendAnalyzeToEngineSlot(Slots[I], esmAnalyze,
+      'stopping previous search before analysis');
 end;
 
 procedure TMainWindow.SendStopToAllEngines;
 begin
-  SendStopToSecondEngine;
-  SendStopToEngine;
+  SendStopToEngineSlot(2);
+  SendStopToEngineSlot(1);
 end;
 
-procedure TMainWindow.SendStopToSecondEngine;
+procedure TMainWindow.SendStopToEngineSlot(AEngineIndex: Integer);
 var
   PreviousState: TEngineState;
 begin
-  if not SecondEngineIsRunning then
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  if not EngineSlotCanReceiveCommand(AEngineIndex, False).Allowed then
     Exit;
 
-  PreviousState := FEngines[2].State;
-  if EngineIsDxp(2) then
-  begin
-    if FPlayGameActive then
-      SendDxpGameEndToEngine(2, DxpGameEndCodeForEngine(2));
-    FEngines[2].FinishSearch;
-    FEngines[2].IgnoreNextDoneMove := False;
-    if PreviousState <> esIdle then
-      AppendEngine2Log('[' + EngineLogName(2) + ' state: ' +
-        EngineStateLogText(PreviousState) + ' -> idle]' + LineEnding);
-    UpdateEngineStateLabels;
-    Exit;
-  end;
-  AppendEngine2Log('> stop' + LineEnding);
-  AppendEngine2Log('[' + EngineLogName(2) + ' stop requested while state: ' +
-    EngineStateLogText(PreviousState) + ']' + LineEnding);
-  FEngines[2].FinishSearch;
-  FEngines[2].IgnoreNextDoneMove := EngineStateNeedsStop(PreviousState);
-  if PreviousState <> esIdle then
-  begin
-    UpdateEngineStateLabels;
-    AppendEngine2Log('[' + EngineLogName(2) + ' state: ' + EngineStateLogText(PreviousState) +
-      ' -> idle]' + LineEnding);
-  end
+  PreviousState := FEngines[AEngineIndex].State;
+  if EngineIsDxp(AEngineIndex) then
+    StopDxpEngineSlot(AEngineIndex, PreviousState)
   else
-    SetSecondEngineState(esIdle);
-  SendSecondEngineCommand('stop');
+    StopHubEngineSlot(AEngineIndex, PreviousState);
 end;
 
-function PdnEscape(const AText: String): String;
+procedure TMainWindow.ClearEngineSlotStopState(AEngineIndex: Integer;
+  APreviousState: TEngineState; AStoppedByHubCommand: Boolean);
 begin
-  Result := StringReplace(AText, '\', '\\', [rfReplaceAll]);
-  Result := StringReplace(Result, '"', '\"', [rfReplaceAll]);
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+  FEngines[AEngineIndex].FinishSearch;
+  FEngines[AEngineIndex].IgnoreNextDoneMove :=
+    AStoppedByHubCommand and EngineStateNeedsStop(APreviousState);
+end;
+
+procedure TMainWindow.LogEngineSlotStopTransition(AEngineIndex: Integer;
+  APreviousState: TEngineState);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  if APreviousState <> esIdle then
+  begin
+    UpdateEngineStateLabels;
+    AppendEngineSlotLog(AEngineIndex,
+      EngineStopTransitionLogText(EngineLogName(AEngineIndex),
+        EngineStateLogText(APreviousState, PlayerNameToMove)));
+  end
+  else if AEngineIndex = 1 then
+    SetEngineSlotState(1, esIdle)
+  else
+    SetEngineSlotState(2, esIdle);
+end;
+
+procedure TMainWindow.StopDxpEngineSlot(AEngineIndex: Integer;
+  APreviousState: TEngineState);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  if FPlayGameActive then
+    SendDxpGameEndToEngine(AEngineIndex,
+      DxpGameEndCodeForEngine(AEngineIndex));
+  ClearEngineSlotStopState(AEngineIndex, APreviousState, False);
+  LogEngineSlotStopTransition(AEngineIndex, APreviousState);
+  UpdateEngineStateLabels;
+end;
+
+procedure TMainWindow.StopHubEngineSlot(AEngineIndex: Integer;
+  APreviousState: TEngineState);
+begin
+  if not EngineSlotIndexValid(AEngineIndex) then
+    Exit;
+
+  LogEngineSlotCommandSent(AEngineIndex, 'stop');
+  AppendEngineSlotLog(AEngineIndex,
+    EngineStopRequestedLogText(EngineLogName(AEngineIndex),
+      EngineStateLogText(APreviousState, PlayerNameToMove)));
+  ClearEngineSlotStopState(AEngineIndex, APreviousState, True);
+  LogEngineSlotStopTransition(AEngineIndex, APreviousState);
+  SendEngineSlotCommand(AEngineIndex, 'stop');
 end;
 
 procedure TMainWindow.SavePdnMenuItemClick(Sender: TObject);
@@ -12188,6 +9981,7 @@ begin
   FGameWhiteName := WhiteName;
   FGameBlackName := BlackName;
   FGameResult := ResultText;
+  FGameResultReason := '';
   MarkGameDirty;
   UpdateHistoryList;
   if FSavePdnDialog.Execute then
@@ -12202,28 +9996,20 @@ begin
 end;
 
 procedure TMainWindow.SaveEngineLogMenuItemClick(Sender: TObject);
+var
+  EngineIndex: Integer;
 begin
-  if (FSaveEngineLogDialog = nil) or (FEngines[1].LogMemo = nil) then
+  EngineIndex := EngineSlotIndexFromSender(Sender);
+  if (FSaveEngineLogDialog = nil) or
+    (FEngines[EngineIndex].LogMemo = nil) then
     Exit;
 
   if FSaveEngineLogDialog.Execute then
   begin
-    FEngines[1].LogMemo.Lines.SaveToFile(FSaveEngineLogDialog.FileName);
-    AppendEngineLog('[saved engine log ' + FSaveEngineLogDialog.FileName + ']' +
-      LineEnding);
-  end;
-end;
-
-procedure TMainWindow.SaveSecondEngineLogMenuItemClick(Sender: TObject);
-begin
-  if (FSaveEngineLogDialog = nil) or (FEngines[2].LogMemo = nil) then
-    Exit;
-
-  if FSaveEngineLogDialog.Execute then
-  begin
-    FEngines[2].LogMemo.Lines.SaveToFile(FSaveEngineLogDialog.FileName);
-    AppendEngine2Log('[saved engine log ' + FSaveEngineLogDialog.FileName + ']' +
-      LineEnding);
+    SaveEngineLogMemoToFile(FEngines[EngineIndex].LogMemo,
+      FSaveEngineLogDialog.FileName);
+    AppendEngineSlotLog(EngineIndex, '[saved engine log ' +
+      FSaveEngineLogDialog.FileName + ']' + LineEnding);
   end;
 end;
 
@@ -12233,16 +10019,10 @@ var
 begin
   DisableAnalyzeToggle := FPlayGameActive and FPlayGameWhiteIsEngine and
     FPlayGameBlackIsEngine;
-  if FEngines[1].AnalyzeMenuItem <> nil then
-  begin
-    FEngines[1].AnalyzeMenuItem.Checked := FEngineAnalyzeEnabled;
-    FEngines[1].AnalyzeMenuItem.Enabled := not DisableAnalyzeToggle;
-  end;
-  if FEngines[2].AnalyzeMenuItem <> nil then
-  begin
-    FEngines[2].AnalyzeMenuItem.Checked := FEngineAnalyzeEnabled;
-    FEngines[2].AnalyzeMenuItem.Enabled := not DisableAnalyzeToggle;
-  end;
+  UpdateEngineLogAnalyzeMenuItem(FEngines[1], FEngineAnalyzeEnabled,
+    not DisableAnalyzeToggle);
+  UpdateEngineLogAnalyzeMenuItem(FEngines[2], FEngineAnalyzeEnabled,
+    not DisableAnalyzeToggle);
   UpdateEnginePopupMenuItems;
 end;
 
@@ -12254,19 +10034,8 @@ begin
   Engine1Loaded := EngineIsRunning;
   Engine2Loaded := SecondEngineIsRunning;
 
-  if FEngines[1].OpenMenuItem <> nil then
-    FEngines[1].OpenMenuItem.Enabled := not Engine1Loaded;
-  if FEngines[1].CloseMenuItem <> nil then
-    FEngines[1].CloseMenuItem.Enabled := Engine1Loaded;
-  if FEngines[1].ParamsMenuItem <> nil then
-    FEngines[1].ParamsMenuItem.Enabled := Engine1Loaded;
-
-  if FEngines[2].OpenMenuItem <> nil then
-    FEngines[2].OpenMenuItem.Enabled := not Engine2Loaded;
-  if FEngines[2].CloseMenuItem <> nil then
-    FEngines[2].CloseMenuItem.Enabled := Engine2Loaded;
-  if FEngines[2].ParamsMenuItem <> nil then
-    FEngines[2].ParamsMenuItem.Enabled := Engine2Loaded;
+  UpdateEngineLogPopupMenuItems(FEngines[1], Engine1Loaded);
+  UpdateEngineLogPopupMenuItems(FEngines[2], Engine2Loaded);
 end;
 
 procedure TMainWindow.AnalyzeMenuItemClick(Sender: TObject);
@@ -12278,7 +10047,7 @@ begin
   UpdateAnalyzeMenuItems;
   if FEngineAnalyzeEnabled then
   begin
-    AppendEngineLog('[analysis enabled]' + LineEnding);
+    AppendEngineSlotLog(1, '[analysis enabled]' + LineEnding);
     if FAutoPlayActive then
       Exit;
     if FPlayGameActive then
@@ -12291,8 +10060,9 @@ begin
   end
   else
   begin
-    AppendEngineLog('[analysis disabled]' + LineEnding);
-    FPendingAnalyzeStart := False;
+    AppendEngineSlotLog(1, '[analysis disabled]' + LineEnding);
+    ClearEngineSlotPendingAction(1);
+    ClearEngineSlotPendingAction(2);
     if (FEngines[1].State = esAnalyzing) or (FEngines[2].State = esAnalyzing) then
       SendStopToAllEngines;
   end;
@@ -12301,10 +10071,8 @@ end;
 procedure TMainWindow.ShowTimestampsMenuItemClick(Sender: TObject);
 begin
   FEngineLogShowTimestamps := not FEngineLogShowTimestamps;
-  if FEngines[1].ShowTimestampsMenuItem <> nil then
-    FEngines[1].ShowTimestampsMenuItem.Checked := FEngineLogShowTimestamps;
-  if FEngines[2].ShowTimestampsMenuItem <> nil then
-    FEngines[2].ShowTimestampsMenuItem.Checked := FEngineLogShowTimestamps;
+  UpdateEngineLogTimestampMenuItem(FEngines[1], FEngineLogShowTimestamps);
+  UpdateEngineLogTimestampMenuItem(FEngines[2], FEngineLogShowTimestamps);
 end;
 
 procedure TMainWindow.SavePdnFile(const AFileName, AWhiteName, ABlackName,
@@ -12331,7 +10099,7 @@ begin
     Lines.Add('[White "' + PdnEscape(AWhiteName) + '"]');
     Lines.Add('[Black "' + PdnEscape(ABlackName) + '"]');
     Lines.Add('[Result "' + AResult + '"]');
-    Lines.Add('[FEN "' + BoardToFen(FHistoryBaseBoard, FHistoryBaseSide) + '"]');
+    Lines.Add('[FEN "' + BoardToFen(FHistory.BaseBoard, FHistory.BaseSide) + '"]');
     Lines.Add('');
     Lines.Add(BuildPdnMoveText(AResult, False));
     if AAppend and FileExists(AFileName) then
@@ -12353,7 +10121,7 @@ begin
     else
       Lines.SaveToFile(AFileName);
     FGameDirty := False;
-    AppendEngineLog('[saved PDN ' + AFileName + ']' + LineEnding);
+    AppendEngineSlotLog(1, '[saved PDN ' + AFileName + ']' + LineEnding);
   finally
     Lines.Free;
   end;
@@ -12409,6 +10177,7 @@ begin
   FGameWhiteName := 'Human';
   FGameBlackName := 'Human';
   FGameResult := '*';
+  FGameResultReason := '';
   LeavePlayGameMode;
   ResetHistoryFromCurrentPosition;
   MarkGameDirty;
@@ -12446,6 +10215,7 @@ begin
     FGameWhiteName := 'Human';
     FGameBlackName := 'Human';
     FGameResult := '*';
+    FGameResultReason := '';
     LeavePlayGameMode;
     ResetHistoryFromCurrentPosition;
     FGameDirty := True;
@@ -12457,209 +10227,6 @@ begin
   finally
     FenText.Free;
   end;
-end;
-
-function ExtractPdnTagValue(const ALines: TStrings; const ATagName: String): String;
-var
-  I: Integer;
-  Line: String;
-  Prefix: String;
-begin
-  Result := '';
-  Prefix := '[' + ATagName + ' "';
-  for I := 0 to ALines.Count - 1 do
-  begin
-    Line := Trim(ALines[I]);
-    if StartsText(Prefix, Line) then
-    begin
-      Result := Copy(Line, Length(Prefix) + 1, MaxInt);
-      if EndsText('"]', Result) then
-        SetLength(Result, Length(Result) - 2);
-      Result := StringReplace(Result, '\"', '"', [rfReplaceAll]);
-      Result := StringReplace(Result, '\\', '\', [rfReplaceAll]);
-      Exit;
-    end;
-  end;
-end;
-
-function StripPdnMoveText(const ALines: TStrings): String;
-var
-  Ch: Char;
-  I: Integer;
-  InComment: Boolean;
-  InVariation: Integer;
-  J: Integer;
-  Line: String;
-begin
-  Result := '';
-  InComment := False;
-  InVariation := 0;
-
-  for I := 0 to ALines.Count - 1 do
-  begin
-    Line := Trim(ALines[I]);
-    if (Line = '') or StartsText('[', Line) then
-      Continue;
-
-    for J := 1 to Length(Line) do
-    begin
-      Ch := Line[J];
-      if InComment then
-      begin
-        if Ch = '}' then
-          InComment := False;
-        Continue;
-      end;
-      if InVariation > 0 then
-      begin
-        if Ch = '(' then
-          Inc(InVariation)
-        else if Ch = ')' then
-          Dec(InVariation);
-        Continue;
-      end;
-
-      case Ch of
-        '{': InComment := True;
-        '(': InVariation := 1;
-        ';': Break;
-      else
-        Result += Ch;
-      end;
-    end;
-    Result += ' ';
-  end;
-end;
-
-procedure ExtractPdnMoveTokens(const ALines: TStrings; out ATokens,
-  AAnnotations: TTextArray);
-var
-  Ch: Char;
-  Comment: String;
-  I: Integer;
-  InComment: Boolean;
-  InVariation: Integer;
-  J: Integer;
-  LastTokenIndex: Integer;
-  Line: String;
-  Token: String;
-
-  procedure AppendToken;
-  begin
-    Token := Trim(Token);
-    if Token = '' then
-      Exit;
-    SetLength(ATokens, Length(ATokens) + 1);
-    SetLength(AAnnotations, Length(ATokens));
-    ATokens[High(ATokens)] := Token;
-    AAnnotations[High(AAnnotations)] := '';
-    LastTokenIndex := High(ATokens);
-    Token := '';
-  end;
-
-  procedure AppendComment;
-  begin
-    Comment := Trim(Comment);
-    if (Comment = '') or (LastTokenIndex < 0) then
-      Exit;
-    if AAnnotations[LastTokenIndex] <> '' then
-      AAnnotations[LastTokenIndex] += ' ';
-    AAnnotations[LastTokenIndex] += Comment;
-    Comment := '';
-  end;
-
-begin
-  SetLength(ATokens, 0);
-  SetLength(AAnnotations, 0);
-  InComment := False;
-  InVariation := 0;
-  LastTokenIndex := -1;
-  Token := '';
-  Comment := '';
-
-  for I := 0 to ALines.Count - 1 do
-  begin
-    Line := Trim(ALines[I]);
-    if (Line = '') or StartsText('[', Line) then
-      Continue;
-
-    for J := 1 to Length(Line) do
-    begin
-      Ch := Line[J];
-      if InComment then
-      begin
-        if Ch = '}' then
-        begin
-          InComment := False;
-          AppendComment;
-        end
-        else
-          Comment += Ch;
-        Continue;
-      end;
-      if InVariation > 0 then
-      begin
-        if Ch = '(' then
-          Inc(InVariation)
-        else if Ch = ')' then
-          Dec(InVariation);
-        Continue;
-      end;
-
-      case Ch of
-        '{':
-        begin
-          AppendToken;
-          InComment := True;
-          Comment := '';
-        end;
-        '(':
-        begin
-          AppendToken;
-          InVariation := 1;
-        end;
-        ';':
-        begin
-          AppendToken;
-          Break;
-        end;
-        ' ', #9, #10, #13:
-          AppendToken;
-      else
-        Token += Ch;
-      end;
-    end;
-    AppendToken;
-  end;
-end;
-
-function PdnTokenMoveText(const AToken: String): String;
-var
-  DotPos: Integer;
-  I: Integer;
-begin
-  Result := Trim(AToken);
-  while (Result <> '') and (Result[1] in ['!', '?']) do
-    Delete(Result, 1, 1);
-  while (Result <> '') and (Result[Length(Result)] in ['!', '?', ',', ';']) do
-    SetLength(Result, Length(Result) - 1);
-
-  DotPos := 0;
-  for I := Length(Result) downto 1 do
-    if Result[I] = '.' then
-    begin
-      DotPos := I;
-      Break;
-    end;
-  if DotPos > 0 then
-    Delete(Result, 1, DotPos);
-end;
-
-function IsPdnResultToken(const AToken: String): Boolean;
-begin
-  Result := (AToken = '2-0') or (AToken = '1-1') or (AToken = '0-2') or
-    (AToken = '*') or (AToken = '1-0') or (AToken = '0-1') or
-    (AToken = '1/2-1/2');
 end;
 
 procedure TMainWindow.LoadPdnFile(const AFileName: String);
@@ -12689,6 +10256,7 @@ begin
     FGameResult := ExtractPdnTagValue(Lines, 'Result');
     if FGameResult = '' then
       FGameResult := '*';
+    FGameResultReason := '';
 
     ParseFen(StartFen);
     LeavePlayGameMode;
@@ -12738,95 +10306,12 @@ end;
 
 procedure TMainWindow.ParseFen(const AFen: String);
 var
-  CurrentSide: Char;
-  Fen: String;
-  FirstPieceSection: Integer;
-  IsKing: Boolean;
-  Piece: TPiece;
-  PositionText: String;
-  RangeEnd: Integer;
-  RangeStart: Integer;
-  Section: String;
-  Sections: TStringArray;
-  Token: String;
-  Tokens: TStringArray;
-  I: Integer;
-  J: Integer;
-  P: Integer;
+  Board: TBoard;
+  Side: TSide;
 begin
-  Fen := Trim(StringReplace(AFen, LineEnding, '', [rfReplaceAll]));
-  if Fen = '' then
-    raise Exception.Create('The selected FEN file is empty.');
-
-  ClearBoard;
-  Sections := Fen.Split(':');
-  FirstPieceSection := 0;
-
-  if (Length(Sections) > 0) and (Length(Trim(Sections[0])) = 1) and
-    (UpCase(Trim(Sections[0])[1]) in ['W', 'B']) then
-  begin
-    if UpCase(Trim(Sections[0])[1]) = 'W' then
-      FSideToMove := sideWhite
-    else
-      FSideToMove := sideBlack;
-    FirstPieceSection := 1;
-  end;
-
-  for I := FirstPieceSection to High(Sections) do
-  begin
-    Section := Trim(Sections[I]);
-    if Section = '' then
-      Continue;
-
-    CurrentSide := UpCase(Section[1]);
-    if not (CurrentSide in ['W', 'B']) then
-      Continue;
-
-    Delete(Section, 1, 1);
-    Section := StringReplace(Section, ';', ',', [rfReplaceAll]);
-    Tokens := Section.Split(',');
-
-    for J := 0 to High(Tokens) do
-    begin
-      Token := Trim(Tokens[J]);
-      if Token = '' then
-        Continue;
-
-      IsKing := UpCase(Token[1]) = 'K';
-      if IsKing then
-        Delete(Token, 1, 1);
-
-      PositionText := Token;
-      if Pos('-', PositionText) > 0 then
-      begin
-        RangeStart := StrToIntDef(Copy(PositionText, 1, Pos('-', PositionText) - 1), 0);
-        RangeEnd := StrToIntDef(Copy(PositionText, Pos('-', PositionText) + 1, MaxInt), 0);
-      end
-      else
-      begin
-        RangeStart := StrToIntDef(PositionText, 0);
-        RangeEnd := RangeStart;
-      end;
-
-      if (RangeStart < 1) or (RangeEnd > 50) or (RangeEnd < RangeStart) then
-        raise Exception.CreateFmt('Invalid FEN position: %s', [Token]);
-
-      for P := RangeStart to RangeEnd do
-      begin
-        if CurrentSide = 'W' then
-          if IsKing then
-            Piece := pcWhiteKing
-          else
-            Piece := pcWhiteMan
-        else if IsKing then
-          Piece := pcBlackKing
-        else
-          Piece := pcBlackMan;
-
-        PlacePiece(P, Piece);
-      end;
-    end;
-  end;
+  ParseFenToBoard(AFen, Board, Side);
+  FBoard := Board;
+  FSideToMove := Side;
 end;
 
 procedure TMainWindow.PlacePiece(APosition: Integer; APiece: TPiece);
@@ -12845,12 +10330,12 @@ begin
   FHistoryWhiteEdit.Text := FGameWhiteName;
   FHistoryBlackEdit.Text := FGameBlackName;
   FHistoryResultEdit.Text := FGameResult;
-  FHistoryFenMemo.Text := BoardToFen(FHistoryBaseBoard, FHistoryBaseSide);
+  FHistoryFenMemo.Text := BoardToFen(FHistory.BaseBoard, FHistory.BaseSide);
   FHistoryMemo.Text := BuildPdnMoveText(FGameResult, True);
   if FHistoryEvalPaintBox <> nil then
     FHistoryEvalPaintBox.Invalidate;
 
-  SelectHistoryPly(FCurrentPly);
+  SelectHistoryPly(FHistory.CurrentPly);
   FHistoryMemo.Invalidate;
   FHistoryMemo.Update;
 end;
@@ -12861,6 +10346,7 @@ var
 begin
   ClearBoardSelection;
   GenerateLegalMoves(FBoard, FSideToMove, FMoves);
+  ClearAnalyzePvForAllEngines;
   SetLength(FAnalyzePvMoves, 0);
   FAnalyzePvHasBase := False;
   FAnalyzePvLocked := False;

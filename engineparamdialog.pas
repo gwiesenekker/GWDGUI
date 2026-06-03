@@ -12,6 +12,7 @@ uses
   ExtCtrls,
   Forms,
   Grids,
+  GuiDialogs,
   StdCtrls;
 
 type
@@ -31,6 +32,7 @@ type
     FParams: TEngineParamArray;
     FScorePerspectiveCombo: TComboBox;
     FSelectedRow: Integer;
+    function ExpandedIniText: String;
     procedure BoolComboChange(Sender: TObject);
     procedure BrowseDirButtonClick(Sender: TObject);
     procedure CancelButtonClick(Sender: TObject);
@@ -42,11 +44,13 @@ type
     procedure OKButtonClick(Sender: TObject);
     procedure LoadGrid;
     function FindIniFileForEngine(const AEngineFileName: String): String;
+    function ParamValue(const AName: String): String;
     function SaveIniFile: Boolean;
     procedure ScorePerspectiveComboChange(Sender: TObject);
     procedure SelectCell(Sender: TObject; aCol, aRow: Integer;
       var CanSelect: Boolean);
     procedure StoreGrid;
+    procedure StoreIniParams;
     procedure UpdateRowControls;
     function IsBoolRow(ARow: Integer): Boolean;
     function IsDirRow(ARow: Integer): Boolean;
@@ -66,6 +70,9 @@ uses
 
 const
   EngineIniFileParamName = 'gui-ini-file';
+  EngineIniContentParamName = 'gui-ini-content';
+  DxpIpParamName = 'gui-dxp-ip';
+  DxpSocketParamName = 'gui-dxp-socket';
 
 constructor TEngineParamDialog.Create(AOwner: TComponent);
 var
@@ -228,10 +235,13 @@ procedure TEngineParamDialog.CloseWithResult(AResult: Integer);
 begin
   FInlineBoolCombo.Visible := False;
   FGrid.EditorMode := False;
-  if (AResult = mrOK) and (not SaveIniFile) then
-    Exit;
   if AResult = mrOK then
+  begin
     StoreGrid;
+    StoreIniParams;
+    if not SaveIniFile then
+      Exit;
+  end;
   ModalResult := AResult;
   Hide;
 end;
@@ -340,21 +350,32 @@ procedure TEngineParamDialog.LoadIniFromEngineFile(
   const AEngineFileName: String);
 var
   I: Integer;
+  StoredContent: String;
 begin
   FIniFileName := '';
+  StoredContent := '';
   for I := 0 to High(FParams) do
+  begin
     if SameText(FParams[I].Name, EngineIniFileParamName) then
-    begin
       FIniFileName := Trim(FParams[I].Value);
-      Break;
-    end;
+    if SameText(FParams[I].Name, EngineIniContentParamName) then
+      StoredContent := FParams[I].Value;
+  end;
   if FIniFileName = '' then
     FIniFileName := FindIniFileForEngine(AEngineFileName);
-  FIniPanel.Visible := FIniFileName <> '';
-  if FIniFileName = '' then
+  FIniPanel.Visible := (FIniFileName <> '') or (StoredContent <> '');
+  if (FIniFileName = '') and (StoredContent = '') then
     Exit;
 
-  FIniLabel.Caption := 'INI file: ' + FIniFileName;
+  if FIniFileName <> '' then
+    FIniLabel.Caption := 'INI file: ' + FIniFileName
+  else
+    FIniLabel.Caption := 'INI file: (stored copy only)';
+  if StoredContent <> '' then
+  begin
+    FIniMemo.Lines.Text := StoredContent;
+    Exit;
+  end;
   try
     FIniMemo.Lines.LoadFromFile(FIniFileName);
   except
@@ -367,21 +388,48 @@ begin
 end;
 
 function TEngineParamDialog.SaveIniFile: Boolean;
+var
+  Lines: TStringList;
 begin
   Result := True;
   if FIniFileName = '' then
     Exit;
 
+  Lines := TStringList.Create;
   try
-    FIniMemo.Lines.SaveToFile(FIniFileName);
+    try
+      Lines.Text := ExpandedIniText;
+      Lines.SaveToFile(FIniFileName);
+    finally
+      Lines.Free;
+    end;
   except
     on E: Exception do
     begin
-      MessageDlg('Could not save INI file:' + LineEnding + FIniFileName +
-        LineEnding + E.Message, mtError, [mbOK], 0);
+      ShowGuiOkDialog(Self, 'Could not save INI file',
+        FIniFileName + LineEnding + E.Message);
       Result := False;
     end;
   end;
+end;
+
+function TEngineParamDialog.ParamValue(const AName: String): String;
+var
+  I: Integer;
+begin
+  Result := '';
+  for I := 0 to High(FParams) do
+    if SameText(FParams[I].Name, AName) then
+      Exit(FParams[I].Value);
+end;
+
+function TEngineParamDialog.ExpandedIniText: String;
+begin
+  Result := FIniMemo.Lines.Text;
+  Result := StringReplace(Result, '{ip}', ParamValue(DxpIpParamName),
+    [rfReplaceAll, rfIgnoreCase]);
+  Result := StringReplace(Result, '{port}', ParamValue(DxpSocketParamName),
+    [rfReplaceAll, rfIgnoreCase]);
 end;
 
 procedure TEngineParamDialog.SetParams(const AParams: TEngineParamArray);
@@ -407,13 +455,19 @@ end;
 procedure TEngineParamDialog.LoadGrid;
 var
   I: Integer;
+  Row: Integer;
 begin
-  FGrid.RowCount := Length(FParams) + 1;
+  FGrid.RowCount := 1;
+  Row := 1;
   for I := 0 to High(FParams) do
   begin
-    FGrid.Cells[0, I + 1] := FParams[I].Name;
-    FGrid.Cells[1, I + 1] := FParams[I].ParamType;
-    FGrid.Cells[2, I + 1] := FParams[I].Value;
+    if SameText(FParams[I].Name, EngineIniContentParamName) then
+      Continue;
+    FGrid.RowCount := Row + 1;
+    FGrid.Cells[0, Row] := FParams[I].Name;
+    FGrid.Cells[1, Row] := FParams[I].ParamType;
+    FGrid.Cells[2, Row] := FParams[I].Value;
+    Inc(Row);
   end;
   UpdateRowControls;
 end;
@@ -531,6 +585,17 @@ begin
     FParams[I - 1].ParamType := FGrid.Cells[1, I];
     FParams[I - 1].Value := FGrid.Cells[2, I];
   end;
+end;
+
+procedure TEngineParamDialog.StoreIniParams;
+begin
+  if FIniFileName = '' then
+    Exit;
+
+  AddOrUpdateParam(FParams, EngineIniFileParamName, 'string',
+    FIniFileName, False);
+  AddOrUpdateParam(FParams, EngineIniContentParamName, 'string',
+    FIniMemo.Lines.Text, False);
 end;
 
 end.
