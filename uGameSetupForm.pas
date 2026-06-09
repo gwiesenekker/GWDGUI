@@ -71,7 +71,7 @@ begin
   inherited Create(AOwner);
 
   Caption := 'New game';
-  Position := poOwnerFormCenter;
+  Position := poDesigned;
   Width := 430;
   Height := 390;
   Constraints.MinWidth := 380;

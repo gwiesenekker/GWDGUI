@@ -209,8 +209,6 @@ begin
 end;
 
 procedure CenterFormOnOwner(AForm, AOwner: TCustomForm);
-var
-  WorkArea: TRect;
 begin
   if AForm = nil then
     Exit;
@@ -221,11 +219,9 @@ begin
     Exit;
   end;
 
-  WorkArea := AOwner.Monitor.WorkareaRect;
   AForm.Position := poDesigned;
   AForm.Left := AOwner.Left + ((AOwner.Width - AForm.Width) div 2);
   AForm.Top := AOwner.Top + ((AOwner.Height - AForm.Height) div 2);
-  ClampFormToWorkArea(AForm, WorkArea);
 end;
 
 function WrappedTextHeight(ADialog: TForm; const AText: string;

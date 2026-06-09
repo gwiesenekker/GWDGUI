@@ -43,7 +43,7 @@ begin
   inherited Create(AOwner);
 
   Caption := 'Engines';
-  Position := poOwnerFormCenter;
+  Position := poDesigned;
   Width := 820;
   Height := 420;
   Constraints.MinWidth := 560;

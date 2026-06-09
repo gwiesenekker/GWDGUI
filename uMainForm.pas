@@ -2163,6 +2163,7 @@ begin
   finally
     LBusyEngineKeys.Free;
   end;
+  CenterFormOnOwner(FSetupForm, Self);
   FSetupForm.Show;
   FSetupForm.BringToFront;
 end;
@@ -2171,6 +2172,7 @@ procedure TMainForm.EnginesClick(Sender: TObject);
 begin
   if FEnginesDialog = nil then
     FEnginesDialog := TEnginesDialog.Create(Self);
+  CenterFormOnOwner(FEnginesDialog, Self);
   FEnginesDialog.Show;
   FEnginesDialog.BringToFront;
 end;
@@ -2541,6 +2543,7 @@ begin
     FTournamentDialog := TTournamentDialog.Create(Self);
     FTournamentDialog.OnStartGame := @TournamentStartGame;
   end;
+  CenterFormOnOwner(FTournamentDialog, Self);
   FTournamentDialog.Show;
   FTournamentDialog.BringToFront;
 end;

@@ -197,7 +197,7 @@ begin
   inherited Create(AOwner);
 
   Caption := 'Tournament';
-  Position := poOwnerFormCenter;
+  Position := poDesigned;
   Width := 980;
   Height := 680;
   Constraints.MinWidth := 760;
