@@ -163,11 +163,7 @@ end;
 
 function TPlatformProcess.NeedsPolling: Boolean;
 begin
-  {$IFDEF MSWINDOWS}
-  Result := False;
-  {$ELSE}
   Result := True;
-  {$ENDIF}
 end;
 
 procedure TPlatformProcess.Start(const AFileName: string; ALaunchArgs: TStrings;
@@ -230,7 +226,6 @@ begin
     FInputWriteHandle := Parent2ChildWrite;
     FOutputReadHandle := Child2ParentRead;
     FRunning := True;
-    FReaderThread := TPlatformProcessReaderThread.Create(Self, FOutputReadHandle);
   finally
     if Parent2ChildRead <> 0 then
       CloseHandle(Parent2ChildRead);
