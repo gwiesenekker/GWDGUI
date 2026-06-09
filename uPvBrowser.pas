@@ -5,28 +5,53 @@ unit uPvBrowser;
 interface
 
 uses
-  Classes, StdCtrls, SysUtils, uBoardControl, uDraughtsBoard,
+  Classes, LCLType, StdCtrls, SysUtils, uBoardControl, uDraughtsBoard,
   uPvSnapshot;
 
 type
+  TIntArray = array of Integer;
+
   TPvBrowser = class
   private
     FBaseBoard: TDraughtsBoard;
     FBasePly: Integer;
     FBoard: TDraughtsBoard;
     FBoardControl: TDraughtsBoardControl;
+    FBrowsePly: Integer;
     FDepth: string;
     FInfoLabel: TLabel;
+    FMoveLengths: TIntArray;
+    FMoveStarts: TIntArray;
     FOnBoardChanged: TNotifyEvent;
+    FPendingBaseBoard: TDraughtsBoard;
+    FPendingBasePly: Integer;
+    FPendingDepth: string;
+    FPendingScore: string;
+    FPendingStartingFEN: string;
+    FPendingTimeText: string;
+    FPendingVariation: string;
+    FHasPendingData: Boolean;
     FPvMemo: TMemo;
     FScore: string;
     FStartingFEN: string;
     FTimeText: string;
     FVariation: string;
+    procedure ApplyBrowsePly(APly: Integer);
+    procedure ApplyPendingData;
     function FormatInfo: string;
-    procedure BuildMoveText(out AText: string);
+    function MoveCount: Integer;
+    procedure BuildMoveText(out AText: string; var AStarts,
+      ALengths: TIntArray);
+    procedure HighlightSelection(AFocusMemo: Boolean);
+    procedure MemoClick(Sender: TObject);
+    procedure MemoKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure RenderBoard;
     procedure RenderMemo(const AText: string);
+    procedure SetDataInternal(ABaseBoard: TDraughtsBoard; ABasePly: Integer;
+      const AStartingFEN, APv, AScore, ADepth, ATimeText: string);
+    procedure StorePendingData(ABaseBoard: TDraughtsBoard; ABasePly: Integer;
+      const AStartingFEN, APv, AScore, ADepth, ATimeText: string);
+    procedure UnlockUpdates;
   public
     constructor Create(ABoard: TDraughtsBoard; ABoardControl: TDraughtsBoardControl;
       AInfoLabel: TLabel; APvMemo: TMemo);
@@ -92,15 +117,23 @@ constructor TPvBrowser.Create(ABoard: TDraughtsBoard;
 begin
   inherited Create;
   FBaseBoard := TDraughtsBoard.Create;
+  FPendingBaseBoard := TDraughtsBoard.Create;
+  FBrowsePly := -1;
   FBoard := ABoard;
   FBoardControl := ABoardControl;
   FInfoLabel := AInfoLabel;
   FPvMemo := APvMemo;
+  if FPvMemo <> nil then
+  begin
+    FPvMemo.OnClick := @MemoClick;
+    FPvMemo.OnKeyDown := @MemoKeyDown;
+  end;
   Clear;
 end;
 
 destructor TPvBrowser.Destroy;
 begin
+  FPendingBaseBoard.Free;
   FBaseBoard.Free;
   inherited Destroy;
 end;
@@ -113,6 +146,10 @@ begin
   FScore := '';
   FDepth := '';
   FTimeText := '';
+  FHasPendingData := False;
+  FBrowsePly := -1;
+  SetLength(FMoveStarts, 0);
+  SetLength(FMoveLengths, 0);
   RenderMemo('No PV');
   RenderBoard;
   if FInfoLabel <> nil then
@@ -134,7 +171,8 @@ begin
     Result += ' no info';
 end;
 
-procedure TPvBrowser.BuildMoveText(out AText: string);
+procedure TPvBrowser.BuildMoveText(out AText: string; var AStarts,
+  ALengths: TIntArray);
 var
   I: Integer;
   LMoves: TStringList;
@@ -142,6 +180,8 @@ var
   LStartingSide: TDraughtsSide;
 begin
   AText := '';
+  SetLength(AStarts, 0);
+  SetLength(ALengths, 0);
 
   LMoves := TStringList.Create;
   try
@@ -152,6 +192,8 @@ begin
       Exit;
     end;
 
+    SetLength(AStarts, LMoves.Count);
+    SetLength(ALengths, LMoves.Count);
     LStartingSide := FenSideToMove(FStartingFEN);
     for I := 0 to LMoves.Count - 1 do
     begin
@@ -159,6 +201,8 @@ begin
         AText += ' ';
       LSegment := MoveSegmentText(FBasePly + I + 1, I, LMoves[I],
         LStartingSide);
+      AStarts[I] := Length(AText);
+      ALengths[I] := Length(LSegment);
       AText += LSegment;
     end;
   finally
@@ -170,6 +214,7 @@ procedure TPvBrowser.RenderBoard;
 var
   I: Integer;
   LMoves: TStringList;
+  LPly: Integer;
 begin
   if FBoard = nil then
     Exit;
@@ -178,7 +223,10 @@ begin
   LMoves := TStringList.Create;
   try
     TextToMoveList(FVariation, LMoves);
-    for I := 0 to LMoves.Count - 1 do
+    LPly := FBrowsePly;
+    if (LPly < 0) or (LPly > LMoves.Count) then
+      LPly := LMoves.Count;
+    for I := 0 to LPly - 1 do
       try
         FBoard.PlayMove(LMoves[I], True, False);
       except
@@ -208,8 +256,143 @@ begin
   FPvMemo.SelLength := 0;
 end;
 
-procedure TPvBrowser.SetData(ABaseBoard: TDraughtsBoard; ABasePly: Integer;
-  const AStartingFEN, APv, AScore, ADepth, ATimeText: string);
+function TPvBrowser.MoveCount: Integer;
+var
+  LMoves: TStringList;
+begin
+  LMoves := TStringList.Create;
+  try
+    TextToMoveList(FVariation, LMoves);
+    Result := LMoves.Count;
+  finally
+    LMoves.Free;
+  end;
+end;
+
+procedure TPvBrowser.HighlightSelection(AFocusMemo: Boolean);
+begin
+  if FPvMemo = nil then
+    Exit;
+  if (FBrowsePly > 0) and (FBrowsePly <= Length(FMoveStarts)) then
+  begin
+    FPvMemo.SelStart := FMoveStarts[FBrowsePly - 1];
+    FPvMemo.SelLength := FMoveLengths[FBrowsePly - 1];
+  end
+  else
+  begin
+    FPvMemo.SelStart := 0;
+    FPvMemo.SelLength := 0;
+  end;
+  if AFocusMemo and FPvMemo.CanFocus then
+    FPvMemo.SetFocus;
+end;
+
+procedure TPvBrowser.ApplyBrowsePly(APly: Integer);
+var
+  LMoveCount: Integer;
+begin
+  LMoveCount := MoveCount;
+  if APly < 0 then
+    APly := 0
+  else if APly > LMoveCount then
+    APly := LMoveCount;
+  FBrowsePly := APly;
+  RenderBoard;
+  HighlightSelection(True);
+end;
+
+procedure TPvBrowser.MemoClick(Sender: TObject);
+var
+  I: Integer;
+  LPos: Integer;
+begin
+  if FPvMemo = nil then
+    Exit;
+  LPos := FPvMemo.SelStart;
+  for I := 0 to High(FMoveStarts) do
+    if (LPos >= FMoveStarts[I]) and
+      (LPos <= FMoveStarts[I] + FMoveLengths[I]) then
+    begin
+      ApplyBrowsePly(I + 1);
+      Exit;
+    end;
+end;
+
+procedure TPvBrowser.MemoKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+var
+  LMoveCount: Integer;
+  LPly: Integer;
+begin
+  if Key = VK_ESCAPE then
+  begin
+    UnlockUpdates;
+    Key := 0;
+  end
+  else if Key = VK_LEFT then
+  begin
+    LMoveCount := MoveCount;
+    if LMoveCount = 0 then
+      Exit;
+    if FBrowsePly < 0 then
+      LPly := LMoveCount
+    else
+      LPly := FBrowsePly - 1;
+    ApplyBrowsePly(LPly);
+    Key := 0;
+  end
+  else if Key = VK_RIGHT then
+  begin
+    if MoveCount = 0 then
+      Exit;
+    if FBrowsePly < 0 then
+      LPly := 1
+    else
+      LPly := FBrowsePly + 1;
+    ApplyBrowsePly(LPly);
+    Key := 0;
+  end;
+end;
+
+procedure TPvBrowser.StorePendingData(ABaseBoard: TDraughtsBoard;
+  ABasePly: Integer; const AStartingFEN, APv, AScore, ADepth,
+  ATimeText: string);
+begin
+  if ABaseBoard <> nil then
+    FPendingBaseBoard.AssignFrom(ABaseBoard);
+  FPendingBasePly := ABasePly;
+  FPendingStartingFEN := AStartingFEN;
+  FPendingVariation := Trim(APv);
+  FPendingScore := Trim(AScore);
+  FPendingDepth := Trim(ADepth);
+  FPendingTimeText := Trim(ATimeText);
+  FHasPendingData := True;
+end;
+
+procedure TPvBrowser.ApplyPendingData;
+begin
+  if not FHasPendingData then
+    Exit;
+  FHasPendingData := False;
+  SetDataInternal(FPendingBaseBoard, FPendingBasePly, FPendingStartingFEN,
+    FPendingVariation, FPendingScore, FPendingDepth, FPendingTimeText);
+end;
+
+procedure TPvBrowser.UnlockUpdates;
+begin
+  FBrowsePly := -1;
+  if FHasPendingData then
+    ApplyPendingData
+  else
+  begin
+    RenderBoard;
+    HighlightSelection(True);
+  end;
+end;
+
+procedure TPvBrowser.SetDataInternal(ABaseBoard: TDraughtsBoard;
+  ABasePly: Integer; const AStartingFEN, APv, AScore, ADepth,
+  ATimeText: string);
 var
   LText: string;
 begin
@@ -224,9 +407,21 @@ begin
 
   if FInfoLabel <> nil then
     FInfoLabel.Caption := FormatInfo;
-  BuildMoveText(LText);
+  BuildMoveText(LText, FMoveStarts, FMoveLengths);
   RenderMemo(LText);
   RenderBoard;
+  HighlightSelection(False);
+end;
+
+procedure TPvBrowser.SetData(ABaseBoard: TDraughtsBoard; ABasePly: Integer;
+  const AStartingFEN, APv, AScore, ADepth, ATimeText: string);
+begin
+  if FBrowsePly >= 0 then
+    StorePendingData(ABaseBoard, ABasePly, AStartingFEN, APv, AScore, ADepth,
+      ATimeText)
+  else
+    SetDataInternal(ABaseBoard, ABasePly, AStartingFEN, APv, AScore, ADepth,
+      ATimeText);
 end;
 
 procedure TPvBrowser.SetSnapshot(ASnapshot: TPvSnapshot;
