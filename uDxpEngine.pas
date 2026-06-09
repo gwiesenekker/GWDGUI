@@ -74,6 +74,7 @@ type
     function LaunchProcess: Boolean;
     function LocalSocketOpen(out AStatus: string): Boolean;
     procedure ProcessData(Sender: TObject; const AText: string);
+    procedure QueueProcessData(const AText: string);
     function QueueBoolCommand(ACommand: TObject): Boolean;
     procedure QueueProcedureCommand(ACommand: TObject);
     function QueueStringCommand(ACommand: TObject): string;
@@ -113,6 +114,7 @@ type
     dwcSetGamePosition,
     dwcSetClockInfo,
     dwcStartThinking,
+    dwcProcessData,
     dwcStop
   );
 
@@ -130,6 +132,7 @@ type
     FSide: TDraughtsSide;
     FStartingFEN: string;
     FStringResult: string;
+    FTextValue: string;
     FTotalUsedSeconds: Double;
   public
     constructor Create(AKind: TDxpWorkerCommandKind); reintroduce;
@@ -147,6 +150,7 @@ type
     property Side: TDraughtsSide read FSide write FSide;
     property StartingFEN: string read FStartingFEN write FStartingFEN;
     property StringResult: string read FStringResult write FStringResult;
+    property TextValue: string read FTextValue write FTextValue;
     property TotalUsedSeconds: Double read FTotalUsedSeconds write FTotalUsedSeconds;
   end;
 
@@ -176,6 +180,7 @@ const
     'dxp-set-game-position',
     'dxp-set-clock-info',
     'dxp-start-thinking',
+    'dxp-process-data',
     'dxp-stop'
   );
 begin
@@ -210,6 +215,7 @@ procedure TDxpWorkerThread.Execute;
 var
   CommandObject: TObject;
   DxpCommand: TDxpWorkerCommand;
+  AutoFreeCommand: Boolean;
 begin
   FOwner.FWorkerThreadId := System.ThreadID;
   try
@@ -218,6 +224,7 @@ begin
       if not (CommandObject is TDxpWorkerCommand) then
         Continue;
       DxpCommand := TDxpWorkerCommand(CommandObject);
+      AutoFreeCommand := DxpCommand.CommandKind = dwcProcessData;
       try
         FOwner.ExecuteWorkerCommand(DxpCommand);
       except
@@ -225,6 +232,8 @@ begin
           DxpCommand.ErrorMessage := E.Message;
       end;
       DxpCommand.SignalCompleted;
+      if AutoFreeCommand then
+        DxpCommand.Free;
     end;
   finally
     FOwner.FWorkerThreadId := 0;
@@ -462,6 +471,7 @@ begin
     EngineName := ChangeFileExt(FEngine.ExecutableName, '');
   FBoard := TDraughtsBoard.Create;
   FProcess := TPlatformProcess.Create;
+  FProcess.SynchronizeData := False;
   FProcess.OnData := @ProcessData;
   FReceivedLines := TStringList.Create;
   FSocketLock := TCriticalSection.Create;
@@ -499,6 +509,12 @@ var
   Line: string;
   LineEnd: Integer;
 begin
+  if not IsWorkerThread then
+  begin
+    QueueProcessData(AText);
+    Exit;
+  end;
+
   Log('stdout; text=' + StringReplace(AText, LineEnding, '\n', [rfReplaceAll]));
   FBuffer += AText;
   while True do
@@ -599,6 +615,18 @@ begin
   end;
 end;
 
+procedure TDxpEngine.QueueProcessData(const AText: string);
+var
+  DxpCommand: TDxpWorkerCommand;
+begin
+  if AText = '' then
+    Exit;
+  DxpCommand := TDxpWorkerCommand.Create(dwcProcessData);
+  DxpCommand.TextValue := AText;
+  if (FWorkerQueue = nil) or (not FWorkerQueue.TryPost(DxpCommand)) then
+    DxpCommand.Free;
+end;
+
 function TDxpEngine.QueueStringCommand(ACommand: TObject): string;
 var
   DxpCommand: TDxpWorkerCommand;
@@ -646,6 +674,8 @@ begin
         DxpCommand.TotalUsedSeconds);
     dwcStartThinking:
       DxpCommand.StringResult := inherited StartThinking;
+    dwcProcessData:
+      ProcessData(nil, DxpCommand.TextValue);
     dwcStop:
       DoStop;
   end;

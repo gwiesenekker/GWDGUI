@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Controls, Dialogs, Forms, Grids, Menus, SysUtils,
-  uEngineEditForm, uEngineRegistry;
+  uEngineEditForm, uEngineRegistry, uGuiDialogs;
 
 type
   TEnginesDialog = class(TForm)
@@ -43,7 +43,7 @@ begin
   inherited Create(AOwner);
 
   Caption := 'Engines';
-  Position := poMainFormCenter;
+  Position := poOwnerFormCenter;
   Width := 820;
   Height := 420;
   Constraints.MinWidth := 560;
@@ -192,16 +192,16 @@ begin
     Exit;
   if ProtocolIdConflict(AEngine, OtherEngineName) then
   begin
-    MessageDlg('Engines',
+    ShowGuiOkDialog(Self, 'Engines',
       UpperCase(AEngine.KindText) + ' ID "' + AEngine.IdText +
-      '" is already used by ' + OtherEngineName + '.', mtError, [mbOK], 0);
+      '" is already used by ' + OtherEngineName + '.');
     Exit;
   end;
   if DxpPortConflict(AEngine, OtherEngineName) then
   begin
-    MessageDlg('Engines',
+    ShowGuiOkDialog(Self, 'Engines',
       'DXP port ' + IntToStr(AEngine.DxpPort) +
-      ' is already used by ' + OtherEngineName + '.', mtError, [mbOK], 0);
+      ' is already used by ' + OtherEngineName + '.');
     Exit;
   end;
   if (FEditingIndex >= 0) and (FEditingIndex < FEngines.Count) then

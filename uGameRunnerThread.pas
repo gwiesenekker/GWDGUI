@@ -85,6 +85,7 @@ type
     FRunnerFailed: Boolean;
     FSetup: TGameSetup;
     FShowStdout: Boolean;
+    FSnapshotLock: TCriticalSection;
     FStopLogged: Boolean;
     FWhiteEngine: TExternalEngineDefinition;
     FBlackEngine: TExternalEngineDefinition;
@@ -260,6 +261,7 @@ begin
   end;
   FGameLog := TStringList.Create;
   FLogLock := TCriticalSection.Create;
+  FSnapshotLock := TCriticalSection.Create;
   FCommandQueue := TThreadMessageQueue.Create(True);
   FStopToken := TCancellationToken.Create;
   FPvBaseBoard := TDraughtsBoard.Create;
@@ -274,6 +276,7 @@ begin
   FBlackEngine.Free;
   FWhiteEngine.Free;
   FStopToken.Free;
+  FSnapshotLock.Free;
   FLogLock.Free;
   FGameLog.Free;
   inherited Destroy;
@@ -608,11 +611,16 @@ procedure TGameRunnerThread.PublishSnapshot;
 var
   Snapshot: TGameRunnerSnapshot;
 begin
-  Snapshot := CreateSnapshot;
-  if Assigned(FOnSnapshot) then
-    FOnSnapshot(Self, Snapshot)
-  else
-    Snapshot.Free;
+  FSnapshotLock.Acquire;
+  try
+    Snapshot := CreateSnapshot;
+    if Assigned(FOnSnapshot) then
+      FOnSnapshot(Self, Snapshot)
+    else
+      Snapshot.Free;
+  finally
+    FSnapshotLock.Release;
+  end;
 end;
 
 procedure TGameRunnerThread.PublishFinished;

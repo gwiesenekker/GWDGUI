@@ -104,8 +104,8 @@ implementation
 
 uses
   Dialogs, FPJSON, Graphics, JSONParser, Math, uGameOrchestrator,
-  uMainForm, uTournamentGridModel, uTournamentModel, uTournamentPairing,
-  uTournamentResults, uTournamentTypes;
+  uGuiDialogs, uMainForm, uTournamentGridModel, uTournamentModel,
+  uTournamentPairing, uTournamentResults, uTournamentTypes;
 
 procedure DrawGridText(AGrid: TStringGrid; ACol, ARow: Integer;
   const ARect: TRect);
@@ -632,8 +632,7 @@ begin
     CollectSelectedEngines(Engines);
     if Engines.Count < 2 then
     begin
-      MessageDlg('Tournament', 'Select at least two engines.', mtInformation,
-        [mbOK], 0);
+      ShowGuiOkDialog(Self, 'Tournament', 'Select at least two engines.');
       Exit;
     end;
     CollectPairingRows(WhiteEngines, BlackEngines, Results);
@@ -642,8 +641,8 @@ begin
       ClearTournamentPairingGrid(FGrid)
     else if not TournamentAllResultsKnown(WhiteEngines, BlackEngines, Results) then
     begin
-      MessageDlg('Tournament', 'Finish the current Swiss round first.',
-        mtInformation, [mbOK], 0);
+      ShowGuiOkDialog(Self, 'Tournament',
+        'Finish the current Swiss round first.');
       Exit;
     end;
 
@@ -670,9 +669,9 @@ begin
   if FRunning then
     Exit;
   if HasNonByeResults and
-    (MessageDlg('Clear pairing',
-    'This will clear existing tournament results. Are you sure?',
-    mtConfirmation, [mbYes, mbNo], 0) <> mrYes) then
+    (ShowGuiConfirmationDialog(Self, 'Clear pairing',
+    'This will clear existing tournament results. Are you sure?', 'Yes',
+    'No', mrNo) <> mrYes) then
     Exit;
   ClearTournamentPairingGrid(FGrid);
   FAcceptedTournamentSignature := TournamentSignature;

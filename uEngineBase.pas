@@ -41,6 +41,7 @@ type
     FPrincipalVariation: string;
     FStartingFEN: string;
     FState: TEngineState;
+    FStateLock: TCriticalSection;
     FStateLog: TStringList;
     FStopToken: TCancellationToken;
     function ExtractMessageValue(const AMessage, AName: string; out AValue: string): Boolean;
@@ -50,6 +51,7 @@ type
     function GetLastScore: string;
     function GetLastTimeText: string;
     function GetPrincipalVariation: string;
+    function GetCurrentState: TEngineState;
     procedure ParsePositionMessage(const AMessage: string; out AFEN,
       AMovesText: string);
     procedure SetLastError(const AValue: string);
@@ -63,7 +65,7 @@ type
     procedure Log(const AMessage: string);
     procedure SetGameResult(const AResult: string);
     function StopRequested: Boolean;
-    property State: TEngineState read FState;
+    property State: TEngineState read GetCurrentState;
   public
     constructor Create(const AEngineName: string = 'Engine'); virtual;
     destructor Destroy; override;
@@ -82,7 +84,7 @@ type
     procedure Stop; virtual;
 
     property EngineName: string read FEngineName write FEngineName;
-    property CurrentState: TEngineState read FState;
+    property CurrentState: TEngineState read GetCurrentState;
     property GameResult: string read GetGameResult;
     property LastDepth: string read GetLastDepth write SetLastDepth;
     property LastError: string read GetLastError;
@@ -159,9 +161,10 @@ begin
   FGameResultLock := TCriticalSection.Create;
   FLastErrorLock := TCriticalSection.Create;
   FPvLock := TCriticalSection.Create;
+  FStateLock := TCriticalSection.Create;
   FState := esWaiting;
   SetGameResult('*');
-  Log('created; state=' + EngineStateToString(FState));
+  Log('created; state=' + EngineStateToString(GetCurrentState));
 end;
 
 destructor TDraughtsEngine.Destroy;
@@ -170,17 +173,30 @@ begin
   FGameResultLock.Free;
   FLastErrorLock.Free;
   FPvLock.Free;
+  FStateLock.Free;
   FStateLog.Free;
   FMovesPlayed.Free;
   inherited Destroy;
 end;
 
+function TDraughtsEngine.GetCurrentState: TEngineState;
+begin
+  FStateLock.Acquire;
+  try
+    Result := FState;
+  finally
+    FStateLock.Release;
+  end;
+end;
+
 procedure TDraughtsEngine.Log(const AMessage: string);
 var
   LMessage: string;
+  LState: TEngineState;
 begin
+  LState := GetCurrentState;
   LMessage := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) + ' [' +
-    FEngineName + '] current_state=' + EngineStateToString(FState) + '; ' + AMessage;
+    FEngineName + '] current_state=' + EngineStateToString(LState) + '; ' + AMessage;
   FLogLock.Acquire;
   try
     FStateLog.Add(LMessage);
@@ -198,11 +214,15 @@ var
   LOldState: TEngineState;
   LMessage: string;
 begin
-  if FState = ANewState then
-    Exit;
-
-  LOldState := FState;
-  FState := ANewState;
+  FStateLock.Acquire;
+  try
+    if FState = ANewState then
+      Exit;
+    LOldState := FState;
+    FState := ANewState;
+  finally
+    FStateLock.Release;
+  end;
 
   LMessage := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) + ' [' +
     FEngineName + '] transition; old_state=' + EngineStateToString(LOldState) +
@@ -428,7 +448,7 @@ procedure TDraughtsEngine.LogCurrentState(const AReason: string);
 var
   LMessage: string;
 begin
-  LMessage := 'state snapshot; state=' + EngineStateToString(FState);
+  LMessage := 'state snapshot; state=' + EngineStateToString(GetCurrentState);
   if AReason <> '' then
     LMessage := LMessage + '; ' + AReason;
   Log(LMessage);

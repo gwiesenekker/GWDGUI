@@ -18,7 +18,7 @@
     <RunParams>
       <FormatVersion Value="2"/>
     </RunParams>
-    <Units Count="30">
+    <Units Count="32">
       <Unit0>
         <Filename Value="gwdgui.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -135,6 +135,14 @@
         <Filename Value="uPvBrowser.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit29>
+      <Unit30>
+        <Filename Value="uAnalyzerRunnerThread.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit30>
+      <Unit31>
+        <Filename Value="uGuiDialogs.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit31>
     </Units>
     <RequiredPackages Count="1">
       <Item1>

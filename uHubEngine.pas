@@ -39,6 +39,7 @@ type
     function ParamBool(const AName: string; ADefault: Boolean): Boolean;
     procedure ParsePositionMessage(const AMessage: string);
     procedure ProcessData(Sender: TObject; const AText: string);
+    procedure QueueProcessData(const AText: string);
     function QueueBoolCommand(ACommand: TObject): Boolean;
     procedure QueueProcedureCommand(ACommand: TObject);
     function QueueStringCommand(ACommand: TObject): string;
@@ -83,6 +84,7 @@ type
     hwcStartThinking,
     hwcStartAnalyzing,
     hwcPollOutput,
+    hwcProcessData,
     hwcStopSearch,
     hwcStop
   );
@@ -101,6 +103,7 @@ type
     FSide: TDraughtsSide;
     FStartingFEN: string;
     FStringResult: string;
+    FTextValue: string;
     FTotalUsedSeconds: Double;
   public
     constructor Create(AKind: THubWorkerCommandKind); reintroduce;
@@ -117,6 +120,7 @@ type
     property Side: TDraughtsSide read FSide write FSide;
     property StartingFEN: string read FStartingFEN write FStartingFEN;
     property StringResult: string read FStringResult write FStringResult;
+    property TextValue: string read FTextValue write FTextValue;
     property TotalUsedSeconds: Double read FTotalUsedSeconds write FTotalUsedSeconds;
     property Completed: TSimpleEvent read FCompleted;
   end;
@@ -167,6 +171,7 @@ const
     'hub-start-thinking',
     'hub-start-analyzing',
     'hub-poll-output',
+    'hub-process-data',
     'hub-stop-search',
     'hub-stop'
   );
@@ -202,6 +207,7 @@ procedure THubWorkerThread.Execute;
 var
   CommandObject: TObject;
   HubCommand: THubWorkerCommand;
+  AutoFreeCommand: Boolean;
 begin
   FOwner.FWorkerThreadId := System.ThreadID;
   try
@@ -210,6 +216,7 @@ begin
       if not (CommandObject is THubWorkerCommand) then
         Continue;
       HubCommand := THubWorkerCommand(CommandObject);
+      AutoFreeCommand := HubCommand.CommandKind = hwcProcessData;
       try
         FOwner.ExecuteWorkerCommand(HubCommand);
       except
@@ -217,6 +224,8 @@ begin
           HubCommand.ErrorMessage := E.Message;
       end;
       HubCommand.SignalCompleted;
+      if AutoFreeCommand then
+        HubCommand.Free;
     end;
   finally
     FOwner.FWorkerThreadId := 0;
@@ -234,6 +243,7 @@ begin
   FReceivedLines := TStringList.Create;
   FLineLock := TCriticalSection.Create;
   FProcess := TPlatformProcess.Create;
+  FProcess.SynchronizeData := False;
   FProcess.OnData := @ProcessData;
   FWorkerQueue := TThreadMessageQueue.Create(False);
   FWorker := THubWorkerThread.Create(Self, FWorkerQueue);
@@ -276,6 +286,12 @@ var
   ScoreText: string;
   TimeText: string;
 begin
+  if not IsWorkerThread then
+  begin
+    QueueProcessData(AText);
+    Exit;
+  end;
+
   Log('stdout; text=' + StringReplace(AText, LineEnding, '\n', [rfReplaceAll]));
   LoggedPvText := '';
   LoggedScoreText := '';
@@ -427,6 +443,18 @@ begin
   end;
 end;
 
+procedure THubEngine.QueueProcessData(const AText: string);
+var
+  HubCommand: THubWorkerCommand;
+begin
+  if AText = '' then
+    Exit;
+  HubCommand := THubWorkerCommand.Create(hwcProcessData);
+  HubCommand.TextValue := AText;
+  if (FWorkerQueue = nil) or (not FWorkerQueue.TryPost(HubCommand)) then
+    HubCommand.Free;
+end;
+
 function THubEngine.QueueStringCommand(ACommand: TObject): string;
 var
   HubCommand: THubWorkerCommand;
@@ -478,6 +506,8 @@ begin
       DoStartAnalyzing;
     hwcPollOutput:
       DoPollOutput;
+    hwcProcessData:
+      ProcessData(nil, HubCommand.TextValue);
     hwcStopSearch:
       DoStopSearch;
     hwcStop:

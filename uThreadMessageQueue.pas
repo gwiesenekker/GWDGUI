@@ -25,9 +25,11 @@ type
   private
     FClosed: Boolean;
     FEvent: TSimpleEvent;
+    FHeadIndex: Integer;
     FItems: TList;
     FLock: TCriticalSection;
     FOwnsMessages: Boolean;
+    procedure CompactLocked;
     function PopLocked(out AMessage: TObject): Boolean;
     procedure ResetEventIfEmptyLocked;
   public
@@ -77,13 +79,28 @@ end;
 
 procedure TThreadMessageQueue.ResetEventIfEmptyLocked;
 begin
-  if FItems.Count = 0 then
+  if FItems.Count - FHeadIndex = 0 then
     FEvent.ResetEvent;
+end;
+
+procedure TThreadMessageQueue.CompactLocked;
+begin
+  if FHeadIndex = 0 then
+    Exit;
+  if FHeadIndex < 64 then
+    Exit;
+  if FHeadIndex < FItems.Count div 2 then
+    Exit;
+  while FHeadIndex > 0 do
+  begin
+    FItems.Delete(0);
+    Dec(FHeadIndex);
+  end;
 end;
 
 function TThreadMessageQueue.PopLocked(out AMessage: TObject): Boolean;
 begin
-  Result := FItems.Count > 0;
+  Result := FHeadIndex < FItems.Count;
   if not Result then
   begin
     AMessage := nil;
@@ -91,8 +108,10 @@ begin
     Exit;
   end;
 
-  AMessage := TObject(FItems[0]);
-  FItems.Delete(0);
+  AMessage := TObject(FItems[FHeadIndex]);
+  FItems[FHeadIndex] := nil;
+  Inc(FHeadIndex);
+  CompactLocked;
   ResetEventIfEmptyLocked;
 end;
 
@@ -103,9 +122,10 @@ begin
   FLock.Acquire;
   try
     if FOwnsMessages then
-      for I := 0 to FItems.Count - 1 do
+      for I := FHeadIndex to FItems.Count - 1 do
         TObject(FItems[I]).Free;
     FItems.Clear;
+    FHeadIndex := 0;
     FEvent.ResetEvent;
   finally
     FLock.Release;
@@ -127,7 +147,7 @@ function TThreadMessageQueue.Count: Integer;
 begin
   FLock.Acquire;
   try
-    Result := FItems.Count;
+    Result := FItems.Count - FHeadIndex;
   finally
     FLock.Release;
   end;

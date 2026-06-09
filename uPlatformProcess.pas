@@ -36,6 +36,7 @@ type
   TPlatformProcess = class
   private
     FOnData: TPlatformProcessDataEvent;
+    FSynchronizeData: Boolean;
     {$IFDEF MSWINDOWS}
     FInputWriteHandle: THandle;
     FOutputReadHandle: THandle;
@@ -63,6 +64,7 @@ type
     procedure Terminate(AWaitMs: Integer);
     procedure Close;
     property OnData: TPlatformProcessDataEvent read FOnData write FOnData;
+    property SynchronizeData: Boolean read FSynchronizeData write FSynchronizeData;
   end;
 
 implementation
@@ -109,7 +111,10 @@ begin
       (BytesRead = 0) then
       Break;
     SetString(FChunk, PChar(@Buffer[0]), BytesRead);
-    Synchronize(@DeliverChunk);
+    if (FOwner <> nil) and FOwner.SynchronizeData then
+      Synchronize(@DeliverChunk)
+    else
+      DeliverChunk;
   end;
 end;
 {$ENDIF}
@@ -117,6 +122,7 @@ end;
 constructor TPlatformProcess.Create;
 begin
   inherited Create;
+  FSynchronizeData := True;
   {$IFDEF MSWINDOWS}
   FInputWriteHandle := 0;
   FOutputReadHandle := 0;

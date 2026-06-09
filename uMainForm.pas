@@ -7,9 +7,10 @@ interface
 uses
   Classes, Clipbrd, Controls, Dialogs, ExtCtrls, Forms, Graphics, LCLType,
   Menus, StdCtrls, SysUtils, uBoardControl, uDraughtsBoard, uEnginesDialog,
-  uEngineBase, uGameOrchestrator, uGameRunnerThread, uGameSetupForm,
-  uEngineRegistry, uHubEngine, uPdn, uPdnOpenDialog, uThreadMessageQueue,
-  uTournamentDialog, uPvBrowser;
+  uGameOrchestrator, uGameRunnerThread, uGameSetupForm,
+  uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue,
+  uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
+  uGuiDialogs;
 
 type
   TIntArray = array of Integer;
@@ -41,6 +42,23 @@ type
   public
     constructor Create(const AMessage: string); reintroduce;
     property Message: string read FMessage;
+  end;
+
+  TAnalyzerSnapshotGuiMessage = class(TThreadMessage)
+  private
+    FSnapshot: TPvSnapshot;
+  public
+    constructor Create(ASnapshot: TPvSnapshot); reintroduce;
+    destructor Destroy; override;
+    property Snapshot: TPvSnapshot read FSnapshot;
+  end;
+
+  TAnalyzerFinishedGuiMessage = class(TThreadMessage)
+  private
+    FRunner: TAnalyzerRunnerThread;
+  public
+    constructor Create(ARunner: TAnalyzerRunnerThread); reintroduce;
+    property Runner: TAnalyzerRunnerThread read FRunner;
   end;
 
   TRunningGameLifecycle = (
@@ -91,10 +109,8 @@ type
   TMainForm = class(TForm)
   private
     FAnalyzerCloseMenuItem: TMenuItem;
-    FAnalyzerEngine: THubEngine;
     FAnalyzerEngineKey: string;
     FAnalyzerLastPositionSignature: string;
-    FAnalyzerLastPollTick: QWord;
     FAnalyzerMiniBoard: TDraughtsBoard;
     FAnalyzerMiniBoardControl: TDraughtsBoardControl;
     FAnalyzerMiniBoardForm: TForm;
@@ -107,6 +123,7 @@ type
     FAnalyzerPvBasePly: Integer;
     FAnalyzerPvBrowser: TPvBrowser;
     FAnalyzerPvMemo: TMemo;
+    FAnalyzerRunner: TAnalyzerRunnerThread;
     FBoard: TDraughtsBoard;
     FBoardControl: TDraughtsBoardControl;
     FBlackClockLabel: TLabel;
@@ -167,7 +184,6 @@ type
     FStandaloneBlackPlayerName: string;
     FStandaloneEventName: string;
     FStandaloneWhitePlayerName: string;
-    FStatusLabel: TLabel;
     FTournamentDialog: TTournamentDialog;
     FViewedGameId: Integer;
     FWhiteClockLabel: TLabel;
@@ -178,12 +194,14 @@ type
     procedure ApplyGameToDisplay(AGame: TRunningGame);
     procedure ApplyGameBrowsePly(APly: Integer);
     procedure AnalyzerLog(Sender: TObject; const AMessage: string);
+    procedure AnalyzerFinished(Sender: TObject);
     procedure AnalyzerMiniBoardDblClick(Sender: TObject);
     procedure AnalyzerMiniBoardFormClose(Sender: TObject;
       var CloseAction: TCloseAction);
     procedure AnalyzerMiniBoardPopoutClick(Sender: TObject);
     procedure AnalyzerPvBoardChanged(Sender: TObject);
     procedure AnalyzerPopupPopup(Sender: TObject);
+    procedure AnalyzerSnapshot(Sender: TObject; ASnapshot: TPvSnapshot);
     procedure BuildAnnotatedMoveText(const AMovesText, AAnnotationsText,
       AStartingFEN: string; out AText: string; var AMoveStarts,
       AMoveLengths, ACommentStarts, ACommentLengths: TIntArray;
@@ -314,6 +332,24 @@ constructor TAnalyzerLogGuiMessage.Create(const AMessage: string);
 begin
   inherited Create('analyzer-log');
   FMessage := AMessage;
+end;
+
+constructor TAnalyzerSnapshotGuiMessage.Create(ASnapshot: TPvSnapshot);
+begin
+  inherited Create('analyzer-snapshot');
+  FSnapshot := ASnapshot;
+end;
+
+destructor TAnalyzerSnapshotGuiMessage.Destroy;
+begin
+  FSnapshot.Free;
+  inherited Destroy;
+end;
+
+constructor TAnalyzerFinishedGuiMessage.Create(ARunner: TAnalyzerRunnerThread);
+begin
+  inherited Create('analyzer-finished');
+  FRunner := ARunner;
 end;
 
 constructor TRunningGame.Create(AId: Integer; const ATitle: string;
@@ -475,12 +511,13 @@ begin
   inherited Create(AOwner);
 
   Caption := 'GWDGUI - International Polish Draughts';
-  Position := poScreenCenter;
+  Position := poDesigned;
   OnCloseQuery := @CloseQueryHandler;
   Width := 1040;
   Height := 760;
   Constraints.MinWidth := 720;
   Constraints.MinHeight := 520;
+  CenterFormOnLaptopPanel(Self, 0);
 
   FBoard := TDraughtsBoard.Create;
   FMiniBoard := TDraughtsBoard.Create;
@@ -909,11 +946,13 @@ end;
 destructor TMainForm.Destroy;
 begin
   FClosing := True;
+  Application.RemoveAsyncCalls(Self);
   if FGuiEventTimer <> nil then
     FGuiEventTimer.Enabled := False;
   if FTournamentDialog <> nil then
     FTournamentDialog.BeginShutdown;
   StopAllGames;
+  FreeAndNil(FAnalyzerRunner);
   if FGuiEventQueue <> nil then
     FGuiEventQueue.Close;
   FreeAndNil(FGuiEventQueue);
@@ -925,7 +964,6 @@ begin
   FreeAndNil(FAnalyzerMiniBoardForm);
   FreeAndNil(FAnalyzerPvBrowser);
   FreeAndNil(FPvBrowser);
-  FreeAndNil(FAnalyzerEngine);
   FHumanMoveChoices.Free;
   FGameLog.Free;
   FGames.Free;
@@ -1032,17 +1070,9 @@ begin
   end;
 
   if FHumanMoveChoices.Count = 0 then
-  begin
-    if FStatusLabel <> nil then
-      FStatusLabel.Caption := 'No legal human move from square ' +
-        IntToStr(ASourceSquare);
     Exit;
-  end;
   if FHumanMoveChoices.Count = 1 then
   begin
-    if FStatusLabel <> nil then
-      FStatusLabel.Caption := 'Forced human move from square ' +
-        IntToStr(ASourceSquare) + ': ' + FHumanMoveChoices[0];
     PlayHumanMove(FHumanMoveChoices[0]);
     Exit;
   end;
@@ -1067,9 +1097,6 @@ begin
   end;
   if FBoardControl <> nil then
     FBoardControl.SetTargetSquares(LTargets);
-  if FStatusLabel <> nil then
-    FStatusLabel.Caption := 'Selected square ' + IntToStr(ASourceSquare) +
-      '; legal moves=' + IntToStr(FHumanMoveChoices.Count);
 end;
 
 procedure TMainForm.BoardMouseDown(Sender: TObject; Button: TMouseButton;
@@ -1086,20 +1113,12 @@ begin
   LSquare := FBoardControl.SquareAtPoint(X, Y);
   if LSquare <= 0 then
   begin
-    if FStatusLabel <> nil then
-      FStatusLabel.Caption := 'Board click outside playable squares';
     ClearHumanMoveSelection;
     Exit;
   end;
-  if FStatusLabel <> nil then
-    FStatusLabel.Caption := 'Board click; square=' + IntToStr(LSquare);
 
   if (FHumanMoveSourceSquare > 0) and FindHumanMoveToTarget(LSquare, LMove) then
   begin
-    if FStatusLabel <> nil then
-      FStatusLabel.Caption := 'Human move selected; source=' +
-        IntToStr(FHumanMoveSourceSquare) + '; target=' + IntToStr(LSquare) +
-        '; move=' + LMove;
     PlayHumanMove(LMove);
     Exit;
   end;
@@ -1114,26 +1133,32 @@ begin
   FGuiEventQueue.TryPost(TAnalyzerLogGuiMessage.Create(AMessage));
 end;
 
+procedure TMainForm.AnalyzerFinished(Sender: TObject);
+begin
+  if FGuiEventQueue = nil then
+    Exit;
+  FGuiEventQueue.TryPost(TAnalyzerFinishedGuiMessage.Create(
+    TAnalyzerRunnerThread(Sender)));
+end;
+
+procedure TMainForm.AnalyzerSnapshot(Sender: TObject; ASnapshot: TPvSnapshot);
+begin
+  if ASnapshot = nil then
+    Exit;
+  if FGuiEventQueue = nil then
+  begin
+    ASnapshot.Free;
+    Exit;
+  end;
+  FGuiEventQueue.TryPost(TAnalyzerSnapshotGuiMessage.Create(ASnapshot));
+end;
+
 procedure TMainForm.HandleAnalyzerLog(const AMessage: string);
-var
-  LLowerMessage: string;
 begin
   if FAnalyzerMemo = nil then
     Exit;
   FAnalyzerMemo.Lines.Add(AMessage);
   FAnalyzerMemo.SelStart := Length(FAnalyzerMemo.Text);
-
-  LLowerMessage := LowerCase(AMessage);
-  if (FAnalyzerPvBrowser <> nil) and (FAnalyzerEngine <> nil) and
-    ((Pos('info ', LLowerMessage) > 0) or
-    (Pos('info=', LLowerMessage) > 0) or
-    (Pos(' pv; text=', LLowerMessage) > 0) or
-    (Pos(' score; value=', LLowerMessage) > 0)) and
-    (Trim(FAnalyzerEngine.PrincipalVariation) <> '') then
-    FAnalyzerPvBrowser.SetData(FAnalyzerPvBaseBoard, FAnalyzerPvBasePly,
-      FStartingFEN, FAnalyzerEngine.PrincipalVariation,
-      FAnalyzerEngine.LastScore, FAnalyzerEngine.LastDepth,
-      FAnalyzerEngine.LastTimeText);
 end;
 
 procedure TMainForm.HintSourceClick(Sender: TObject);
@@ -1162,10 +1187,10 @@ var
   Item: TMenuItem;
 begin
   FAnalyzerOpenMenuItem.Clear;
-  FAnalyzerOpenMenuItem.Enabled := FAnalyzerEngine = nil;
-  FAnalyzerCloseMenuItem.Enabled := FAnalyzerEngine <> nil;
+  FAnalyzerOpenMenuItem.Enabled := FAnalyzerRunner = nil;
+  FAnalyzerCloseMenuItem.Enabled := FAnalyzerRunner <> nil;
 
-  if FAnalyzerEngine <> nil then
+  if FAnalyzerRunner <> nil then
     Exit;
 
   BusyKeys := TStringList.Create;
@@ -1209,7 +1234,7 @@ var
   Engines: TExternalEngineList;
   I: Integer;
 begin
-  if FAnalyzerEngine <> nil then
+  if FAnalyzerRunner <> nil then
     Exit;
   if not (Sender is TMenuItem) then
     Exit;
@@ -1230,22 +1255,13 @@ begin
       Exit;
 
     FAnalyzerMemo.Clear;
-    FAnalyzerMemo.Lines.Add('Opening Analyzer: ' + EnginePickerDisplayName(Engine, I + 1));
     if FAnalyzerPvBrowser <> nil then
       FAnalyzerPvBrowser.Clear;
-    FAnalyzerLastPollTick := 0;
-    FAnalyzerEngine := THubEngine.Create(Engine);
     FAnalyzerEngineKey := EngineKey;
     FAnalyzerLastPositionSignature := '';
-    FAnalyzerEngine.OnLog := @AnalyzerLog;
-    if not FAnalyzerEngine.LaunchAndInit then
-    begin
-      FAnalyzerMemo.Lines.Add('Analyzer launch failed');
-      FreeAndNil(FAnalyzerEngine);
-      FAnalyzerEngineKey := '';
-      Exit;
-    end;
-    FAnalyzerMemo.Lines.Add('Analyzer ready');
+    FAnalyzerRunner := TAnalyzerRunnerThread.Create(Engine, @AnalyzerLog,
+      @AnalyzerSnapshot, @AnalyzerFinished);
+    FAnalyzerRunner.Start;
     RestartAnalyzer;
   finally
     Engines.Free;
@@ -1253,31 +1269,25 @@ begin
 end;
 
 procedure TMainForm.CloseAnalyzerClick(Sender: TObject);
-var
-  HadAnalyzer: Boolean;
 begin
-  HadAnalyzer := FAnalyzerEngine <> nil;
-  if FAnalyzerEngine <> nil then
+  if FAnalyzerRunner <> nil then
   begin
     if FAnalyzerMemo <> nil then
       FAnalyzerMemo.Lines.Add('Closing Analyzer');
-    FreeAndNil(FAnalyzerEngine);
+    FAnalyzerRunner.PostShutdown;
   end;
   FAnalyzerEngineKey := '';
   FAnalyzerLastPositionSignature := '';
-  FAnalyzerLastPollTick := 0;
   if FAnalyzerPvBrowser <> nil then
     FAnalyzerPvBrowser.Clear;
-  if HadAnalyzer and (FAnalyzerMemo <> nil) then
-    FAnalyzerMemo.Lines.Add('Analyzer closed');
 end;
 
 procedure TMainForm.RestartAnalyzer;
 var
-  Moves: TStringList;
+  LTerminal: Boolean;
   Signature: string;
 begin
-  if FAnalyzerEngine = nil then
+  if FAnalyzerRunner = nil then
     Exit;
   if FGameBrowsePly >= 0 then
     Exit;
@@ -1288,30 +1298,13 @@ begin
     Exit;
   FAnalyzerLastPositionSignature := Signature;
 
-  if (FGameState = gosGameOver) or (ActiveBoard.LegalMoves.Count = 0) then
-  begin
-    if FAnalyzerPvBrowser <> nil then
-      FAnalyzerPvBrowser.Clear;
-    try
-      FAnalyzerEngine.StopSearch;
-    except
-      on E: Exception do
-        AnalyzerLog(FAnalyzerEngine, 'Analyzer stop failed: ' + E.Message);
-    end;
-    AnalyzerLog(FAnalyzerEngine, 'Analyzer idle; terminal position');
-    Exit;
-  end;
-
-  Moves := TStringList.Create;
-  try
-    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(FMovesPlayedText)), Moves);
-    FAnalyzerPvBaseBoard.AssignFrom(ActiveBoard);
-    FAnalyzerPvBasePly := CurrentMoveCount;
-    FAnalyzerEngine.SetGamePosition(FStartingFEN, Moves);
-    FAnalyzerEngine.StartAnalyzing;
-  finally
-    Moves.Free;
-  end;
+  FAnalyzerPvBaseBoard.AssignFrom(ActiveBoard);
+  FAnalyzerPvBasePly := CurrentMoveCount;
+  LTerminal := (FGameState = gosGameOver) or (ActiveBoard.LegalMoves.Count = 0);
+  if LTerminal and (FAnalyzerPvBrowser <> nil) then
+    FAnalyzerPvBrowser.Clear;
+  FAnalyzerRunner.PostAnalyze(FStartingFEN, FMovesPlayedText,
+    FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, LTerminal);
 end;
 
 function TMainForm.LiveGameCount: Integer;
@@ -1343,9 +1336,8 @@ begin
 
   if (FTournamentDialog <> nil) and FTournamentDialog.HasTournamentData then
   begin
-    LResponse := MessageDlg('Close GWDGUI',
-      'Save the tournament JSON before closing?', mtConfirmation,
-      [mbYes, mbNo, mbCancel], 0);
+    LResponse := ShowGuiConfirmationDialog(Self, 'Close GWDGUI',
+      'Save the tournament JSON before closing?', 'Yes', 'No', mrNo);
     if LResponse = mrCancel then
       Exit;
     if (LResponse = mrYes) and (not FTournamentDialog.SaveTournamentWithDialog) then
@@ -1354,9 +1346,9 @@ begin
 
   if Trim(FMovesPlayedText) <> '' then
   begin
-    LResponse := MessageDlg('Close GWDGUI',
-      'Save the currently displayed game as PDN before closing?', mtConfirmation,
-      [mbYes, mbNo, mbCancel], 0);
+    LResponse := ShowGuiConfirmationDialog(Self, 'Close GWDGUI',
+      'Save the currently displayed game as PDN before closing?', 'Yes',
+      'No', mrNo);
     if LResponse = mrCancel then
       Exit;
     if (LResponse = mrYes) and (not SaveCurrentGameWithDialog) then
@@ -1376,8 +1368,8 @@ begin
       LMessage += ' and the running tournament scheduler';
     LMessage += '. Close anyway?';
 
-    if MessageDlg('Close GWDGUI', LMessage, mtWarning,
-      [mbYes, mbNo], 0) <> mrYes then
+    if ShowGuiConfirmationDialog(Self, 'Close GWDGUI', LMessage, 'Yes',
+      'No', mrNo) <> mrYes then
       Exit;
   end;
 
@@ -1390,8 +1382,6 @@ var
 begin
   LFen := FBoard.CurrentFEN;
   Clipboard.AsText := LFen;
-  if FStatusLabel <> nil then
-    FStatusLabel.Caption := 'Copied FEN: ' + LFen;
 end;
 
 procedure TMainForm.LoadStandaloneFen(const AFEN: string);
@@ -1442,19 +1432,16 @@ begin
   LFen := Trim(Clipboard.AsText);
   if LFen = '' then
   begin
-    if FStatusLabel <> nil then
-      FStatusLabel.Caption := 'Clipboard does not contain a FEN position';
+    ShowGuiOkDialog(Self, 'Paste FEN',
+      'Clipboard does not contain a FEN position');
     Exit;
   end;
 
   try
     LoadStandaloneFen(LFen);
-    if FStatusLabel <> nil then
-      FStatusLabel.Caption := 'Pasted FEN: ' + FStartingFEN;
   except
     on E: Exception do
-      if FStatusLabel <> nil then
-        FStatusLabel.Caption := 'Invalid FEN: ' + E.Message;
+      ShowGuiOkDialog(Self, 'Paste FEN', 'Invalid FEN: ' + E.Message);
   end;
 end;
 
@@ -1487,9 +1474,8 @@ begin
       except
         on E: Exception do
         begin
-          if FStatusLabel <> nil then
-            FStatusLabel.Caption := 'PDN move ' + IntToStr(I + 1) +
-              ' is invalid: ' + LMoves[I] + '; ' + E.Message;
+          ShowGuiOkDialog(Self, 'Open PDN', 'PDN move ' + IntToStr(I + 1) +
+            ' is invalid: ' + LMoves[I] + '; ' + E.Message);
           Exit;
         end;
       end;
@@ -1523,9 +1509,6 @@ begin
     FGameLog.Clear;
     UpdateMiniBoardFromBoard(FBoard);
     UpdateBoardInfo;
-    if FStatusLabel <> nil then
-      FStatusLabel.Caption := 'Loaded PDN game: ' +
-        FStandaloneWhitePlayerName + ' vs ' + FStandaloneBlackPlayerName;
   finally
     LMoves.Free;
     LBoard.Free;
@@ -2213,8 +2196,8 @@ begin
       FPdnOpenDialog.OpenPdnFile(Dialog.FileName);
     except
       on E: Exception do
-        if FStatusLabel <> nil then
-          FStatusLabel.Caption := 'Could not open PDN: ' + E.Message;
+        ShowGuiOkDialog(Self, 'Open PDN',
+          'Could not open PDN: ' + E.Message);
     end;
   finally
     Dialog.Free;
@@ -2297,8 +2280,6 @@ begin
       begin
         AppendRunningGameToPdn(RunningGame, Dialog.FileName,
           PlayerNameOrFallback(FStandaloneEventName, '?'));
-        if FStatusLabel <> nil then
-          FStatusLabel.Caption := 'Saved PDN game to ' + Dialog.FileName;
         Result := True;
         Exit;
       end
@@ -2315,8 +2296,6 @@ begin
       Game.MovesText := FMovesPlayedText;
       Game.MoveAnnotationsText := FMoveAnnotationsText;
       AppendPdnGameToFile(Dialog.FileName, Game);
-      if FStatusLabel <> nil then
-        FStatusLabel.Caption := 'Saved PDN game to ' + Dialog.FileName;
       Result := True;
     finally
       Game.Free;
@@ -2451,27 +2430,14 @@ begin
 end;
 
 procedure TMainForm.GuiEventTimerTick(Sender: TObject);
-const
-  AnalyzerPollIntervalMs = 200;
 var
   EventObject: TObject;
   LGame: TRunningGame;
-  LTick: QWord;
   RemoveAfterFinish: Boolean;
   SnapshotMessage: TRunnerSnapshotGuiMessage;
 begin
   if FGuiEventQueue = nil then
     Exit;
-  if FAnalyzerEngine <> nil then
-  begin
-    LTick := GetTickCount64;
-    if (FAnalyzerLastPollTick = 0) or
-      (LTick - FAnalyzerLastPollTick >= AnalyzerPollIntervalMs) then
-    begin
-      FAnalyzerLastPollTick := LTick;
-    FAnalyzerEngine.PollOutput;
-    end;
-  end;
 
   while FGuiEventQueue.TryPop(EventObject) do
   begin
@@ -2480,6 +2446,29 @@ begin
       begin
         if EventObject is TAnalyzerLogGuiMessage then
           HandleAnalyzerLog(TAnalyzerLogGuiMessage(EventObject).Message)
+        else if EventObject is TAnalyzerSnapshotGuiMessage then
+        begin
+          FAnalyzerPvBaseBoard.AssignFrom(
+            TAnalyzerSnapshotGuiMessage(EventObject).Snapshot.BaseBoard);
+          FAnalyzerPvBasePly :=
+            TAnalyzerSnapshotGuiMessage(EventObject).Snapshot.BasePly;
+          if FAnalyzerPvBrowser <> nil then
+            FAnalyzerPvBrowser.SetSnapshot(
+              TAnalyzerSnapshotGuiMessage(EventObject).Snapshot, FStartingFEN);
+          if FPvHintSource = phsAnalyzer then
+          begin
+            UpdateBoardHighlights;
+            if FBoardControl <> nil then
+              FBoardControl.Invalidate;
+          end;
+        end
+        else if EventObject is TAnalyzerFinishedGuiMessage then
+        begin
+          if FAnalyzerRunner = TAnalyzerFinishedGuiMessage(EventObject).Runner then
+            FreeAndNil(FAnalyzerRunner);
+          FAnalyzerEngineKey := '';
+          FAnalyzerLastPositionSignature := '';
+        end
         else if EventObject is TRunnerFinishedGuiMessage then
         begin
           LGame := FindGameById(TRunnerFinishedGuiMessage(EventObject).GameId);
