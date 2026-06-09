@@ -5,7 +5,8 @@ unit uPdnOpenDialog;
 interface
 
 uses
-  Classes, Controls, Forms, Graphics, Grids, StdCtrls, SysUtils, uPdn;
+  Classes, Controls, Forms, Graphics, Grids, StdCtrls, SysUtils, uGuiDialogs,
+  uPdn;
 
 type
   TPdnGameSelectedEvent = procedure(Sender: TObject; AGame: TPdnGame) of object;
@@ -35,7 +36,7 @@ begin
   inherited Create(AOwner);
 
   Caption := 'Open PDN';
-  Position := poOwnerFormCenter;
+  Position := poDesigned;
   Width := 720;
   Height := 420;
   Constraints.MinWidth := 520;
@@ -132,8 +133,13 @@ begin
   FFileName := AFileName;
   LoadPdnGamesFromFile(FFileName, FGames);
   PopulateGrid;
-  Show;
-  BringToFront;
+  if Owner is TCustomForm then
+    ShowFormCenteredOnOwner(Self, TCustomForm(Owner))
+  else
+  begin
+    Show;
+    BringToFront;
+  end;
 end;
 
 end.

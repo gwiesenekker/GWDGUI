@@ -31,6 +31,7 @@ type
     procedure HandleCommand(ACommand: TObject);
     procedure PublishSnapshot;
     procedure RuntimeLog(Sender: TObject; const AMessage: string);
+    procedure PostCommand(ACommand: TObject);
   protected
     procedure Execute; override;
   public
@@ -226,6 +227,17 @@ begin
   end;
 end;
 
+procedure TAnalyzerRunnerThread.PostCommand(ACommand: TObject);
+begin
+  if ACommand = nil then
+    Exit;
+  if (FCommandQueue = nil) or (not FCommandQueue.TryPost(ACommand)) then
+  begin
+    if FCommandQueue = nil then
+      ACommand.Free;
+  end;
+end;
+
 procedure TAnalyzerRunnerThread.Execute;
 var
   CommandObject: TObject;
@@ -295,10 +307,7 @@ begin
   Command.Terminal := ATerminal;
   if ABaseBoard <> nil then
     Command.BaseBoard.AssignFrom(ABaseBoard);
-  if FCommandQueue = nil then
-    Command.Free;
-  if FCommandQueue <> nil then
-    FCommandQueue.TryPost(Command);
+  PostCommand(Command);
 end;
 
 procedure TAnalyzerRunnerThread.PostStopSearch;
@@ -306,20 +315,15 @@ var
   Command: TAnalyzerCommand;
 begin
   Command := TAnalyzerCommand.Create(accStopSearch);
-  if FCommandQueue = nil then
-    Command.Free;
-  if FCommandQueue <> nil then
-    FCommandQueue.TryPost(Command);
+  PostCommand(Command);
 end;
 
 procedure TAnalyzerRunnerThread.PostShutdown;
 var
   Command: TAnalyzerCommand;
 begin
-  if FCommandQueue = nil then
-    Exit;
   Command := TAnalyzerCommand.Create(accShutdown);
-  FCommandQueue.TryPost(Command);
+  PostCommand(Command);
   Terminate;
 end;
 

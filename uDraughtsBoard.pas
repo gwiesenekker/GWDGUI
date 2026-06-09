@@ -366,6 +366,7 @@ end;
 
 procedure TDraughtsBoard.LoadFromFEN(const AFEN: string);
 var
+  I: Integer;
   LBoard: TDraughtsBoardArray;
   LPart, LPieceList, LEntry: string;
   LPiece: TDraughtsPieceKind;
@@ -374,7 +375,8 @@ begin
   if Trim(AFEN) = '' then
     raise EConvertError.Create('FEN cannot be empty');
 
-  ClearBoard(LBoard);
+  for I := Low(LBoard) to High(LBoard) do
+    LBoard[I] := pkEmpty;
   LPieceList := Trim(AFEN);
   LPart := NextToken(LPieceList, ':');
   if Length(LPart) <> 1 then

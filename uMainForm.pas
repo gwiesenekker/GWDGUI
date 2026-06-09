@@ -126,6 +126,7 @@ type
     FAnalyzerRunner: TAnalyzerRunnerThread;
     FBoard: TDraughtsBoard;
     FBoardControl: TDraughtsBoardControl;
+    FBoardFlipped: Boolean;
     FBlackClockLabel: TLabel;
     FBlackRemainingSeconds: Double;
     FBlackUsedSeconds: Double;
@@ -191,6 +192,7 @@ type
     FWhiteRemainingSeconds: Double;
     FWhiteUsedSeconds: Double;
     function ActiveBoard: TDraughtsBoard;
+    procedure ApplyBoardFlipped;
     procedure ApplyGameToDisplay(AGame: TRunningGame);
     procedure ApplyGameBrowsePly(APly: Integer);
     procedure AnalyzerLog(Sender: TObject; const AMessage: string);
@@ -236,6 +238,8 @@ type
     procedure GameSnapshot(Sender: TObject; ASnapshot: TGameRunnerSnapshot);
     procedure LegalMovesMemoClick(Sender: TObject);
     function LiveGameCount: Integer;
+    procedure MainFormKeyDown(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
     procedure MiniBoardDblClick(Sender: TObject);
     procedure MiniBoardFormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure MiniBoardPopoutClick(Sender: TObject);
@@ -248,6 +252,7 @@ type
     procedure PasteFenClick(Sender: TObject);
     procedure PdnGameSelected(Sender: TObject; AGame: TPdnGame);
     function PlayerNameOrFallback(const AName, AFallback: string): string;
+    function PostGuiEvent(AEvent: TObject): Boolean;
     function MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
     procedure PlayHumanMove(const AMove: string);
     procedure RemoveGame(AGame: TRunningGame);
@@ -260,6 +265,7 @@ type
     function SaveCurrentGameWithDialog: Boolean;
     procedure ShowStdoutClick(Sender: TObject);
     procedure StopAllGames;
+    procedure ToggleBoardFlipped;
     procedure TournamentStartGame(Sender: TObject; const ASetup: TGameSetup;
       const ATitlePrefix: string; out AGame: TObject);
     procedure LoadStandaloneFen(const AFEN: string);
@@ -512,6 +518,8 @@ begin
 
   Caption := 'GWDGUI - International Polish Draughts';
   Position := poDesigned;
+  KeyPreview := True;
+  OnKeyDown := @MainFormKeyDown;
   OnCloseQuery := @CloseQueryHandler;
   Width := 1040;
   Height := 760;
@@ -643,6 +651,7 @@ begin
   FAnalyzerMiniBoardControl.GridColor := RGBToColor(31, 62, 95);
   FAnalyzerMiniBoardControl.PopupMenu := LAnalyzerBoardPopup;
   FAnalyzerMiniBoardControl.OnDblClick := @AnalyzerMiniBoardDblClick;
+  FAnalyzerMiniBoardControl.BoardFlipped := FBoardFlipped;
 
   LAnalyzerTextPanel := TPanel.Create(Self);
   LAnalyzerTextPanel.Parent := LAnalyzerPanel;
@@ -853,6 +862,7 @@ begin
   FMiniBoardControl.ShowCoordinates := False;
   FMiniBoardControl.PopupMenu := LPvPopup;
   FMiniBoardControl.OnDblClick := @MiniBoardDblClick;
+  FMiniBoardControl.BoardFlipped := FBoardFlipped;
 
   LPvTextPanel := TPanel.Create(Self);
   LPvTextPanel.Parent := LPvPanel;
@@ -917,6 +927,7 @@ begin
   FBoardControl.Board := FBoard;
   FBoardControl.ShowSideToMoveMarker := True;
   FBoardControl.OnMouseDown := @BoardMouseDown;
+  FBoardControl.BoardFlipped := FBoardFlipped;
   LBoardPopup := TPopupMenu.Create(Self);
   FHintFromMainMenuItem := TMenuItem.Create(Self);
   FHintFromMainMenuItem.Caption := 'Show hints from main PV';
@@ -982,6 +993,20 @@ begin
   Result := FBoard;
 end;
 
+procedure TMainForm.ApplyBoardFlipped;
+begin
+  if FBoardControl <> nil then
+    FBoardControl.BoardFlipped := FBoardFlipped;
+  if FMiniBoardControl <> nil then
+    FMiniBoardControl.BoardFlipped := FBoardFlipped;
+  if FPopoutBoardControl <> nil then
+    FPopoutBoardControl.BoardFlipped := FBoardFlipped;
+  if FAnalyzerMiniBoardControl <> nil then
+    FAnalyzerMiniBoardControl.BoardFlipped := FBoardFlipped;
+  if FAnalyzerPopoutBoardControl <> nil then
+    FAnalyzerPopoutBoardControl.BoardFlipped := FBoardFlipped;
+end;
+
 function TMainForm.CanAcceptHumanBoardMove: Boolean;
 var
   LGame: TRunningGame;
@@ -1004,6 +1029,13 @@ begin
     FHumanMoveChoices.Clear;
   if FBoardControl <> nil then
     FBoardControl.ClearTargetSquares;
+end;
+
+procedure TMainForm.ToggleBoardFlipped;
+begin
+  FBoardFlipped := not FBoardFlipped;
+  ClearHumanMoveSelection;
+  ApplyBoardFlipped;
 end;
 
 function TMainForm.FindHumanMoveToTarget(ATargetSquare: Integer;
@@ -1128,29 +1160,19 @@ end;
 
 procedure TMainForm.AnalyzerLog(Sender: TObject; const AMessage: string);
 begin
-  if FGuiEventQueue = nil then
-    Exit;
-  FGuiEventQueue.TryPost(TAnalyzerLogGuiMessage.Create(AMessage));
+  PostGuiEvent(TAnalyzerLogGuiMessage.Create(AMessage));
 end;
 
 procedure TMainForm.AnalyzerFinished(Sender: TObject);
 begin
-  if FGuiEventQueue = nil then
-    Exit;
-  FGuiEventQueue.TryPost(TAnalyzerFinishedGuiMessage.Create(
-    TAnalyzerRunnerThread(Sender)));
+  PostGuiEvent(TAnalyzerFinishedGuiMessage.Create(TAnalyzerRunnerThread(Sender)));
 end;
 
 procedure TMainForm.AnalyzerSnapshot(Sender: TObject; ASnapshot: TPvSnapshot);
 begin
   if ASnapshot = nil then
     Exit;
-  if FGuiEventQueue = nil then
-  begin
-    ASnapshot.Free;
-    Exit;
-  end;
-  FGuiEventQueue.TryPost(TAnalyzerSnapshotGuiMessage.Create(ASnapshot));
+  PostGuiEvent(TAnalyzerSnapshotGuiMessage.Create(ASnapshot));
 end;
 
 procedure TMainForm.HandleAnalyzerLog(const AMessage: string);
@@ -1668,6 +1690,19 @@ begin
     Result := AFallback;
 end;
 
+function TMainForm.PostGuiEvent(AEvent: TObject): Boolean;
+begin
+  Result := False;
+  if AEvent = nil then
+    Exit;
+  if FGuiEventQueue = nil then
+  begin
+    AEvent.Free;
+    Exit;
+  end;
+  Result := FGuiEventQueue.TryPost(AEvent);
+end;
+
 procedure TMainForm.RebuildGameMoveLabels;
 var
   LText: string;
@@ -1831,9 +1866,9 @@ begin
   ClearHumanMoveSelection;
   LMoveCount := CurrentMoveCount;
   if APly < 0 then
-    APly := 0;
-  if APly > LMoveCount then
-    FGameBrowsePly := -1
+    FGameBrowsePly := LMoveCount
+  else if APly > LMoveCount then
+    FGameBrowsePly := 0
   else
     FGameBrowsePly := APly;
   UpdateBoardFromBrowseState;
@@ -1925,7 +1960,7 @@ begin
   begin
     FMiniBoardForm := TForm.Create(Self);
     FMiniBoardForm.Caption := 'Mini-board';
-    FMiniBoardForm.Position := poOwnerFormCenter;
+    FMiniBoardForm.Position := poDesigned;
     FMiniBoardForm.Width := 520;
     FMiniBoardForm.Height := 540;
     FMiniBoardForm.Constraints.MinWidth := 300;
@@ -1936,13 +1971,13 @@ begin
     FPopoutBoardControl.Parent := FMiniBoardForm;
     FPopoutBoardControl.Align := alClient;
     FPopoutBoardControl.Board := FPopoutBoard;
+    FPopoutBoardControl.BoardFlipped := FBoardFlipped;
   end;
 
   FPopoutBoard.AssignFrom(FMiniBoard);
   if FPopoutBoardControl <> nil then
     FPopoutBoardControl.Invalidate;
-  FMiniBoardForm.Show;
-  FMiniBoardForm.BringToFront;
+  ShowFormCenteredOnOwner(FMiniBoardForm, Self);
 end;
 
 procedure TMainForm.PvBoardChanged(Sender: TObject);
@@ -1979,7 +2014,7 @@ begin
   begin
     FAnalyzerMiniBoardForm := TForm.Create(Self);
     FAnalyzerMiniBoardForm.Caption := 'Analyzer mini-board';
-    FAnalyzerMiniBoardForm.Position := poOwnerFormCenter;
+    FAnalyzerMiniBoardForm.Position := poDesigned;
     FAnalyzerMiniBoardForm.Width := 520;
     FAnalyzerMiniBoardForm.Height := 540;
     FAnalyzerMiniBoardForm.Constraints.MinWidth := 300;
@@ -1994,13 +2029,13 @@ begin
     FAnalyzerPopoutBoardControl.BoardLightColor := RGBToColor(206, 228, 246);
     FAnalyzerPopoutBoardControl.BoardDarkColor := RGBToColor(54, 95, 139);
     FAnalyzerPopoutBoardControl.GridColor := RGBToColor(31, 62, 95);
+    FAnalyzerPopoutBoardControl.BoardFlipped := FBoardFlipped;
   end;
 
   FAnalyzerPopoutBoard.AssignFrom(FAnalyzerMiniBoard);
   if FAnalyzerPopoutBoardControl <> nil then
     FAnalyzerPopoutBoardControl.Invalidate;
-  FAnalyzerMiniBoardForm.Show;
-  FAnalyzerMiniBoardForm.BringToFront;
+  ShowFormCenteredOnOwner(FAnalyzerMiniBoardForm, Self);
 end;
 
 procedure TMainForm.AnalyzerPvBoardChanged(Sender: TObject);
@@ -2107,7 +2142,7 @@ begin
   if Key = VK_LEFT then
   begin
     if FGameBrowsePly < 0 then
-      LPly := CurrentMoveCount - 1
+      LPly := CurrentMoveCount
     else
       LPly := FGameBrowsePly - 1;
     ApplyGameBrowsePly(LPly);
@@ -2117,11 +2152,21 @@ begin
   else if Key = VK_RIGHT then
   begin
     if FGameBrowsePly < 0 then
-      LPly := CurrentMoveCount
+      LPly := 0
     else
       LPly := FGameBrowsePly + 1;
     ApplyGameBrowsePly(LPly);
     HighlightGameMoveTextSelection(True);
+    Key := 0;
+  end;
+end;
+
+procedure TMainForm.MainFormKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  if ((Key = Ord('F')) or (Key = Ord('f'))) and (Shift = []) then
+  begin
+    ToggleBoardFlipped;
     Key := 0;
   end;
 end;
@@ -2163,18 +2208,14 @@ begin
   finally
     LBusyEngineKeys.Free;
   end;
-  CenterFormOnOwner(FSetupForm, Self);
-  FSetupForm.Show;
-  FSetupForm.BringToFront;
+  ShowFormCenteredOnOwner(FSetupForm, Self);
 end;
 
 procedure TMainForm.EnginesClick(Sender: TObject);
 begin
   if FEnginesDialog = nil then
     FEnginesDialog := TEnginesDialog.Create(Self);
-  CenterFormOnOwner(FEnginesDialog, Self);
-  FEnginesDialog.Show;
-  FEnginesDialog.BringToFront;
+  ShowFormCenteredOnOwner(FEnginesDialog, Self);
 end;
 
 procedure TMainForm.OpenPdnClick(Sender: TObject);
@@ -2511,29 +2552,16 @@ begin
 end;
 
 procedure TMainForm.GameFinished(Sender: TObject);
-var
-  LMessage: TRunnerFinishedGuiMessage;
 begin
-  if FGuiEventQueue = nil then
-    Exit;
-  LMessage := TRunnerFinishedGuiMessage.Create(TGameRunnerThread(Sender).GameId);
-  FGuiEventQueue.TryPost(LMessage);
+  PostGuiEvent(TRunnerFinishedGuiMessage.Create(TGameRunnerThread(Sender).GameId));
 end;
 
 procedure TMainForm.GameSnapshot(Sender: TObject; ASnapshot: TGameRunnerSnapshot);
-var
-  SnapshotMessage: TRunnerSnapshotGuiMessage;
 begin
   if ASnapshot = nil then
     Exit;
-  if FGuiEventQueue = nil then
-  begin
-    ASnapshot.Free;
-    Exit;
-  end;
-  SnapshotMessage := TRunnerSnapshotGuiMessage.Create(
-    TGameRunnerThread(Sender).GameId, ASnapshot);
-  FGuiEventQueue.TryPost(SnapshotMessage);
+  PostGuiEvent(TRunnerSnapshotGuiMessage.Create(
+    TGameRunnerThread(Sender).GameId, ASnapshot));
 end;
 
 procedure TMainForm.TournamentClick(Sender: TObject);
@@ -2543,9 +2571,7 @@ begin
     FTournamentDialog := TTournamentDialog.Create(Self);
     FTournamentDialog.OnStartGame := @TournamentStartGame;
   end;
-  CenterFormOnOwner(FTournamentDialog, Self);
-  FTournamentDialog.Show;
-  FTournamentDialog.BringToFront;
+  ShowFormCenteredOnOwner(FTournamentDialog, Self);
 end;
 
 procedure TMainForm.TournamentStartGame(Sender: TObject; const ASetup: TGameSetup;

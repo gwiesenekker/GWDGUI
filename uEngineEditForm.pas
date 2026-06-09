@@ -105,7 +105,7 @@ begin
   inherited Create(AOwner);
 
   Caption := 'Add engine';
-  Position := poOwnerFormCenter;
+  Position := poDesigned;
   Width := 860;
   Height := 620;
   Constraints.MinWidth := 700;

@@ -101,8 +101,7 @@ begin
     FAddForm.OnAccepted := @EngineAccepted;
   end;
   FAddForm.LoadEngine(nil);
-  FAddForm.Show;
-  FAddForm.BringToFront;
+  ShowFormCenteredOnOwner(FAddForm, Self);
 end;
 
 procedure TEnginesDialog.DeleteEngineClick(Sender: TObject);
@@ -230,8 +229,7 @@ begin
     FAddForm.OnAccepted := @EngineAccepted;
   end;
   FAddForm.LoadEngine(FEngines[AIndex]);
-  FAddForm.Show;
-  FAddForm.BringToFront;
+  ShowFormCenteredOnOwner(FAddForm, Self);
 end;
 
 procedure TEnginesDialog.RefreshGrid;

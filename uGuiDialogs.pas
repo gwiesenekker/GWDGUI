@@ -18,6 +18,7 @@ procedure CenterFormOnLaptopPanel(AForm: TCustomForm;
   AFallbackMonitorIndex: Integer = 0);
 procedure CenterFormOnMouseMonitor(AForm: TCustomForm);
 procedure CenterFormOnOwner(AForm, AOwner: TCustomForm);
+procedure ShowFormCenteredOnOwner(AForm, AOwner: TCustomForm);
 
 implementation
 
@@ -222,6 +223,15 @@ begin
   AForm.Position := poDesigned;
   AForm.Left := AOwner.Left + ((AOwner.Width - AForm.Width) div 2);
   AForm.Top := AOwner.Top + ((AOwner.Height - AForm.Height) div 2);
+end;
+
+procedure ShowFormCenteredOnOwner(AForm, AOwner: TCustomForm);
+begin
+  if AForm = nil then
+    Exit;
+  CenterFormOnOwner(AForm, AOwner);
+  AForm.Show;
+  AForm.BringToFront;
 end;
 
 function WrappedTextHeight(ADialog: TForm; const AText: string;

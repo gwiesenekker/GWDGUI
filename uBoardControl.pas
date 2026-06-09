@@ -15,6 +15,7 @@ type
   private
     FBoard: TDraughtsBoard;
     FBoardDarkColor: TColor;
+    FBoardFlipped: Boolean;
     FBoardLightColor: TColor;
     FGridColor: TColor;
     FHintSourceSquare: Integer;
@@ -25,6 +26,7 @@ type
     FTargetSquares: TIntArray;
     procedure SetBoard(AValue: TDraughtsBoard);
     procedure SetBoardDarkColor(AValue: TColor);
+    procedure SetBoardFlipped(AValue: Boolean);
     procedure SetBoardLightColor(AValue: TColor);
     procedure SetGridColor(AValue: TColor);
     procedure SetHintSourceSquare(AValue: Integer);
@@ -46,6 +48,7 @@ type
     procedure ClearTargetSquares;
     procedure SetTargetSquares(const ASquares: array of Integer);
     property Board: TDraughtsBoard read FBoard write SetBoard;
+    property BoardFlipped: Boolean read FBoardFlipped write SetBoardFlipped;
     property HintSourceSquare: Integer read FHintSourceSquare
       write SetHintSourceSquare;
     property LastMoveTargetSquare: Integer read FLastMoveTargetSquare
@@ -126,6 +129,14 @@ begin
   Invalidate;
 end;
 
+procedure TDraughtsBoardControl.SetBoardFlipped(AValue: Boolean);
+begin
+  if FBoardFlipped = AValue then
+    Exit;
+  FBoardFlipped := AValue;
+  Invalidate;
+end;
+
 procedure TDraughtsBoardControl.SetBoardLightColor(AValue: TColor);
 begin
   if FBoardLightColor = AValue then
@@ -186,6 +197,8 @@ function TDraughtsBoardControl.SquareAtPoint(X, Y: Integer): Integer;
 var
   LBoardRect: TRect;
   LCell: Integer;
+  LCol: Integer;
+  LRow: Integer;
 begin
   Result := 0;
   LCell := CellSize;
@@ -195,8 +208,14 @@ begin
   if (X < LBoardRect.Left) or (X >= LBoardRect.Right) or
     (Y < LBoardRect.Top) or (Y >= LBoardRect.Bottom) then
     Exit;
-  Result := RowColToSquare((Y - LBoardRect.Top) div LCell,
-    (X - LBoardRect.Left) div LCell);
+  LRow := (Y - LBoardRect.Top) div LCell;
+  LCol := (X - LBoardRect.Left) div LCell;
+  if FBoardFlipped then
+  begin
+    LRow := 9 - LRow;
+    LCol := 9 - LCol;
+  end;
+  Result := RowColToSquare(LRow, LCol);
 end;
 
 procedure TDraughtsBoardControl.ClearTargetSquares;
@@ -269,7 +288,8 @@ end;
 procedure TDraughtsBoardControl.Paint;
 var
   LBoardRect, LCellRect, LPieceRect: TRect;
-  LCell, LCol, LRow, LSquare: Integer;
+  LCell, LCol, LLogicalCol, LLogicalRow, LRow, LSquare: Integer;
+  LMarkerAtBottom: Boolean;
   LMarkerRect: TRect;
   LMarkerSize: Integer;
   LPiece: TDraughtsPieceKind;
@@ -300,7 +320,14 @@ begin
       Canvas.Pen.Color := FGridColor;
       Canvas.Rectangle(LCellRect);
 
-      LSquare := RowColToSquare(LRow, LCol);
+      LLogicalRow := LRow;
+      LLogicalCol := LCol;
+      if FBoardFlipped then
+      begin
+        LLogicalRow := 9 - LRow;
+        LLogicalCol := 9 - LCol;
+      end;
+      LSquare := RowColToSquare(LLogicalRow, LLogicalCol);
       if (LSquare > 0) and FShowCoordinates then
       begin
         Canvas.Brush.Style := bsClear;
@@ -378,17 +405,26 @@ begin
     LMarkerSize := SideMarkerSize;
     LMarkerRect.Left := LBoardRect.Right + SideMarkerGap;
     LMarkerRect.Right := LMarkerRect.Left + LMarkerSize;
-    if FBoard.SideToMove = dsWhite then
+    LMarkerAtBottom := ((FBoard.SideToMove = dsWhite) and (not FBoardFlipped)) or
+      ((FBoard.SideToMove = dsBlack) and FBoardFlipped);
+    if LMarkerAtBottom then
     begin
       LMarkerRect.Top := LBoardRect.Bottom - LMarkerSize;
       LMarkerRect.Bottom := LBoardRect.Bottom;
-      Canvas.Brush.Color := RGBToColor(245, 241, 229);
-      Canvas.Pen.Color := RGBToColor(70, 70, 70);
     end
     else
     begin
       LMarkerRect.Top := LBoardRect.Top;
       LMarkerRect.Bottom := LBoardRect.Top + LMarkerSize;
+    end;
+
+    if FBoard.SideToMove = dsWhite then
+    begin
+      Canvas.Brush.Color := RGBToColor(245, 241, 229);
+      Canvas.Pen.Color := RGBToColor(70, 70, 70);
+    end
+    else
+    begin
       Canvas.Brush.Color := RGBToColor(36, 37, 40);
       Canvas.Pen.Color := RGBToColor(10, 10, 10);
     end;
