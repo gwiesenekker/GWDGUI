@@ -84,13 +84,16 @@ type
     FStopReason: string;
     FTitle: string;
     FWhiteEngineKey: string;
+    FWhiteDisplayName: string;
     FWhitePlayerKind: TPlayerKind;
+    FBlackDisplayName: string;
     procedure ReleaseRunner;
     procedure WaitForRunnerFinished;
   public
     constructor Create(AId: Integer; const ATitle: string; ARunner: TGameRunnerThread;
       AWhitePlayerKind, ABlackPlayerKind: TPlayerKind; const AWhiteEngineKey,
-      ABlackEngineKey: string; AReservationKeys: TStrings);
+      ABlackEngineKey, AWhiteDisplayName, ABlackDisplayName: string;
+      AReservationKeys: TStrings);
     destructor Destroy; override;
 
     function IsEngineReservationActive: Boolean;
@@ -104,6 +107,8 @@ type
     property Snapshot: TGameRunnerSnapshot read FSnapshot;
     property StopReason: string read FStopReason;
     property Title: string read FTitle;
+    property WhiteDisplayName: string read FWhiteDisplayName;
+    property BlackDisplayName: string read FBlackDisplayName;
   end;
 
   TMainForm = class(TForm)
@@ -223,6 +228,8 @@ type
     function FormatClock(ASeconds: Double): string;
     function GameLogLineVisible(const ALine: string; AGame: TRunningGame): Boolean;
     function GameTitleEngineName(AEngine: TExternalEngineDefinition): string;
+    function PlayerSetupDisplayName(AKind: TPlayerKind;
+      AEngine: TExternalEngineDefinition): string;
     function FindHumanMoveToTarget(ATargetSquare: Integer; out AMove: string): Boolean;
     procedure GameMoveBrowseClick(Sender: TObject);
     procedure GameMoveBrowseKeyDown(Sender: TObject; var Key: Word;
@@ -360,7 +367,8 @@ end;
 
 constructor TRunningGame.Create(AId: Integer; const ATitle: string;
   ARunner: TGameRunnerThread; AWhitePlayerKind, ABlackPlayerKind: TPlayerKind;
-  const AWhiteEngineKey, ABlackEngineKey: string; AReservationKeys: TStrings);
+  const AWhiteEngineKey, ABlackEngineKey, AWhiteDisplayName,
+  ABlackDisplayName: string; AReservationKeys: TStrings);
 begin
   inherited Create;
   FId := AId;
@@ -370,6 +378,8 @@ begin
   FBlackPlayerKind := ABlackPlayerKind;
   FWhiteEngineKey := AWhiteEngineKey;
   FBlackEngineKey := ABlackEngineKey;
+  FWhiteDisplayName := AWhiteDisplayName;
+  FBlackDisplayName := ABlackDisplayName;
   FReservationKeys := TStringList.Create;
   FReservationKeys.Sorted := True;
   FReservationKeys.Duplicates := dupIgnore;
@@ -2103,6 +2113,19 @@ begin
     Result := 'Engine';
 end;
 
+function TMainForm.PlayerSetupDisplayName(AKind: TPlayerKind;
+  AEngine: TExternalEngineDefinition): string;
+begin
+  case AKind of
+    pkHuman:
+      Result := 'Human';
+    pkRegistered:
+      Result := GameTitleEngineName(AEngine);
+  else
+    Result := 'Player';
+  end;
+end;
+
 procedure TMainForm.GameMoveBrowseClick(Sender: TObject);
 var
   I: Integer;
@@ -2362,20 +2385,24 @@ function TMainForm.StartGameFromSetup(const ASetup: TGameSetup;
   const ATitlePrefix: string): TRunningGame;
 var
   LBlackEngineKey: string;
+  LBlackName: string;
   LGameId: Integer;
   LReservationKeys: TStringList;
   LRunner: TGameRunnerThread;
   LTitle: string;
   LWhiteEngineKey: string;
+  LWhiteName: string;
 begin
+  LWhiteName := PlayerSetupDisplayName(ASetup.WhitePlayer, ASetup.WhiteEngine);
+  LBlackName := PlayerSetupDisplayName(ASetup.BlackPlayer, ASetup.BlackEngine);
   LTitle := Trim(ATitlePrefix);
   if LTitle = '' then
     LTitle := 'Game';
   if SameText(LTitle, 'Tournament game') then
-    LTitle := 'Tournament ' + GameTitleEngineName(ASetup.WhiteEngine) +
-      ' vs ' + GameTitleEngineName(ASetup.BlackEngine)
+    LTitle := 'Tournament ' + LWhiteName + ' vs ' + LBlackName
   else
-    LTitle := LTitle + ' ' + IntToStr(FGames.Count + 1);
+    LTitle := LTitle + ' ' + IntToStr(FGames.Count + 1) + ' ' +
+      LWhiteName + ' vs ' + LBlackName;
   LWhiteEngineKey := EngineIdentityKey(ASetup.WhiteEngine);
   LBlackEngineKey := EngineIdentityKey(ASetup.BlackEngine);
   LReservationKeys := TStringList.Create;
@@ -2395,7 +2422,7 @@ begin
     @GameFinished);
   Result := TRunningGame.Create(LGameId, LTitle, LRunner,
       ASetup.WhitePlayer, ASetup.BlackPlayer, LWhiteEngineKey,
-      LBlackEngineKey, LReservationKeys);
+      LBlackEngineKey, LWhiteName, LBlackName, LReservationKeys);
   finally
     LReservationKeys.Free;
   end;
@@ -2781,22 +2808,38 @@ end;
 procedure TMainForm.UpdateBoardInfo;
 var
   LGame: TRunningGame;
+  LBlackName: string;
   LPvBaseBoard: TDraughtsBoard;
   LPvBasePly: Integer;
   LResultText: string;
+  LWhiteName: string;
 begin
   LGame := SelectedGame;
   UpdateBoardHighlights;
+  if (LGame <> nil) and FGameActive then
+  begin
+    LWhiteName := PlayerNameOrFallback(LGame.Snapshot.WhitePlayerName,
+      PlayerNameOrFallback(LGame.WhiteDisplayName, 'White'));
+    LBlackName := PlayerNameOrFallback(LGame.Snapshot.BlackPlayerName,
+      PlayerNameOrFallback(LGame.BlackDisplayName, 'Black'));
+  end
+  else
+  begin
+    LWhiteName := PlayerNameOrFallback(FStandaloneWhitePlayerName, 'White');
+    LBlackName := PlayerNameOrFallback(FStandaloneBlackPlayerName, 'Black');
+  end;
 
   if FBlackClockLabel <> nil then
     if FGameActive then
-      FBlackClockLabel.Caption := 'Black  ' + FormatClock(FBlackRemainingSeconds) +
+      FBlackClockLabel.Caption := LBlackName + '  ' +
+        FormatClock(FBlackRemainingSeconds) +
         '   used ' + FormatFloat('0.000', FBlackUsedSeconds) + ' s'
     else
       FBlackClockLabel.Caption := '';
   if FWhiteClockLabel <> nil then
     if FGameActive then
-      FWhiteClockLabel.Caption := 'White  ' + FormatClock(FWhiteRemainingSeconds) +
+      FWhiteClockLabel.Caption := LWhiteName + '  ' +
+        FormatClock(FWhiteRemainingSeconds) +
         '   used ' + FormatFloat('0.000', FWhiteUsedSeconds) + ' s'
     else
       FWhiteClockLabel.Caption := '';
@@ -2805,19 +2848,9 @@ begin
   if Trim(LResultText) = '' then
     LResultText := '*';
   if FWhitePlayerEdit <> nil then
-    if (LGame <> nil) and FGameActive then
-      FWhitePlayerEdit.Text := PlayerNameOrFallback(
-        LGame.Snapshot.WhitePlayerName, 'White')
-    else
-      FWhitePlayerEdit.Text := PlayerNameOrFallback(FStandaloneWhitePlayerName,
-        'White');
+    FWhitePlayerEdit.Text := LWhiteName;
   if FBlackPlayerEdit <> nil then
-    if (LGame <> nil) and FGameActive then
-      FBlackPlayerEdit.Text := PlayerNameOrFallback(
-        LGame.Snapshot.BlackPlayerName, 'Black')
-    else
-      FBlackPlayerEdit.Text := PlayerNameOrFallback(FStandaloneBlackPlayerName,
-        'Black');
+    FBlackPlayerEdit.Text := LBlackName;
   if FResultEdit <> nil then
     FResultEdit.Text := LResultText;
   if FFenEdit <> nil then
@@ -2853,19 +2886,30 @@ end;
 procedure TMainForm.UpdateGameListItem(AGame: TRunningGame);
 var
   I: Integer;
+  LBaseTitle: string;
+  LBlackName: string;
   LCaption: string;
+  LWhiteName: string;
 begin
   if AGame = nil then
     Exit;
 
+  LWhiteName := PlayerNameOrFallback(AGame.Snapshot.WhitePlayerName,
+    PlayerNameOrFallback(AGame.WhiteDisplayName, 'White'));
+  LBlackName := PlayerNameOrFallback(AGame.Snapshot.BlackPlayerName,
+    PlayerNameOrFallback(AGame.BlackDisplayName, 'Black'));
+  LBaseTitle := AGame.Title;
+  if Pos(' vs ', LBaseTitle) = 0 then
+    LBaseTitle := LBaseTitle + ' ' + LWhiteName + ' vs ' + LBlackName;
+
   if AGame.Snapshot.State = gosGameOver then
-    LCaption := AGame.Title + ' - ' + AGame.Snapshot.GameResult
+    LCaption := LBaseTitle + ' - ' + AGame.Snapshot.GameResult
   else
-    LCaption := AGame.Title + ' - ' +
+    LCaption := LBaseTitle + ' - ' +
       OrchestratorStateToString(AGame.Snapshot.State);
   case AGame.Lifecycle of
     rglStarting:
-      LCaption := AGame.Title + ' - ' +
+      LCaption := LBaseTitle + ' - ' +
         RunningGameLifecycleToString(AGame.Lifecycle);
     rglStopRequested:
       LCaption := LCaption + ' (' +
