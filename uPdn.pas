@@ -1,0 +1,508 @@
+unit uPdn;
+
+{$mode objfpc}{$H+}
+
+interface
+
+uses
+  Classes, SysUtils, uDraughtsBoard;
+
+type
+  TPdnGame = class
+  public
+    EventName: string;
+    WhiteName: string;
+    BlackName: string;
+    ResultText: string;
+    StartingFEN: string;
+    MoveAnnotationsText: string;
+    MovesText: string;
+    constructor Create;
+    procedure AssignFrom(ASource: TPdnGame);
+  end;
+
+procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList);
+procedure AppendPdnGameToFile(const AFileName: string; AGame: TPdnGame);
+
+implementation
+
+const
+  DefaultPdnFen = 'W:W31-50:B1-20';
+
+constructor TPdnGame.Create;
+begin
+  inherited Create;
+  EventName := '?';
+  WhiteName := 'White';
+  BlackName := 'Black';
+  ResultText := '*';
+  StartingFEN := DefaultPdnFen;
+end;
+
+procedure TPdnGame.AssignFrom(ASource: TPdnGame);
+begin
+  if ASource = nil then
+    Exit;
+  EventName := ASource.EventName;
+  WhiteName := ASource.WhiteName;
+  BlackName := ASource.BlackName;
+  ResultText := ASource.ResultText;
+  StartingFEN := ASource.StartingFEN;
+  MoveAnnotationsText := ASource.MoveAnnotationsText;
+  MovesText := ASource.MovesText;
+end;
+
+function PdnUnquote(const AText: string): string;
+var
+  I: Integer;
+  LEscaped: Boolean;
+begin
+  Result := '';
+  LEscaped := False;
+  for I := 1 to Length(AText) do
+  begin
+    if LEscaped then
+    begin
+      Result += AText[I];
+      LEscaped := False;
+    end
+    else if AText[I] = '\' then
+      LEscaped := True
+    else
+      Result += AText[I];
+  end;
+end;
+
+function PdnQuote(const AText: string): string;
+begin
+  Result := StringReplace(AText, '\', '\\', [rfReplaceAll]);
+  Result := StringReplace(Result, '"', '\"', [rfReplaceAll]);
+end;
+
+function NormalizePdnResult(const AText: string): string;
+begin
+  Result := Trim(AText);
+  if not (SameText(Result, '2-0') or SameText(Result, '1-1') or
+    SameText(Result, '0-2') or SameText(Result, '*')) then
+    Result := '*';
+end;
+
+function StripPdnMoveText(const AText: string): string;
+var
+  I: Integer;
+  LBraceDepth: Integer;
+  LInLineComment: Boolean;
+  LParenDepth: Integer;
+begin
+  Result := '';
+  LBraceDepth := 0;
+  LInLineComment := False;
+  LParenDepth := 0;
+  for I := 1 to Length(AText) do
+  begin
+    if LInLineComment then
+    begin
+      if AText[I] in [#10, #13] then
+      begin
+        LInLineComment := False;
+        Result += ' ';
+      end;
+      Continue;
+    end;
+
+    if LBraceDepth > 0 then
+    begin
+      if AText[I] = '}' then
+        Dec(LBraceDepth);
+      Continue;
+    end;
+
+    if LParenDepth > 0 then
+    begin
+      if AText[I] = '(' then
+        Inc(LParenDepth)
+      else if AText[I] = ')' then
+        Dec(LParenDepth);
+      Continue;
+    end;
+
+    case AText[I] of
+      '{':
+        Inc(LBraceDepth);
+      '(':
+        Inc(LParenDepth);
+      ';':
+        LInLineComment := True;
+      #10, #13, #9:
+        Result += ' ';
+    else
+      Result += AText[I];
+    end;
+  end;
+end;
+
+function CleanMoveToken(AToken: string): string;
+begin
+  Result := Trim(AToken);
+  while (Result <> '') and (Result[Length(Result)] in
+    ['!', '?', '+', '=', ',', ';', ':']) do
+    Delete(Result, Length(Result), 1);
+end;
+
+function LooksLikePdnMove(const AToken: string): Boolean;
+begin
+  Result := (AToken <> '') and (AToken[1] in ['0'..'9']) and
+    ((Pos('-', AToken) > 0) or (Pos('x', LowerCase(AToken)) > 0));
+end;
+
+procedure ExtractMovesAndAnnotationsFromPdnText(const AText: string;
+  AMoves, AAnnotations: TStrings);
+var
+  I: Integer;
+  LBraceDepth: Integer;
+  LComment: string;
+  LInLineComment: Boolean;
+  LLastMoveIndex: Integer;
+  LParenDepth: Integer;
+  LToken: string;
+
+  procedure ProcessToken;
+  var
+    LCleanToken: string;
+  begin
+    LCleanToken := CleanMoveToken(LToken);
+    LToken := '';
+    if LCleanToken = '' then
+      Exit;
+    if LCleanToken[1] = '$' then
+      Exit;
+    if (Pos('.', LCleanToken) > 0) and (Pos('-', LCleanToken) = 0) and
+      (Pos('x', LowerCase(LCleanToken)) = 0) then
+      Exit;
+    if SameText(LCleanToken, '2-0') or SameText(LCleanToken, '1-1') or
+      SameText(LCleanToken, '0-2') or SameText(LCleanToken, '*') then
+      Exit;
+    if LooksLikePdnMove(LCleanToken) then
+    begin
+      AMoves.Add(NormalizeMoveNotation(LCleanToken));
+      AAnnotations.Add('');
+      LLastMoveIndex := AMoves.Count - 1;
+    end;
+  end;
+
+  procedure ProcessComment;
+  var
+    LCommentText: string;
+    LScorePos: SizeInt;
+  begin
+    LCommentText := Trim(LComment);
+    LComment := '';
+    if (LLastMoveIndex < 0) or (LLastMoveIndex >= AAnnotations.Count) then
+      Exit;
+    LScorePos := Pos('score=', LowerCase(LCommentText));
+    if LScorePos > 0 then
+      AAnnotations[LLastMoveIndex] := Trim(Copy(LCommentText, LScorePos,
+        MaxInt));
+  end;
+begin
+  if AMoves <> nil then
+    AMoves.Clear;
+  if AAnnotations <> nil then
+    AAnnotations.Clear;
+  if (AMoves = nil) or (AAnnotations = nil) then
+    Exit;
+
+  LBraceDepth := 0;
+  LComment := '';
+  LInLineComment := False;
+  LLastMoveIndex := -1;
+  LParenDepth := 0;
+  LToken := '';
+  for I := 1 to Length(AText) do
+  begin
+    if LInLineComment then
+    begin
+      if AText[I] in [#10, #13] then
+      begin
+        LInLineComment := False;
+        ProcessToken;
+      end;
+      Continue;
+    end;
+
+    if LBraceDepth > 0 then
+    begin
+      if AText[I] = '}' then
+      begin
+        Dec(LBraceDepth);
+        if LBraceDepth = 0 then
+          ProcessComment
+        else
+          LComment += AText[I];
+      end
+      else
+        LComment += AText[I];
+      Continue;
+    end;
+
+    if LParenDepth > 0 then
+    begin
+      if AText[I] = '(' then
+        Inc(LParenDepth)
+      else if AText[I] = ')' then
+        Dec(LParenDepth);
+      Continue;
+    end;
+
+    case AText[I] of
+      '{':
+        begin
+          ProcessToken;
+          Inc(LBraceDepth);
+          LComment := '';
+        end;
+      '(':
+        begin
+          ProcessToken;
+          Inc(LParenDepth);
+        end;
+      ';':
+        begin
+          ProcessToken;
+          LInLineComment := True;
+        end;
+      ' ', #9, #10, #13:
+        ProcessToken;
+    else
+      LToken += AText[I];
+    end;
+  end;
+  ProcessToken;
+end;
+
+function ExtractMovesFromPdnText(const AText: string): string;
+var
+  LAnnotations: TStringList;
+  LMoves: TStringList;
+begin
+  LAnnotations := TStringList.Create;
+  LMoves := TStringList.Create;
+  try
+    ExtractMovesAndAnnotationsFromPdnText(AText, LMoves, LAnnotations);
+    Result := Trim(StringReplace(LMoves.Text, LineEnding, ' ', [rfReplaceAll]));
+  finally
+    LMoves.Free;
+    LAnnotations.Free;
+  end;
+end;
+
+procedure ParsePdnTag(const ALine: string; AGame: TPdnGame);
+var
+  LFirstQuote: Integer;
+  LLastQuote: Integer;
+  LName: string;
+  LSpace: Integer;
+  LValue: string;
+begin
+  if (AGame = nil) or (Length(ALine) < 3) or (ALine[1] <> '[') then
+    Exit;
+
+  LSpace := Pos(' ', ALine);
+  if LSpace <= 2 then
+    Exit;
+  LName := Copy(ALine, 2, LSpace - 2);
+  LFirstQuote := Pos('"', ALine);
+  LLastQuote := Length(ALine);
+  while (LLastQuote > LFirstQuote) and (ALine[LLastQuote] <> '"') do
+    Dec(LLastQuote);
+  if (LFirstQuote = 0) or (LLastQuote <= LFirstQuote) then
+    Exit;
+  LValue := PdnUnquote(Copy(ALine, LFirstQuote + 1,
+    LLastQuote - LFirstQuote - 1));
+
+  if SameText(LName, 'Event') then
+    AGame.EventName := LValue
+  else if SameText(LName, 'White') then
+    AGame.WhiteName := LValue
+  else if SameText(LName, 'Black') then
+    AGame.BlackName := LValue
+  else if SameText(LName, 'Result') then
+    AGame.ResultText := NormalizePdnResult(LValue)
+  else if SameText(LName, 'FEN') then
+    AGame.StartingFEN := Trim(LValue);
+end;
+
+procedure ClearGameList(AGames: TList);
+var
+  I: Integer;
+begin
+  if AGames = nil then
+    Exit;
+  for I := 0 to AGames.Count - 1 do
+    TObject(AGames[I]).Free;
+  AGames.Clear;
+end;
+
+procedure AddCurrentGame(var ACurrent: TPdnGame; AMoveLines: TStrings;
+  AGames: TList);
+var
+  LAnnotations: TStringList;
+  LMoves: TStringList;
+begin
+  if ACurrent = nil then
+    Exit;
+  LAnnotations := TStringList.Create;
+  LMoves := TStringList.Create;
+  try
+    ExtractMovesAndAnnotationsFromPdnText(AMoveLines.Text, LMoves, LAnnotations);
+    ACurrent.MovesText := Trim(StringReplace(LMoves.Text, LineEnding, ' ',
+      [rfReplaceAll]));
+    ACurrent.MoveAnnotationsText := LAnnotations.Text;
+    if Trim(ACurrent.StartingFEN) = '' then
+      ACurrent.StartingFEN := DefaultPdnFen;
+    if Trim(ACurrent.ResultText) = '' then
+      ACurrent.ResultText := '*';
+    AGames.Add(ACurrent);
+    ACurrent := nil;
+    AMoveLines.Clear;
+  finally
+    LMoves.Free;
+    LAnnotations.Free;
+  end;
+end;
+
+procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList);
+var
+  Current: TPdnGame;
+  I: Integer;
+  Lines: TStringList;
+  MoveLines: TStringList;
+  S: string;
+begin
+  if AGames = nil then
+    Exit;
+  ClearGameList(AGames);
+  Lines := TStringList.Create;
+  MoveLines := TStringList.Create;
+  Current := nil;
+  try
+    Lines.LoadFromFile(AFileName);
+    for I := 0 to Lines.Count - 1 do
+    begin
+      S := Trim(Lines[I]);
+      if S = '' then
+        Continue;
+      if S[1] = '[' then
+      begin
+        if (Current <> nil) and (Trim(MoveLines.Text) <> '') then
+          AddCurrentGame(Current, MoveLines, AGames);
+        if Current = nil then
+          Current := TPdnGame.Create;
+        ParsePdnTag(S, Current);
+      end
+      else
+      begin
+        if Current = nil then
+          Current := TPdnGame.Create;
+        MoveLines.Add(S);
+      end;
+    end;
+    AddCurrentGame(Current, MoveLines, AGames);
+  finally
+    Current.Free;
+    MoveLines.Free;
+    Lines.Free;
+  end;
+end;
+
+function FormatMovesForPdn(const AMovesText, AAnnotationsText, AResultText: string;
+  const AStartingFEN: string): string;
+var
+  I: Integer;
+  LAnnotations: TStringList;
+  LMoves: TStringList;
+  LMoveNumber: Integer;
+  LOut: TStringList;
+  LSide: TDraughtsSide;
+  LText: string;
+begin
+  LMoves := TStringList.Create;
+  LAnnotations := TStringList.Create;
+  LOut := TStringList.Create;
+  try
+    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(AMovesText)), LMoves);
+    LAnnotations.Text := AAnnotationsText;
+    LSide := dsWhite;
+    if (Trim(AStartingFEN) <> '') and (UpCase(Trim(AStartingFEN)[1]) = 'B') then
+      LSide := dsBlack;
+    LText := '';
+    for I := 0 to LMoves.Count - 1 do
+    begin
+      if LText <> '' then
+        LText += ' ';
+      if LSide = dsWhite then
+      begin
+        LMoveNumber := (I div 2) + 1;
+        LText += IntToStr(LMoveNumber) + '. ' + LMoves[I];
+        LSide := dsBlack;
+      end
+      else
+      begin
+        if I = 0 then
+          LText += '1... ';
+        LText += LMoves[I];
+        LSide := dsWhite;
+      end;
+      if (I < LAnnotations.Count) and (Trim(LAnnotations[I]) <> '') then
+        LText += ' {' + Trim(LAnnotations[I]) + '}';
+      if Length(LText) > 78 then
+      begin
+        LOut.Add(Trim(LText));
+        LText := '';
+      end;
+    end;
+    if NormalizePdnResult(AResultText) <> '*' then
+    begin
+      if LText <> '' then
+        LText += ' ';
+      LText += NormalizePdnResult(AResultText);
+    end;
+    if LText <> '' then
+      LOut.Add(Trim(LText));
+    Result := LOut.Text;
+  finally
+    LOut.Free;
+    LAnnotations.Free;
+    LMoves.Free;
+  end;
+end;
+
+procedure AppendPdnGameToFile(const AFileName: string; AGame: TPdnGame);
+var
+  Lines: TStringList;
+begin
+  if AGame = nil then
+    Exit;
+  Lines := TStringList.Create;
+  try
+    if FileExists(AFileName) then
+      Lines.LoadFromFile(AFileName);
+    if (Lines.Count > 0) and (Trim(Lines[Lines.Count - 1]) <> '') then
+      Lines.Add('');
+    Lines.Add('[Event "' + PdnQuote(AGame.EventName) + '"]');
+    Lines.Add('[White "' + PdnQuote(AGame.WhiteName) + '"]');
+    Lines.Add('[Black "' + PdnQuote(AGame.BlackName) + '"]');
+    Lines.Add('[Result "' + PdnQuote(NormalizePdnResult(AGame.ResultText)) + '"]');
+    if Trim(AGame.StartingFEN) <> DefaultPdnFen then
+      Lines.Add('[SetUp "1"]');
+    Lines.Add('[FEN "' + PdnQuote(AGame.StartingFEN) + '"]');
+    Lines.Add('');
+    Lines.Text := Lines.Text + FormatMovesForPdn(AGame.MovesText,
+      AGame.MoveAnnotationsText, AGame.ResultText, AGame.StartingFEN);
+    Lines.SaveToFile(AFileName);
+  finally
+    Lines.Free;
+  end;
+end;
+
+end.
