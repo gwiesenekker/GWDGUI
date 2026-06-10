@@ -89,9 +89,16 @@ begin
     Check(Games.Count = 3, 'saved game should be appended');
     CheckEqual(TPdnGame(Games[2]).EventName, 'Saved',
       'appended game event');
+    CheckEqual(TPdnGame(Games[2]).ResultText, '2-0',
+      'appended game result should stay internal draughts notation');
     CheckEqual(TPdnGame(Games[2]).MoveAnnotationsText,
       'score=0.25' + LineEnding + 'score=-0.10' + LineEnding,
       'appended game score annotations');
+    Lines.LoadFromFile(FileName);
+    Check(Pos('[Result "1-0"]', Lines.Text) > 0,
+      'saved PDN should export white win as 1-0');
+    Check(Pos('1. 34-30 {score=0.25} 20-25 {score=-0.10} 1-0',
+      Lines.Text) > 0, 'saved movetext should end with exported 1-0');
   finally
     ClearGames(Games);
     Games.Free;

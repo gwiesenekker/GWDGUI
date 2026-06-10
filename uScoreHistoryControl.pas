@@ -14,13 +14,15 @@ type
     FAnnotationsText: string;
     FCurrentPly: Integer;
     FHintText: string;
-    FHintWindow: THintWindow;
     FMaxScore: Double;
+    FPlyCount: Integer;
     FScale: TScoreScale;
     FShowEvaluationBar: Boolean;
     FStartingSide: TDraughtsSide;
     function BarPenWidth(APlotWidth, ACount: Integer): Integer;
     function ChartBounds(out APlotLeft, APlotRight: Integer): Boolean;
+    procedure DrawMissingScoreRect(ALeft, AMidY, AHalfHeight, AWidth: Integer;
+      AColor: TColor);
     procedure DrawScoreRect(ALeft, AMidY, AY, AWidth: Integer;
       AColor: TColor);
     function MappedScore(AScore: Double): Double;
@@ -28,15 +30,16 @@ type
     function MoveCount: Integer;
     function PlyLabel(APly: Integer): string;
     function PlyAtX(AX: Integer; out APly: Integer): Boolean;
-    procedure HideScoreHint;
+    procedure ClearScoreHint;
     procedure SetAnnotationsText(const AValue: string);
     procedure SetCurrentPly(AValue: Integer);
     procedure SetMaxScore(AValue: Double);
+    procedure SetPlyCount(AValue: Integer);
     procedure SetScale(AValue: TScoreScale);
     procedure SetShowEvaluationBar(AValue: Boolean);
     procedure SetStartingSide(AValue: TDraughtsSide);
     function ScoreHintForPly(APly: Integer): string;
-    procedure ShowScoreHint(const AText: string; AX, AY: Integer);
+    procedure SetScoreHint(const AText: string; AX, AY: Integer);
     function TryAnnotationScoreTextForPly(APly: Integer; const AName: string;
       out AScoreText: string): Boolean;
     function TryAnnotationScoreForPly(APly: Integer; const AName: string;
@@ -55,6 +58,7 @@ type
       write SetAnnotationsText;
     property CurrentPly: Integer read FCurrentPly write SetCurrentPly;
     property MaxScore: Double read FMaxScore write SetMaxScore;
+    property PlyCount: Integer read FPlyCount write SetPlyCount;
     property Scale: TScoreScale read FScale write SetScale;
     property ShowEvaluationBar: Boolean read FShowEvaluationBar
       write SetShowEvaluationBar;
@@ -69,6 +73,7 @@ type
     property ParentColor;
     property ParentFont;
     property Visible;
+    property ShowHint;
   end;
 
 function TryExtractScoreFromAnnotation(const AAnnotation: string;
@@ -123,10 +128,11 @@ begin
   DoubleBuffered := True;
   Color := clWindow;
   Hint := 'Score history';
-  ShowHint := False;
+  ShowHint := True;
   Height := 84;
   FCurrentPly := -1;
   FMaxScore := 10.0;
+  FPlyCount := 0;
   FScale := ssLogarithmic;
   FShowEvaluationBar := True;
   FStartingSide := dsWhite;
@@ -134,22 +140,20 @@ end;
 
 destructor TScoreHistoryControl.Destroy;
 begin
-  HideScoreHint;
+  ClearScoreHint;
   inherited Destroy;
 end;
 
 function TScoreHistoryControl.BarPenWidth(APlotWidth, ACount: Integer): Integer;
 var
-  HeightLimit: Integer;
   Spacing: Double;
 begin
   Result := 1;
   if ACount <= 0 then
     Exit;
   Spacing := APlotWidth / ACount;
-  HeightLimit := Max(1, Height div 60);
   Result := Max(1, Round(Spacing * 0.35));
-  Result := Min(Min(12, HeightLimit), Result);
+  Result := Min(12, Result);
 end;
 
 function TScoreHistoryControl.ChartBounds(out APlotLeft,
@@ -184,7 +188,21 @@ end;
 procedure TScoreHistoryControl.CMMouseLeave(var Message: TLMessage);
 begin
   inherited;
-  HideScoreHint;
+  ClearScoreHint;
+end;
+
+procedure TScoreHistoryControl.DrawMissingScoreRect(ALeft, AMidY, AHalfHeight,
+  AWidth: Integer; AColor: TColor);
+var
+  Distance: Integer;
+begin
+  if AWidth < 1 then
+    AWidth := 1;
+  Distance := Max(1, AHalfHeight div 30);
+  Canvas.Brush.Color := AColor;
+  Canvas.Pen.Style := psClear;
+  Canvas.Rectangle(ALeft, AMidY - Distance, ALeft + AWidth, AMidY + Distance + 1);
+  Canvas.Pen.Style := psSolid;
 end;
 
 procedure TScoreHistoryControl.DrawScoreRect(ALeft, AMidY, AY, AWidth: Integer;
@@ -243,7 +261,7 @@ begin
   Lines := TStringList.Create;
   try
     Lines.Text := FAnnotationsText;
-    Result := Lines.Count;
+    Result := Max(FPlyCount, Lines.Count);
   finally
     Lines.Free;
   end;
@@ -271,10 +289,11 @@ begin
     Result := 'Move ' + IntToStr(LMoveNumber) + ' Black';
 end;
 
-procedure TScoreHistoryControl.HideScoreHint;
+procedure TScoreHistoryControl.ClearScoreHint;
 begin
   FHintText := '';
-  FreeAndNil(FHintWindow);
+  Hint := 'Score history';
+  Application.CancelHint;
 end;
 
 procedure TScoreHistoryControl.MouseMove(Shift: TShiftState; X, Y: Integer);
@@ -289,10 +308,10 @@ begin
   end
   else
   begin
-    HideScoreHint;
+    ClearScoreHint;
     Exit;
   end;
-  ShowScoreHint(NewHint, X, Y);
+  SetScoreHint(NewHint, X, Y);
 end;
 
 function TScoreHistoryControl.PlyAtX(AX: Integer; out APly: Integer): Boolean;
@@ -417,6 +436,10 @@ begin
     HasAnnotatorScore := TryAnnotationScoreForPly(I, 'annotator',
       AnnotatorScore);
     LeftX := X - BarWidth;
+    if LeftX < PlotLeft then
+      LeftX := PlotLeft
+    else if LeftX + BarWidth * 2 > PlotRight then
+      LeftX := PlotRight - BarWidth * 2;
     if HasEngineScore then
     begin
       EngineY := ScoreY(Score, MidY, (ChartRect.Bottom - ChartRect.Top) div 2);
@@ -448,13 +471,15 @@ begin
     if HasEngineScore then
       DrawScoreRect(LeftX, MidY, EngineY, BarWidth, EngineColor)
     else
-      DrawScoreRect(LeftX, MidY, EngineY, BarWidth,
+      DrawMissingScoreRect(LeftX, MidY,
+        (ChartRect.Bottom - ChartRect.Top) div 2, BarWidth,
         RGBToColor(28, 74, 132));
 
     if HasAnnotatorScore then
       DrawScoreRect(LeftX + BarWidth, MidY, Y, BarWidth, LColor)
     else
-      DrawScoreRect(LeftX + BarWidth, MidY, Y, BarWidth,
+      DrawMissingScoreRect(LeftX + BarWidth, MidY,
+        (ChartRect.Bottom - ChartRect.Top) div 2, BarWidth,
         RGBToColor(102, 169, 220));
   end;
 
@@ -472,7 +497,7 @@ procedure TScoreHistoryControl.SetAnnotationsText(const AValue: string);
 begin
   if FAnnotationsText = AValue then
     Exit;
-  HideScoreHint;
+  ClearScoreHint;
   FAnnotationsText := AValue;
   Invalidate;
 end;
@@ -481,7 +506,7 @@ procedure TScoreHistoryControl.SetCurrentPly(AValue: Integer);
 begin
   if FCurrentPly = AValue then
     Exit;
-  HideScoreHint;
+  ClearScoreHint;
   FCurrentPly := AValue;
   Invalidate;
 end;
@@ -492,8 +517,19 @@ begin
     AValue := 10.0;
   if Abs(FMaxScore - AValue) < 0.000001 then
     Exit;
-  HideScoreHint;
+  ClearScoreHint;
   FMaxScore := AValue;
+  Invalidate;
+end;
+
+procedure TScoreHistoryControl.SetPlyCount(AValue: Integer);
+begin
+  if AValue < 0 then
+    AValue := 0;
+  if FPlyCount = AValue then
+    Exit;
+  ClearScoreHint;
+  FPlyCount := AValue;
   Invalidate;
 end;
 
@@ -501,7 +537,7 @@ procedure TScoreHistoryControl.SetScale(AValue: TScoreScale);
 begin
   if FScale = AValue then
     Exit;
-  HideScoreHint;
+  ClearScoreHint;
   FScale := AValue;
   Invalidate;
 end;
@@ -510,7 +546,7 @@ procedure TScoreHistoryControl.SetShowEvaluationBar(AValue: Boolean);
 begin
   if FShowEvaluationBar = AValue then
     Exit;
-  HideScoreHint;
+  ClearScoreHint;
   FShowEvaluationBar := AValue;
   Invalidate;
 end;
@@ -519,8 +555,9 @@ procedure TScoreHistoryControl.SetStartingSide(AValue: TDraughtsSide);
 begin
   if FStartingSide = AValue then
     Exit;
-  HideScoreHint;
+  ClearScoreHint;
   FStartingSide := AValue;
+  Invalidate;
 end;
 
 function TScoreHistoryControl.ScoreHintForPly(APly: Integer): string;
@@ -553,29 +590,20 @@ begin
     Result += 'annotator: no score';
 end;
 
-procedure TScoreHistoryControl.ShowScoreHint(const AText: string; AX,
+procedure TScoreHistoryControl.SetScoreHint(const AText: string; AX,
   AY: Integer);
-var
-  HintRect: TRect;
-  ScreenPoint: TPoint;
 begin
   if Trim(AText) = '' then
   begin
-    HideScoreHint;
+    ClearScoreHint;
     Exit;
   end;
-  if (FHintWindow <> nil) and (FHintText = AText) then
+  if FHintText = AText then
     Exit;
-
-  FreeAndNil(FHintWindow);
   FHintText := AText;
-  FHintWindow := THintWindow.Create(nil);
-  FHintWindow.Color := Application.HintColor;
-  FHintWindow.Font.Assign(Screen.HintFont);
-  HintRect := FHintWindow.CalcHintRect(600, AText, nil);
-  ScreenPoint := ClientToScreen(Point(AX + 14, AY + 18));
-  OffsetRect(HintRect, ScreenPoint.X, ScreenPoint.Y);
-  FHintWindow.ActivateHint(HintRect, AText);
+  Hint := AText;
+  Application.CancelHint;
+  Application.ActivateHint(ClientToScreen(Point(AX, AY)), True);
 end;
 
 function TScoreHistoryControl.TryAnnotationScoreTextForPly(APly: Integer;

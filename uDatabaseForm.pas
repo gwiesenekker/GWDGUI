@@ -5,9 +5,9 @@ unit uDatabaseForm;
 interface
 
 uses
-  Classes, Clipbrd, Controls, Dialogs, ExtCtrls, Forms, Graphics, Grids,
-  Menus, StdCtrls, SysUtils, uBoardControl, uDraughtsBoard, uGameDatabase,
-  uGuiDialogs, uPositionSetupForm, uPreferences;
+  Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
+  Grids, Math, Menus, StdCtrls, SysUtils, uBoardControl, uDraughtsBoard,
+  uGameDatabase, uGuiDialogs, uPositionSetupForm, uPreferences;
 
 type
   TDatabaseForm = class(TForm)
@@ -18,6 +18,11 @@ type
     FFenEdit: TEdit;
     FGameInfos: TList;
     FGamesGrid: TStringGrid;
+    FImportCancel: Boolean;
+    FImportProgressBar: TProgressBar;
+    FImportProgressForm: TForm;
+    FImportProgressLabel: TLabel;
+    FImportStartTick: QWord;
     FPreferences: TGuiPreferences;
     FResults: TList;
     FResultsGrid: TStringGrid;
@@ -27,6 +32,9 @@ type
     procedure BoardPasteFenClick(Sender: TObject);
     procedure ClearObjectList(AList: TList);
     procedure FormCloseHandler(Sender: TObject; var CloseAction: TCloseAction);
+    procedure ImportProgress(ABytesRead, ATotalBytes: Int64; AImported,
+      AErrors: Integer; var ACancel: Boolean);
+    procedure ImportProgressCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure ImportPdnClick(Sender: TObject);
     procedure PopulateGamesGrid;
     procedure PopulateResultsGrid;
@@ -34,6 +42,7 @@ type
     procedure SetFenClick(Sender: TObject);
     procedure SetupPositionAccepted(Sender: TObject; const AFEN: string);
     procedure SetupPositionClick(Sender: TObject);
+    procedure StopImportClick(Sender: TObject);
     procedure UpdateBoardFromFen;
   public
     constructor Create(AOwner: TComponent); override;
@@ -45,6 +54,9 @@ type
   end;
 
 implementation
+
+const
+  DatabaseGridGameLimit = 5000;
 
 constructor TDatabaseForm.Create(AOwner: TComponent);
 var
@@ -237,6 +249,46 @@ begin
   CloseAction := caHide;
 end;
 
+procedure TDatabaseForm.ImportProgress(ABytesRead, ATotalBytes: Int64;
+  AImported, AErrors: Integer; var ACancel: Boolean);
+var
+  ElapsedSeconds: Double;
+  Percent: Integer;
+begin
+  ACancel := FImportCancel;
+  if FImportProgressForm = nil then
+    Exit;
+
+  if ATotalBytes > 0 then
+    Percent := Round((ABytesRead / ATotalBytes) * 1000)
+  else
+    Percent := 0;
+  Percent := Max(0, Min(1000, Percent));
+  FImportProgressBar.Position := Percent;
+
+  ElapsedSeconds := (GetTickCount64 - FImportStartTick) / 1000;
+  FImportProgressLabel.Caption :=
+    Format('Imported %d game(s), errors %d, %.1f MB / %.1f MB, elapsed %.1f s',
+      [AImported, AErrors, ABytesRead / 1048576, ATotalBytes / 1048576,
+      ElapsedSeconds]);
+  Application.ProcessMessages;
+  ACancel := FImportCancel;
+end;
+
+procedure TDatabaseForm.ImportProgressCloseQuery(Sender: TObject;
+  var CanClose: Boolean);
+begin
+  FImportCancel := True;
+  CanClose := False;
+end;
+
+procedure TDatabaseForm.StopImportClick(Sender: TObject);
+begin
+  FImportCancel := True;
+  if FImportProgressLabel <> nil then
+    FImportProgressLabel.Caption := 'Stopping import...';
+end;
+
 procedure TDatabaseForm.CreateDatabase(const AFileName: string);
 begin
   FDatabase.CreateDatabase(AFileName);
@@ -266,7 +318,7 @@ var
   Info: TDatabaseGameInfo;
   Row: Integer;
 begin
-  FDatabase.LoadGames(FGameInfos);
+  FDatabase.LoadGames(FGameInfos, DatabaseGridGameLimit);
   if FGameInfos.Count = 0 then
     FGamesGrid.RowCount := 2
   else
@@ -385,6 +437,7 @@ var
   Dialog: TOpenDialog;
   Errors: Integer;
   Imported: Integer;
+  LButton: TButton;
 begin
   Dialog := TOpenDialog.Create(Self);
   try
@@ -393,13 +446,52 @@ begin
     if not Dialog.Execute then
       Exit;
     try
-      FDatabase.ImportPdnFile(Dialog.FileName, Imported, Errors);
+      FImportCancel := False;
+      FImportStartTick := GetTickCount64;
+      FImportProgressForm := TForm.Create(Self);
+      try
+        FImportProgressForm.Caption := 'Import PDN';
+        FImportProgressForm.Position := poDesigned;
+        FImportProgressForm.BorderStyle := bsDialog;
+        FImportProgressForm.Width := 520;
+        FImportProgressForm.Height := 140;
+        FImportProgressForm.OnCloseQuery := @ImportProgressCloseQuery;
+
+        FImportProgressLabel := TLabel.Create(FImportProgressForm);
+        FImportProgressLabel.Parent := FImportProgressForm;
+        FImportProgressLabel.SetBounds(12, 12, 488, 24);
+        FImportProgressLabel.Caption := 'Preparing import...';
+
+        FImportProgressBar := TProgressBar.Create(FImportProgressForm);
+        FImportProgressBar.Parent := FImportProgressForm;
+        FImportProgressBar.SetBounds(12, 42, 488, 22);
+        FImportProgressBar.Min := 0;
+        FImportProgressBar.Max := 1000;
+
+        LButton := TButton.Create(FImportProgressForm);
+        LButton.Parent := FImportProgressForm;
+        LButton.SetBounds(410, 78, 90, 30);
+        LButton.Caption := 'Stop';
+        LButton.OnClick := @StopImportClick;
+
+        ShowFormCenteredOnOwner(FImportProgressForm, Self);
+        FDatabase.ImportPdnFile(Dialog.FileName, Imported, Errors,
+          @ImportProgress);
+      finally
+        FreeAndNil(FImportProgressForm);
+        FImportProgressBar := nil;
+        FImportProgressLabel := nil;
+      end;
       PopulateGamesGrid;
-      FStatusLabel.Caption := 'Imported ' + IntToStr(Imported) +
-        ' game(s), errors ' + IntToStr(Errors);
+      if FImportCancel then
+        FStatusLabel.Caption := 'Stopped after importing ' +
+          IntToStr(Imported) + ' game(s), errors ' + IntToStr(Errors)
+      else
+        FStatusLabel.Caption := 'Imported ' + IntToStr(Imported) +
+          ' game(s), errors ' + IntToStr(Errors);
     except
       on E: Exception do
-        ShowGuiOkDialog(Self, 'Import PDN', E.Message);
+        ShowGuiTextDialog(Self, 'Import PDN', E.Message);
     end;
   finally
     Dialog.Free;

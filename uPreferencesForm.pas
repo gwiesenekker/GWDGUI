@@ -53,9 +53,9 @@ begin
   Position := poDesigned;
   BorderStyle := bsSizeable;
   Width := 500;
-  Height := 660;
+  Height := 647;
   Constraints.MinWidth := 460;
-  Constraints.MinHeight := 600;
+  Constraints.MinHeight := 587;
 
   FColorDialog := TColorDialog.Create(Self);
 
@@ -86,7 +86,7 @@ begin
   LGroup := TGroupBox.Create(Self);
   LGroup.Parent := Self;
   LGroup.Align := alTop;
-  LGroup.Height := 162;
+  LGroup.Height := 144;
   LGroup.BorderSpacing.Left := 8;
   LGroup.BorderSpacing.Right := 8;
   LGroup.BorderSpacing.Bottom := 8;
@@ -105,7 +105,7 @@ begin
 
   FEvaluationScaleGroup := TRadioGroup.Create(Self);
   FEvaluationScaleGroup.Parent := LGroup;
-  FEvaluationScaleGroup.SetBounds(12, 58, 318, 92);
+  FEvaluationScaleGroup.SetBounds(12, 60, 318, 58);
   FEvaluationScaleGroup.Caption := 'Scale';
   FEvaluationScaleGroup.Columns := 2;
   FEvaluationScaleGroup.Items.Add('Linear');

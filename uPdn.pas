@@ -21,8 +21,14 @@ type
     procedure AssignFrom(ASource: TPdnGame);
   end;
 
+  TPdnGameReadEvent = procedure(AGame: TPdnGame; ABytesRead,
+    ATotalBytes: Int64; var AStop: Boolean) of object;
+
 procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList);
+procedure ReadPdnGamesFromFile(const AFileName: string;
+  AOnGame: TPdnGameReadEvent);
 procedure AppendPdnGameToFile(const AFileName: string; AGame: TPdnGame);
+function PdnGameToText(AGame: TPdnGame): string;
 function AnnotationWithScore(const AAnnotation, AName, AScore: string): string;
 function ExtractAnnotationValue(const AAnnotation, AName: string): string;
 
@@ -84,9 +90,42 @@ end;
 function NormalizePdnResult(const AText: string): string;
 begin
   Result := Trim(AText);
-  if not (SameText(Result, '2-0') or SameText(Result, '1-1') or
+  if SameText(Result, '1-0') then
+    Result := '2-0'
+  else if SameText(Result, '0-1') then
+    Result := '0-2'
+  else if SameText(Result, '1/2-1/2') or SameText(Result, '1/2:1/2') then
+    Result := '1-1'
+  else if not (SameText(Result, '2-0') or SameText(Result, '1-1') or
     SameText(Result, '0-2') or SameText(Result, '*')) then
     Result := '*';
+end;
+
+function IsPdnResultToken(const AText: string): Boolean;
+begin
+  Result := SameText(AText, '2-0') or SameText(AText, '1-1') or
+    SameText(AText, '0-2') or SameText(AText, '1-0') or
+    SameText(AText, '0-1') or SameText(AText, '1/2-1/2') or
+    SameText(AText, '1/2:1/2') or SameText(AText, '*');
+end;
+
+function PdnExportResult(const AText: string): string;
+begin
+  Result := NormalizePdnResult(AText);
+  if Result = '2-0' then
+    Result := '1-0'
+  else if Result = '1-1' then
+    Result := '1/2-1/2'
+  else if Result = '0-2' then
+    Result := '0-1';
+end;
+
+function TrimPdnLine(const ALine: string): string;
+begin
+  Result := Trim(ALine);
+  if Copy(Result, 1, 3) = #$EF#$BB#$BF then
+    Delete(Result, 1, 3);
+  Result := Trim(Result);
 end;
 
 function StripPdnMoveText(const AText: string): string;
@@ -114,7 +153,9 @@ begin
 
     if LBraceDepth > 0 then
     begin
-      if AText[I] = '}' then
+      if AText[I] = '{' then
+        Inc(LBraceDepth)
+      else if AText[I] = '}' then
         Dec(LBraceDepth);
       Continue;
     end;
@@ -259,8 +300,7 @@ var
     if (Pos('.', LCleanToken) > 0) and (Pos('-', LCleanToken) = 0) and
       (Pos('x', LowerCase(LCleanToken)) = 0) then
       Exit;
-    if SameText(LCleanToken, '2-0') or SameText(LCleanToken, '1-1') or
-      SameText(LCleanToken, '0-2') or SameText(LCleanToken, '*') then
+    if IsPdnResultToken(LCleanToken) then
       Exit;
     if LooksLikePdnMove(LCleanToken) then
     begin
@@ -315,7 +355,12 @@ begin
 
     if LBraceDepth > 0 then
     begin
-      if AText[I] = '}' then
+      if AText[I] = '{' then
+      begin
+        Inc(LBraceDepth);
+        LComment += AText[I];
+      end
+      else if AText[I] = '}' then
       begin
         Dec(LBraceDepth);
         if LBraceDepth = 0 then
@@ -445,8 +490,11 @@ begin
       ACurrent.StartingFEN := DefaultPdnFen;
     if Trim(ACurrent.ResultText) = '' then
       ACurrent.ResultText := '*';
-    AGames.Add(ACurrent);
-    ACurrent := nil;
+    if AGames <> nil then
+    begin
+      AGames.Add(ACurrent);
+      ACurrent := nil;
+    end;
     AMoveLines.Clear;
   finally
     LMoves.Free;
@@ -472,7 +520,7 @@ begin
     Lines.LoadFromFile(AFileName);
     for I := 0 to Lines.Count - 1 do
     begin
-      S := Trim(Lines[I]);
+      S := TrimPdnLine(Lines[I]);
       if S = '' then
         Continue;
       if S[1] = '[' then
@@ -495,6 +543,96 @@ begin
     Current.Free;
     MoveLines.Free;
     Lines.Free;
+  end;
+end;
+
+procedure ReadPdnGamesFromFile(const AFileName: string;
+  AOnGame: TPdnGameReadEvent);
+var
+  Buffer: array[0..65535] of Byte;
+  BytesRead: Integer;
+  Current: TPdnGame;
+  I: Integer;
+  Line: string;
+  MoveLines: TStringList;
+  Stop: Boolean;
+  Stream: TFileStream;
+  TotalBytes: Int64;
+
+  procedure ProcessLine(const ALine: string);
+  var
+    S: string;
+  begin
+    S := TrimPdnLine(ALine);
+    if S = '' then
+      Exit;
+    if S[1] = '[' then
+    begin
+      if (Current <> nil) and (Trim(MoveLines.Text) <> '') then
+      begin
+        AddCurrentGame(Current, MoveLines, nil);
+        if Assigned(AOnGame) then
+          AOnGame(Current, Stream.Position, TotalBytes, Stop)
+        else
+          Stop := True;
+        Current.Free;
+        Current := nil;
+        if Stop then
+          Exit;
+      end;
+      if Current = nil then
+        Current := TPdnGame.Create;
+      ParsePdnTag(S, Current);
+    end
+    else
+    begin
+      if Current = nil then
+        Current := TPdnGame.Create;
+      MoveLines.Add(S);
+    end;
+  end;
+
+begin
+  if not Assigned(AOnGame) then
+    Exit;
+
+  Current := nil;
+  Line := '';
+  Stop := False;
+  MoveLines := TStringList.Create;
+  Stream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
+  try
+    TotalBytes := Stream.Size;
+    FillChar(Buffer, SizeOf(Buffer), 0);
+    repeat
+      BytesRead := Stream.Read(Buffer, SizeOf(Buffer));
+      for I := 0 to BytesRead - 1 do
+      begin
+        if Buffer[I] = Ord(#10) then
+        begin
+          ProcessLine(Line);
+          Line := '';
+          if Stop then
+            Break;
+        end
+        else if Buffer[I] <> Ord(#13) then
+          Line += Chr(Buffer[I]);
+      end;
+    until (BytesRead = 0) or Stop;
+
+    if (not Stop) and (Trim(Line) <> '') then
+      ProcessLine(Line);
+    if (not Stop) and (Current <> nil) then
+    begin
+      AddCurrentGame(Current, MoveLines, nil);
+      AOnGame(Current, Stream.Position, TotalBytes, Stop);
+      Current.Free;
+      Current := nil;
+    end;
+  finally
+    Current.Free;
+    MoveLines.Free;
+    Stream.Free;
   end;
 end;
 
@@ -548,7 +686,7 @@ begin
     begin
       if LText <> '' then
         LText += ' ';
-      LText += NormalizePdnResult(AResultText);
+      LText += PdnExportResult(AResultText);
     end;
     if LText <> '' then
       LOut.Add(Trim(LText));
@@ -572,17 +710,33 @@ begin
       Lines.LoadFromFile(AFileName);
     if (Lines.Count > 0) and (Trim(Lines[Lines.Count - 1]) <> '') then
       Lines.Add('');
+    Lines.Text := Lines.Text + PdnGameToText(AGame);
+    Lines.SaveToFile(AFileName);
+  finally
+    Lines.Free;
+  end;
+end;
+
+function PdnGameToText(AGame: TPdnGame): string;
+var
+  Lines: TStringList;
+begin
+  Result := '';
+  if AGame = nil then
+    Exit;
+  Lines := TStringList.Create;
+  try
     Lines.Add('[Event "' + PdnQuote(AGame.EventName) + '"]');
     Lines.Add('[White "' + PdnQuote(AGame.WhiteName) + '"]');
     Lines.Add('[Black "' + PdnQuote(AGame.BlackName) + '"]');
-    Lines.Add('[Result "' + PdnQuote(NormalizePdnResult(AGame.ResultText)) + '"]');
+    Lines.Add('[Result "' + PdnQuote(PdnExportResult(AGame.ResultText)) + '"]');
     if Trim(AGame.StartingFEN) <> DefaultPdnFen then
       Lines.Add('[SetUp "1"]');
     Lines.Add('[FEN "' + PdnQuote(AGame.StartingFEN) + '"]');
     Lines.Add('');
     Lines.Text := Lines.Text + FormatMovesForPdn(AGame.MovesText,
       AGame.MoveAnnotationsText, AGame.ResultText, AGame.StartingFEN);
-    Lines.SaveToFile(AFileName);
+    Result := Lines.Text;
   finally
     Lines.Free;
   end;

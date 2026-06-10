@@ -11,6 +11,8 @@ function ShowGuiConfirmationDialog(AOwner: TCustomForm; const ACaption,
   AText, AAcceptCaption, ARejectCaption: string; ARejectResult: Integer): Integer;
 function ShowGuiOkDialog(AOwner: TCustomForm; const ACaption,
   AText: string): Integer;
+function ShowGuiTextDialog(AOwner: TCustomForm; const ACaption,
+  AText: string): Integer;
 procedure CenterFormInWorkArea(AForm: TCustomForm; const AWorkArea: TRect);
 procedure CenterFormOnPrimaryMonitor(AForm: TCustomForm);
 procedure CenterFormOnMonitorIndex(AForm: TCustomForm; AMonitorIndex: Integer);
@@ -23,7 +25,7 @@ procedure ShowFormCenteredOnOwner(AForm, AOwner: TCustomForm);
 implementation
 
 uses
-  Classes, Controls, Graphics, Math, Process, StdCtrls, SysUtils;
+  Classes, Controls, ExtCtrls, Graphics, Math, Process, StdCtrls, SysUtils;
 
 const
   DialogWidth = 400;
@@ -341,6 +343,58 @@ function ShowGuiOkDialog(AOwner: TCustomForm; const ACaption,
 begin
   Result := ShowGuiConfirmationDialog(AOwner, ACaption, AText, 'OK', '',
     mrCancel);
+end;
+
+function ShowGuiTextDialog(AOwner: TCustomForm; const ACaption,
+  AText: string): Integer;
+var
+  Button: TButton;
+  ButtonPanel: TPanel;
+  Dialog: TForm;
+  Memo: TMemo;
+begin
+  Dialog := TForm.Create(AOwner);
+  try
+    Dialog.Caption := ACaption;
+    Dialog.Position := poDesigned;
+    Dialog.Color := clBtnFace;
+    Dialog.BorderStyle := bsSizeable;
+    Dialog.Width := 760;
+    Dialog.Height := 520;
+    Dialog.Constraints.MinWidth := 420;
+    Dialog.Constraints.MinHeight := 260;
+
+    ButtonPanel := TPanel.Create(Dialog);
+    ButtonPanel.Parent := Dialog;
+    ButtonPanel.Align := alBottom;
+    ButtonPanel.Height := 52;
+    ButtonPanel.BevelOuter := bvNone;
+
+    Button := TButton.Create(Dialog);
+    Button.Parent := ButtonPanel;
+    Button.Caption := 'OK';
+    Button.ModalResult := mrOk;
+    Button.SetBounds(ButtonPanel.ClientWidth - DialogMargin - 80, 12, 80,
+      DialogButtonHeight);
+    Button.Anchors := [akTop, akRight];
+    Dialog.DefaultControl := Button;
+    Dialog.CancelControl := Button;
+
+    Memo := TMemo.Create(Dialog);
+    Memo.Parent := Dialog;
+    Memo.Align := alClient;
+    Memo.BorderSpacing.Around := DialogMargin;
+    Memo.ReadOnly := True;
+    Memo.ScrollBars := ssBoth;
+    Memo.WordWrap := False;
+    Memo.Lines.Text := AText;
+    Memo.SelStart := 0;
+
+    CenterFormOnOwner(Dialog, AOwner);
+    Result := Dialog.ShowModal;
+  finally
+    Dialog.Free;
+  end;
 end;
 
 end.

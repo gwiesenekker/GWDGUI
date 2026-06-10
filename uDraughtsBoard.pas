@@ -13,6 +13,7 @@ type
   TDraughtsSide = (dsWhite, dsBlack);
 
   TDraughtsBoardArray = array[1..50] of TDraughtsPieceKind;
+  TCapturedSet = array[1..50] of Boolean;
 
   TDraughtsBoard = class
   private
@@ -28,10 +29,12 @@ type
     procedure AddManQuietMoves(ASquare: Integer);
     procedure AddKingQuietMoves(ASquare: Integer);
     function FindCapturedSquare(AFromSquare, AToSquare: Integer): Integer;
-    procedure GenerateManCaptures(const ABoard: TDraughtsBoardArray; AStartSquare,
-      ASquare: Integer; const ACapturedText: string; ACaptureCount: Integer);
-    procedure GenerateKingCaptures(const ABoard: TDraughtsBoardArray; AStartSquare,
-      ASquare: Integer; const ACapturedText: string; ACaptureCount: Integer);
+    procedure GenerateManCaptures(const ABoard: TDraughtsBoardArray;
+      const ACapturedSet: TCapturedSet; AStartSquare, ASquare: Integer;
+      const ACapturedText: string; ACaptureCount: Integer);
+    procedure GenerateKingCaptures(const ABoard: TDraughtsBoardArray;
+      const ACapturedSet: TCapturedSet; AStartSquare, ASquare: Integer;
+      const ACapturedText: string; ACaptureCount: Integer);
   public
     constructor Create;
     destructor Destroy; override;
@@ -45,7 +48,7 @@ type
     function IsLegalMove(const AMove: string): Boolean;
     function TryGetLegalMove(const AMove: string; out ALegalMove: string): Boolean;
     procedure PlayMove(const AMove: string; ARecordMove: Boolean = True;
-      AValidateLegal: Boolean = True);
+      AValidateLegal: Boolean = True; AUpdateLegalMoves: Boolean = True);
     function HubPosition: string;
     function MoveIsReversible(const AMove: string): Boolean;
     function CurrentFEN: string;
@@ -281,30 +284,42 @@ begin
   end;
 end;
 
-function CaptureMovesEquivalent(const AMove, ALegalMove: string): Boolean;
+function CaptureMoveAliasMatchesCanonical(const AAliasMove,
+  ACanonicalMove: string): Boolean;
 var
-  MoveSquares: TStringList;
-  LegalSquares: TStringList;
+  AliasSquares: TStringList;
+  CanonicalSquares: TStringList;
 begin
   Result := False;
-  if (Pos('x', LowerCase(AMove)) = 0) or
-    (Pos('x', LowerCase(ALegalMove)) = 0) then
+  if (Pos('x', LowerCase(AAliasMove)) = 0) or
+    (Pos('x', LowerCase(ACanonicalMove)) = 0) then
     Exit;
 
-  MoveSquares := TStringList.Create;
-  LegalSquares := TStringList.Create;
+  AliasSquares := TStringList.Create;
+  CanonicalSquares := TStringList.Create;
   try
-    if (not ExtractMoveSquares(AMove, MoveSquares)) or
-      (not ExtractMoveSquares(ALegalMove, LegalSquares)) then
+    if (not ExtractMoveSquares(AAliasMove, AliasSquares)) or
+      (not ExtractMoveSquares(ACanonicalMove, CanonicalSquares)) then
       Exit;
-    if (MoveSquares.Count < 2) or (LegalSquares.Count < 2) then
+    if (AliasSquares.Count < 2) or (CanonicalSquares.Count < 2) then
       Exit;
-    Result := (MoveSquares[0] = LegalSquares[0]) and
-      (MoveSquares[1] = LegalSquares[1]) and
-      SameCapturedSquaresIgnoringOrder(MoveSquares, LegalSquares);
+    if (AliasSquares[0] <> CanonicalSquares[0]) or
+      (AliasSquares[1] <> CanonicalSquares[1]) then
+      Exit;
+
+    // Some PDN files write captures as source x final landing, omitting the
+    // captured-square list that our canonical move notation stores.
+    if AliasSquares.Count = 2 then
+    begin
+      Result := CanonicalSquares.Count >= 3;
+      Exit;
+    end;
+
+    // Engines and databases may list captured pieces in another order.
+    Result := SameCapturedSquaresIgnoringOrder(AliasSquares, CanonicalSquares);
   finally
-    LegalSquares.Free;
-    MoveSquares.Free;
+    CanonicalSquares.Free;
+    AliasSquares.Free;
   end;
 end;
 
@@ -436,6 +451,8 @@ begin
 end;
 
 procedure TDraughtsBoard.AddLegalMove(const ANotation: string; ACaptureCount: Integer);
+var
+  I: Integer;
 begin
   if ACaptureCount < FMaxCaptureCount then
     Exit;
@@ -445,7 +462,13 @@ begin
     FMaxCaptureCount := ACaptureCount;
   end;
   if FLegalMoves.IndexOf(ANotation) < 0 then
+  begin
+    if Pos('x', LowerCase(ANotation)) > 0 then
+      for I := 0 to FLegalMoves.Count - 1 do
+        if CaptureMoveAliasMatchesCanonical(ANotation, FLegalMoves[I]) then
+          Exit;
     FLegalMoves.Add(ANotation);
+  end;
 end;
 
 procedure TDraughtsBoard.AddManQuietMoves(ASquare: Integer);
@@ -528,8 +551,10 @@ begin
 end;
 
 procedure TDraughtsBoard.GenerateManCaptures(const ABoard: TDraughtsBoardArray;
-  AStartSquare, ASquare: Integer; const ACapturedText: string; ACaptureCount: Integer);
+  const ACapturedSet: TCapturedSet; AStartSquare, ASquare: Integer;
+  const ACapturedText: string; ACaptureCount: Integer);
 var
+  LCapturedSet: TCapturedSet;
   D, LCol, LCaptured, LLanding, LRow: Integer;
   LNextBoard: TDraughtsBoardArray;
   LFound: Boolean;
@@ -543,15 +568,17 @@ begin
     LCaptured := RowColToSquare(LRow + DiagonalDeltas[D, 0], LCol + DiagonalDeltas[D, 1]);
     LLanding := RowColToSquare(LRow + DiagonalDeltas[D, 0] * 2, LCol + DiagonalDeltas[D, 1] * 2);
     if (LCaptured > 0) and (LLanding > 0) and
+      (not ACapturedSet[LCaptured]) and
       IsOpponentPiece(ABoard[LCaptured], FSideToMove) and (ABoard[LLanding] = pkEmpty) then
     begin
       LNextBoard := ABoard;
       LNextBoard[LLanding] := LNextBoard[ASquare];
       LNextBoard[ASquare] := pkEmpty;
-      LNextBoard[LCaptured] := pkEmpty;
+      LCapturedSet := ACapturedSet;
+      LCapturedSet[LCaptured] := True;
       LNextCapturedText := ACapturedText + 'x' + IntToStr(LCaptured);
-      GenerateManCaptures(LNextBoard, AStartSquare, LLanding, LNextCapturedText,
-        ACaptureCount + 1);
+      GenerateManCaptures(LNextBoard, LCapturedSet, AStartSquare, LLanding,
+        LNextCapturedText, ACaptureCount + 1);
       LFound := True;
     end;
   end;
@@ -562,9 +589,10 @@ begin
 end;
 
 procedure TDraughtsBoard.GenerateKingCaptures(const ABoard: TDraughtsBoardArray;
-  AStartSquare, ASquare: Integer; const ACapturedText: string;
-  ACaptureCount: Integer);
+  const ACapturedSet: TCapturedSet; AStartSquare, ASquare: Integer;
+  const ACapturedText: string; ACaptureCount: Integer);
 var
+  LCapturedSet: TCapturedSet;
   D, LCol, LCaptured, LLanding, LRow, LScanCol, LScanRow: Integer;
   LNextBoard: TDraughtsBoardArray;
   LFound: Boolean;
@@ -584,7 +612,8 @@ begin
     begin
       if ABoard[LLanding] <> pkEmpty then
       begin
-        if IsOpponentPiece(ABoard[LLanding], FSideToMove) then
+        if IsOpponentPiece(ABoard[LLanding], FSideToMove) and
+          (not ACapturedSet[LLanding]) then
           LCaptured := LLanding;
         Break;
       end;
@@ -604,10 +633,11 @@ begin
       LNextBoard := ABoard;
       LNextBoard[LLanding] := LNextBoard[ASquare];
       LNextBoard[ASquare] := pkEmpty;
-      LNextBoard[LCaptured] := pkEmpty;
+      LCapturedSet := ACapturedSet;
+      LCapturedSet[LCaptured] := True;
       LNextCapturedText := ACapturedText + 'x' + IntToStr(LCaptured);
-      GenerateKingCaptures(LNextBoard, AStartSquare, LLanding, LNextCapturedText,
-        ACaptureCount + 1);
+      GenerateKingCaptures(LNextBoard, LCapturedSet, AStartSquare, LLanding,
+        LNextCapturedText, ACaptureCount + 1);
       LFound := True;
 
       Inc(LScanRow, DiagonalDeltas[D, 0]);
@@ -623,18 +653,21 @@ end;
 
 procedure TDraughtsBoard.GenerateLegalMoves;
 var
+  LCapturedSet: TCapturedSet;
   I: Integer;
 begin
   FLegalMoves.Clear;
   FMaxCaptureCount := 0;
+  for I := Low(LCapturedSet) to High(LCapturedSet) do
+    LCapturedSet[I] := False;
 
   for I := Low(FSquares) to High(FSquares) do
     if OwnsPiece(FSquares[I], FSideToMove) then
     begin
       if IsKing(FSquares[I]) then
-        GenerateKingCaptures(FSquares, I, I, '', 0)
+        GenerateKingCaptures(FSquares, LCapturedSet, I, I, '', 0)
       else
-        GenerateManCaptures(FSquares, I, I, '', 0);
+        GenerateManCaptures(FSquares, LCapturedSet, I, I, '', 0);
     end;
 
   if FLegalMoves.Count > 0 then
@@ -670,32 +703,55 @@ function TDraughtsBoard.TryGetLegalMove(const AMove: string;
 var
   I: Integer;
   LMove: string;
+
+  function TryFindCanonicalMoveAlias: Boolean;
+  var
+    AliasIndex: Integer;
+    Ambiguous: Boolean;
+    MatchedMove: string;
+  begin
+    Result := False;
+    if Pos('x', LowerCase(LMove)) = 0 then
+      Exit;
+
+    Ambiguous := False;
+    MatchedMove := '';
+    for AliasIndex := 0 to FLegalMoves.Count - 1 do
+      if CaptureMoveAliasMatchesCanonical(LMove, FLegalMoves[AliasIndex]) then
+      begin
+        if MatchedMove = '' then
+          MatchedMove := FLegalMoves[AliasIndex]
+        else if not CaptureMoveAliasMatchesCanonical(MatchedMove,
+          FLegalMoves[AliasIndex]) then
+          Ambiguous := True;
+      end;
+    if (MatchedMove <> '') and (not Ambiguous) then
+    begin
+      ALegalMove := MatchedMove;
+      Result := True;
+    end;
+  end;
+
 begin
   ALegalMove := '';
   LMove := NormalizeMoveNotation(AMove);
+
   I := FLegalMoves.IndexOf(LMove);
-  Result := I >= 0;
-  if Result then
+  if I >= 0 then
   begin
     ALegalMove := FLegalMoves[I];
-    Exit;
+    Exit(True);
   end;
-  if Pos('x', LowerCase(LMove)) = 0 then
-    Exit(False);
 
-  for I := 0 to FLegalMoves.Count - 1 do
-    if CaptureMovesEquivalent(LMove, FLegalMoves[I]) then
-    begin
-      ALegalMove := FLegalMoves[I];
-      Exit(True);
-    end;
+  Result := TryFindCanonicalMoveAlias;
 end;
 
 procedure TDraughtsBoard.PlayMove(const AMove: string; ARecordMove: Boolean;
-  AValidateLegal: Boolean);
+  AValidateLegal: Boolean; AUpdateLegalMoves: Boolean);
 var
   I, LCaptured, LFromSquare, LRow, LToSquare: Integer;
   LIsCapture: Boolean;
+  LLegalMove: string;
   LMove: string;
   LPiece: TDraughtsPieceKind;
   LSquares: TStringList;
@@ -703,8 +759,12 @@ begin
   LMove := NormalizeMoveNotation(AMove);
   if LMove = '' then
     Exit;
-  if AValidateLegal and (not IsLegalMove(LMove)) then
-    raise EInvalidOperation.Create('Illegal move: ' + LMove);
+  if AValidateLegal then
+  begin
+    if not TryGetLegalMove(LMove, LLegalMove) then
+      raise EInvalidOperation.Create('Illegal move: ' + LMove);
+    LMove := LLegalMove;
+  end;
 
   LSquares := TStringList.Create;
   try
@@ -761,7 +821,10 @@ begin
     FSideToMove := OppositeSide(FSideToMove);
     if ARecordMove then
       FMovesPlayed.Add(LMove);
-    GenerateLegalMoves;
+    if AUpdateLegalMoves then
+      GenerateLegalMoves
+    else
+      FLegalMoves.Clear;
   finally
     LSquares.Free;
   end;

@@ -28,12 +28,21 @@ type
     Losses: Integer;
   end;
 
+  TDatabaseImportProgressEvent = procedure(ABytesRead, ATotalBytes: Int64;
+    AImported, AErrors: Integer; var ACancel: Boolean) of object;
+
   TGameDatabase = class
   private
     FConnection: TSQLite3Connection;
     FFileName: string;
     FTransaction: TSQLTransaction;
     procedure ClearObjectList(AList: TList);
+    procedure CommitActiveTransaction;
+    procedure CreateImportIndexes;
+    procedure DropImportIndexes;
+    procedure ExecuteSql(const ASql: string);
+    procedure SetBulkImportPragmas;
+    procedure StartTransactionIfNeeded;
     function Query: TSQLQuery;
   public
     constructor Create;
@@ -43,8 +52,8 @@ type
     procedure CreateDatabase(const AFileName: string);
     procedure OpenDatabase(const AFileName: string);
     procedure ImportPdnFile(const AFileName: string; out AImported,
-      AErrors: Integer);
-    procedure LoadGames(AList: TList);
+      AErrors: Integer; AOnProgress: TDatabaseImportProgressEvent = nil);
+    procedure LoadGames(AList: TList; ALimit: Integer = 0);
     procedure SearchPosition(const APositionKey: string; ASideToMove: TDraughtsSide;
       AList: TList);
 
@@ -52,6 +61,37 @@ type
   end;
 
 implementation
+
+type
+  TDatabasePdnImporter = class
+  private
+    FBoard: TDraughtsBoard;
+    FDatabase: TGameDatabase;
+    FErrors: Integer;
+    FGame: TPdnGame;
+    FGameId: Integer;
+    FGameInsertQuery: TSQLQuery;
+    FIdQuery: TSQLQuery;
+    FImported: Integer;
+    FLastProgressTick: QWord;
+    FMoves: TStringList;
+    FOnProgress: TDatabaseImportProgressEvent;
+    FPositionInsertQuery: TSQLQuery;
+    procedure CanonicalizeMovesForImport;
+    procedure CommitBatchIfNeeded;
+    procedure ImportGame(AGame: TPdnGame; ABytesRead, ATotalBytes: Int64;
+      var AStop: Boolean);
+    procedure InsertPosition(APly: Integer; const ANextMove: string);
+    procedure ReportProgress(ABytesRead, ATotalBytes: Int64;
+      var ACancel: Boolean);
+  public
+    constructor Create(ADatabase: TGameDatabase;
+      AOnProgress: TDatabaseImportProgressEvent);
+    destructor Destroy; override;
+    procedure Run(const AFileName: string);
+    property Errors: Integer read FErrors;
+    property Imported: Integer read FImported;
+  end;
 
 function SideToText(ASide: TDraughtsSide): string;
 begin
@@ -93,6 +133,149 @@ begin
   Result := -1;
 end;
 
+constructor TDatabasePdnImporter.Create(ADatabase: TGameDatabase;
+  AOnProgress: TDatabaseImportProgressEvent);
+begin
+  inherited Create;
+  FDatabase := ADatabase;
+  FOnProgress := AOnProgress;
+  FBoard := TDraughtsBoard.Create;
+  FMoves := TStringList.Create;
+  FGameInsertQuery := FDatabase.Query;
+  FGameInsertQuery.SQL.Text :=
+    'insert into games(white, black, event, result, starting_fen, moves_text, annotations_text, ply_count) ' +
+    'values(:white, :black, :event, :result, :starting_fen, :moves_text, :annotations_text, :ply_count)';
+  FPositionInsertQuery := FDatabase.Query;
+  FPositionInsertQuery.SQL.Text :=
+    'insert into positions(game_id, ply, position_key, side_to_move, next_move, result) ' +
+    'values(:game_id, :ply, :position_key, :side_to_move, :next_move, :result)';
+  FIdQuery := FDatabase.Query;
+  FIdQuery.SQL.Text := 'select last_insert_rowid() as id';
+end;
+
+destructor TDatabasePdnImporter.Destroy;
+begin
+  FIdQuery.Free;
+  FPositionInsertQuery.Free;
+  FGameInsertQuery.Free;
+  FMoves.Free;
+  FBoard.Free;
+  inherited Destroy;
+end;
+
+procedure TDatabasePdnImporter.CanonicalizeMovesForImport;
+var
+  LLegalMove: string;
+  LMove: string;
+  LMovesText: string;
+  Points: Integer;
+begin
+  FBoard.LoadFromFEN(FGame.StartingFEN);
+  for Points := 0 to FMoves.Count - 1 do
+  begin
+    LMove := FMoves[Points];
+    if not FBoard.TryGetLegalMove(LMove, LLegalMove) then
+      raise EInvalidOperation.Create('Illegal move: ' + NormalizeMoveNotation(LMove) +
+        LineEnding + 'Ply: ' + IntToStr(Points + 1) +
+        LineEnding + 'Position: ' + FBoard.CurrentFEN +
+        LineEnding + 'Legal moves:' + LineEnding + FBoard.LegalMoves.Text);
+    FMoves[Points] := LLegalMove;
+    FBoard.PlayMove(LLegalMove, False, False);
+  end;
+
+  LMovesText := Trim(StringReplace(FMoves.Text, LineEnding, ' ', [rfReplaceAll]));
+  FGame.MovesText := LMovesText;
+end;
+
+procedure TDatabasePdnImporter.CommitBatchIfNeeded;
+begin
+  if (FImported > 0) and ((FImported mod 10000) = 0) then
+  begin
+    FDatabase.CommitActiveTransaction;
+    FDatabase.StartTransactionIfNeeded;
+  end;
+end;
+
+procedure TDatabasePdnImporter.InsertPosition(APly: Integer;
+  const ANextMove: string);
+begin
+  FPositionInsertQuery.ParamByName('game_id').AsInteger := FGameId;
+  FPositionInsertQuery.ParamByName('ply').AsInteger := APly;
+  FPositionInsertQuery.ParamByName('position_key').AsString := FBoard.PositionKey;
+  FPositionInsertQuery.ParamByName('side_to_move').AsString := SideToText(FBoard.SideToMove);
+  FPositionInsertQuery.ParamByName('next_move').AsString := ANextMove;
+  FPositionInsertQuery.ParamByName('result').AsString := FGame.ResultText;
+  FPositionInsertQuery.ExecSQL;
+end;
+
+procedure TDatabasePdnImporter.ReportProgress(ABytesRead, ATotalBytes: Int64;
+  var ACancel: Boolean);
+begin
+  if not Assigned(FOnProgress) then
+    Exit;
+  if (GetTickCount64 - FLastProgressTick < 250) and
+    (ABytesRead < ATotalBytes) then
+    Exit;
+  FLastProgressTick := GetTickCount64;
+  FOnProgress(ABytesRead, ATotalBytes, FImported, FErrors, ACancel);
+end;
+
+procedure TDatabasePdnImporter.ImportGame(AGame: TPdnGame; ABytesRead,
+  ATotalBytes: Int64; var AStop: Boolean);
+var
+  Points: Integer;
+begin
+  FGame := AGame;
+  try
+    FMoves.Clear;
+    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(FGame.MovesText)),
+      FMoves);
+    CanonicalizeMovesForImport;
+    FBoard.LoadFromFEN(FGame.StartingFEN);
+
+    FGameInsertQuery.ParamByName('white').AsString := FGame.WhiteName;
+    FGameInsertQuery.ParamByName('black').AsString := FGame.BlackName;
+    FGameInsertQuery.ParamByName('event').AsString := FGame.EventName;
+    FGameInsertQuery.ParamByName('result').AsString := FGame.ResultText;
+    FGameInsertQuery.ParamByName('starting_fen').AsString := FGame.StartingFEN;
+    FGameInsertQuery.ParamByName('moves_text').AsString := FGame.MovesText;
+    FGameInsertQuery.ParamByName('annotations_text').AsString := FGame.MoveAnnotationsText;
+    FGameInsertQuery.ParamByName('ply_count').AsInteger := FMoves.Count;
+    FGameInsertQuery.ExecSQL;
+
+    FIdQuery.Open;
+    FGameId := FIdQuery.FieldByName('id').AsInteger;
+    FIdQuery.Close;
+
+    for Points := 0 to FMoves.Count do
+    begin
+      if Points < FMoves.Count then
+        InsertPosition(Points, FMoves[Points])
+      else
+        InsertPosition(Points, '');
+      if Points < FMoves.Count then
+        FBoard.PlayMove(FMoves[Points], False, False, False);
+    end;
+    Inc(FImported);
+    CommitBatchIfNeeded;
+  except
+    on E: Exception do
+    begin
+      Inc(FErrors);
+      raise EInvalidOperation.Create('Import stopped at first invalid game.' +
+        LineEnding + LineEnding + 'Error: ' + E.Message + LineEnding +
+        LineEnding + PdnGameToText(FGame));
+    end;
+  end;
+  ReportProgress(ABytesRead, ATotalBytes, AStop);
+end;
+
+procedure TDatabasePdnImporter.Run(const AFileName: string);
+begin
+  FLastProgressTick := 0;
+  ReadPdnGamesFromFile(AFileName, @ImportGame);
+end;
+
 constructor TGameDatabase.Create;
 begin
   inherited Create;
@@ -120,6 +303,51 @@ begin
   AList.Clear;
 end;
 
+procedure TGameDatabase.CommitActiveTransaction;
+begin
+  if FTransaction.Active then
+    FTransaction.Commit;
+end;
+
+procedure TGameDatabase.StartTransactionIfNeeded;
+begin
+  if not FTransaction.Active then
+    FTransaction.StartTransaction;
+end;
+
+procedure TGameDatabase.ExecuteSql(const ASql: string);
+var
+  Q: TSQLQuery;
+begin
+  Q := Query;
+  try
+    Q.SQL.Text := ASql;
+    Q.ExecSQL;
+  finally
+    Q.Free;
+  end;
+end;
+
+procedure TGameDatabase.CreateImportIndexes;
+begin
+  ExecuteSql('create index if not exists idx_positions_key on positions(position_key)');
+  ExecuteSql('create index if not exists idx_positions_game on positions(game_id)');
+end;
+
+procedure TGameDatabase.DropImportIndexes;
+begin
+  ExecuteSql('drop index if exists idx_positions_key');
+  ExecuteSql('drop index if exists idx_positions_game');
+end;
+
+procedure TGameDatabase.SetBulkImportPragmas;
+begin
+  CommitActiveTransaction;
+  FConnection.ExecuteDirect('pragma temp_store=memory');
+  FConnection.ExecuteDirect('pragma cache_size=-200000');
+  CommitActiveTransaction;
+end;
+
 function TGameDatabase.Query: TSQLQuery;
 begin
   Result := TSQLQuery.Create(nil);
@@ -129,8 +357,7 @@ end;
 
 procedure TGameDatabase.Close;
 begin
-  if FTransaction.Active then
-    FTransaction.Commit;
+  CommitActiveTransaction;
   FConnection.Connected := False;
   FFileName := '';
 end;
@@ -142,7 +369,7 @@ begin
   Close;
   FConnection.DatabaseName := AFileName;
   FConnection.Connected := True;
-  FTransaction.StartTransaction;
+  StartTransactionIfNeeded;
   Q := Query;
   try
     Q.SQL.Text :=
@@ -162,12 +389,7 @@ begin
       'next_move text,' +
       'result text)';
     Q.ExecSQL;
-    Q.SQL.Text :=
-      'create index if not exists idx_positions_key on positions(position_key)';
-    Q.ExecSQL;
-    Q.SQL.Text :=
-      'create index if not exists idx_positions_game on positions(game_id)';
-    Q.ExecSQL;
+    CreateImportIndexes;
     FTransaction.Commit;
     FFileName := AFileName;
   finally
@@ -181,105 +403,50 @@ begin
 end;
 
 procedure TGameDatabase.ImportPdnFile(const AFileName: string; out AImported,
-  AErrors: Integer);
+  AErrors: Integer; AOnProgress: TDatabaseImportProgressEvent);
 var
-  Board: TDraughtsBoard;
-  Game: TPdnGame;
-  GameId: Integer;
-  Games: TList;
-  I: Integer;
-  Moves: TStringList;
-  Points: Integer;
-  Q: TSQLQuery;
-
-  procedure InsertPosition(APly: Integer; const ANextMove: string);
-  begin
-    Q.SQL.Text :=
-      'insert into positions(game_id, ply, position_key, side_to_move, next_move, result) ' +
-      'values(:game_id, :ply, :position_key, :side_to_move, :next_move, :result)';
-    Q.ParamByName('game_id').AsInteger := GameId;
-    Q.ParamByName('ply').AsInteger := APly;
-    Q.ParamByName('position_key').AsString := Board.PositionKey;
-    Q.ParamByName('side_to_move').AsString := SideToText(Board.SideToMove);
-    Q.ParamByName('next_move').AsString := ANextMove;
-    Q.ParamByName('result').AsString := Game.ResultText;
-    Q.ExecSQL;
-  end;
-
+  Importer: TDatabasePdnImporter;
 begin
   AImported := 0;
   AErrors := 0;
   if not FConnection.Connected then
     raise EInvalidOperation.Create('No database is open');
 
-  Games := TList.Create;
-  Moves := TStringList.Create;
-  Board := TDraughtsBoard.Create;
-  Q := Query;
+  Importer := TDatabasePdnImporter.Create(Self, AOnProgress);
   try
     try
-      LoadPdnGamesFromFile(AFileName, Games);
-      FTransaction.StartTransaction;
-      for I := 0 to Games.Count - 1 do
-      begin
-        Game := TPdnGame(Games[I]);
-        try
-          Moves.Clear;
-          ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(Game.MovesText)),
-            Moves);
-          Board.LoadFromFEN(Game.StartingFEN);
-          for Points := 0 to Moves.Count - 1 do
-            Board.PlayMove(Moves[Points], False, True);
-          Board.LoadFromFEN(Game.StartingFEN);
-
-          Q.SQL.Text :=
-            'insert into games(white, black, event, result, starting_fen, moves_text, annotations_text, ply_count) ' +
-            'values(:white, :black, :event, :result, :starting_fen, :moves_text, :annotations_text, :ply_count)';
-          Q.ParamByName('white').AsString := Game.WhiteName;
-          Q.ParamByName('black').AsString := Game.BlackName;
-          Q.ParamByName('event').AsString := Game.EventName;
-          Q.ParamByName('result').AsString := Game.ResultText;
-          Q.ParamByName('starting_fen').AsString := Game.StartingFEN;
-          Q.ParamByName('moves_text').AsString := Game.MovesText;
-          Q.ParamByName('annotations_text').AsString := Game.MoveAnnotationsText;
-          Q.ParamByName('ply_count').AsInteger := Moves.Count;
-          Q.ExecSQL;
-
-          Q.SQL.Text := 'select last_insert_rowid() as id';
-          Q.Open;
-          GameId := Q.FieldByName('id').AsInteger;
-          Q.Close;
-
-          for Points := 0 to Moves.Count do
-          begin
-            if Points < Moves.Count then
-              InsertPosition(Points, Moves[Points])
-            else
-              InsertPosition(Points, '');
-            if Points < Moves.Count then
-              Board.PlayMove(Moves[Points], False, True);
-          end;
-          Inc(AImported);
-        except
-          Inc(AErrors);
-        end;
-      end;
-      FTransaction.Commit;
+      CommitActiveTransaction;
+      SetBulkImportPragmas;
+      StartTransactionIfNeeded;
+      DropImportIndexes;
+      CommitActiveTransaction;
+      StartTransactionIfNeeded;
+      Importer.Run(AFileName);
+      CommitActiveTransaction;
+      StartTransactionIfNeeded;
+      CreateImportIndexes;
+      CommitActiveTransaction;
     except
       if FTransaction.Active then
         FTransaction.Rollback;
+      try
+        StartTransactionIfNeeded;
+        CreateImportIndexes;
+        CommitActiveTransaction;
+      except
+        if FTransaction.Active then
+          FTransaction.Rollback;
+      end;
       raise;
     end;
+    AImported := Importer.Imported;
+    AErrors := Importer.Errors;
   finally
-    Q.Free;
-    Board.Free;
-    Moves.Free;
-    ClearObjectList(Games);
-    Games.Free;
+    Importer.Free;
   end;
 end;
 
-procedure TGameDatabase.LoadGames(AList: TList);
+procedure TGameDatabase.LoadGames(AList: TList; ALimit: Integer);
 var
   Info: TDatabaseGameInfo;
   Q: TSQLQuery;
@@ -293,6 +460,8 @@ begin
     Q.SQL.Text :=
       'select id, white, black, event, result, starting_fen, ply_count ' +
       'from games order by id';
+    if ALimit > 0 then
+      Q.SQL.Text := Q.SQL.Text + ' limit ' + IntToStr(ALimit);
     Q.Open;
     while not Q.EOF do
     begin
@@ -310,6 +479,7 @@ begin
     Q.Close;
   finally
     Q.Free;
+    CommitActiveTransaction;
   end;
 end;
 
@@ -362,6 +532,7 @@ begin
     Q.Close;
   finally
     Q.Free;
+    CommitActiveTransaction;
   end;
 end;
 

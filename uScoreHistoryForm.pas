@@ -14,8 +14,9 @@ type
     FScoreHistoryControl: TScoreHistoryControl;
   public
     constructor Create(AOwner: TComponent); override;
-    procedure UpdateScores(const AAnnotationsText: string; ACurrentPly: Integer;
-      AMaxScore: Double; AScale: TScoreScale; AStartingSide: TDraughtsSide);
+    procedure UpdateScores(const AAnnotationsText: string; APlyCount,
+      ACurrentPly: Integer; AMaxScore: Double; AScale: TScoreScale;
+      AStartingSide: TDraughtsSide);
   end;
 
 implementation
@@ -38,12 +39,13 @@ begin
 end;
 
 procedure TScoreHistoryForm.UpdateScores(const AAnnotationsText: string;
-  ACurrentPly: Integer; AMaxScore: Double; AScale: TScoreScale;
+  APlyCount, ACurrentPly: Integer; AMaxScore: Double; AScale: TScoreScale;
   AStartingSide: TDraughtsSide);
 begin
   FScoreHistoryControl.MaxScore := AMaxScore;
   FScoreHistoryControl.Scale := AScale;
   FScoreHistoryControl.StartingSide := AStartingSide;
+  FScoreHistoryControl.PlyCount := APlyCount;
   FScoreHistoryControl.AnnotationsText := AAnnotationsText;
   FScoreHistoryControl.CurrentPly := ACurrentPly;
 end;

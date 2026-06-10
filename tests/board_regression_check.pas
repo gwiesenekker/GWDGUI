@@ -98,6 +98,8 @@ begin
       'generated capture order should be legal');
     Check(Board.IsLegalMove('30x10x14x24'),
       'captured pieces may be listed in any order');
+    Check(Board.IsLegalMove('30x10'),
+      'capture alias may omit the captured-square list');
     Check(Board.TryGetLegalMove('30x10x14x24', LegalMove),
       'unordered captured-piece move should resolve to a generated legal move');
     CheckEqual(LegalMove, '30x10x24x14',
@@ -107,6 +109,78 @@ begin
       'order-insensitive capture should land the king on the target square');
     Check((Board[14] = pkEmpty) and (Board[24] = pkEmpty),
       'order-insensitive capture should remove all captured pieces');
+  finally
+    Board.Free;
+  end;
+end;
+
+procedure CheckSingleCaptureMayOmitCapturedSquare;
+var
+  Board: TDraughtsBoard;
+  LegalMove: string;
+begin
+  Board := TDraughtsBoard.Create;
+  try
+    Board.LoadFromFEN('W:W28:B23');
+    Check(Board.IsLegalMove('28x19'),
+      'single-capture PDN may omit the captured square');
+    Check(Board.TryGetLegalMove('28x19', LegalMove),
+      'short single-capture move should resolve to generated legal move');
+    CheckEqual(LegalMove, '28x19x23',
+      'short single-capture move resolves to captured-square notation');
+    Board.PlayMove('28x19', False);
+    Check((Board[19] = pkWhiteMan) and (Board[23] = pkEmpty),
+      'short single-capture move should land and remove the captured piece');
+  finally
+    Board.Free;
+  end;
+end;
+
+procedure CheckKingCaptureKeepsCapturedPiecesAsBlockers;
+var
+  Board: TDraughtsBoard;
+  LegalMove: string;
+begin
+  Board := TDraughtsBoard.Create;
+  try
+    Board.LoadFromFEN('B:W11,26,27,34,38,39:B15:BK45');
+    Check(Board.TryGetLegalMove('45x49', LegalMove),
+      'king capture alias should resolve to canonical capture');
+    CheckEqual(LegalMove, '45x49x34x11x27x38',
+      'king capture should keep captured pieces as blockers while generating');
+    Check(not Board.IsLegalMove('45x34'),
+      'king should not be allowed to land on a captured piece');
+    Board.PlayMove('45x49', False);
+    Check(Board[49] = pkBlackKing,
+      'king capture alias should land on final square');
+    Check((Board[34] = pkEmpty) and (Board[11] = pkEmpty) and
+      (Board[27] = pkEmpty) and (Board[38] = pkEmpty),
+      'king capture should remove captured pieces when played');
+  finally
+    Board.Free;
+  end;
+end;
+
+procedure CheckEquivalentAliasMatchesAreNotAmbiguous;
+var
+  Board: TDraughtsBoard;
+  LegalMove: string;
+begin
+  Board := TDraughtsBoard.Create;
+  try
+    Board.LoadFromFEN('B:W17,23,27,28,32,35,37,38:B16,31');
+    Check(Board.LegalMoves.Count = 2,
+      'equivalent generated captures should be deduplicated');
+    Check(Board.TryGetLegalMove('31x31', LegalMove),
+      'equivalent generated capture aliases should not be ambiguous');
+    CheckEqual(LegalMove, '31x31x27x28x38x37',
+      '31x31 should resolve to first equivalent canonical capture');
+    Board.PlayMove('31x31', False);
+    Check(Board[31] = pkBlackMan,
+      '31x31 alias should land on square 31');
+    Check((Board[27] = pkEmpty) and (Board[28] = pkEmpty) and
+      (Board[38] = pkEmpty) and (Board[37] = pkEmpty),
+      '31x31 alias should remove the equivalent captured set');
   finally
     Board.Free;
   end;
@@ -137,6 +211,9 @@ begin
   CheckDxpMoveConversion;
   CheckReplayAcceptsZeroPaddedMove;
   CheckCapturedPiecesCanBeInAnyOrder;
+  CheckSingleCaptureMayOmitCapturedSquare;
+  CheckKingCaptureKeepsCapturedPiecesAsBlockers;
+  CheckEquivalentAliasMatchesAreNotAmbiguous;
   CheckCurrentFenRoundTrip;
   Writeln('OK');
 end.

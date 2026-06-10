@@ -293,6 +293,7 @@ type
     procedure SavePdnClick(Sender: TObject);
     function SaveCurrentGameWithDialog: Boolean;
     procedure ScoreHistoryPopoutClick(Sender: TObject);
+    procedure ScoreHistoryFormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure SetupPositionAccepted(Sender: TObject; const AFEN: string);
     procedure SetupPositionClick(Sender: TObject);
     procedure ShowStdoutClick(Sender: TObject);
@@ -530,6 +531,7 @@ var
   LPvPopup: TPopupMenu;
   LPvSplitter: TSplitter;
   LPvTextPanel: TPanel;
+  LPvTopPanel: TPanel;
   LAnalyzerBoardPanel: TPanel;
   LAnalyzerBoardPopup: TPopupMenu;
   LAnalyzerPanel: TPanel;
@@ -930,10 +932,16 @@ begin
   LPvTextPanel.Align := alClient;
   LPvTextPanel.BevelOuter := bvNone;
 
+  LPvTopPanel := TPanel.Create(Self);
+  LPvTopPanel.Parent := LPvTextPanel;
+  LPvTopPanel.Align := alTop;
+  LPvTopPanel.Height := 88;
+  LPvTopPanel.BevelOuter := bvNone;
+
   FScoreHistoryControl := TScoreHistoryControl.Create(Self);
-  FScoreHistoryControl.Parent := LPvTextPanel;
-  FScoreHistoryControl.SetBounds(0, 0, LPvTextPanel.ClientWidth, 62);
-  FScoreHistoryControl.Anchors := [akTop, akLeft, akRight];
+  FScoreHistoryControl.Parent := LPvTopPanel;
+  FScoreHistoryControl.Align := alTop;
+  FScoreHistoryControl.Height := 62;
   FScoreHistoryControl.ParentFont := True;
   FScoreHistoryControl.ShowEvaluationBar := True;
   LScoreHistoryPopup := TPopupMenu.Create(Self);
@@ -944,9 +952,8 @@ begin
   FScoreHistoryControl.PopupMenu := LScoreHistoryPopup;
 
   LPvLabel := TLabel.Create(Self);
-  LPvLabel.Parent := LPvTextPanel;
-  LPvLabel.SetBounds(0, 64, LPvTextPanel.ClientWidth, 22);
-  LPvLabel.Anchors := [akTop, akLeft, akRight];
+  LPvLabel.Parent := LPvTopPanel;
+  LPvLabel.Align := alClient;
   LPvLabel.Caption := 'PV';
   LPvLabel.Layout := tlCenter;
 
@@ -962,9 +969,7 @@ begin
 
   FPvMemo := TMemo.Create(Self);
   FPvMemo.Parent := LPvTextPanel;
-  FPvMemo.SetBounds(0, 88, LPvTextPanel.ClientWidth,
-    LPvTextPanel.ClientHeight - 88);
-  FPvMemo.Anchors := [akTop, akLeft, akRight, akBottom];
+  FPvMemo.Align := alClient;
   FPvMemo.ParentFont := True;
   FPvMemo.ReadOnly := True;
   FPvMemo.ScrollBars := ssVertical;
@@ -2752,9 +2757,18 @@ end;
 procedure TMainForm.ScoreHistoryPopoutClick(Sender: TObject);
 begin
   if FScoreHistoryForm = nil then
+  begin
     FScoreHistoryForm := TScoreHistoryForm.Create(Self);
+    FScoreHistoryForm.OnClose := @ScoreHistoryFormClose;
+  end;
   UpdateScoreHistory;
   ShowFormCenteredOnOwner(FScoreHistoryForm, Self);
+end;
+
+procedure TMainForm.ScoreHistoryFormClose(Sender: TObject;
+  var CloseAction: TCloseAction);
+begin
+  CloseAction := caHide;
 end;
 
 procedure TMainForm.GameSetupAccepted(Sender: TObject; const ASetup: TGameSetup);
@@ -3304,10 +3318,11 @@ begin
   FScoreHistoryControl.MaxScore := FPreferences.EvaluationMaxScore;
   FScoreHistoryControl.Scale := FPreferences.EvaluationScale;
   FScoreHistoryControl.StartingSide := FenSideToMove(FStartingFEN);
+  FScoreHistoryControl.PlyCount := CurrentMoveCount;
   FScoreHistoryControl.AnnotationsText := FMoveAnnotationsText;
   FScoreHistoryControl.CurrentPly := LPly;
   if FScoreHistoryForm <> nil then
-    FScoreHistoryForm.UpdateScores(FMoveAnnotationsText, LPly,
+    FScoreHistoryForm.UpdateScores(FMoveAnnotationsText, CurrentMoveCount, LPly,
       FPreferences.EvaluationMaxScore, FPreferences.EvaluationScale,
       FenSideToMove(FStartingFEN));
 end;
