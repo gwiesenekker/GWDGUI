@@ -73,7 +73,7 @@ begin
 
   LPopup := TPopupMenu.Create(Self);
   LItem := TMenuItem.Create(Self);
-  LItem.Caption := 'Add engine';
+  LItem.Caption := 'Add engine...';
   LItem.OnClick := @AddEngineClick;
   LPopup.Items.Add(LItem);
   LItem := TMenuItem.Create(Self);

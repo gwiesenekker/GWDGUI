@@ -10,7 +10,8 @@ uses
   uGameOrchestrator, uGameRunnerThread, uGameSetupForm,
   uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
-  uGuiDialogs;
+  uGuiDialogs, uDatabaseForm, uPositionSetupForm, uPreferences,
+  uPreferencesForm;
 
 type
   TIntArray = array of Integer;
@@ -136,6 +137,7 @@ type
     FBlackRemainingSeconds: Double;
     FBlackUsedSeconds: Double;
     FClosing: Boolean;
+    FDatabaseForm: TDatabaseForm;
     FEnginesDialog: TEnginesDialog;
     FGameActive: Boolean;
     FGameLog: TStringList;
@@ -173,6 +175,9 @@ type
     FPauseGameMenuItem: TMenuItem;
     FPopoutBoard: TDraughtsBoard;
     FPopoutBoardControl: TDraughtsBoardControl;
+    FPositionSetupForm: TPositionSetupForm;
+    FPreferences: TGuiPreferences;
+    FPreferencesForm: TPreferencesForm;
     FPrincipalVariation: string;
     FPrincipalVariationDepth: string;
     FPrincipalVariationScore: string;
@@ -198,6 +203,9 @@ type
     FWhiteUsedSeconds: Double;
     function ActiveBoard: TDraughtsBoard;
     procedure ApplyBoardFlipped;
+    procedure ApplyBoardTheme(AControl: TDraughtsBoardControl;
+      AUseAnalysisTheme: Boolean);
+    procedure ApplyPreferences;
     procedure ApplyGameToDisplay(AGame: TRunningGame);
     procedure ApplyGameBrowsePly(APly: Integer);
     procedure AnalyzerLog(Sender: TObject; const AMessage: string);
@@ -223,8 +231,10 @@ type
     procedure CloseQueryHandler(Sender: TObject; var CanClose: Boolean);
     procedure CloseAnalyzerClick(Sender: TObject);
     procedure CopyBoardFenClick(Sender: TObject);
+    procedure CreateDatabaseClick(Sender: TObject);
     procedure StopSelectedGame(Sender: TObject);
     function CurrentMoveCount: Integer;
+    function DisplayedMovesText: string;
     function FormatClock(ASeconds: Double): string;
     function GameLogLineVisible(const ALine: string; AGame: TRunningGame): Boolean;
     function GameTitleEngineName(AEngine: TExternalEngineDefinition): string;
@@ -253,6 +263,7 @@ type
     procedure PvBoardChanged(Sender: TObject);
     procedure NewGameClick(Sender: TObject);
     procedure OpenAnalyzerClick(Sender: TObject);
+    procedure OpenDatabaseClick(Sender: TObject);
     procedure EnginesClick(Sender: TObject);
     procedure OpenPdnClick(Sender: TObject);
     procedure PauseGameClick(Sender: TObject);
@@ -260,6 +271,9 @@ type
     procedure PdnGameSelected(Sender: TObject; AGame: TPdnGame);
     function PlayerNameOrFallback(const AName, AFallback: string): string;
     function PostGuiEvent(AEvent: TObject): Boolean;
+    procedure PreferencesAccepted(Sender: TObject;
+      const APreferences: TGuiPreferences);
+    procedure PreferencesClick(Sender: TObject);
     function MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
     procedure PlayHumanMove(const AMove: string);
     procedure RemoveGame(AGame: TRunningGame);
@@ -270,6 +284,8 @@ type
     function SelectedGame: TRunningGame;
     procedure SavePdnClick(Sender: TObject);
     function SaveCurrentGameWithDialog: Boolean;
+    procedure SetupPositionAccepted(Sender: TObject; const AFEN: string);
+    procedure SetupPositionClick(Sender: TObject);
     procedure ShowStdoutClick(Sender: TObject);
     procedure StopAllGames;
     procedure ToggleBoardFlipped;
@@ -281,6 +297,7 @@ type
     procedure UpdateBoardInfo;
     procedure UpdateBoardFromBrowseState;
     procedure UpdateBoardHighlights;
+    procedure UpdateClockLabels(const AWhiteName, ABlackName: string);
     procedure UpdateGameListItem(AGame: TRunningGame);
     procedure UpdateLegalMoves;
     procedure UpdateGameLogMemo;
@@ -478,6 +495,7 @@ var
   LToolbar: TPanel;
   LWorkPanel: TPanel;
   LBoardPopup: TPopupMenu;
+  LDatabaseMenu: TMenuItem;
   LFenPopup: TPopupMenu;
   LFileMenu: TMenuItem;
   LLeftSplitter: TSplitter;
@@ -564,6 +582,7 @@ begin
   FStandaloneWhitePlayerName := 'White';
   FStandaloneBlackPlayerName := 'Black';
   FStandaloneEventName := '?';
+  LoadGuiPreferences(FPreferences);
 
   LMainMenu := TMainMenu.Create(Self);
   LFileMenu := TMenuItem.Create(Self);
@@ -577,6 +596,22 @@ begin
   LMenuItem.Caption := 'Save PDN...';
   LMenuItem.OnClick := @SavePdnClick;
   LFileMenu.Add(LMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := 'Preferences...';
+  LMenuItem.OnClick := @PreferencesClick;
+  LFileMenu.Add(LMenuItem);
+
+  LDatabaseMenu := TMenuItem.Create(Self);
+  LDatabaseMenu.Caption := 'Database';
+  LMainMenu.Items.Add(LDatabaseMenu);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := 'Create database...';
+  LMenuItem.OnClick := @CreateDatabaseClick;
+  LDatabaseMenu.Add(LMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := 'Open database...';
+  LMenuItem.OnClick := @OpenDatabaseClick;
+  LDatabaseMenu.Add(LMenuItem);
   Menu := LMainMenu;
 
   LToolbar := TPanel.Create(Self);
@@ -586,20 +621,20 @@ begin
   LToolbar.BevelOuter := bvNone;
   LToolbar.BorderSpacing.Around := 6;
 
-  LResetButton := TButton.Create(Self);
-  LResetButton.Parent := LToolbar;
-  LResetButton.Align := alLeft;
-  LResetButton.Width := 120;
-  LResetButton.Caption := 'New game';
-  LResetButton.OnClick := @NewGameClick;
-
   LEnginesButton := TButton.Create(Self);
   LEnginesButton.Parent := LToolbar;
   LEnginesButton.Align := alLeft;
   LEnginesButton.Width := 120;
-  LEnginesButton.BorderSpacing.Left := 8;
   LEnginesButton.Caption := 'Engines...';
   LEnginesButton.OnClick := @EnginesClick;
+
+  LResetButton := TButton.Create(Self);
+  LResetButton.Parent := LToolbar;
+  LResetButton.Align := alLeft;
+  LResetButton.Width := 120;
+  LResetButton.BorderSpacing.Left := 8;
+  LResetButton.Caption := 'New game...';
+  LResetButton.OnClick := @NewGameClick;
 
   LTournamentButton := TButton.Create(Self);
   LTournamentButton.Parent := LToolbar;
@@ -656,9 +691,6 @@ begin
   FAnalyzerMiniBoardControl.Align := alClient;
   FAnalyzerMiniBoardControl.Board := FAnalyzerMiniBoard;
   FAnalyzerMiniBoardControl.ShowCoordinates := False;
-  FAnalyzerMiniBoardControl.BoardLightColor := RGBToColor(206, 228, 246);
-  FAnalyzerMiniBoardControl.BoardDarkColor := RGBToColor(54, 95, 139);
-  FAnalyzerMiniBoardControl.GridColor := RGBToColor(31, 62, 95);
   FAnalyzerMiniBoardControl.PopupMenu := LAnalyzerBoardPopup;
   FAnalyzerMiniBoardControl.OnDblClick := @AnalyzerMiniBoardDblClick;
   FAnalyzerMiniBoardControl.BoardFlipped := FBoardFlipped;
@@ -757,7 +789,7 @@ begin
   LGamesPopup := TPopupMenu.Create(Self);
   LGamesPopup.OnPopup := @GamesPopupPopup;
   LMenuItem := TMenuItem.Create(Self);
-  LMenuItem.Caption := 'New game';
+  LMenuItem.Caption := 'New game...';
   LMenuItem.OnClick := @NewGameClick;
   LGamesPopup.Items.Add(LMenuItem);
   FShowStdoutMenuItem := TMenuItem.Create(Self);
@@ -956,11 +988,16 @@ begin
   LMenuItem.Caption := '-';
   LBoardPopup.Items.Add(LMenuItem);
   LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := 'Setup position...';
+  LMenuItem.OnClick := @SetupPositionClick;
+  LBoardPopup.Items.Add(LMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := 'Copy FEN position to clipboard';
   LMenuItem.OnClick := @CopyBoardFenClick;
   LBoardPopup.Items.Add(LMenuItem);
   FBoardControl.PopupMenu := LBoardPopup;
 
+  ApplyPreferences;
   UpdateBoardInfo;
 end;
 
@@ -978,7 +1015,10 @@ begin
     FGuiEventQueue.Close;
   FreeAndNil(FGuiEventQueue);
   FreeAndNil(FEnginesDialog);
+  FreeAndNil(FDatabaseForm);
   FreeAndNil(FSetupForm);
+  FreeAndNil(FPositionSetupForm);
+  FreeAndNil(FPreferencesForm);
   FreeAndNil(FTournamentDialog);
   FreeAndNil(FPdnOpenDialog);
   FreeAndNil(FMiniBoardForm);
@@ -1001,6 +1041,45 @@ end;
 function TMainForm.ActiveBoard: TDraughtsBoard;
 begin
   Result := FBoard;
+end;
+
+procedure TMainForm.ApplyBoardTheme(AControl: TDraughtsBoardControl;
+  AUseAnalysisTheme: Boolean);
+begin
+  if AControl = nil then
+    Exit;
+
+  if AUseAnalysisTheme then
+  begin
+    AControl.BoardLightColor := FPreferences.AnalysisBoardLightColor;
+    AControl.BoardDarkColor := FPreferences.AnalysisBoardDarkColor;
+    AControl.GridColor := FPreferences.AnalysisBoardDarkColor;
+  end
+  else
+  begin
+    AControl.BoardLightColor := FPreferences.MainBoardLightColor;
+    AControl.BoardDarkColor := FPreferences.MainBoardDarkColor;
+    AControl.GridColor := FPreferences.MainBoardDarkColor;
+  end;
+
+  AControl.TargetSquareColor := FPreferences.TargetSquareColor;
+  AControl.LastMoveTargetSquareColor := FPreferences.LastMoveColor;
+  AControl.PvSourceSquareColor := FPreferences.PvMoveColor;
+  AControl.HintSourceSquareColor := FPreferences.HintMoveColor;
+end;
+
+procedure TMainForm.ApplyPreferences;
+begin
+  ApplyBoardTheme(FBoardControl, False);
+  ApplyBoardTheme(FMiniBoardControl, False);
+  ApplyBoardTheme(FPopoutBoardControl, False);
+  ApplyBoardTheme(FAnalyzerMiniBoardControl, True);
+  ApplyBoardTheme(FAnalyzerPopoutBoardControl, True);
+
+  if FPositionSetupForm <> nil then
+    FPositionSetupForm.ApplyPreferences(FPreferences);
+  if FDatabaseForm <> nil then
+    FDatabaseForm.ApplyPreferences(FPreferences);
 end;
 
 procedure TMainForm.ApplyBoardFlipped;
@@ -1046,6 +1125,8 @@ begin
   FBoardFlipped := not FBoardFlipped;
   ClearHumanMoveSelection;
   ApplyBoardFlipped;
+  if FGameActive then
+    UpdateClockLabels(FWhitePlayerEdit.Text, FBlackPlayerEdit.Text);
 end;
 
 function TMainForm.FindHumanMoveToTarget(ATargetSquare: Integer;
@@ -1316,26 +1397,41 @@ end;
 
 procedure TMainForm.RestartAnalyzer;
 var
+  LDisplayedMoveCount: Integer;
+  LDisplayedMoves: TStringList;
+  LDisplayedMovesText: string;
+  LTotalMoveCount: Integer;
   LTerminal: Boolean;
   Signature: string;
 begin
   if FAnalyzerRunner = nil then
     Exit;
-  if FGameBrowsePly >= 0 then
-    Exit;
 
-  Signature := FStartingFEN + #10 + FMovesPlayedText + #10 +
+  LDisplayedMovesText := DisplayedMovesText;
+  LDisplayedMoves := TStringList.Create;
+  try
+    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(LDisplayedMovesText)),
+      LDisplayedMoves);
+    LDisplayedMoveCount := LDisplayedMoves.Count;
+  finally
+    LDisplayedMoves.Free;
+  end;
+  LTotalMoveCount := CurrentMoveCount;
+
+  Signature := FStartingFEN + #10 + LDisplayedMovesText + #10 +
     IntToStr(Ord(FGameState));
   if Signature = FAnalyzerLastPositionSignature then
     Exit;
   FAnalyzerLastPositionSignature := Signature;
 
   FAnalyzerPvBaseBoard.AssignFrom(ActiveBoard);
-  FAnalyzerPvBasePly := CurrentMoveCount;
-  LTerminal := (FGameState = gosGameOver) or (ActiveBoard.LegalMoves.Count = 0);
+  FAnalyzerPvBasePly := LDisplayedMoveCount;
+  LTerminal := (ActiveBoard.LegalMoves.Count = 0) or
+    ((FGameState = gosGameOver) and
+      ((FGameBrowsePly < 0) or (LDisplayedMoveCount >= LTotalMoveCount)));
   if LTerminal and (FAnalyzerPvBrowser <> nil) then
     FAnalyzerPvBrowser.Clear;
-  FAnalyzerRunner.PostAnalyze(FStartingFEN, FMovesPlayedText,
+  FAnalyzerRunner.PostAnalyze(FStartingFEN, LDisplayedMovesText,
     FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, LTerminal);
 end;
 
@@ -1416,6 +1512,28 @@ begin
   Clipboard.AsText := LFen;
 end;
 
+procedure TMainForm.SetupPositionAccepted(Sender: TObject; const AFEN: string);
+begin
+  try
+    LoadStandaloneFen(AFEN);
+  except
+    on E: Exception do
+      ShowGuiOkDialog(Self, 'Setup position', 'Invalid FEN: ' + E.Message);
+  end;
+end;
+
+procedure TMainForm.SetupPositionClick(Sender: TObject);
+begin
+  if FPositionSetupForm = nil then
+  begin
+    FPositionSetupForm := TPositionSetupForm.Create(Self);
+    FPositionSetupForm.OnAccepted := @SetupPositionAccepted;
+    FPositionSetupForm.ApplyPreferences(FPreferences);
+  end;
+  FPositionSetupForm.StartSetup(FBoard.CurrentFEN);
+  ShowFormCenteredOnOwner(FPositionSetupForm, Self);
+end;
+
 procedure TMainForm.LoadStandaloneFen(const AFEN: string);
 var
   LBoard: TDraughtsBoard;
@@ -1475,6 +1593,25 @@ begin
     on E: Exception do
       ShowGuiOkDialog(Self, 'Paste FEN', 'Invalid FEN: ' + E.Message);
   end;
+end;
+
+procedure TMainForm.PreferencesAccepted(Sender: TObject;
+  const APreferences: TGuiPreferences);
+begin
+  FPreferences := APreferences;
+  SaveGuiPreferences(FPreferences);
+  ApplyPreferences;
+end;
+
+procedure TMainForm.PreferencesClick(Sender: TObject);
+begin
+  if FPreferencesForm = nil then
+  begin
+    FPreferencesForm := TPreferencesForm.Create(Self);
+    FPreferencesForm.OnAccepted := @PreferencesAccepted;
+  end;
+  FPreferencesForm.StartEdit(FPreferences);
+  ShowFormCenteredOnOwner(FPreferencesForm, Self);
 end;
 
 procedure TextToMoveList(const AMovesText: string; AMoves: TStrings);
@@ -1688,6 +1825,30 @@ begin
   try
     TextToMoveList(FMovesPlayedText, LMoves);
     Result := LMoves.Count;
+  finally
+    LMoves.Free;
+  end;
+end;
+
+function TMainForm.DisplayedMovesText: string;
+var
+  I: Integer;
+  LMoves: TStringList;
+  LPly: Integer;
+begin
+  Result := '';
+  LMoves := TStringList.Create;
+  try
+    TextToMoveList(FMovesPlayedText, LMoves);
+    LPly := FGameBrowsePly;
+    if (LPly < 0) or (LPly > LMoves.Count) then
+      LPly := LMoves.Count;
+    for I := 0 to LPly - 1 do
+    begin
+      if Result <> '' then
+        Result += ' ';
+      Result += LMoves[I];
+    end;
   finally
     LMoves.Free;
   end;
@@ -1982,6 +2143,7 @@ begin
     FPopoutBoardControl.Align := alClient;
     FPopoutBoardControl.Board := FPopoutBoard;
     FPopoutBoardControl.BoardFlipped := FBoardFlipped;
+    ApplyBoardTheme(FPopoutBoardControl, False);
   end;
 
   FPopoutBoard.AssignFrom(FMiniBoard);
@@ -2036,10 +2198,8 @@ begin
     FAnalyzerPopoutBoardControl.Parent := FAnalyzerMiniBoardForm;
     FAnalyzerPopoutBoardControl.Align := alClient;
     FAnalyzerPopoutBoardControl.Board := FAnalyzerPopoutBoard;
-    FAnalyzerPopoutBoardControl.BoardLightColor := RGBToColor(206, 228, 246);
-    FAnalyzerPopoutBoardControl.BoardDarkColor := RGBToColor(54, 95, 139);
-    FAnalyzerPopoutBoardControl.GridColor := RGBToColor(31, 62, 95);
     FAnalyzerPopoutBoardControl.BoardFlipped := FBoardFlipped;
+    ApplyBoardTheme(FAnalyzerPopoutBoardControl, True);
   end;
 
   FAnalyzerPopoutBoard.AssignFrom(FAnalyzerMiniBoard);
@@ -2239,6 +2399,63 @@ begin
   if FEnginesDialog = nil then
     FEnginesDialog := TEnginesDialog.Create(Self);
   ShowFormCenteredOnOwner(FEnginesDialog, Self);
+end;
+
+procedure TMainForm.CreateDatabaseClick(Sender: TObject);
+var
+  Dialog: TSaveDialog;
+begin
+  Dialog := TSaveDialog.Create(Self);
+  try
+    Dialog.Title := 'Create database';
+    Dialog.DefaultExt := 'sqlite';
+    Dialog.Filter := 'SQLite database (*.sqlite)|*.sqlite|All files (*)|*';
+    Dialog.Options := Dialog.Options + [ofOverwritePrompt, ofEnableSizing];
+    if not Dialog.Execute then
+      Exit;
+
+    if FDatabaseForm = nil then
+      FDatabaseForm := TDatabaseForm.Create(Self);
+    try
+      FDatabaseForm.ApplyPreferences(FPreferences);
+      FDatabaseForm.CreateDatabase(Dialog.FileName);
+      ShowFormCenteredOnOwner(FDatabaseForm, Self);
+    except
+      on E: Exception do
+        ShowGuiOkDialog(Self, 'Create database',
+          'Could not create database: ' + E.Message);
+    end;
+  finally
+    Dialog.Free;
+  end;
+end;
+
+procedure TMainForm.OpenDatabaseClick(Sender: TObject);
+var
+  Dialog: TOpenDialog;
+begin
+  Dialog := TOpenDialog.Create(Self);
+  try
+    Dialog.Title := 'Open database';
+    Dialog.Filter := 'SQLite database (*.sqlite;*.db)|*.sqlite;*.db|All files (*)|*';
+    Dialog.Options := Dialog.Options + [ofFileMustExist, ofEnableSizing];
+    if not Dialog.Execute then
+      Exit;
+
+    if FDatabaseForm = nil then
+      FDatabaseForm := TDatabaseForm.Create(Self);
+    try
+      FDatabaseForm.ApplyPreferences(FPreferences);
+      FDatabaseForm.OpenDatabase(Dialog.FileName);
+      ShowFormCenteredOnOwner(FDatabaseForm, Self);
+    except
+      on E: Exception do
+        ShowGuiOkDialog(Self, 'Open database',
+          'Could not open database: ' + E.Message);
+    end;
+  finally
+    Dialog.Free;
+  end;
 end;
 
 procedure TMainForm.OpenPdnClick(Sender: TObject);
@@ -2787,6 +3004,7 @@ begin
   UpdateGameMoveHighlight;
   HighlightGameMoveTextSelection(False);
   UpdateLegalMoves;
+  RestartAnalyzer;
   if Trim(FPrincipalVariation) = '' then
   begin
     LPvBaseBoard := LBoard;
@@ -2803,6 +3021,41 @@ begin
       FPrincipalVariationTimeText);
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
+end;
+
+procedure TMainForm.UpdateClockLabels(const AWhiteName, ABlackName: string);
+var
+  LBlackCaption: string;
+  LWhiteCaption: string;
+begin
+  if not FGameActive then
+  begin
+    if FBlackClockLabel <> nil then
+      FBlackClockLabel.Caption := '';
+    if FWhiteClockLabel <> nil then
+      FWhiteClockLabel.Caption := '';
+    Exit;
+  end;
+
+  LBlackCaption := ABlackName + '  ' + FormatClock(FBlackRemainingSeconds) +
+    '   used ' + FormatFloat('0.000', FBlackUsedSeconds) + ' s';
+  LWhiteCaption := AWhiteName + '  ' + FormatClock(FWhiteRemainingSeconds) +
+    '   used ' + FormatFloat('0.000', FWhiteUsedSeconds) + ' s';
+
+  if FBoardFlipped then
+  begin
+    if FBlackClockLabel <> nil then
+      FBlackClockLabel.Caption := LWhiteCaption;
+    if FWhiteClockLabel <> nil then
+      FWhiteClockLabel.Caption := LBlackCaption;
+  end
+  else
+  begin
+    if FBlackClockLabel <> nil then
+      FBlackClockLabel.Caption := LBlackCaption;
+    if FWhiteClockLabel <> nil then
+      FWhiteClockLabel.Caption := LWhiteCaption;
+  end;
 end;
 
 procedure TMainForm.UpdateBoardInfo;
@@ -2829,20 +3082,7 @@ begin
     LBlackName := PlayerNameOrFallback(FStandaloneBlackPlayerName, 'Black');
   end;
 
-  if FBlackClockLabel <> nil then
-    if FGameActive then
-      FBlackClockLabel.Caption := LBlackName + '  ' +
-        FormatClock(FBlackRemainingSeconds) +
-        '   used ' + FormatFloat('0.000', FBlackUsedSeconds) + ' s'
-    else
-      FBlackClockLabel.Caption := '';
-  if FWhiteClockLabel <> nil then
-    if FGameActive then
-      FWhiteClockLabel.Caption := LWhiteName + '  ' +
-        FormatClock(FWhiteRemainingSeconds) +
-        '   used ' + FormatFloat('0.000', FWhiteUsedSeconds) + ' s'
-    else
-      FWhiteClockLabel.Caption := '';
+  UpdateClockLabels(LWhiteName, LBlackName);
 
   LResultText := FGameResult;
   if Trim(LResultText) = '' then

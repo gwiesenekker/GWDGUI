@@ -18,7 +18,7 @@
     <RunParams>
       <FormatVersion Value="2"/>
     </RunParams>
-    <Units Count="32">
+    <Units Count="37">
       <Unit0>
         <Filename Value="gwdgui.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -143,6 +143,26 @@
         <Filename Value="uGuiDialogs.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit31>
+      <Unit32>
+        <Filename Value="uGameDatabase.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit32>
+      <Unit33>
+        <Filename Value="uDatabaseForm.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit33>
+      <Unit34>
+        <Filename Value="uPositionSetupForm.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit34>
+      <Unit35>
+        <Filename Value="uPreferences.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit35>
+      <Unit36>
+        <Filename Value="uPreferencesForm.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit36>
     </Units>
     <RequiredPackages Count="1">
       <Item1>

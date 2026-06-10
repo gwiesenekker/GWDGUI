@@ -19,10 +19,14 @@ type
     FBoardLightColor: TColor;
     FGridColor: TColor;
     FHintSourceSquare: Integer;
+    FHintSourceSquareColor: TColor;
     FLastMoveTargetSquare: Integer;
+    FLastMoveTargetSquareColor: TColor;
     FPvSourceSquare: Integer;
+    FPvSourceSquareColor: TColor;
     FShowCoordinates: Boolean;
     FShowSideToMoveMarker: Boolean;
+    FTargetSquareColor: TColor;
     FTargetSquares: TIntArray;
     procedure SetBoard(AValue: TDraughtsBoard);
     procedure SetBoardDarkColor(AValue: TColor);
@@ -30,10 +34,14 @@ type
     procedure SetBoardLightColor(AValue: TColor);
     procedure SetGridColor(AValue: TColor);
     procedure SetHintSourceSquare(AValue: Integer);
+    procedure SetHintSourceSquareColor(AValue: TColor);
     procedure SetLastMoveTargetSquare(AValue: Integer);
+    procedure SetLastMoveTargetSquareColor(AValue: TColor);
     procedure SetPvSourceSquare(AValue: Integer);
+    procedure SetPvSourceSquareColor(AValue: TColor);
     procedure SetShowCoordinates(AValue: Boolean);
     procedure SetShowSideToMoveMarker(AValue: Boolean);
+    procedure SetTargetSquareColor(AValue: TColor);
     function BoardRect: TRect;
     function CellSize: Integer;
     function IsTargetSquare(ASquare: Integer): Boolean;
@@ -51,9 +59,17 @@ type
     property BoardFlipped: Boolean read FBoardFlipped write SetBoardFlipped;
     property HintSourceSquare: Integer read FHintSourceSquare
       write SetHintSourceSquare;
+    property HintSourceSquareColor: TColor read FHintSourceSquareColor
+      write SetHintSourceSquareColor;
     property LastMoveTargetSquare: Integer read FLastMoveTargetSquare
       write SetLastMoveTargetSquare;
+    property LastMoveTargetSquareColor: TColor read FLastMoveTargetSquareColor
+      write SetLastMoveTargetSquareColor;
     property PvSourceSquare: Integer read FPvSourceSquare write SetPvSourceSquare;
+    property PvSourceSquareColor: TColor read FPvSourceSquareColor
+      write SetPvSourceSquareColor;
+    property TargetSquareColor: TColor read FTargetSquareColor
+      write SetTargetSquareColor;
   published
     property Align;
     property Anchors;
@@ -109,6 +125,10 @@ begin
   FBoardDarkColor := RGBToColor(98, 73, 53);
   FBoardLightColor := RGBToColor(228, 207, 176);
   FGridColor := RGBToColor(58, 44, 34);
+  FHintSourceSquareColor := clRed;
+  FLastMoveTargetSquareColor := clYellow;
+  FPvSourceSquareColor := RGBToColor(255, 165, 0);
+  FTargetSquareColor := clLime;
   FShowCoordinates := True;
   FShowSideToMoveMarker := False;
 end;
@@ -161,11 +181,27 @@ begin
   Invalidate;
 end;
 
+procedure TDraughtsBoardControl.SetHintSourceSquareColor(AValue: TColor);
+begin
+  if FHintSourceSquareColor = AValue then
+    Exit;
+  FHintSourceSquareColor := AValue;
+  Invalidate;
+end;
+
 procedure TDraughtsBoardControl.SetLastMoveTargetSquare(AValue: Integer);
 begin
   if FLastMoveTargetSquare = AValue then
     Exit;
   FLastMoveTargetSquare := AValue;
+  Invalidate;
+end;
+
+procedure TDraughtsBoardControl.SetLastMoveTargetSquareColor(AValue: TColor);
+begin
+  if FLastMoveTargetSquareColor = AValue then
+    Exit;
+  FLastMoveTargetSquareColor := AValue;
   Invalidate;
 end;
 
@@ -177,11 +213,27 @@ begin
   Invalidate;
 end;
 
+procedure TDraughtsBoardControl.SetPvSourceSquareColor(AValue: TColor);
+begin
+  if FPvSourceSquareColor = AValue then
+    Exit;
+  FPvSourceSquareColor := AValue;
+  Invalidate;
+end;
+
 procedure TDraughtsBoardControl.SetShowCoordinates(AValue: Boolean);
 begin
   if FShowCoordinates = AValue then
     Exit;
   FShowCoordinates := AValue;
+  Invalidate;
+end;
+
+procedure TDraughtsBoardControl.SetTargetSquareColor(AValue: TColor);
+begin
+  if FTargetSquareColor = AValue then
+    Exit;
+  FTargetSquareColor := AValue;
   Invalidate;
 end;
 
@@ -386,16 +438,16 @@ begin
       if LSquare > 0 then
       begin
         if LSquare = FPvSourceSquare then
-          DrawSquareOutline(Canvas, LCellRect, RGBToColor(255, 165, 0),
+          DrawSquareOutline(Canvas, LCellRect, FPvSourceSquareColor,
             Max(3, LCell div 12), LCell div 10);
         if LSquare = FHintSourceSquare then
-          DrawSquareOutline(Canvas, LCellRect, clRed,
+          DrawSquareOutline(Canvas, LCellRect, FHintSourceSquareColor,
             Max(3, LCell div 12), LCell div 7);
         if LSquare = FLastMoveTargetSquare then
-          DrawSquareOutline(Canvas, LCellRect, clYellow,
+          DrawSquareOutline(Canvas, LCellRect, FLastMoveTargetSquareColor,
             Max(3, LCell div 12), 2);
         if IsTargetSquare(LSquare) then
-          DrawSquareOutline(Canvas, LCellRect, clLime,
+          DrawSquareOutline(Canvas, LCellRect, FTargetSquareColor,
             Max(3, LCell div 12), LCell div 5);
       end;
     end;

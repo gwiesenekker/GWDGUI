@@ -49,6 +49,7 @@ type
     FWhiteEngines: TStringList;
     procedure AddLabelledEdit(AParent: TWinControl; const ACaption: string;
       AEdit: TEdit; var ATop: Integer);
+    procedure AdjustPairingGridColumnWidths;
     procedure ApplyInvalidatingChange(Sender: TObject);
     procedure AppendTournamentGameToPdn(ARunningGame: TTournamentRunningGame;
       AGame: TObject);
@@ -58,6 +59,7 @@ type
       AResults: TStrings);
     procedure CollectRoundRows(ARounds: TStrings);
     procedure CollectSelectedEngines(AEngines: TStrings);
+    procedure ConfigurePairingGridColumns;
     procedure CreatePairingClick(Sender: TObject);
     function DisplayNameForEngine(AEngine: TExternalEngineDefinition): string;
     function EngineByDisplayName(const AName: string): TExternalEngineDefinition;
@@ -72,16 +74,19 @@ type
     function IsRowStartable(ARow: Integer; ABusyEngineKeys: TStrings): Boolean;
     procedure LoadClick(Sender: TObject);
     procedure LoadTournamentFromFile(const AFileName: string);
-    procedure ManualEditDone(Sender: TObject);
     function PdnFileName: string;
     function PendingInvalidatingChange: Boolean;
     procedure PairingGridDrawCell(Sender: TObject; ACol, ARow: Integer;
       Rect: TRect; State: TGridDrawState);
+    procedure PairingGridMouseDown(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
     procedure PopulateEngines;
     procedure RescheduleSelectedGame(Sender: TObject);
     procedure RevertInvalidatingChange(Sender: TObject);
     procedure SaveClick(Sender: TObject);
     procedure SaveTournamentToFile(const AFileName: string);
+    procedure SetSelectedResult(const AResultText: string);
+    procedure SetSelectedResultClick(Sender: TObject);
     procedure StartStopClick(Sender: TObject);
     procedure StartPendingGames;
     procedure StopRunningGames;
@@ -305,13 +310,13 @@ begin
   SaveButton := TButton.Create(Self);
   SaveButton.Parent := ButtonPanel;
   SaveButton.SetBounds(770, 52, 56, 28);
-  SaveButton.Caption := 'Save';
+  SaveButton.Caption := 'Save...';
   SaveButton.OnClick := @SaveClick;
 
   LoadButton := TButton.Create(Self);
   LoadButton.Parent := ButtonPanel;
   LoadButton.SetBounds(834, 52, 56, 28);
-  LoadButton.Caption := 'Load';
+  LoadButton.Caption := 'Load...';
   LoadButton.OnClick := @LoadClick;
 
   FInvalidationPanel := TPanel.Create(Self);
@@ -365,6 +370,12 @@ begin
   GridPanel.BevelOuter := bvNone;
   GridPanel.BorderSpacing.Around := 8;
 
+  Splitter := TSplitter.Create(Self);
+  Splitter.Parent := GridPanel;
+  Splitter.Align := alTop;
+  Splitter.Height := 8;
+  Splitter.ResizeAnchor := akTop;
+
   CrossTablePanel := TPanel.Create(Self);
   CrossTablePanel.Parent := GridPanel;
   CrossTablePanel.Align := alTop;
@@ -380,11 +391,6 @@ begin
   FCrossTableGrid.Options := FCrossTableGrid.Options - [goEditing] +
     [goColSizing, goRowSelect];
 
-  Splitter := TSplitter.Create(Self);
-  Splitter.Parent := GridPanel;
-  Splitter.Align := alTop;
-  Splitter.Height := 8;
-
   PairingPanel := TPanel.Create(Self);
   PairingPanel.Parent := GridPanel;
   PairingPanel.Align := alClient;
@@ -395,11 +401,31 @@ begin
   FGrid.Align := alClient;
   FGrid.ColCount := 6;
   FGrid.RowCount := 2;
+  FGrid.FixedCols := 0;
   FGrid.FixedRows := 1;
-  FGrid.Options := FGrid.Options + [goColSizing, goEditing] - [goRowSelect];
+  FGrid.Options := FGrid.Options + [goColSizing] - [goEditing, goRowSelect];
   FGrid.OnDrawCell := @PairingGridDrawCell;
-  FGrid.OnEditingDone := @ManualEditDone;
+  FGrid.OnMouseDown := @PairingGridMouseDown;
   PairingPopup := TPopupMenu.Create(Self);
+  PopupItem := TMenuItem.Create(Self);
+  PopupItem.Caption := '*';
+  PopupItem.OnClick := @SetSelectedResultClick;
+  PairingPopup.Items.Add(PopupItem);
+  PopupItem := TMenuItem.Create(Self);
+  PopupItem.Caption := '2-0';
+  PopupItem.OnClick := @SetSelectedResultClick;
+  PairingPopup.Items.Add(PopupItem);
+  PopupItem := TMenuItem.Create(Self);
+  PopupItem.Caption := '1-1';
+  PopupItem.OnClick := @SetSelectedResultClick;
+  PairingPopup.Items.Add(PopupItem);
+  PopupItem := TMenuItem.Create(Self);
+  PopupItem.Caption := '0-2';
+  PopupItem.OnClick := @SetSelectedResultClick;
+  PairingPopup.Items.Add(PopupItem);
+  PopupItem := TMenuItem.Create(Self);
+  PopupItem.Caption := '-';
+  PairingPopup.Items.Add(PopupItem);
   PopupItem := TMenuItem.Create(Self);
   PopupItem.Caption := 'Reschedule selected game';
   PopupItem.OnClick := @RescheduleSelectedGame;
@@ -417,9 +443,12 @@ begin
   FGrid.ColWidths[TournamentColBlack] := 260;
   FGrid.ColWidths[TournamentColResult] := 80;
   FGrid.ColWidths[TournamentColReason] := 180;
+  ConfigurePairingGridColumns;
+  AdjustPairingGridColumnWidths;
 
   ClearTournamentPairingGrid(FGrid);
   PopulateEngines;
+  AdjustPairingGridColumnWidths;
 
   FTimer := TTimer.Create(Self);
   FTimer.Interval := 250;
@@ -504,6 +533,58 @@ begin
   AEdit.Parent := AParent;
   AEdit.SetBounds(0, ATop, 420, 24);
   Inc(ATop, 34);
+end;
+
+procedure TTournamentDialog.AdjustPairingGridColumnWidths;
+var
+  EngineTextWidth: Integer;
+  I: Integer;
+  RequiredWidth: Integer;
+  Row: Integer;
+  TotalGridWidth: Integer;
+
+  function TextWidth(const AText: string; AMinWidth: Integer): Integer;
+  begin
+    Result := Max(AMinWidth, FGrid.Canvas.TextWidth(AText) + 28);
+  end;
+
+begin
+  if FGrid = nil then
+    Exit;
+
+  FGrid.Canvas.Font.Assign(FGrid.Font);
+  EngineTextWidth := TextWidth('Widest player name', 260);
+  if FEngineCheckList <> nil then
+    for I := 0 to FEngineCheckList.Items.Count - 1 do
+      EngineTextWidth := Max(EngineTextWidth,
+        TextWidth(FEngineCheckList.Items[I], 260));
+  for Row := 1 to FGrid.RowCount - 1 do
+  begin
+    EngineTextWidth := Max(EngineTextWidth,
+      TextWidth(FGrid.Cells[TournamentColWhite, Row], 260));
+    EngineTextWidth := Max(EngineTextWidth,
+      TextWidth(FGrid.Cells[TournamentColBlack, Row], 260));
+  end;
+
+  FGrid.ColWidths[TournamentColGame] := TextWidth('Game 9999', 70);
+  FGrid.ColWidths[TournamentColRound] := TextWidth('Round 999', 76);
+  FGrid.ColWidths[TournamentColWhite] := EngineTextWidth;
+  FGrid.ColWidths[TournamentColBlack] := EngineTextWidth;
+  FGrid.ColWidths[TournamentColResult] := TextWidth('Result 0-2', 92);
+  FGrid.ColWidths[TournamentColReason] := TextWidth('Unknown result', 180);
+
+  if FGrid.Columns.Count >= FGrid.ColCount then
+    for I := 0 to FGrid.ColCount - 1 do
+      FGrid.Columns[I].Width := FGrid.ColWidths[I];
+
+  TotalGridWidth := 0;
+  for I := 0 to FGrid.ColCount - 1 do
+    Inc(TotalGridWidth, FGrid.ColWidths[I]);
+  RequiredWidth := 270 + TotalGridWidth + 96;
+  if Constraints.MinWidth < RequiredWidth then
+    Constraints.MinWidth := RequiredWidth;
+  if Width < RequiredWidth then
+    Width := RequiredWidth;
 end;
 
 function TTournamentDialog.DisplayNameForEngine(
@@ -601,6 +682,33 @@ begin
   CollectSelectedTournamentEngineNames(FEngineCheckList, AEngines);
 end;
 
+procedure TTournamentDialog.ConfigurePairingGridColumns;
+  function AddColumn(const ATitle: string; AWidth: Integer;
+    AReadOnly: Boolean): TGridColumn;
+  begin
+    Result := FGrid.Columns.Add;
+    Result.Title.Caption := ATitle;
+    Result.Width := AWidth;
+    Result.ReadOnly := AReadOnly;
+  end;
+
+begin
+  FGrid.Columns.Clear;
+  AddColumn('Game', FGrid.ColWidths[TournamentColGame], True);
+  AddColumn('Round', FGrid.ColWidths[TournamentColRound], True);
+  AddColumn('White', FGrid.ColWidths[TournamentColWhite], True);
+  AddColumn('Black', FGrid.ColWidths[TournamentColBlack], True);
+  AddColumn('Result', FGrid.ColWidths[TournamentColResult], True);
+  AddColumn('Reason', FGrid.ColWidths[TournamentColReason], True);
+
+  FGrid.Cells[TournamentColGame, 0] := 'Game';
+  FGrid.Cells[TournamentColRound, 0] := 'Round';
+  FGrid.Cells[TournamentColWhite, 0] := 'White';
+  FGrid.Cells[TournamentColBlack, 0] := 'Black';
+  FGrid.Cells[TournamentColResult, 0] := 'Result';
+  FGrid.Cells[TournamentColReason, 0] := 'Reason';
+end;
+
 procedure TTournamentDialog.CollectPairingRows(AWhiteEngines, ABlackEngines,
   AResults: TStrings);
 begin
@@ -650,10 +758,17 @@ begin
       TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex),
       TournamentRoundRobinIndexIsDouble(FRoundRobinGroup.ItemIndex), Engines,
       WhiteEngines, BlackEngines, Results, Rounds);
+    if PairingRound.HasRepeat and
+      (ShowGuiConfirmationDialog(Self, 'Tournament',
+      'A Swiss pairing without repeated opponents is no longer possible.' +
+      LineEnding + 'Continue with repeated pairing?', 'Continue', '',
+      mrCancel) <> mrYes) then
+      Exit;
     ApplyTournamentPairingRoundToGrid(FGrid, PairingRound);
     FAcceptedTournamentSignature := TournamentSignature;
     if FInvalidationPanel <> nil then
       FInvalidationPanel.Visible := False;
+    AdjustPairingGridColumnWidths;
     UpdateCrossTable;
   finally
     Rounds.Free;
@@ -811,29 +926,6 @@ begin
   Result := True;
 end;
 
-procedure TTournamentDialog.ManualEditDone(Sender: TObject);
-var
-  ResultText: string;
-begin
-  if (FGrid.Row <= 0) or
-    not (FGrid.Col in [TournamentColResult, TournamentColReason]) then
-    Exit;
-  if FGrid.Col = TournamentColResult then
-  begin
-    ResultText := Trim(FGrid.Cells[TournamentColResult, FGrid.Row]);
-    if ResultText = '' then
-      ResultText := '*';
-    if not (SameText(ResultText, '*') or SameText(ResultText, '2-0') or
-      SameText(ResultText, '1-1') or SameText(ResultText, '0-2')) then
-      ResultText := '*';
-    FGrid.Cells[TournamentColResult, FGrid.Row] := ResultText;
-    if (ResultText <> '*') and
-      (Trim(FGrid.Cells[TournamentColReason, FGrid.Row]) = '') then
-      FGrid.Cells[TournamentColReason, FGrid.Row] := 'Manual result';
-  end;
-  UpdateCrossTable;
-end;
-
 procedure TTournamentDialog.PairingGridDrawCell(Sender: TObject; ACol,
   ARow: Integer; Rect: TRect; State: TGridDrawState);
 begin
@@ -853,6 +945,49 @@ begin
     FGrid.Canvas.Font.Color := clWindowText;
   end;
   DrawGridText(FGrid, ACol, ARow, Rect);
+end;
+
+procedure TTournamentDialog.PairingGridMouseDown(Sender: TObject;
+  Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  Col: Integer;
+  Row: Integer;
+begin
+  if (Button <> mbRight) or (FGrid = nil) then
+    Exit;
+
+  FGrid.MouseToCell(X, Y, Col, Row);
+  if (Col >= 0) and (Col < FGrid.ColCount) and (Row > 0) and
+    (Row < FGrid.RowCount) then
+  begin
+    FGrid.Col := Col;
+    FGrid.Row := Row;
+  end;
+end;
+
+procedure TTournamentDialog.SetSelectedResult(const AResultText: string);
+begin
+  if (FGrid = nil) or (FGrid.Row <= 0) or
+    (FGrid.Row >= FGrid.RowCount) or IsRowRunning(FGrid.Row) or
+    (not TournamentGridHasPairingAtRow(FGrid, FGrid.Row)) then
+    Exit;
+
+  FGrid.Cells[TournamentColResult, FGrid.Row] := AResultText;
+  if AResultText = '*' then
+  begin
+    if SameText(Trim(FGrid.Cells[TournamentColReason, FGrid.Row]),
+      'Manual result') then
+      FGrid.Cells[TournamentColReason, FGrid.Row] := '';
+  end
+  else if Trim(FGrid.Cells[TournamentColReason, FGrid.Row]) = '' then
+    FGrid.Cells[TournamentColReason, FGrid.Row] := 'Manual result';
+  UpdateCrossTable;
+end;
+
+procedure TTournamentDialog.SetSelectedResultClick(Sender: TObject);
+begin
+  if Sender is TMenuItem then
+    SetSelectedResult(TMenuItem(Sender).Caption);
 end;
 
 procedure TTournamentDialog.RescheduleSelectedGame(Sender: TObject);
@@ -1033,6 +1168,7 @@ begin
     FAcceptedTournamentSignature := TournamentSignature;
     if FInvalidationPanel <> nil then
       FInvalidationPanel.Visible := False;
+    AdjustPairingGridColumnWidths;
     UpdateCrossTable;
   finally
     FLoadingTournament := False;
