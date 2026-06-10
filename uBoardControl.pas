@@ -52,6 +52,7 @@ type
     procedure Resize; override;
   public
     constructor Create(AOwner: TComponent); override;
+    function BoardSquareSize: Integer;
     function SquareAtPoint(X, Y: Integer): Integer;
     procedure ClearTargetSquares;
     procedure SetTargetSquares(const ASquares: array of Integer);
@@ -131,6 +132,11 @@ begin
   FTargetSquareColor := clLime;
   FShowCoordinates := True;
   FShowSideToMoveMarker := False;
+end;
+
+function TDraughtsBoardControl.BoardSquareSize: Integer;
+begin
+  Result := CellSize;
 end;
 
 procedure TDraughtsBoardControl.SetBoard(AValue: TDraughtsBoard);

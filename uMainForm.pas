@@ -214,6 +214,7 @@ type
     procedure AnalyzerMiniBoardFormClose(Sender: TObject;
       var CloseAction: TCloseAction);
     procedure AnalyzerMiniBoardPopoutClick(Sender: TObject);
+    procedure AnalyzerPopoutBoardCopyFenClick(Sender: TObject);
     procedure AnalyzerPvBoardChanged(Sender: TObject);
     procedure AnalyzerPopupPopup(Sender: TObject);
     procedure AnalyzerSnapshot(Sender: TObject; ASnapshot: TPvSnapshot);
@@ -260,6 +261,7 @@ type
     procedure MiniBoardDblClick(Sender: TObject);
     procedure MiniBoardFormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure MiniBoardPopoutClick(Sender: TObject);
+    procedure PopoutBoardCopyFenClick(Sender: TObject);
     procedure PvBoardChanged(Sender: TObject);
     procedure NewGameClick(Sender: TObject);
     procedure OpenAnalyzerClick(Sender: TObject);
@@ -2126,6 +2128,9 @@ begin
 end;
 
 procedure TMainForm.MiniBoardPopoutClick(Sender: TObject);
+var
+  LMenuItem: TMenuItem;
+  LPopup: TPopupMenu;
 begin
   if FMiniBoardForm = nil then
   begin
@@ -2144,12 +2149,25 @@ begin
     FPopoutBoardControl.Board := FPopoutBoard;
     FPopoutBoardControl.BoardFlipped := FBoardFlipped;
     ApplyBoardTheme(FPopoutBoardControl, False);
+
+    LPopup := TPopupMenu.Create(FMiniBoardForm);
+    LMenuItem := TMenuItem.Create(FMiniBoardForm);
+    LMenuItem.Caption := 'Copy FEN to clipboard';
+    LMenuItem.OnClick := @PopoutBoardCopyFenClick;
+    LPopup.Items.Add(LMenuItem);
+    FPopoutBoardControl.PopupMenu := LPopup;
   end;
 
   FPopoutBoard.AssignFrom(FMiniBoard);
   if FPopoutBoardControl <> nil then
     FPopoutBoardControl.Invalidate;
   ShowFormCenteredOnOwner(FMiniBoardForm, Self);
+end;
+
+procedure TMainForm.PopoutBoardCopyFenClick(Sender: TObject);
+begin
+  if FPopoutBoard <> nil then
+    Clipboard.AsText := FPopoutBoard.CurrentFEN;
 end;
 
 procedure TMainForm.PvBoardChanged(Sender: TObject);
@@ -2181,6 +2199,9 @@ begin
 end;
 
 procedure TMainForm.AnalyzerMiniBoardPopoutClick(Sender: TObject);
+var
+  LMenuItem: TMenuItem;
+  LPopup: TPopupMenu;
 begin
   if FAnalyzerMiniBoardForm = nil then
   begin
@@ -2200,12 +2221,25 @@ begin
     FAnalyzerPopoutBoardControl.Board := FAnalyzerPopoutBoard;
     FAnalyzerPopoutBoardControl.BoardFlipped := FBoardFlipped;
     ApplyBoardTheme(FAnalyzerPopoutBoardControl, True);
+
+    LPopup := TPopupMenu.Create(FAnalyzerMiniBoardForm);
+    LMenuItem := TMenuItem.Create(FAnalyzerMiniBoardForm);
+    LMenuItem.Caption := 'Copy FEN to clipboard';
+    LMenuItem.OnClick := @AnalyzerPopoutBoardCopyFenClick;
+    LPopup.Items.Add(LMenuItem);
+    FAnalyzerPopoutBoardControl.PopupMenu := LPopup;
   end;
 
   FAnalyzerPopoutBoard.AssignFrom(FAnalyzerMiniBoard);
   if FAnalyzerPopoutBoardControl <> nil then
     FAnalyzerPopoutBoardControl.Invalidate;
   ShowFormCenteredOnOwner(FAnalyzerMiniBoardForm, Self);
+end;
+
+procedure TMainForm.AnalyzerPopoutBoardCopyFenClick(Sender: TObject);
+begin
+  if FAnalyzerPopoutBoard <> nil then
+    Clipboard.AsText := FAnalyzerPopoutBoard.CurrentFEN;
 end;
 
 procedure TMainForm.AnalyzerPvBoardChanged(Sender: TObject);
@@ -2419,6 +2453,7 @@ begin
     try
       FDatabaseForm.ApplyPreferences(FPreferences);
       FDatabaseForm.CreateDatabase(Dialog.FileName);
+      FDatabaseForm.SetSearchFEN(ActiveBoard.CurrentFEN);
       ShowFormCenteredOnOwner(FDatabaseForm, Self);
     except
       on E: Exception do
@@ -2447,6 +2482,7 @@ begin
     try
       FDatabaseForm.ApplyPreferences(FPreferences);
       FDatabaseForm.OpenDatabase(Dialog.FileName);
+      FDatabaseForm.SetSearchFEN(ActiveBoard.CurrentFEN);
       ShowFormCenteredOnOwner(FDatabaseForm, Self);
     except
       on E: Exception do

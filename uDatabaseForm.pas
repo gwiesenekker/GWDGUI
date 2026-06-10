@@ -41,6 +41,7 @@ type
     procedure ApplyPreferences(const APreferences: TGuiPreferences);
     procedure CreateDatabase(const AFileName: string);
     procedure OpenDatabase(const AFileName: string);
+    procedure SetSearchFEN(const AFEN: string);
   end;
 
 implementation
@@ -137,27 +138,24 @@ begin
   LButton := TButton.Create(Self);
   LButton.Parent := LBoardPanel;
   LButton.Align := alTop;
-  LButton.Caption := 'Paste FEN';
-  LButton.OnClick := @SetFenClick;
-
-  LButton := TButton.Create(Self);
-  LButton.Parent := LBoardPanel;
-  LButton.Align := alTop;
   LButton.Caption := 'Search';
   LButton.OnClick := @SearchClick;
 
   LBoardPopup := TPopupMenu.Create(Self);
   LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := 'Copy FEN position to clipboard';
+  LMenuItem.OnClick := @BoardCopyFenClick;
+  LBoardPopup.Items.Add(LMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := 'Paste FEN position from clipboard';
   LMenuItem.OnClick := @BoardPasteFenClick;
   LBoardPopup.Items.Add(LMenuItem);
   LMenuItem := TMenuItem.Create(Self);
-  LMenuItem.Caption := 'Setup position...';
-  LMenuItem.OnClick := @SetupPositionClick;
+  LMenuItem.Caption := '-';
   LBoardPopup.Items.Add(LMenuItem);
   LMenuItem := TMenuItem.Create(Self);
-  LMenuItem.Caption := 'Copy FEN position to clipboard';
-  LMenuItem.OnClick := @BoardCopyFenClick;
+  LMenuItem.Caption := 'Setup position...';
+  LMenuItem.OnClick := @SetupPositionClick;
   LBoardPopup.Items.Add(LMenuItem);
 
   FBoardControl := TDraughtsBoardControl.Create(Self);
@@ -255,6 +253,12 @@ begin
   PopulateGamesGrid;
   PopulateResultsGrid;
   FStatusLabel.Caption := 'Opened ' + AFileName;
+end;
+
+procedure TDatabaseForm.SetSearchFEN(const AFEN: string);
+begin
+  FFenEdit.Text := AFEN;
+  UpdateBoardFromFen;
 end;
 
 procedure TDatabaseForm.PopulateGamesGrid;

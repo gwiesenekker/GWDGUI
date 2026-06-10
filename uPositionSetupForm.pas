@@ -18,18 +18,27 @@ type
     FBoardControl: TDraughtsBoardControl;
     FFenEdit: TEdit;
     FOnAccepted: TPositionSetupAcceptedEvent;
-    FPieceCombo: TComboBox;
-    FSideCombo: TComboBox;
+    FPaletteLabel: TLabel;
+    FPalettePanel: TPanel;
+    FPiecePaintBoxes: array[0..3] of TPaintBox;
+    FSelectedPiece: TDraughtsPieceKind;
+    FSideGroup: TRadioGroup;
     procedure ApplyClick(Sender: TObject);
     procedure BoardMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     procedure CancelClick(Sender: TObject);
     procedure ClearClick(Sender: TObject);
     function CurrentPiece: TDraughtsPieceKind;
+    procedure FormResizeHandler(Sender: TObject);
+    function PalettePiece(AIndex: Integer): TDraughtsPieceKind;
+    procedure PiecePaletteClick(Sender: TObject);
+    procedure PiecePalettePaint(Sender: TObject);
     procedure SetFenClick(Sender: TObject);
     procedure SetStartClick(Sender: TObject);
     procedure SideChange(Sender: TObject);
     procedure UpdateFenEdit;
+    procedure UpdatePiecePalette;
+    procedure UpdatePiecePaletteLayout;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -41,24 +50,37 @@ type
 
 implementation
 
+uses
+  Math;
+
+procedure ShrinkRect(var ARect: TRect; DX, DY: Integer);
+begin
+  Inc(ARect.Left, DX);
+  Inc(ARect.Top, DY);
+  Dec(ARect.Right, DX);
+  Dec(ARect.Bottom, DY);
+end;
+
 constructor TPositionSetupForm.Create(AOwner: TComponent);
 var
   LApplyButton: TButton;
   LBottomPanel: TPanel;
   LButton: TButton;
   LControlsPanel: TPanel;
-  LLabel: TLabel;
+  I: Integer;
 begin
   inherited Create(AOwner);
 
   Caption := 'Setup position';
   Position := poDesigned;
-  Width := 620;
+  OnResize := @FormResizeHandler;
+  Width := 520;
   Height := 620;
-  Constraints.MinWidth := 420;
+  Constraints.MinWidth := 520;
   Constraints.MinHeight := 420;
 
   FBoard := TDraughtsBoard.Create;
+  FSelectedPiece := pkWhiteMan;
 
   LBottomPanel := TPanel.Create(Self);
   LBottomPanel.Parent := Self;
@@ -85,51 +107,19 @@ begin
   LControlsPanel := TPanel.Create(Self);
   LControlsPanel.Parent := Self;
   LControlsPanel.Align := alTop;
-  LControlsPanel.Height := 92;
+  LControlsPanel.Height := 76;
   LControlsPanel.BevelOuter := bvNone;
   LControlsPanel.BorderSpacing.Around := 8;
 
-  LLabel := TLabel.Create(Self);
-  LLabel.Parent := LControlsPanel;
-  LLabel.SetBounds(0, 4, 84, 24);
-  LLabel.Caption := 'Side';
-  LLabel.Layout := tlCenter;
-
-  FSideCombo := TComboBox.Create(Self);
-  FSideCombo.Parent := LControlsPanel;
-  FSideCombo.SetBounds(88, 4, 110, 24);
-  FSideCombo.Style := csDropDownList;
-  FSideCombo.Items.Add('White');
-  FSideCombo.Items.Add('Black');
-  FSideCombo.ItemIndex := 0;
-  FSideCombo.OnChange := @SideChange;
-
-  LLabel := TLabel.Create(Self);
-  LLabel.Parent := LControlsPanel;
-  LLabel.SetBounds(216, 4, 84, 24);
-  LLabel.Caption := 'Piece';
-  LLabel.Layout := tlCenter;
-
-  FPieceCombo := TComboBox.Create(Self);
-  FPieceCombo.Parent := LControlsPanel;
-  FPieceCombo.SetBounds(300, 4, 130, 24);
-  FPieceCombo.Style := csDropDownList;
-  FPieceCombo.Items.Add('Empty');
-  FPieceCombo.Items.Add('White man');
-  FPieceCombo.Items.Add('White king');
-  FPieceCombo.Items.Add('Black man');
-  FPieceCombo.Items.Add('Black king');
-  FPieceCombo.ItemIndex := 1;
-
   LButton := TButton.Create(Self);
   LButton.Parent := LControlsPanel;
-  LButton.SetBounds(448, 4, 76, 24);
+  LButton.SetBounds(0, 8, 76, 24);
   LButton.Caption := 'Start';
   LButton.OnClick := @SetStartClick;
 
   LButton := TButton.Create(Self);
   LButton.Parent := LControlsPanel;
-  LButton.SetBounds(532, 4, 76, 24);
+  LButton.SetBounds(84, 8, 76, 24);
   LButton.Caption := 'Clear';
   LButton.OnClick := @ClearClick;
 
@@ -145,12 +135,57 @@ begin
   LButton.Caption := 'Paste FEN';
   LButton.OnClick := @SetFenClick;
 
+  FPalettePanel := TPanel.Create(Self);
+  FPalettePanel.Parent := Self;
+  FPalettePanel.Align := alLeft;
+  FPalettePanel.Width := 104;
+  FPalettePanel.BevelOuter := bvNone;
+  FPalettePanel.Color := clBtnFace;
+  FPalettePanel.ParentColor := False;
+  FPalettePanel.BorderSpacing.Left := 4;
+  FPalettePanel.BorderSpacing.Right := 4;
+  FPalettePanel.BorderSpacing.Bottom := 8;
+
+  for I := 0 to High(FPiecePaintBoxes) do
+  begin
+    FPiecePaintBoxes[I] := TPaintBox.Create(Self);
+    FPiecePaintBoxes[I].Parent := FPalettePanel;
+    FPiecePaintBoxes[I].Height := 64;
+    FPiecePaintBoxes[I].BorderSpacing.Left := 8;
+    FPiecePaintBoxes[I].BorderSpacing.Right := 8;
+    FPiecePaintBoxes[I].BorderSpacing.Bottom := 8;
+    FPiecePaintBoxes[I].Tag := I;
+    FPiecePaintBoxes[I].OnClick := @PiecePaletteClick;
+    FPiecePaintBoxes[I].OnPaint := @PiecePalettePaint;
+  end;
+
+  FPaletteLabel := TLabel.Create(Self);
+  FPaletteLabel.Parent := FPalettePanel;
+  FPaletteLabel.Height := 24;
+  FPaletteLabel.Caption := 'Pieces';
+  FPaletteLabel.Alignment := taCenter;
+  FPaletteLabel.Layout := tlCenter;
+  FPaletteLabel.Color := clBtnFace;
+  FPaletteLabel.ParentColor := False;
+
+  FSideGroup := TRadioGroup.Create(Self);
+  FSideGroup.Parent := FPalettePanel;
+  FSideGroup.Height := 72;
+  FSideGroup.Caption := 'Side to move';
+  FSideGroup.Columns := 1;
+  FSideGroup.Items.Add('White');
+  FSideGroup.Items.Add('Black');
+  FSideGroup.ItemIndex := 0;
+  FSideGroup.BorderSpacing.Bottom := 8;
+  FSideGroup.OnClick := @SideChange;
+
   FBoardControl := TDraughtsBoardControl.Create(Self);
   FBoardControl.Parent := Self;
   FBoardControl.Align := alClient;
   FBoardControl.Board := FBoard;
   FBoardControl.ShowSideToMoveMarker := True;
   FBoardControl.OnMouseDown := @BoardMouseDown;
+  UpdatePiecePaletteLayout;
 end;
 
 destructor TPositionSetupForm.Destroy;
@@ -171,6 +206,7 @@ begin
   FBoardControl.HintSourceSquareColor := APreferences.HintMoveColor;
   FBoardControl.LastMoveTargetSquareColor := APreferences.LastMoveColor;
   FBoardControl.TargetSquareColor := APreferences.TargetSquareColor;
+  UpdatePiecePalette;
 end;
 
 procedure TPositionSetupForm.StartSetup(const AFEN: string);
@@ -181,26 +217,111 @@ begin
     FBoard.SetBeginPosition;
   end;
   if FBoard.SideToMove = dsBlack then
-    FSideCombo.ItemIndex := 1
+    FSideGroup.ItemIndex := 1
   else
-    FSideCombo.ItemIndex := 0;
+    FSideGroup.ItemIndex := 0;
   UpdateFenEdit;
+  UpdatePiecePalette;
   FBoardControl.Invalidate;
 end;
 
 function TPositionSetupForm.CurrentPiece: TDraughtsPieceKind;
 begin
-  case FPieceCombo.ItemIndex of
-    1:
-      Result := pkWhiteMan;
-    2:
-      Result := pkWhiteKing;
-    3:
-      Result := pkBlackMan;
-    4:
-      Result := pkBlackKing;
+  Result := FSelectedPiece;
+end;
+
+procedure TPositionSetupForm.FormResizeHandler(Sender: TObject);
+begin
+  UpdatePiecePaletteLayout;
+end;
+
+function TPositionSetupForm.PalettePiece(AIndex: Integer): TDraughtsPieceKind;
+begin
+  case AIndex of
+    0: Result := pkWhiteMan;
+    1: Result := pkWhiteKing;
+    2: Result := pkBlackMan;
+    3: Result := pkBlackKing;
   else
-    Result := pkEmpty;
+    Result := pkWhiteMan;
+  end;
+end;
+
+procedure TPositionSetupForm.PiecePaletteClick(Sender: TObject);
+begin
+  if Sender is TPaintBox then
+  begin
+    FSelectedPiece := PalettePiece(TPaintBox(Sender).Tag);
+    UpdatePiecePalette;
+  end;
+end;
+
+procedure TPositionSetupForm.PiecePalettePaint(Sender: TObject);
+var
+  Box: TPaintBox;
+  CellSize: Integer;
+  Piece: TDraughtsPieceKind;
+  PieceRect: TRect;
+  TextValue: string;
+begin
+  if not (Sender is TPaintBox) then
+    Exit;
+
+  Box := TPaintBox(Sender);
+  CellSize := Min(Box.Width, Box.Height);
+  Piece := PalettePiece(Box.Tag);
+  Box.Canvas.Brush.Color := FBoardControl.BoardDarkColor;
+  Box.Canvas.FillRect(Box.ClientRect);
+
+  Box.Canvas.Pen.Color := clGray;
+  Box.Canvas.Brush.Style := bsClear;
+  Box.Canvas.Rectangle(Box.ClientRect);
+  Box.Canvas.Brush.Style := bsSolid;
+
+  PieceRect := Rect((Box.Width - CellSize) div 2, (Box.Height - CellSize) div 2,
+    (Box.Width + CellSize) div 2, (Box.Height + CellSize) div 2);
+  ShrinkRect(PieceRect, Max(4, CellSize div 8), Max(4, CellSize div 8));
+  if PieceColor(Piece) = pcWhite then
+  begin
+    Box.Canvas.Brush.Color := RGBToColor(245, 241, 229);
+    Box.Canvas.Pen.Color := RGBToColor(70, 70, 70);
+  end
+  else
+  begin
+    Box.Canvas.Brush.Color := RGBToColor(36, 37, 40);
+    Box.Canvas.Pen.Color := RGBToColor(10, 10, 10);
+  end;
+  Box.Canvas.Ellipse(PieceRect);
+  ShrinkRect(PieceRect, Max(2, CellSize div 12), Max(2, CellSize div 12));
+  Box.Canvas.Brush.Style := bsClear;
+  Box.Canvas.Pen.Color := RGBToColor(150, 132, 104);
+  Box.Canvas.Ellipse(PieceRect);
+  Box.Canvas.Brush.Style := bsSolid;
+
+  if Piece in [pkWhiteKing, pkBlackKing] then
+  begin
+    Box.Canvas.Font.Style := [fsBold];
+    Box.Canvas.Font.Size := Max(10, CellSize div 3);
+    if PieceColor(Piece) = pcWhite then
+      Box.Canvas.Font.Color := RGBToColor(50, 50, 50)
+    else
+      Box.Canvas.Font.Color := RGBToColor(235, 230, 220);
+    TextValue := 'K';
+    Box.Canvas.Brush.Style := bsClear;
+    Box.Canvas.TextOut((Box.Width - Box.Canvas.TextWidth(TextValue)) div 2,
+      (Box.Height - Box.Canvas.TextHeight(TextValue)) div 2, TextValue);
+    Box.Canvas.Font.Style := [];
+    Box.Canvas.Brush.Style := bsSolid;
+  end;
+
+  if Piece = FSelectedPiece then
+  begin
+    Box.Canvas.Pen.Color := clHighlight;
+    Box.Canvas.Pen.Width := 4;
+    Box.Canvas.Brush.Style := bsClear;
+    Box.Canvas.Rectangle(Box.ClientRect);
+    Box.Canvas.Pen.Width := 1;
+    Box.Canvas.Brush.Style := bsSolid;
   end;
 end;
 
@@ -211,7 +332,7 @@ end;
 
 procedure TPositionSetupForm.SideChange(Sender: TObject);
 begin
-  if FSideCombo.ItemIndex = 1 then
+  if FSideGroup.ItemIndex = 1 then
     FBoard.SideToMove := dsBlack
   else
     FBoard.SideToMove := dsWhite;
@@ -222,6 +343,7 @@ end;
 procedure TPositionSetupForm.BoardMouseDown(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
+  LPiece: TDraughtsPieceKind;
   LSquare: Integer;
 begin
   if Button <> mbLeft then
@@ -229,7 +351,11 @@ begin
   LSquare := FBoardControl.SquareAtPoint(X, Y);
   if LSquare <= 0 then
     Exit;
-  FBoard[LSquare] := CurrentPiece;
+  LPiece := CurrentPiece;
+  if FBoard[LSquare] = LPiece then
+    FBoard[LSquare] := pkEmpty
+  else
+    FBoard[LSquare] := LPiece;
   UpdateFenEdit;
   FBoardControl.Invalidate;
 end;
@@ -239,9 +365,9 @@ begin
   try
     FBoard.LoadFromFEN(Trim(FFenEdit.Text));
     if FBoard.SideToMove = dsBlack then
-      FSideCombo.ItemIndex := 1
+      FSideGroup.ItemIndex := 1
     else
-      FSideCombo.ItemIndex := 0;
+      FSideGroup.ItemIndex := 0;
     UpdateFenEdit;
     FBoardControl.Invalidate;
   except
@@ -253,7 +379,7 @@ end;
 procedure TPositionSetupForm.SetStartClick(Sender: TObject);
 begin
   FBoard.SetBeginPosition;
-  FSideCombo.ItemIndex := 0;
+  FSideGroup.ItemIndex := 0;
   UpdateFenEdit;
   FBoardControl.Invalidate;
 end;
@@ -261,9 +387,55 @@ end;
 procedure TPositionSetupForm.ClearClick(Sender: TObject);
 begin
   FBoard.Clear;
-  FSideCombo.ItemIndex := 0;
+  FSideGroup.ItemIndex := 0;
   UpdateFenEdit;
   FBoardControl.Invalidate;
+end;
+
+procedure TPositionSetupForm.UpdatePiecePalette;
+var
+  I: Integer;
+begin
+  for I := 0 to High(FPiecePaintBoxes) do
+    if FPiecePaintBoxes[I] <> nil then
+      FPiecePaintBoxes[I].Invalidate;
+end;
+
+procedure TPositionSetupForm.UpdatePiecePaletteLayout;
+var
+  I: Integer;
+  PaletteWidth: Integer;
+  SquareSize: Integer;
+  SideMargin: Integer;
+  TopPos: Integer;
+begin
+  if (FBoardControl = nil) or (FPalettePanel = nil) then
+    Exit;
+
+  SquareSize := Max(32, FBoardControl.BoardSquareSize);
+  PaletteWidth := Max(SquareSize + 8, 96);
+  SideMargin := Max(0, (PaletteWidth - SquareSize) div 2);
+  FPalettePanel.Width := PaletteWidth;
+
+  TopPos := 0;
+  if FSideGroup <> nil then
+  begin
+    FSideGroup.SetBounds(0, TopPos, PaletteWidth, 72);
+    Inc(TopPos, FSideGroup.Height + 8);
+  end;
+  if FPaletteLabel <> nil then
+  begin
+    FPaletteLabel.SetBounds(0, TopPos, PaletteWidth, 24);
+    Inc(TopPos, FPaletteLabel.Height + 4);
+  end;
+  for I := 0 to High(FPiecePaintBoxes) do
+    if FPiecePaintBoxes[I] <> nil then
+    begin
+      FPiecePaintBoxes[I].SetBounds(SideMargin, TopPos, SquareSize,
+        SquareSize);
+      Inc(TopPos, SquareSize + 8);
+    end;
+  UpdatePiecePalette;
 end;
 
 procedure TPositionSetupForm.ApplyClick(Sender: TObject);
