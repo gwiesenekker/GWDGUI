@@ -11,7 +11,7 @@ uses
   uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
   uGuiDialogs, uDatabaseForm, uPositionSetupForm, uPreferences,
-  uPreferencesForm;
+  uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm;
 
 type
   TIntArray = array of Integer;
@@ -73,6 +73,7 @@ type
   TRunningGame = class
   private
     FId: Integer;
+    FAnnotatorAnnotationsText: string;
     FBlackEngineKey: string;
     FBlackPlayerKind: TPlayerKind;
     FPaused: Boolean;
@@ -101,6 +102,8 @@ type
     function IsHumanToMove: Boolean;
     function ReservationSummary: string;
     property Id: Integer read FId;
+    property AnnotatorAnnotationsText: string read FAnnotatorAnnotationsText
+      write FAnnotatorAnnotationsText;
     property Lifecycle: TRunningGameLifecycle read FLifecycle;
     property Paused: Boolean read FPaused write FPaused;
     property Runner: TGameRunnerThread read FRunner;
@@ -189,6 +192,8 @@ type
     FPvMemo: TMemo;
     FPdnOpenDialog: TPdnOpenDialog;
     FResultEdit: TEdit;
+    FScoreHistoryControl: TScoreHistoryControl;
+    FScoreHistoryForm: TScoreHistoryForm;
     FSetupForm: TGameSetupForm;
     FShowStdoutMenuItem: TMenuItem;
     FStartingFEN: string;
@@ -218,6 +223,7 @@ type
     procedure AnalyzerPvBoardChanged(Sender: TObject);
     procedure AnalyzerPopupPopup(Sender: TObject);
     procedure AnalyzerSnapshot(Sender: TObject; ASnapshot: TPvSnapshot);
+    procedure ApplyAnalyzerScoreAnnotation(ASnapshot: TPvSnapshot);
     procedure BuildAnnotatedMoveText(const AMovesText, AAnnotationsText,
       AStartingFEN: string; out AText: string; var AMoveStarts,
       AMoveLengths, ACommentStarts, ACommentLengths: TIntArray;
@@ -286,6 +292,7 @@ type
     function SelectedGame: TRunningGame;
     procedure SavePdnClick(Sender: TObject);
     function SaveCurrentGameWithDialog: Boolean;
+    procedure ScoreHistoryPopoutClick(Sender: TObject);
     procedure SetupPositionAccepted(Sender: TObject; const AFEN: string);
     procedure SetupPositionClick(Sender: TObject);
     procedure ShowStdoutClick(Sender: TObject);
@@ -295,11 +302,16 @@ type
       const ATitlePrefix: string; out AGame: TObject);
     procedure LoadStandaloneFen(const AFEN: string);
     procedure LoadPdnGameToDisplay(AGame: TPdnGame);
+    function MergeAnnotatorAnnotations(const ABaseAnnotations,
+      AAnnotatorAnnotations: string): string;
+    function SetAnnotationScoreInText(const AAnnotationsText: string;
+      APly: Integer; const AName, AScore: string): string;
     procedure UpdateBrowseInfo;
     procedure UpdateBoardInfo;
     procedure UpdateBoardFromBrowseState;
     procedure UpdateBoardHighlights;
     procedure UpdateClockLabels(const AWhiteName, ABlackName: string);
+    procedure UpdateScoreHistory;
     procedure UpdateGameListItem(AGame: TRunningGame);
     procedure UpdateLegalMoves;
     procedure UpdateGameLogMemo;
@@ -525,6 +537,7 @@ var
   LPvInfoTextWidth: Integer;
   LPvSidePanelWidth: Integer;
   LResetButton: TButton;
+  LScoreHistoryPopup: TPopupMenu;
   LTournamentButton: TButton;
 
   procedure AddHeaderField(const ACaption: string; ATop: Integer;
@@ -547,6 +560,8 @@ begin
   inherited Create(AOwner);
 
   Caption := 'GWDGUI - International Polish Draughts';
+  Application.HintColor := RGBToColor(255, 255, 225);
+  Screen.HintFont.Color := clBlack;
   Position := poDesigned;
   KeyPreview := True;
   OnKeyDown := @MainFormKeyDown;
@@ -623,12 +638,15 @@ begin
   LToolbar.BevelOuter := bvNone;
   LToolbar.BorderSpacing.Around := 6;
 
-  LEnginesButton := TButton.Create(Self);
-  LEnginesButton.Parent := LToolbar;
-  LEnginesButton.Align := alLeft;
-  LEnginesButton.Width := 120;
-  LEnginesButton.Caption := 'Engines...';
-  LEnginesButton.OnClick := @EnginesClick;
+  { With alLeft on this widgetset, later-created buttons are placed further
+    left, so create these in reverse visual order. }
+  LTournamentButton := TButton.Create(Self);
+  LTournamentButton.Parent := LToolbar;
+  LTournamentButton.Align := alLeft;
+  LTournamentButton.Width := 120;
+  LTournamentButton.BorderSpacing.Left := 8;
+  LTournamentButton.Caption := 'Tournament...';
+  LTournamentButton.OnClick := @TournamentClick;
 
   LResetButton := TButton.Create(Self);
   LResetButton.Parent := LToolbar;
@@ -638,13 +656,12 @@ begin
   LResetButton.Caption := 'New game...';
   LResetButton.OnClick := @NewGameClick;
 
-  LTournamentButton := TButton.Create(Self);
-  LTournamentButton.Parent := LToolbar;
-  LTournamentButton.Align := alLeft;
-  LTournamentButton.Width := 120;
-  LTournamentButton.BorderSpacing.Left := 8;
-  LTournamentButton.Caption := 'Tournament...';
-  LTournamentButton.OnClick := @TournamentClick;
+  LEnginesButton := TButton.Create(Self);
+  LEnginesButton.Parent := LToolbar;
+  LEnginesButton.Align := alLeft;
+  LEnginesButton.Width := 120;
+  LEnginesButton.Caption := 'Engines...';
+  LEnginesButton.OnClick := @EnginesClick;
 
   LBottomPanel := TPanel.Create(Self);
   LBottomPanel.Parent := Self;
@@ -862,17 +879,6 @@ begin
   LFenPopup.Items.Add(LMenuItem);
   FFenEdit.PopupMenu := LFenPopup;
 
-  FGameMoveMemo := TMemo.Create(Self);
-  FGameMoveMemo.Parent := LSidePanel;
-  FGameMoveMemo.Align := alClient;
-  FGameMoveMemo.ParentFont := True;
-  FGameMoveMemo.ReadOnly := True;
-  FGameMoveMemo.ScrollBars := ssVertical;
-  FGameMoveMemo.WordWrap := True;
-  FGameMoveMemo.HideSelection := False;
-  FGameMoveMemo.OnClick := @GameMoveBrowseClick;
-  FGameMoveMemo.OnKeyDown := @GameMoveBrowseKeyDown;
-
   LPvSplitter := TSplitter.Create(Self);
   LPvSplitter.Parent := LSidePanel;
   LPvSplitter.Align := alBottom;
@@ -885,6 +891,17 @@ begin
   LPvPanel.Height := 130;
   LPvPanel.Constraints.MinHeight := 70;
   LPvPanel.BevelOuter := bvNone;
+
+  FGameMoveMemo := TMemo.Create(Self);
+  FGameMoveMemo.Parent := LSidePanel;
+  FGameMoveMemo.Align := alClient;
+  FGameMoveMemo.ParentFont := True;
+  FGameMoveMemo.ReadOnly := True;
+  FGameMoveMemo.ScrollBars := ssVertical;
+  FGameMoveMemo.WordWrap := True;
+  FGameMoveMemo.HideSelection := False;
+  FGameMoveMemo.OnClick := @GameMoveBrowseClick;
+  FGameMoveMemo.OnKeyDown := @GameMoveBrowseKeyDown;
 
   LPvBoardPanel := TPanel.Create(Self);
   LPvBoardPanel.Parent := LPvPanel;
@@ -913,9 +930,22 @@ begin
   LPvTextPanel.Align := alClient;
   LPvTextPanel.BevelOuter := bvNone;
 
+  FScoreHistoryControl := TScoreHistoryControl.Create(Self);
+  FScoreHistoryControl.Parent := LPvTextPanel;
+  FScoreHistoryControl.SetBounds(0, 0, LPvTextPanel.ClientWidth, 62);
+  FScoreHistoryControl.Anchors := [akTop, akLeft, akRight];
+  FScoreHistoryControl.ParentFont := True;
+  FScoreHistoryControl.ShowEvaluationBar := True;
+  LScoreHistoryPopup := TPopupMenu.Create(Self);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := 'Pop out score history...';
+  LMenuItem.OnClick := @ScoreHistoryPopoutClick;
+  LScoreHistoryPopup.Items.Add(LMenuItem);
+  FScoreHistoryControl.PopupMenu := LScoreHistoryPopup;
+
   LPvLabel := TLabel.Create(Self);
   LPvLabel.Parent := LPvTextPanel;
-  LPvLabel.SetBounds(0, 0, LPvTextPanel.ClientWidth, 22);
+  LPvLabel.SetBounds(0, 64, LPvTextPanel.ClientWidth, 22);
   LPvLabel.Anchors := [akTop, akLeft, akRight];
   LPvLabel.Caption := 'PV';
   LPvLabel.Layout := tlCenter;
@@ -932,7 +962,8 @@ begin
 
   FPvMemo := TMemo.Create(Self);
   FPvMemo.Parent := LPvTextPanel;
-  FPvMemo.SetBounds(0, 24, LPvTextPanel.ClientWidth, LPvTextPanel.ClientHeight - 24);
+  FPvMemo.SetBounds(0, 88, LPvTextPanel.ClientWidth,
+    LPvTextPanel.ClientHeight - 88);
   FPvMemo.Anchors := [akTop, akLeft, akRight, akBottom];
   FPvMemo.ParentFont := True;
   FPvMemo.ReadOnly := True;
@@ -1021,6 +1052,7 @@ begin
   FreeAndNil(FSetupForm);
   FreeAndNil(FPositionSetupForm);
   FreeAndNil(FPreferencesForm);
+  FreeAndNil(FScoreHistoryForm);
   FreeAndNil(FTournamentDialog);
   FreeAndNil(FPdnOpenDialog);
   FreeAndNil(FMiniBoardForm);
@@ -1082,6 +1114,7 @@ begin
     FPositionSetupForm.ApplyPreferences(FPreferences);
   if FDatabaseForm <> nil then
     FDatabaseForm.ApplyPreferences(FPreferences);
+  UpdateScoreHistory;
 end;
 
 procedure TMainForm.ApplyBoardFlipped;
@@ -1624,6 +1657,91 @@ begin
   ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(AMovesText)), AMoves);
 end;
 
+function TMainForm.SetAnnotationScoreInText(const AAnnotationsText: string;
+  APly: Integer; const AName, AScore: string): string;
+var
+  Lines: TStringList;
+begin
+  Lines := TStringList.Create;
+  try
+    Lines.Text := AAnnotationsText;
+    while Lines.Count < APly do
+      Lines.Add('');
+    if APly > 0 then
+      Lines[APly - 1] := AnnotationWithScore(Lines[APly - 1], AName,
+        AScore);
+    Result := Lines.Text;
+  finally
+    Lines.Free;
+  end;
+end;
+
+function TMainForm.MergeAnnotatorAnnotations(const ABaseAnnotations,
+  AAnnotatorAnnotations: string): string;
+var
+  BaseLines: TStringList;
+  I: Integer;
+  AnnotatorLines: TStringList;
+  AnnotatorScore: string;
+begin
+  BaseLines := TStringList.Create;
+  AnnotatorLines := TStringList.Create;
+  try
+    BaseLines.Text := ABaseAnnotations;
+    AnnotatorLines.Text := AAnnotatorAnnotations;
+    while BaseLines.Count < AnnotatorLines.Count do
+      BaseLines.Add('');
+    for I := 0 to AnnotatorLines.Count - 1 do
+    begin
+      AnnotatorScore := ExtractAnnotationValue(AnnotatorLines[I],
+        'annotator');
+      if AnnotatorScore <> '' then
+        BaseLines[I] := AnnotationWithScore(BaseLines[I], 'annotator',
+          AnnotatorScore);
+    end;
+    Result := BaseLines.Text;
+  finally
+    AnnotatorLines.Free;
+    BaseLines.Free;
+  end;
+end;
+
+procedure TMainForm.ApplyAnalyzerScoreAnnotation(ASnapshot: TPvSnapshot);
+var
+  LGame: TRunningGame;
+  LAnnotationsText: string;
+begin
+  if ASnapshot = nil then
+    Exit;
+  if Trim(ASnapshot.Score) = '' then
+    Exit;
+  if ASnapshot.BasePly <= 0 then
+    Exit;
+  if ASnapshot.BasePly > CurrentMoveCount then
+    Exit;
+  if ASnapshot.BaseBoard.PositionKey <> FBoard.PositionKey then
+    Exit;
+
+  LGame := SelectedGame;
+  if (LGame <> nil) and FGameActive then
+  begin
+    LGame.AnnotatorAnnotationsText := SetAnnotationScoreInText(
+      LGame.AnnotatorAnnotationsText, ASnapshot.BasePly, 'annotator',
+      ASnapshot.Score);
+    LAnnotationsText := MergeAnnotatorAnnotations(
+      LGame.Snapshot.MoveAnnotationsText, LGame.AnnotatorAnnotationsText);
+  end
+  else
+    LAnnotationsText := SetAnnotationScoreInText(FMoveAnnotationsText,
+      ASnapshot.BasePly, 'annotator', ASnapshot.Score);
+
+  if LAnnotationsText = FMoveAnnotationsText then
+    Exit;
+  FMoveAnnotationsText := LAnnotationsText;
+  RebuildGameMoveLabels;
+  UpdateScoreHistory;
+end;
+
 procedure TMainForm.LoadPdnGameToDisplay(AGame: TPdnGame);
 var
   I: Integer;
@@ -2091,7 +2209,8 @@ begin
   UpdateMiniBoardFromBoard(AGame.Snapshot.Board);
   FStartingFEN := AGame.Snapshot.StartingFEN;
   FMovesPlayedText := AGame.Snapshot.MovesPlayedText;
-  FMoveAnnotationsText := AGame.Snapshot.MoveAnnotationsText;
+  FMoveAnnotationsText := MergeAnnotatorAnnotations(
+    AGame.Snapshot.MoveAnnotationsText, AGame.AnnotatorAnnotationsText);
   FGameState := AGame.Snapshot.State;
   FGameResult := AGame.Snapshot.GameResult;
   FPrincipalVariation := AGame.Snapshot.PrincipalVariation;
@@ -2569,7 +2688,8 @@ begin
     Game.ResultText := AGame.Snapshot.GameResult;
     Game.StartingFEN := AGame.Snapshot.StartingFEN;
     Game.MovesText := AGame.Snapshot.MovesPlayedText;
-    Game.MoveAnnotationsText := AGame.Snapshot.MoveAnnotationsText;
+    Game.MoveAnnotationsText := MergeAnnotatorAnnotations(
+      AGame.Snapshot.MoveAnnotationsText, AGame.AnnotatorAnnotationsText);
     AppendPdnGameToFile(AFileName, Game);
   finally
     Game.Free;
@@ -2627,6 +2747,14 @@ end;
 procedure TMainForm.SavePdnClick(Sender: TObject);
 begin
   SaveCurrentGameWithDialog;
+end;
+
+procedure TMainForm.ScoreHistoryPopoutClick(Sender: TObject);
+begin
+  if FScoreHistoryForm = nil then
+    FScoreHistoryForm := TScoreHistoryForm.Create(Self);
+  UpdateScoreHistory;
+  ShowFormCenteredOnOwner(FScoreHistoryForm, Self);
 end;
 
 procedure TMainForm.GameSetupAccepted(Sender: TObject; const ASetup: TGameSetup);
@@ -2778,6 +2906,8 @@ begin
           if FAnalyzerPvBrowser <> nil then
             FAnalyzerPvBrowser.SetSnapshot(
               TAnalyzerSnapshotGuiMessage(EventObject).Snapshot, FStartingFEN);
+          ApplyAnalyzerScoreAnnotation(
+            TAnalyzerSnapshotGuiMessage(EventObject).Snapshot);
           if FPvHintSource = phsAnalyzer then
           begin
             UpdateBoardHighlights;
@@ -3041,6 +3171,7 @@ begin
   HighlightGameMoveTextSelection(False);
   UpdateLegalMoves;
   RestartAnalyzer;
+  UpdateScoreHistory;
   if Trim(FPrincipalVariation) = '' then
   begin
     LPvBaseBoard := LBoard;
@@ -3133,6 +3264,7 @@ begin
     FFenEdit.Text := FStartingFEN;
 
   RebuildGameMoveLabels;
+  UpdateScoreHistory;
 
   UpdateLegalMoves;
   RestartAnalyzer;
@@ -3157,6 +3289,27 @@ begin
   HighlightGameMoveTextSelection(False);
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
+end;
+
+procedure TMainForm.UpdateScoreHistory;
+var
+  LPly: Integer;
+begin
+  if FScoreHistoryControl = nil then
+    Exit;
+
+  LPly := FGameBrowsePly;
+  if LPly < 0 then
+    LPly := CurrentMoveCount;
+  FScoreHistoryControl.MaxScore := FPreferences.EvaluationMaxScore;
+  FScoreHistoryControl.Scale := FPreferences.EvaluationScale;
+  FScoreHistoryControl.StartingSide := FenSideToMove(FStartingFEN);
+  FScoreHistoryControl.AnnotationsText := FMoveAnnotationsText;
+  FScoreHistoryControl.CurrentPly := LPly;
+  if FScoreHistoryForm <> nil then
+    FScoreHistoryForm.UpdateScores(FMoveAnnotationsText, LPly,
+      FPreferences.EvaluationMaxScore, FPreferences.EvaluationScale,
+      FenSideToMove(FStartingFEN));
 end;
 
 procedure TMainForm.UpdateGameListItem(AGame: TRunningGame);

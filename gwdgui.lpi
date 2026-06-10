@@ -18,7 +18,7 @@
     <RunParams>
       <FormatVersion Value="2"/>
     </RunParams>
-    <Units Count="37">
+    <Units Count="39">
       <Unit0>
         <Filename Value="gwdgui.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -163,6 +163,14 @@
         <Filename Value="uPreferencesForm.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit36>
+      <Unit37>
+        <Filename Value="uScoreHistoryControl.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit37>
+      <Unit38>
+        <Filename Value="uScoreHistoryForm.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit38>
     </Units>
     <RequiredPackages Count="1">
       <Item1>

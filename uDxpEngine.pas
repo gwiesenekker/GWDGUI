@@ -6,6 +6,9 @@ interface
 
 uses
   Classes, sockets, ssockets, SyncObjs, SysUtils,
+  {$IFDEF UNIX}
+  BaseUnix,
+  {$ENDIF}
   uDraughtsBoard, uDxpProtocol, uEngineBase, uEngineRegistry, uPlatformProcess,
   uThreadMessageQueue;
 
@@ -106,6 +109,32 @@ type
   end;
 
 implementation
+
+{$IFDEF UNIX}
+const
+  LocalFdCloseOnExec = 1;
+{$ENDIF}
+
+procedure SetHandleCloseOnExec(AHandle: Longint);
+{$IFDEF UNIX}
+var
+  Flags: cint;
+{$ENDIF}
+begin
+  {$IFDEF UNIX}
+  if AHandle < 0 then
+    Exit;
+  Flags := fpfcntl(AHandle, F_GETFD);
+  if Flags <> -1 then
+    fpfcntl(AHandle, F_SETFD, Flags or LocalFdCloseOnExec);
+  {$ENDIF}
+end;
+
+procedure SetSocketCloseOnExec(ASocket: TSocketStream);
+begin
+  if ASocket <> nil then
+    SetHandleCloseOnExec(ASocket.Handle);
+end;
 
 type
   TDxpWorkerCommandKind = (
@@ -353,6 +382,7 @@ end;
 
 procedure TDxpAcceptThread.AcceptConnection(Sender: TObject; Data: TSocketStream);
 begin
+  SetSocketCloseOnExec(Data);
   FLock.Acquire;
   try
     FSocket := Data;
@@ -433,6 +463,7 @@ procedure TDxpAcceptThread.Execute;
 begin
   try
     FServer := TInetServer.Create('0.0.0.0', FPort);
+    SetHandleCloseOnExec(FServer.Socket);
     try
       FServer.ReuseAddress := True;
       FServer.MaxConnections := 1;
@@ -446,6 +477,12 @@ begin
       end;
       FServer.StartAccepting;
     finally
+      FLock.Acquire;
+      try
+        FListening := False;
+      finally
+        FLock.Release;
+      end;
       FreeAndNil(FServer);
     end;
   except
@@ -848,6 +885,7 @@ begin
     end;
     try
       InetSocket := TInetSocket.Create(FEngine.DxpHost, FEngine.DxpPort, 1000);
+      SetSocketCloseOnExec(InetSocket);
       FSocket := InetSocket;
       if FProcess.NeedsPolling then
         FProcess.ReadAvailable;
@@ -885,16 +923,25 @@ begin
   if FEngine.DxpRole = derListen then
   begin
     if not StartListening(DxpLaunchListenTimeoutMs) then
+    begin
+      DoStop;
       Exit;
+    end;
     if not LaunchProcess then
+    begin
+      DoStop;
       Exit;
+    end;
     ChangeState(esInitializing, 'process launched; waiting for DXP socket');
     Result := ConnectSocket(DxpLaunchSocketTimeoutMs);
   end
   else
   begin
     if not LaunchProcess then
+    begin
+      DoStop;
       Exit;
+    end;
     ChangeState(esInitializing, 'process launched; connecting DXP socket');
     Result := ConnectSocket(DxpLaunchSocketTimeoutMs);
   end;
@@ -907,7 +954,7 @@ begin
   else
   begin
     Log('DXP launch check failed; socket not connected');
-      ChangeState(esError, 'DXP socket timeout');
+    ChangeState(esError, 'DXP socket timeout');
     DoStop;
   end;
 end;
@@ -1194,8 +1241,9 @@ end;
 
 procedure TDxpEngine.DoRequestStop;
 begin
+  { Keep teardown on the DXP worker thread.  RequestStop can be called from
+    the runner/orchestrator while the worker is still polling FAcceptThread. }
   FStopping := True;
-  StopListening;
 end;
 
 procedure TDxpEngine.RequestStop;

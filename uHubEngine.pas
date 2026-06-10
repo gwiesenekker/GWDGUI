@@ -36,6 +36,7 @@ type
     procedure ExecuteWorkerCommand(ACommand: TObject);
     function ExtractDoneMove(const ALine: string): string;
     function IsWorkerThread: Boolean;
+    function NormalizeScoreToWhitePerspective(const AScore: string): string;
     function ParamBool(const AName: string; ADefault: Boolean): Boolean;
     procedure ParsePositionMessage(const AMessage: string);
     procedure ProcessData(Sender: TObject; const AText: string);
@@ -159,6 +160,43 @@ begin
   FormatSettings := DefaultFormatSettings;
   FormatSettings.DecimalSeparator := '.';
   Result := Format('%.3f', [ASeconds], FormatSettings);
+end;
+
+function ScoreText(AValue: Double): string;
+var
+  FormatSettings: TFormatSettings;
+begin
+  if Abs(AValue) < 0.0000005 then
+    AValue := 0.0;
+  FormatSettings := DefaultFormatSettings;
+  FormatSettings.DecimalSeparator := '.';
+  Result := FormatFloat('0.###', AValue, FormatSettings);
+end;
+
+function TryHubFloat(const AText: string; out AValue: Double): Boolean;
+var
+  FormatSettings: TFormatSettings;
+begin
+  FormatSettings := DefaultFormatSettings;
+  FormatSettings.DecimalSeparator := '.';
+  Result := TryStrToFloat(StringReplace(Trim(AText), ',', '.', []), AValue,
+    FormatSettings);
+end;
+
+function SideToMoveFromPosition(const AStartingFEN: string;
+  AMoveCount: Integer): TDraughtsSide;
+begin
+  if (Trim(AStartingFEN) <> '') and (UpCase(Trim(AStartingFEN)[1]) = 'B') then
+    Result := dsBlack
+  else
+    Result := dsWhite;
+  if Odd(AMoveCount) then
+  begin
+    if Result = dsWhite then
+      Result := dsBlack
+    else
+      Result := dsWhite;
+  end;
 end;
 
 constructor THubWorkerCommand.Create(AKind: THubWorkerCommandKind);
@@ -333,8 +371,8 @@ begin
           ScoreText := ExtractHubArgument(InfoLine, 'score');
           if ScoreText <> '' then
           begin
-            LastScore := ScoreText;
-            LoggedScoreText := ScoreText;
+            LastScore := NormalizeScoreToWhitePerspective(ScoreText);
+            LoggedScoreText := LastScore;
           end;
           DepthText := ExtractHubArgument(InfoLine, 'depth');
           if DepthText <> '' then
@@ -652,6 +690,33 @@ begin
     Exit(ADefault);
   Result := (Value = 'true') or (Value = '1') or (Value = 'yes') or
     (Value = 'on');
+end;
+
+function THubEngine.NormalizeScoreToWhitePerspective(
+  const AScore: string): string;
+var
+  Perspective: string;
+  ScoreValue: Double;
+begin
+  Result := Trim(AScore);
+  if (Result = '') or (not TryHubFloat(Result, ScoreValue)) then
+    Exit;
+
+  Perspective := LowerCase(Trim(EngineParamValue(FParams,
+    'gui-score-perspective', 'side-to-move')));
+  if Perspective = '' then
+    Perspective := 'side-to-move';
+
+  if (Perspective = 'black') or (Perspective = 'b') then
+    ScoreValue := -ScoreValue
+  else if (Perspective = 'side-to-move') or (Perspective = 'stm') or
+    (Perspective = 'side') then
+  begin
+    if SideToMoveFromPosition(StartingFEN, MovesPlayed.Count) = dsBlack then
+      ScoreValue := -ScoreValue;
+  end;
+
+  Result := ScoreText(ScoreValue);
 end;
 
 procedure THubEngine.ParsePositionMessage(const AMessage: string);

@@ -15,6 +15,8 @@ type
   TPreferencesForm = class(TForm)
   private
     FColorDialog: TColorDialog;
+    FEvaluationMaxEdit: TEdit;
+    FEvaluationScaleGroup: TRadioGroup;
     FOnAccepted: TPreferencesAcceptedEvent;
     FPreferences: TGuiPreferences;
     FSwatches: array[0..7] of TPanel;
@@ -51,9 +53,9 @@ begin
   Position := poDesigned;
   BorderStyle := bsSizeable;
   Width := 500;
-  Height := 500;
+  Height := 660;
   Constraints.MinWidth := 460;
-  Constraints.MinHeight := 460;
+  Constraints.MinHeight := 600;
 
   FColorDialog := TColorDialog.Create(Self);
 
@@ -80,6 +82,34 @@ begin
   AddColorRow(LGroup, 'Last move', 5, 66);
   AddColorRow(LGroup, 'PV move', 6, 102);
   AddColorRow(LGroup, 'Hint move', 7, 138);
+
+  LGroup := TGroupBox.Create(Self);
+  LGroup.Parent := Self;
+  LGroup.Align := alTop;
+  LGroup.Height := 162;
+  LGroup.BorderSpacing.Left := 8;
+  LGroup.BorderSpacing.Right := 8;
+  LGroup.BorderSpacing.Bottom := 8;
+  LGroup.Caption := 'Evaluation bar / score history';
+
+  FEvaluationMaxEdit := TEdit.Create(Self);
+  FEvaluationMaxEdit.Parent := LGroup;
+  FEvaluationMaxEdit.SetBounds(250, 28, 80, 24);
+
+  with TLabel.Create(Self) do
+  begin
+    Parent := LGroup;
+    SetBounds(12, 32, 220, 22);
+    Caption := 'Max score';
+  end;
+
+  FEvaluationScaleGroup := TRadioGroup.Create(Self);
+  FEvaluationScaleGroup.Parent := LGroup;
+  FEvaluationScaleGroup.SetBounds(12, 58, 318, 92);
+  FEvaluationScaleGroup.Caption := 'Scale';
+  FEvaluationScaleGroup.Columns := 2;
+  FEvaluationScaleGroup.Items.Add('Linear');
+  FEvaluationScaleGroup.Items.Add('Logarithmic');
 
   LDefaultsButton := TButton.Create(Self);
   LDefaultsButton.Parent := Self;
@@ -185,6 +215,16 @@ end;
 procedure TPreferencesForm.StartEdit(const APreferences: TGuiPreferences);
 begin
   FPreferences := APreferences;
+  if FEvaluationMaxEdit <> nil then
+    FEvaluationMaxEdit.Text := FormatFloat('0.###',
+      FPreferences.EvaluationMaxScore);
+  if FEvaluationScaleGroup <> nil then
+  begin
+    if FPreferences.EvaluationScale = ssLinear then
+      FEvaluationScaleGroup.ItemIndex := 0
+    else
+      FEvaluationScaleGroup.ItemIndex := 1;
+  end;
   UpdateSwatches;
 end;
 
@@ -206,11 +246,29 @@ end;
 procedure TPreferencesForm.DefaultsClick(Sender: TObject);
 begin
   FPreferences := DefaultGuiPreferences;
+  if FEvaluationMaxEdit <> nil then
+    FEvaluationMaxEdit.Text := FormatFloat('0.###',
+      FPreferences.EvaluationMaxScore);
+  if FEvaluationScaleGroup <> nil then
+    FEvaluationScaleGroup.ItemIndex := 1;
   UpdateSwatches;
 end;
 
 procedure TPreferencesForm.ApplyClick(Sender: TObject);
+var
+  MaxScore: Double;
 begin
+  if (FEvaluationMaxEdit <> nil) and
+    TryStrToFloat(Trim(FEvaluationMaxEdit.Text), MaxScore) and
+    (MaxScore > 0.0) then
+    FPreferences.EvaluationMaxScore := MaxScore;
+  if FEvaluationScaleGroup <> nil then
+  begin
+    if FEvaluationScaleGroup.ItemIndex = 0 then
+      FPreferences.EvaluationScale := ssLinear
+    else
+      FPreferences.EvaluationScale := ssLogarithmic;
+  end;
   if Assigned(FOnAccepted) then
     FOnAccepted(Self, FPreferences);
 end;

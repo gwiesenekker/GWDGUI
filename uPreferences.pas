@@ -8,6 +8,8 @@ uses
   Graphics;
 
 type
+  TScoreScale = (ssLinear, ssLogarithmic);
+
   TGuiPreferences = record
     MainBoardLightColor: TColor;
     MainBoardDarkColor: TColor;
@@ -17,6 +19,8 @@ type
     LastMoveColor: TColor;
     PvMoveColor: TColor;
     HintMoveColor: TColor;
+    EvaluationMaxScore: Double;
+    EvaluationScale: TScoreScale;
   end;
 
 function PreferencesJsonFileName: string;
@@ -45,6 +49,8 @@ begin
   Result.LastMoveColor := clYellow;
   Result.PvMoveColor := RGBToColor(255, 165, 0);
   Result.HintMoveColor := clRed;
+  Result.EvaluationMaxScore := 10.0;
+  Result.EvaluationScale := ssLogarithmic;
 end;
 
 function ColorToJsonText(AColor: TColor): string;
@@ -122,6 +128,13 @@ begin
       LoadColor(TJSONObject(Data), 'last_move', APrefs.LastMoveColor);
       LoadColor(TJSONObject(Data), 'pv_move', APrefs.PvMoveColor);
       LoadColor(TJSONObject(Data), 'hint_move', APrefs.HintMoveColor);
+      APrefs.EvaluationMaxScore := TJSONObject(Data).Get(
+        'evaluation_max_score', APrefs.EvaluationMaxScore);
+      if SameText(TJSONObject(Data).Get('evaluation_scale', 'logarithmic'),
+        'linear') then
+        APrefs.EvaluationScale := ssLinear
+      else
+        APrefs.EvaluationScale := ssLogarithmic;
     end;
   finally
     Data.Free;
@@ -146,6 +159,11 @@ begin
     Data.Add('last_move', ColorToJsonText(APrefs.LastMoveColor));
     Data.Add('pv_move', ColorToJsonText(APrefs.PvMoveColor));
     Data.Add('hint_move', ColorToJsonText(APrefs.HintMoveColor));
+    Data.Add('evaluation_max_score', APrefs.EvaluationMaxScore);
+    if APrefs.EvaluationScale = ssLinear then
+      Data.Add('evaluation_scale', 'linear')
+    else
+      Data.Add('evaluation_scale', 'logarithmic');
     Lines.Text := Data.FormatJSON([], 2);
     Lines.SaveToFile(PreferencesJsonFileName);
   finally

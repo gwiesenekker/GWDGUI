@@ -23,6 +23,8 @@ type
 
 procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList);
 procedure AppendPdnGameToFile(const AFileName: string; AGame: TPdnGame);
+function AnnotationWithScore(const AAnnotation, AName, AScore: string): string;
+function ExtractAnnotationValue(const AAnnotation, AName: string): string;
 
 implementation
 
@@ -155,6 +157,84 @@ begin
     ((Pos('-', AToken) > 0) or (Pos('x', LowerCase(AToken)) > 0));
 end;
 
+function AnnotationNameMatches(const AText: string; AStart: Integer;
+  const AName: string): Boolean;
+var
+  Prefix: string;
+begin
+  Prefix := LowerCase(Copy(AText, AStart, Length(AName) + 1));
+  Result := (Prefix = LowerCase(AName) + ':') or
+    (Prefix = LowerCase(AName) + '=');
+end;
+
+function ExtractAnnotationValue(const AAnnotation, AName: string): string;
+var
+  I: Integer;
+  LowerText: string;
+  StartPos: Integer;
+begin
+  Result := '';
+  LowerText := LowerCase(AAnnotation);
+  StartPos := Pos(LowerCase(AName) + ':', LowerText);
+  if StartPos <= 0 then
+    StartPos := Pos(LowerCase(AName) + '=', LowerText);
+  if StartPos <= 0 then
+    Exit;
+
+  Inc(StartPos, Length(AName) + 1);
+  while (StartPos <= Length(AAnnotation)) and
+    (AAnnotation[StartPos] in [' ', #9]) do
+    Inc(StartPos);
+  I := StartPos;
+  while (I <= Length(AAnnotation)) and (AAnnotation[I] <> ';') do
+    Inc(I);
+  Result := Trim(Copy(AAnnotation, StartPos, I - StartPos));
+end;
+
+function AnnotationWithScore(const AAnnotation, AName, AScore: string): string;
+var
+  I: Integer;
+  Items: TStringList;
+  ItemText: string;
+  NewItem: string;
+  Replaced: Boolean;
+begin
+  Result := '';
+  if Trim(AScore) = '' then
+    Exit(Trim(AAnnotation));
+
+  Items := TStringList.Create;
+  try
+    ExtractStrings([';'], [], PChar(AAnnotation), Items);
+    NewItem := Trim(AName) + ': ' + Trim(AScore);
+    Replaced := False;
+    for I := 0 to Items.Count - 1 do
+    begin
+      ItemText := Trim(Items[I]);
+      if ItemText = '' then
+        Continue;
+      if AnnotationNameMatches(ItemText, 1, AName) or
+        ((SameText(AName, 'engine')) and AnnotationNameMatches(ItemText, 1,
+        'score')) then
+      begin
+        ItemText := NewItem;
+        Replaced := True;
+      end;
+      if Result <> '' then
+        Result += '; ';
+      Result += ItemText;
+    end;
+    if not Replaced then
+    begin
+      if Result <> '' then
+        Result += '; ';
+      Result += NewItem;
+    end;
+  finally
+    Items.Free;
+  end;
+end;
+
 procedure ExtractMovesAndAnnotationsFromPdnText(const AText: string;
   AMoves, AAnnotations: TStrings);
 var
@@ -193,16 +273,19 @@ var
   procedure ProcessComment;
   var
     LCommentText: string;
-    LScorePos: SizeInt;
+    LLowerComment: string;
   begin
     LCommentText := Trim(LComment);
     LComment := '';
     if (LLastMoveIndex < 0) or (LLastMoveIndex >= AAnnotations.Count) then
       Exit;
-    LScorePos := Pos('score=', LowerCase(LCommentText));
-    if LScorePos > 0 then
-      AAnnotations[LLastMoveIndex] := Trim(Copy(LCommentText, LScorePos,
-        MaxInt));
+    LLowerComment := LowerCase(LCommentText);
+    if (Pos('score=', LLowerComment) > 0) or
+      (Pos('engine:', LLowerComment) > 0) or
+      (Pos('engine=', LLowerComment) > 0) or
+      (Pos('annotator:', LLowerComment) > 0) or
+      (Pos('annotator=', LLowerComment) > 0) then
+      AAnnotations[LLastMoveIndex] := LCommentText;
   end;
 begin
   if AMoves <> nil then

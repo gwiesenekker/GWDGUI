@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils,
-  uDraughtsBoard, uEngineBase, uGameMoveHistory;
+  uDraughtsBoard, uEngineBase, uGameMoveHistory, uPdn;
 
 type
   TClockIncrementMode = (
@@ -571,7 +571,8 @@ begin
   LMoveAnnotation := '';
   if (Trim(ASource) = 'engine') and (FEngines[ASide] <> nil) and
     (FEngines[ASide].LastScore <> '') then
-    LMoveAnnotation := 'score=' + FEngines[ASide].LastScore;
+    LMoveAnnotation := AnnotationWithScore('', 'engine',
+      FEngines[ASide].LastScore);
   if FEngines[ASide] <> nil then
     FMoveHistory.AddMove(LMove, ASide, ASecondsUsed, LMoveAnnotation,
       FEngines[ASide].PrincipalVariation)

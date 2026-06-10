@@ -72,10 +72,10 @@ begin
 
   Caption := 'New game';
   Position := poDesigned;
-  Width := 430;
-  Height := 390;
-  Constraints.MinWidth := 380;
-  Constraints.MinHeight := 340;
+  Width := 560;
+  Height := 420;
+  Constraints.MinWidth := 520;
+  Constraints.MinHeight := 380;
   OnShow := @FormShow;
   FBusyEngineKeys := TStringList.Create;
   FBusyEngineKeys.Sorted := True;
