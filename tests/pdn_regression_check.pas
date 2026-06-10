@@ -3,7 +3,7 @@ program pdn_regression_check;
 {$mode objfpc}{$H+}
 
 uses
-  Classes, SysUtils, uDraughtsBoard, uGameMoveHistory, uPdn;
+  Classes, SysUtils, uDraughtsBoard, uGameDatabase, uGameMoveHistory, uPdn;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -108,6 +108,44 @@ begin
   end;
 end;
 
+procedure CheckPdnGluedMoveNumbers;
+var
+  FileName: string;
+  Game: TPdnGame;
+  Games: TList;
+  Lines: TStringList;
+begin
+  FileName := IncludeTrailingPathDelimiter(GetTempDir(False)) +
+    'gwdgui_pdn_glued_move_numbers_check.pdn';
+  Lines := TStringList.Create;
+  Games := TList.Create;
+  try
+    Lines.Add('[Event "Glued"]');
+    Lines.Add('[White "Alpha"]');
+    Lines.Add('[Black "Beta"]');
+    Lines.Add('[Result "2-0"]');
+    Lines.Add('[FEN "W:W31-50:B1-20"]');
+    Lines.Add('');
+    Lines.Add('1.32-28 1...18-23 2.34-29 2-0');
+    Lines.SaveToFile(FileName);
+
+    LoadPdnGamesFromFile(FileName, Games);
+    CheckEqual(IntToStr(Games.Count), '1',
+      'glued move-number game should be parsed');
+    Game := TPdnGame(Games[0]);
+    CheckEqual(Game.MovesText, '32-28 18-23 34-29',
+      'glued move-number tokens should produce moves');
+    CheckEqual(Game.ResultText, '2-0',
+      'internal draughts result token should be accepted');
+  finally
+    ClearGames(Games);
+    Games.Free;
+    Lines.Free;
+    if FileExists(FileName) then
+      DeleteFile(FileName);
+  end;
+end;
+
 procedure CheckMoveHistoryKeepsMoveAndAnnotationTogether;
 var
   History: TGameMoveHistory;
@@ -132,8 +170,102 @@ begin
   end;
 end;
 
+procedure CheckDatabaseImportSkipsExactDuplicates;
+var
+  Database: TGameDatabase;
+  DbName: string;
+  Duplicates: Integer;
+  Errors: Integer;
+  Games: TList;
+  Imported: Integer;
+  LogName: string;
+  PdnName: string;
+  Lines: TStringList;
+begin
+  DbName := IncludeTrailingPathDelimiter(GetTempDir(False)) +
+    'gwdgui_database_duplicate_check.sqlite';
+  PdnName := IncludeTrailingPathDelimiter(GetTempDir(False)) +
+    'gwdgui_database_duplicate_check.pdn';
+  LogName := IncludeTrailingPathDelimiter(GetTempDir(False)) +
+    'gwdgui_database_duplicate_check.import.log';
+  Lines := TStringList.Create;
+  Games := TList.Create;
+  Database := TGameDatabase.Create;
+  try
+    if FileExists(DbName) then
+      DeleteFile(DbName);
+    if FileExists(LogName) then
+      DeleteFile(LogName);
+    Lines.Add('[Event "Duplicate Test"]');
+    Lines.Add('[White "Alpha"]');
+    Lines.Add('[Black "Beta"]');
+    Lines.Add('[Result "*"]');
+    Lines.Add('[FEN "W:W31-50:B1-20"]');
+    Lines.Add('');
+    Lines.Add('1. 34-30 20-25 *');
+    Lines.Add('');
+    Lines.Add('[Event "Duplicate Test"]');
+    Lines.Add('[White "Alpha"]');
+    Lines.Add('[Black "Beta"]');
+    Lines.Add('[Result "*"]');
+    Lines.Add('[FEN "W:W31-50:B1-20"]');
+    Lines.Add('');
+    Lines.Add('1. 34-30 20-25 *');
+    Lines.Add('');
+    Lines.Add('[Event "Duplicate Test"]');
+    Lines.Add('[White "Alpha"]');
+    Lines.Add('[Black "Beta"]');
+    Lines.Add('[Result "2-0"]');
+    Lines.Add('[FEN "W:W31-50:B1-20"]');
+    Lines.Add('');
+    Lines.Add('1. 34-30 20-25 2-0');
+    Lines.Add('');
+    Lines.Add('[Event "Duplicate Test"]');
+    Lines.Add('[White "Gamma"]');
+    Lines.Add('[Black "Delta"]');
+    Lines.Add('[Result "*"]');
+    Lines.Add('[FEN "W:W31-50:B1-20"]');
+    Lines.Add('');
+    Lines.Add('1. 34-30 20-25 *');
+    Lines.SaveToFile(PdnName);
+
+    Database.CreateDatabase(DbName);
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors, nil,
+      LogName);
+    CheckEqual(IntToStr(Imported), '3',
+      'database import should keep same moves with different players or result');
+    CheckEqual(IntToStr(Duplicates), '1',
+      'database import should skip exact duplicate game');
+    CheckEqual(IntToStr(Errors), '0',
+      'database duplicate import should not count duplicates as errors');
+    Database.LoadGames(Games);
+    CheckEqual(IntToStr(Games.Count), '3',
+      'database should contain only imported non-duplicate games');
+    Lines.LoadFromFile(LogName);
+    Check(Pos(#9 + 'duplicate' + #9, Lines.Text) > 0,
+      'database import log should contain duplicate entry');
+    Check(Pos(#9 + 'plies=2', Lines.Text) > 0,
+      'database import log should contain duplicate ply count');
+    Check(Pos('----- DUPLICATE PDN -----', Lines.Text) > 0,
+      'database import log should contain duplicate PDN block');
+  finally
+    ClearGames(Games);
+    Games.Free;
+    Database.Free;
+    Lines.Free;
+    if FileExists(PdnName) then
+      DeleteFile(PdnName);
+    if FileExists(DbName) then
+      DeleteFile(DbName);
+    if FileExists(LogName) then
+      DeleteFile(LogName);
+  end;
+end;
+
 begin
   CheckPdnLoadAndAppend;
+  CheckPdnGluedMoveNumbers;
   CheckMoveHistoryKeepsMoveAndAnnotationTogether;
+  CheckDatabaseImportSkipsExactDuplicates;
   Writeln('OK');
 end.

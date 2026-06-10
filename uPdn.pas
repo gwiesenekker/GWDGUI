@@ -185,11 +185,27 @@ begin
 end;
 
 function CleanMoveToken(AToken: string): string;
+var
+  DotPos: Integer;
+  Prefix: string;
+  Rest: string;
 begin
   Result := Trim(AToken);
   while (Result <> '') and (Result[Length(Result)] in
     ['!', '?', '+', '=', ',', ';', ':']) do
     Delete(Result, Length(Result), 1);
+  DotPos := Pos('.', Result);
+  if DotPos <= 0 then
+    Exit;
+
+  Prefix := Copy(Result, 1, DotPos - 1);
+  Rest := Copy(Result, DotPos + 1, MaxInt);
+  while (Rest <> '') and (Rest[1] = '.') do
+    Delete(Rest, 1, 1);
+  if (Prefix <> '') and (StrToIntDef(Prefix, -1) >= 0) and
+    (Rest <> '') and (Rest[1] in ['0'..'9']) and
+    ((Pos('-', Rest) > 0) or (Pos('x', LowerCase(Rest)) > 0)) then
+    Result := Rest;
 end;
 
 function LooksLikePdnMove(const AToken: string): Boolean;

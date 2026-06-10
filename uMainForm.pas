@@ -686,10 +686,10 @@ begin
   FAnalyzerPopup := TPopupMenu.Create(Self);
   FAnalyzerPopup.OnPopup := @AnalyzerPopupPopup;
   FAnalyzerOpenMenuItem := TMenuItem.Create(Self);
-  FAnalyzerOpenMenuItem.Caption := 'Open Analyzer';
+  FAnalyzerOpenMenuItem.Caption := 'Open Annotator';
   FAnalyzerPopup.Items.Add(FAnalyzerOpenMenuItem);
   FAnalyzerCloseMenuItem := TMenuItem.Create(Self);
-  FAnalyzerCloseMenuItem.Caption := 'Close Analyzer';
+  FAnalyzerCloseMenuItem.Caption := 'Close Annotator';
   FAnalyzerCloseMenuItem.OnClick := @CloseAnalyzerClick;
   FAnalyzerPopup.Items.Add(FAnalyzerCloseMenuItem);
 
@@ -703,7 +703,7 @@ begin
 
   LAnalyzerBoardPopup := TPopupMenu.Create(Self);
   LMenuItem := TMenuItem.Create(Self);
-  LMenuItem.Caption := 'Pop out analyzer mini-board';
+  LMenuItem.Caption := 'Pop out annotator mini-board';
   LMenuItem.OnClick := @AnalyzerMiniBoardPopoutClick;
   LAnalyzerBoardPopup.Items.Add(LMenuItem);
 
@@ -744,7 +744,7 @@ begin
   FAnalyzerMemo.ReadOnly := True;
   FAnalyzerMemo.ScrollBars := ssAutoBoth;
   FAnalyzerMemo.WordWrap := False;
-  FAnalyzerMemo.Lines.Add('Analyzer closed');
+  FAnalyzerMemo.Lines.Add('Annotator closed');
   FAnalyzerMemo.PopupMenu := FAnalyzerPopup;
 
   LAnalyzerSplitter := TSplitter.Create(Self);
@@ -1017,7 +1017,7 @@ begin
   FHintFromMainMenuItem.OnClick := @HintSourceClick;
   LBoardPopup.Items.Add(FHintFromMainMenuItem);
   FHintFromAnalyzerMenuItem := TMenuItem.Create(Self);
-  FHintFromAnalyzerMenuItem.Caption := 'Show hints from analyzer PV';
+  FHintFromAnalyzerMenuItem.Caption := 'Show hints from annotator PV';
   FHintFromAnalyzerMenuItem.RadioItem := True;
   FHintFromAnalyzerMenuItem.GroupIndex := 1;
   FHintFromAnalyzerMenuItem.OnClick := @HintSourceClick;
@@ -1426,7 +1426,7 @@ begin
   if FAnalyzerRunner <> nil then
   begin
     if FAnalyzerMemo <> nil then
-      FAnalyzerMemo.Lines.Add('Closing Analyzer');
+      FAnalyzerMemo.Lines.Add('Closing Annotator');
     FAnalyzerRunner.PostShutdown;
   end;
   FAnalyzerEngineKey := '';
@@ -2330,7 +2330,7 @@ begin
   if FAnalyzerMiniBoardForm = nil then
   begin
     FAnalyzerMiniBoardForm := TForm.Create(Self);
-    FAnalyzerMiniBoardForm.Caption := 'Analyzer mini-board';
+    FAnalyzerMiniBoardForm.Caption := 'Annotator mini-board';
     FAnalyzerMiniBoardForm.Position := poDesigned;
     FAnalyzerMiniBoardForm.Width := 520;
     FAnalyzerMiniBoardForm.Height := 540;

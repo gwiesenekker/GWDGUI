@@ -18,6 +18,7 @@ gwdgui.exe
 
 # Engines / large assets
 GWD/
+GIT/
 engine*/
 engines/
 *.bin

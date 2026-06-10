@@ -21,6 +21,8 @@ type
     FExecutableName: string;
     FExePath: string;
     FHubId: string;
+    FIniContent: string;
+    FIniFileName: string;
     FInitText: string;
     FKind: TExternalEngineKind;
     procedure SetExePath(const AValue: string);
@@ -40,6 +42,8 @@ type
     property ExecutableName: string read FExecutableName write FExecutableName;
     property ExePath: string read FExePath write SetExePath;
     property HubId: string read FHubId write FHubId;
+    property IniContent: string read FIniContent write FIniContent;
+    property IniFileName: string read FIniFileName write FIniFileName;
     property InitText: string read FInitText write FInitText;
     property Kind: TExternalEngineKind read FKind write SetKind;
   end;
@@ -62,6 +66,8 @@ type
 procedure SplitLaunchArguments(const AText: string; AArgs: TStrings);
 function ExpandEnginePlaceholders(const AText: string;
   AEngine: TExternalEngineDefinition): string;
+procedure WriteEngineIniFile(const AIniFileName, AIniContent: string;
+  AEngine: TExternalEngineDefinition);
 procedure AddEngineReservationKeys(AEngine: TExternalEngineDefinition;
   AKeys: TStrings);
 function EnginesJsonFileName: string;
@@ -98,6 +104,8 @@ begin
   FExecutableName := Source.ExecutableName;
   FExePath := Source.ExePath;
   FHubId := Source.HubId;
+  FIniContent := Source.IniContent;
+  FIniFileName := Source.IniFileName;
   FInitText := Source.InitText;
   FKind := Source.Kind;
 end;
@@ -248,6 +256,22 @@ begin
     [rfReplaceAll, rfIgnoreCase]);
   Result := StringReplace(Result, '{port}', IntToStr(AEngine.DxpPort),
     [rfReplaceAll, rfIgnoreCase]);
+end;
+
+procedure WriteEngineIniFile(const AIniFileName, AIniContent: string;
+  AEngine: TExternalEngineDefinition);
+var
+  Lines: TStringList;
+begin
+  if Trim(AIniFileName) = '' then
+    Exit;
+  Lines := TStringList.Create;
+  try
+    Lines.Text := ExpandEnginePlaceholders(AIniContent, AEngine);
+    Lines.SaveToFile(AIniFileName);
+  finally
+    Lines.Free;
+  end;
 end;
 
 function EnginesJsonFileName: string;

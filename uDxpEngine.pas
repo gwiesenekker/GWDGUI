@@ -9,8 +9,8 @@ uses
   {$IFDEF UNIX}
   BaseUnix,
   {$ENDIF}
-  uDraughtsBoard, uDxpProtocol, uEngineBase, uEngineRegistry, uPlatformProcess,
-  uThreadMessageQueue;
+  uDraughtsBoard, uDxpProtocol, uEngineBase, uEngineParamsJson,
+  uEngineRegistry, uPlatformProcess, uThreadMessageQueue;
 
 type
   TDxpAcceptThread = class(TThread)
@@ -750,11 +750,22 @@ end;
 function TDxpEngine.LaunchProcess: Boolean;
 var
   Args: TStringList;
+  Params: TEngineParamArray;
 begin
   Result := False;
+  Params := nil;
   Args := TStringList.Create;
   try
     SplitLaunchArguments(ExpandEnginePlaceholders(FEngine.Arguments, FEngine), Args);
+    LoadEngineParamsFromJson(EngineParamsFileName(FEngine.ExePath), 'dxp',
+      Params);
+    FEngine.IniFileName := EngineParamValue(Params, 'gui-ini-file',
+      FEngine.IniFileName);
+    FEngine.IniContent := EngineParamValue(Params, 'gui-ini-content',
+      FEngine.IniContent);
+    WriteEngineIniFile(FEngine.IniFileName, FEngine.IniContent, FEngine);
+    if Trim(FEngine.IniFileName) <> '' then
+      Log('wrote expanded INI/config file; file=' + FEngine.IniFileName);
     Log('launch; executable=' + FEngine.ExePath);
     ChangeState(esLaunching, 'starting DXP process');
     FProcess.Start(FEngine.ExePath, Args, ExtractFilePath(FEngine.ExePath));

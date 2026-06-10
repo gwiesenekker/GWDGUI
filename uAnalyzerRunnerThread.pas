@@ -192,7 +192,7 @@ begin
           FEngine.StopSearch;
           PublishSnapshot;
           if Assigned(FOnLog) then
-            FOnLog(Self, 'Analyzer idle; terminal position');
+            FOnLog(Self, 'Annotator idle; terminal position');
           Exit;
         end;
         Moves := TStringList.Create;
@@ -247,15 +247,15 @@ begin
     FEngine := THubEngine.Create(FEngineDefinition);
     FEngine.OnLog := @RuntimeLog;
     if Assigned(FOnLog) then
-      FOnLog(Self, 'Opening Analyzer: ' + EnginePickerDisplayName(FEngineDefinition, 0));
+      FOnLog(Self, 'Opening Annotator: ' + EnginePickerDisplayName(FEngineDefinition, 0));
     if not FEngine.LaunchAndInit then
     begin
       if Assigned(FOnLog) then
-        FOnLog(Self, 'Analyzer launch failed');
+        FOnLog(Self, 'Annotator launch failed');
       Exit;
     end;
     if Assigned(FOnLog) then
-      FOnLog(Self, 'Analyzer ready');
+      FOnLog(Self, 'Annotator ready');
 
     while not Terminated do
     begin
@@ -289,7 +289,7 @@ begin
       FEngine := nil;
     end;
     if Assigned(FOnLog) then
-      FOnLog(Self, 'Analyzer closed');
+      FOnLog(Self, 'Annotator closed');
     if Assigned(FOnFinished) then
       FOnFinished(Self);
   end;

@@ -27,13 +27,14 @@ type
     FResults: TList;
     FResultsGrid: TStringGrid;
     FPositionSetupForm: TPositionSetupForm;
+    FSearchButton: TButton;
     FStatusLabel: TLabel;
     procedure BoardCopyFenClick(Sender: TObject);
     procedure BoardPasteFenClick(Sender: TObject);
     procedure ClearObjectList(AList: TList);
     procedure FormCloseHandler(Sender: TObject; var CloseAction: TCloseAction);
     procedure ImportProgress(ABytesRead, ATotalBytes: Int64; AImported,
-      AErrors: Integer; var ACancel: Boolean);
+      ADuplicates, AErrors: Integer; var ACancel: Boolean);
     procedure ImportProgressCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure ImportPdnClick(Sender: TObject);
     procedure PopulateGamesGrid;
@@ -62,7 +63,6 @@ constructor TDatabaseForm.Create(AOwner: TComponent);
 var
   LBoardPanel: TPanel;
   LBoardPopup: TPopupMenu;
-  LButton: TButton;
   LMenuItem: TMenuItem;
   LRootPanel: TPanel;
   LSearchPanel: TPanel;
@@ -108,22 +108,24 @@ begin
   FGamesGrid.Align := alClient;
   FGamesGrid.FixedCols := 0;
   FGamesGrid.FixedRows := 1;
-  FGamesGrid.ColCount := 6;
+  FGamesGrid.ColCount := 7;
   FGamesGrid.RowCount := 2;
   FGamesGrid.Options := FGamesGrid.Options + [goRowSelect] -
     [goEditing, goRangeSelect];
-  FGamesGrid.Cells[0, 0] := 'White';
-  FGamesGrid.Cells[1, 0] := 'Black';
-  FGamesGrid.Cells[2, 0] := 'Event';
-  FGamesGrid.Cells[3, 0] := 'Result';
-  FGamesGrid.Cells[4, 0] := 'Starting FEN';
-  FGamesGrid.Cells[5, 0] := 'Plies';
-  FGamesGrid.ColWidths[0] := 160;
+  FGamesGrid.Cells[0, 0] := '#';
+  FGamesGrid.Cells[1, 0] := 'White';
+  FGamesGrid.Cells[2, 0] := 'Black';
+  FGamesGrid.Cells[3, 0] := 'Event';
+  FGamesGrid.Cells[4, 0] := 'Result';
+  FGamesGrid.Cells[5, 0] := 'Starting FEN';
+  FGamesGrid.Cells[6, 0] := 'Plies';
+  FGamesGrid.ColWidths[0] := 55;
   FGamesGrid.ColWidths[1] := 160;
-  FGamesGrid.ColWidths[2] := 280;
-  FGamesGrid.ColWidths[3] := 70;
-  FGamesGrid.ColWidths[4] := 190;
-  FGamesGrid.ColWidths[5] := 60;
+  FGamesGrid.ColWidths[2] := 160;
+  FGamesGrid.ColWidths[3] := 280;
+  FGamesGrid.ColWidths[4] := 70;
+  FGamesGrid.ColWidths[5] := 190;
+  FGamesGrid.ColWidths[6] := 60;
 
   LSplitter := TSplitter.Create(Self);
   LSplitter.Parent := LRootPanel;
@@ -147,11 +149,11 @@ begin
   FFenEdit.Align := alTop;
   FFenEdit.Text := FBoard.CurrentFEN;
 
-  LButton := TButton.Create(Self);
-  LButton.Parent := LBoardPanel;
-  LButton.Align := alTop;
-  LButton.Caption := 'Search';
-  LButton.OnClick := @SearchClick;
+  FSearchButton := TButton.Create(Self);
+  FSearchButton.Parent := LBoardPanel;
+  FSearchButton.Align := alTop;
+  FSearchButton.Caption := 'Search';
+  FSearchButton.OnClick := @SearchClick;
 
   LBoardPopup := TPopupMenu.Create(Self);
   LMenuItem := TMenuItem.Create(Self);
@@ -250,7 +252,7 @@ begin
 end;
 
 procedure TDatabaseForm.ImportProgress(ABytesRead, ATotalBytes: Int64;
-  AImported, AErrors: Integer; var ACancel: Boolean);
+  AImported, ADuplicates, AErrors: Integer; var ACancel: Boolean);
 var
   ElapsedSeconds: Double;
   Percent: Integer;
@@ -268,9 +270,9 @@ begin
 
   ElapsedSeconds := (GetTickCount64 - FImportStartTick) / 1000;
   FImportProgressLabel.Caption :=
-    Format('Imported %d game(s), errors %d, %.1f MB / %.1f MB, elapsed %.1f s',
-      [AImported, AErrors, ABytesRead / 1048576, ATotalBytes / 1048576,
-      ElapsedSeconds]);
+    Format('Games %d, errors %d, dups %d, %.1f/%.1f MB, %.1f s',
+      [AImported, AErrors, ADuplicates, ABytesRead / 1048576,
+      ATotalBytes / 1048576, ElapsedSeconds]);
   Application.ProcessMessages;
   ACancel := FImportCancel;
 end;
@@ -331,16 +333,18 @@ begin
     FGamesGrid.Cells[3, Row] := '';
     FGamesGrid.Cells[4, Row] := '';
     FGamesGrid.Cells[5, Row] := '';
+    FGamesGrid.Cells[6, Row] := '';
   end;
   for Row := 1 to FGameInfos.Count do
   begin
     Info := TDatabaseGameInfo(FGameInfos[Row - 1]);
-    FGamesGrid.Cells[0, Row] := Info.WhiteName;
-    FGamesGrid.Cells[1, Row] := Info.BlackName;
-    FGamesGrid.Cells[2, Row] := Info.EventName;
-    FGamesGrid.Cells[3, Row] := Info.ResultText;
-    FGamesGrid.Cells[4, Row] := Info.StartingFEN;
-    FGamesGrid.Cells[5, Row] := IntToStr(Info.PlyCount);
+    FGamesGrid.Cells[0, Row] := IntToStr(Row);
+    FGamesGrid.Cells[1, Row] := Info.WhiteName;
+    FGamesGrid.Cells[2, Row] := Info.BlackName;
+    FGamesGrid.Cells[3, Row] := Info.EventName;
+    FGamesGrid.Cells[4, Row] := Info.ResultText;
+    FGamesGrid.Cells[5, Row] := Info.StartingFEN;
+    FGamesGrid.Cells[6, Row] := IntToStr(Info.PlyCount);
   end;
 end;
 
@@ -391,15 +395,29 @@ end;
 
 procedure TDatabaseForm.SearchClick(Sender: TObject);
 begin
+  if FSearchButton <> nil then
+    FSearchButton.Enabled := False;
+  FStatusLabel.Caption := 'Searching...';
+  Screen.Cursor := crHourGlass;
+  Application.ProcessMessages;
   try
-    UpdateBoardFromFen;
-    FDatabase.SearchPosition(FBoard.PositionKey, FBoard.SideToMove, FResults);
-    PopulateResultsGrid;
-    FStatusLabel.Caption := IntToStr(FResults.Count) +
-      ' continuation(s) found for ' + FBoard.CurrentFEN;
-  except
-    on E: Exception do
-      ShowGuiOkDialog(Self, 'Database search', E.Message);
+    try
+      UpdateBoardFromFen;
+      FDatabase.SearchPosition(FBoard.PositionKey, FBoard.SideToMove, FResults);
+      PopulateResultsGrid;
+      FStatusLabel.Caption := IntToStr(FResults.Count) +
+        ' continuation(s) found for ' + FBoard.CurrentFEN;
+    except
+      on E: Exception do
+      begin
+        FStatusLabel.Caption := 'Search failed';
+        ShowGuiOkDialog(Self, 'Database search', E.Message);
+      end;
+    end;
+  finally
+    Screen.Cursor := crDefault;
+    if FSearchButton <> nil then
+      FSearchButton.Enabled := True;
   end;
 end;
 
@@ -435,9 +453,11 @@ end;
 procedure TDatabaseForm.ImportPdnClick(Sender: TObject);
 var
   Dialog: TOpenDialog;
+  Duplicates: Integer;
   Errors: Integer;
   Imported: Integer;
   LButton: TButton;
+  LogFileName: string;
 begin
   Dialog := TOpenDialog.Create(Self);
   try
@@ -446,6 +466,7 @@ begin
     if not Dialog.Execute then
       Exit;
     try
+      LogFileName := ChangeFileExt(Dialog.FileName, '.import.log');
       FImportCancel := False;
       FImportStartTick := GetTickCount64;
       FImportProgressForm := TForm.Create(Self);
@@ -475,8 +496,8 @@ begin
         LButton.OnClick := @StopImportClick;
 
         ShowFormCenteredOnOwner(FImportProgressForm, Self);
-        FDatabase.ImportPdnFile(Dialog.FileName, Imported, Errors,
-          @ImportProgress);
+        FDatabase.ImportPdnFile(Dialog.FileName, Imported, Duplicates, Errors,
+          @ImportProgress, LogFileName);
       finally
         FreeAndNil(FImportProgressForm);
         FImportProgressBar := nil;
@@ -485,13 +506,18 @@ begin
       PopulateGamesGrid;
       if FImportCancel then
         FStatusLabel.Caption := 'Stopped after importing ' +
-          IntToStr(Imported) + ' game(s), errors ' + IntToStr(Errors)
+          IntToStr(Imported) + ' game(s), errors ' + IntToStr(Errors) +
+          ', duplicates ' + IntToStr(Duplicates) + '; log ' +
+          ExtractFileName(LogFileName)
       else
         FStatusLabel.Caption := 'Imported ' + IntToStr(Imported) +
-          ' game(s), errors ' + IntToStr(Errors);
+          ' game(s), errors ' + IntToStr(Errors) +
+          ', duplicates ' + IntToStr(Duplicates) + '; log ' +
+          ExtractFileName(LogFileName);
     except
       on E: Exception do
-        ShowGuiTextDialog(Self, 'Import PDN', E.Message);
+        ShowGuiTextDialog(Self, 'Import PDN',
+          E.Message + LineEnding + LineEnding + 'Import log: ' + LogFileName);
     end;
   finally
     Dialog.Free;
