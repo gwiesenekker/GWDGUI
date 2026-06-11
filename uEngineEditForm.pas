@@ -30,6 +30,9 @@ type
     FDxpRoleCombo: TComboBox;
     FExeEdit: TEdit;
     FHubIdEdit: TEdit;
+    FIniBrowseDialog: TOpenDialog;
+    FIniContentMemo: TMemo;
+    FIniPathEdit: TEdit;
     FInitMemo: TMemo;
     FKindCombo: TComboBox;
     FOnAccepted: TEngineAcceptedEvent;
@@ -52,6 +55,7 @@ type
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure HideInlineParamCombo(Sender: TObject);
     procedure InlineParamComboSelect(Sender: TObject);
+    procedure IniPathClick(Sender: TObject);
     function IsBoolParamRow(ARow: Integer): Boolean;
     function IsDirParamRow(ARow: Integer): Boolean;
     function IsScorePerspectiveParamRow(ARow: Integer): Boolean;
@@ -70,6 +74,7 @@ type
     procedure ReadForMs(AWaitMs: Integer);
     procedure SendHubParamsToProcess;
     procedure StopProcessFor(AEngine: TExternalEngineDefinition);
+    procedure StoreIniParams;
     procedure StoreParamsGrid;
     procedure UpdateFieldsFromParams;
     procedure UpdateKindFields;
@@ -84,6 +89,16 @@ implementation
 
 uses
   LCLType;
+
+const
+  EngineArgsHint =
+    'Command-line arguments passed to the engine, such as hub.' +
+    LineEnding +
+    'You can use {ip}/{host} and {port} macros. These will be expanded into the configured host and port settings.';
+  EngineIniHint =
+    'You can use {ip}/{host} and {port} macros.' +
+    LineEnding +
+    'These will be expanded into the configured host and port settings.';
 
 constructor TEngineEditForm.Create(AOwner: TComponent);
 var
@@ -130,6 +145,10 @@ begin
   FBrowseDialog.Filter := 'All files (*)|*';
   FBrowseDialog.FilterIndex := 1;
   {$ENDIF}
+  FIniBrowseDialog := TOpenDialog.Create(Self);
+  FIniBrowseDialog.Title := 'Select engine INI/config file';
+  FIniBrowseDialog.Filter := 'INI files (*.ini)|*.ini|All files (*.*)|*.*';
+  FIniBrowseDialog.FilterIndex := 1;
   FDirectoryDialog := TSelectDirectoryDialog.Create(Self);
   FDirectoryDialog.Title := 'Select parameter directory';
 
@@ -288,23 +307,42 @@ begin
   FArgsEdit.Parent := LFieldsPanel;
   FArgsEdit.SetBounds(86, LTop, LFieldsPanel.Width - 86, 28);
   FArgsEdit.Anchors := [akTop, akLeft, akRight];
+  FArgsEdit.Hint := EngineArgsHint;
+  FArgsEdit.ShowHint := True;
   Inc(LTop, 38);
+
+  FInitMemo := TMemo.Create(Self);
+  FInitMemo.Parent := Self;
+  FInitMemo.Visible := False;
+  FInitMemo.Text := 'init';
 
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, LFieldsPanel.Width, 22);
   LLabel.Anchors := [akTop, akLeft, akRight];
-  LLabel.Caption := 'Edit init ({ip}, {host}, {port} are expanded)';
+  LLabel.Caption := 'INI/config file (click path to browse)';
   LLabel.Layout := tlCenter;
   Inc(LTop, 24);
 
-  FInitMemo := TMemo.Create(Self);
-  FInitMemo.Parent := LFieldsPanel;
-  FInitMemo.SetBounds(0, LTop, LFieldsPanel.Width, LFieldsPanel.Height - LTop);
-  FInitMemo.Anchors := [akTop, akLeft, akRight, akBottom];
-  FInitMemo.ScrollBars := ssAutoBoth;
-  FInitMemo.WordWrap := False;
-  FInitMemo.Text := 'init';
+  FIniPathEdit := TEdit.Create(Self);
+  FIniPathEdit.Parent := LFieldsPanel;
+  FIniPathEdit.SetBounds(0, LTop, LFieldsPanel.Width, 28);
+  FIniPathEdit.Anchors := [akTop, akLeft, akRight];
+  FIniPathEdit.ReadOnly := True;
+  FIniPathEdit.Hint := EngineIniHint;
+  FIniPathEdit.ShowHint := True;
+  FIniPathEdit.OnClick := @IniPathClick;
+  Inc(LTop, 32);
+
+  FIniContentMemo := TMemo.Create(Self);
+  FIniContentMemo.Parent := LFieldsPanel;
+  FIniContentMemo.SetBounds(0, LTop, LFieldsPanel.Width,
+    LFieldsPanel.Height - LTop);
+  FIniContentMemo.Anchors := [akTop, akLeft, akRight, akBottom];
+  FIniContentMemo.ScrollBars := ssAutoBoth;
+  FIniContentMemo.WordWrap := False;
+  FIniContentMemo.Hint := EngineIniHint;
+  FIniContentMemo.ShowHint := True;
 
   FStdoutMemo := TMemo.Create(Self);
   FStdoutMemo.Parent := LRightPanel;
@@ -561,6 +599,8 @@ begin
   else
     Result.DxpRole := derListen;
   Result.Arguments := Trim(FArgsEdit.Text);
+  Result.IniFileName := Trim(FIniPathEdit.Text);
+  Result.IniContent := FIniContentMemo.Lines.Text;
   Result.InitText := FInitMemo.Text;
   Result.NormalizeIds;
 end;
@@ -613,6 +653,34 @@ begin
     IsScorePerspectiveParamRow(FSelectedParamRow)) and
     (FInlineParamCombo.ItemIndex >= 0) then
     FParamsGrid.Cells[2, FSelectedParamRow] := FInlineParamCombo.Text;
+end;
+
+procedure TEngineEditForm.IniPathClick(Sender: TObject);
+var
+  InitialPath: string;
+  Lines: TStringList;
+begin
+  InitialPath := Trim(FIniPathEdit.Text);
+  if InitialPath = '' then
+    InitialPath := Trim(FExeEdit.Text);
+  if InitialPath <> '' then
+    FIniBrowseDialog.InitialDir := ExtractFilePath(InitialPath);
+  if FIniBrowseDialog.Execute then
+  begin
+    Lines := TStringList.Create;
+    try
+      try
+        Lines.LoadFromFile(FIniBrowseDialog.FileName);
+        FIniPathEdit.Text := FIniBrowseDialog.FileName;
+        FIniContentMemo.Lines.Assign(Lines);
+      except
+        on E: Exception do
+          Log('[could not load INI/config file: ' + E.Message + ']');
+      end;
+    finally
+      Lines.Free;
+    end;
+  end;
 end;
 
 function TEngineEditForm.IsBoolParamRow(ARow: Integer): Boolean;
@@ -670,6 +738,17 @@ begin
     begin
       Log('[executable does not exist: ' + Engine.ExePath + ']');
       Exit;
+    end;
+    try
+      WriteEngineIniFile(Engine.IniFileName, Engine.IniContent, Engine);
+      if Trim(Engine.IniFileName) <> '' then
+        Log('[wrote expanded INI/config file: ' + Engine.IniFileName + ']');
+    except
+      on E: Exception do
+      begin
+        Log('[could not write INI/config file: ' + E.Message + ']');
+        Exit;
+      end;
     end;
 
     SplitLaunchArguments(ExpandEnginePlaceholders(Engine.Arguments, Engine), Args);
@@ -767,12 +846,17 @@ begin
     Exit;
 
   SortEngineParams(FCapturedParams);
-  FParamsGrid.RowCount := Length(FCapturedParams) + 1;
+  FParamsGrid.RowCount := 1;
   for I := 0 to High(FCapturedParams) do
   begin
-    FParamsGrid.Cells[0, I + 1] := FCapturedParams[I].Name;
-    FParamsGrid.Cells[1, I + 1] := FCapturedParams[I].ParamType;
-    FParamsGrid.Cells[2, I + 1] := FCapturedParams[I].Value;
+    if SameText(FCapturedParams[I].Name, 'gui-ini-file') or
+      SameText(FCapturedParams[I].Name, 'gui-ini-content') or
+      SameText(FCapturedParams[I].Name, 'gui-hub-init') then
+      Continue;
+    FParamsGrid.RowCount := FParamsGrid.RowCount + 1;
+    FParamsGrid.Cells[0, FParamsGrid.RowCount - 1] := FCapturedParams[I].Name;
+    FParamsGrid.Cells[1, FParamsGrid.RowCount - 1] := FCapturedParams[I].ParamType;
+    FParamsGrid.Cells[2, FParamsGrid.RowCount - 1] := FCapturedParams[I].Value;
   end;
 end;
 
@@ -811,6 +895,10 @@ begin
       'gui-hub-launch-argument', FArgsEdit.Text);
   FInitMemo.Text := EngineParamValue(FCapturedParams, 'gui-hub-init',
     FInitMemo.Text);
+  FIniPathEdit.Text := EngineParamValue(FCapturedParams, 'gui-ini-file',
+    FIniPathEdit.Text);
+  FIniContentMemo.Lines.Text := EngineParamValue(FCapturedParams,
+    'gui-ini-content', FIniContentMemo.Lines.Text);
 end;
 
 procedure TEngineEditForm.Log(const AText: string);
@@ -1025,6 +1113,17 @@ begin
     FCapturedParams[I].ParamType := Trim(FParamsGrid.Cells[1, Row]);
     FCapturedParams[I].Value := FParamsGrid.Cells[2, Row];
   end;
+  StoreIniParams;
+end;
+
+procedure TEngineEditForm.StoreIniParams;
+begin
+  if FIniPathEdit = nil then
+    Exit;
+  AddOrUpdateParam(FCapturedParams, 'gui-ini-file', 'string',
+    Trim(FIniPathEdit.Text), False);
+  AddOrUpdateParam(FCapturedParams, 'gui-ini-content', 'string',
+    FIniContentMemo.Lines.Text, False);
 end;
 
 procedure TEngineEditForm.UpdateKindFields;

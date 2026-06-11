@@ -641,6 +641,13 @@ begin
   InitLines := TStringList.Create;
   try
     SplitLaunchArguments(ExpandEnginePlaceholders(FEngine.Arguments, FEngine), Args);
+    FEngine.IniFileName := EngineParamValue(FParams, 'gui-ini-file',
+      FEngine.IniFileName);
+    FEngine.IniContent := EngineParamValue(FParams, 'gui-ini-content',
+      FEngine.IniContent);
+    WriteEngineIniFile(FEngine.IniFileName, FEngine.IniContent, FEngine);
+    if Trim(FEngine.IniFileName) <> '' then
+      Log('wrote expanded INI/config file; file=' + FEngine.IniFileName);
     FStopping := False;
     Log('launch; executable=' + FEngine.ExePath);
     ChangeState(esLaunching, 'starting hub process');

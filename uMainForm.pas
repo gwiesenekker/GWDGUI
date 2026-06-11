@@ -163,6 +163,8 @@ type
     FGameMoveMemo: TMemo;
     FGameMoveStarts: TIntArray;
     FHighlightedGameMovePly: Integer;
+    FHideMoveAnnotations: Boolean;
+    FHideMoveAnnotationsMenuItem: TMenuItem;
     FHumanMoveChoices: TStringList;
     FHumanMoveSourceSquare: Integer;
     FLegalMovesMemo: TMemo;
@@ -227,7 +229,7 @@ type
     procedure BuildAnnotatedMoveText(const AMovesText, AAnnotationsText,
       AStartingFEN: string; out AText: string; var AMoveStarts,
       AMoveLengths, ACommentStarts, ACommentLengths: TIntArray;
-      APlyOffset: Integer = 0);
+      APlyOffset: Integer = 0; AHideAnnotations: Boolean = False);
     procedure BuildMoveText(const AMovesText, AStartingFEN: string;
       out AText: string; var AStarts, ALengths: TIntArray;
       APlyOffset: Integer = 0);
@@ -251,6 +253,7 @@ type
     procedure GameMoveBrowseClick(Sender: TObject);
     procedure GameMoveBrowseKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
+    procedure HideMoveAnnotationsClick(Sender: TObject);
     procedure HighlightGameMoveTextSelection(AFocusMemo: Boolean);
     procedure GameSetupAccepted(Sender: TObject; const ASetup: TGameSetup);
     procedure GamesPopupPopup(Sender: TObject);
@@ -513,6 +516,7 @@ var
   LDatabaseMenu: TMenuItem;
   LFenPopup: TPopupMenu;
   LFileMenu: TMenuItem;
+  LGameMovePopup: TPopupMenu;
   LLeftSplitter: TSplitter;
   LMainMenu: TMainMenu;
   LRightSplitter: TSplitter;
@@ -588,6 +592,7 @@ begin
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
   FHighlightedGameMovePly := -1;
+  FHideMoveAnnotations := False;
   FPvHintSource := phsMain;
   FViewedGameId := -1;
   FGameLog := TStringList.Create;
@@ -904,6 +909,14 @@ begin
   FGameMoveMemo.HideSelection := False;
   FGameMoveMemo.OnClick := @GameMoveBrowseClick;
   FGameMoveMemo.OnKeyDown := @GameMoveBrowseKeyDown;
+
+  LGameMovePopup := TPopupMenu.Create(Self);
+  FHideMoveAnnotationsMenuItem := TMenuItem.Create(Self);
+  FHideMoveAnnotationsMenuItem.Caption := 'Hide annotation';
+  FHideMoveAnnotationsMenuItem.AutoCheck := False;
+  FHideMoveAnnotationsMenuItem.OnClick := @HideMoveAnnotationsClick;
+  LGameMovePopup.Items.Add(FHideMoveAnnotationsMenuItem);
+  FGameMoveMemo.PopupMenu := LGameMovePopup;
 
   LPvBoardPanel := TPanel.Create(Self);
   LPvBoardPanel.Parent := LPvPanel;
@@ -1845,7 +1858,7 @@ end;
 procedure TMainForm.BuildAnnotatedMoveText(const AMovesText,
   AAnnotationsText, AStartingFEN: string; out AText: string;
   var AMoveStarts, AMoveLengths, ACommentStarts, ACommentLengths: TIntArray;
-  APlyOffset: Integer);
+  APlyOffset: Integer; AHideAnnotations: Boolean);
 var
   I: Integer;
   LAnnotations: TStringList;
@@ -1886,10 +1899,9 @@ begin
       AMoveLengths[I] := Length(LSegment);
       AText += LSegment;
 
-      if I < LAnnotations.Count then
-        LComment := Trim(LAnnotations[I])
-      else
-        LComment := '';
+      LComment := '';
+      if (not AHideAnnotations) and (I < LAnnotations.Count) then
+        LComment := Trim(LAnnotations[I]);
       if LComment <> '' then
       begin
         LSegment := ' {' + LComment + '}';
@@ -2010,7 +2022,7 @@ begin
   try
     BuildAnnotatedMoveText(FMovesPlayedText, FMoveAnnotationsText,
       FStartingFEN, LText, FGameMoveStarts, FGameMoveLengths,
-      FGameCommentStarts, FGameCommentLengths);
+      FGameCommentStarts, FGameCommentLengths, 0, FHideMoveAnnotations);
     FGameMoveMemo.Text := LText;
     FHighlightedGameMovePly := -2;
   finally
@@ -2460,6 +2472,14 @@ begin
       HighlightGameMoveTextSelection(True);
       Exit;
     end;
+end;
+
+procedure TMainForm.HideMoveAnnotationsClick(Sender: TObject);
+begin
+  FHideMoveAnnotations := not FHideMoveAnnotations;
+  if FHideMoveAnnotationsMenuItem <> nil then
+    FHideMoveAnnotationsMenuItem.Checked := FHideMoveAnnotations;
+  RebuildGameMoveLabels;
 end;
 
 procedure TMainForm.HighlightGameMoveTextSelection(AFocusMemo: Boolean);
