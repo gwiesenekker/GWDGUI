@@ -84,23 +84,27 @@ type
     FShowStdout: Boolean;
     FSnapshot: TGameRunnerSnapshot;
     FStopReason: string;
+    FSetup: TGameSetup;
     FTitle: string;
     FWhiteEngineKey: string;
     FWhiteDisplayName: string;
     FWhitePlayerKind: TPlayerKind;
     FBlackDisplayName: string;
+    procedure ClearSetup;
+    procedure CopySetupFrom(const ASetup: TGameSetup);
     procedure ReleaseRunner;
     procedure WaitForRunnerFinished;
   public
     constructor Create(AId: Integer; const ATitle: string; ARunner: TGameRunnerThread;
       AWhitePlayerKind, ABlackPlayerKind: TPlayerKind; const AWhiteEngineKey,
       ABlackEngineKey, AWhiteDisplayName, ABlackDisplayName: string;
-      AReservationKeys: TStrings);
+      AReservationKeys: TStrings; const ASetup: TGameSetup);
     destructor Destroy; override;
 
     function IsEngineReservationActive: Boolean;
     function IsHumanToMove: Boolean;
     function ReservationSummary: string;
+    procedure AssignSetupTo(out ASetup: TGameSetup);
     property Id: Integer read FId;
     property AnnotatorAnnotationsText: string read FAnnotatorAnnotationsText
       write FAnnotatorAnnotationsText;
@@ -163,9 +167,12 @@ type
     FGameMoveMemo: TMemo;
     FGameMoveStarts: TIntArray;
     FHighlightedGameMovePly: Integer;
+    FHideMoveAnnotations: Boolean;
+    FHideMoveAnnotationsMenuItem: TMenuItem;
     FHumanMoveChoices: TStringList;
     FHumanMoveSourceSquare: Integer;
     FLegalMovesMemo: TMemo;
+    FLastDatabaseSearchFEN: string;
     FMiniBoard: TDraughtsBoard;
     FMiniBoardControl: TDraughtsBoardControl;
     FMiniBoardForm: TForm;
@@ -191,9 +198,12 @@ type
     FPvBrowser: TPvBrowser;
     FPvMemo: TMemo;
     FPdnOpenDialog: TPdnOpenDialog;
+    FReplayGameMenuItem: TMenuItem;
     FResultEdit: TEdit;
     FScoreHistoryControl: TScoreHistoryControl;
     FScoreHistoryForm: TScoreHistoryForm;
+    FSearchPositionInDatabase: Boolean;
+    FSearchPositionInDatabaseMenuItem: TMenuItem;
     FSetupForm: TGameSetupForm;
     FShowStdoutMenuItem: TMenuItem;
     FStartingFEN: string;
@@ -227,12 +237,13 @@ type
     procedure BuildAnnotatedMoveText(const AMovesText, AAnnotationsText,
       AStartingFEN: string; out AText: string; var AMoveStarts,
       AMoveLengths, ACommentStarts, ACommentLengths: TIntArray;
-      APlyOffset: Integer = 0);
+      APlyOffset: Integer = 0; AHideAnnotations: Boolean = False);
     procedure BuildMoveText(const AMovesText, AStartingFEN: string;
       out AText: string; var AStarts, ALengths: TIntArray;
       APlyOffset: Integer = 0);
     procedure BoardMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
+    procedure BoardPopupPopup(Sender: TObject);
     function CanAcceptHumanBoardMove: Boolean;
     procedure ClearHumanMoveSelection;
     procedure CloseQueryHandler(Sender: TObject; var CanClose: Boolean);
@@ -251,6 +262,7 @@ type
     procedure GameMoveBrowseClick(Sender: TObject);
     procedure GameMoveBrowseKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
+    procedure HideMoveAnnotationsClick(Sender: TObject);
     procedure HighlightGameMoveTextSelection(AFocusMemo: Boolean);
     procedure GameSetupAccepted(Sender: TObject; const ASetup: TGameSetup);
     procedure GamesPopupPopup(Sender: TObject);
@@ -273,6 +285,7 @@ type
     procedure OpenAnalyzerClick(Sender: TObject);
     procedure OpenDatabaseClick(Sender: TObject);
     procedure EnginesClick(Sender: TObject);
+    procedure ExitGameBrowseMode;
     procedure OpenPdnClick(Sender: TObject);
     procedure PauseGameClick(Sender: TObject);
     procedure PasteFenClick(Sender: TObject);
@@ -286,6 +299,7 @@ type
     procedure PlayHumanMove(const AMove: string);
     procedure RemoveGame(AGame: TRunningGame);
     procedure RestartAnalyzer;
+    procedure ReplaySelectedGame(Sender: TObject);
     procedure SelectHumanMoveSource(ASourceSquare: Integer);
     procedure RebuildGameMoveLabels;
     procedure UpdateGameMoveHighlight;
@@ -294,6 +308,7 @@ type
     function SaveCurrentGameWithDialog: Boolean;
     procedure ScoreHistoryPopoutClick(Sender: TObject);
     procedure ScoreHistoryFormClose(Sender: TObject; var CloseAction: TCloseAction);
+    procedure SearchPositionInDatabaseClick(Sender: TObject);
     procedure SetupPositionAccepted(Sender: TObject; const AFEN: string);
     procedure SetupPositionClick(Sender: TObject);
     procedure ShowStdoutClick(Sender: TObject);
@@ -309,6 +324,7 @@ type
       APly: Integer; const AName, AScore: string): string;
     procedure UpdateBrowseInfo;
     procedure UpdateBoardInfo;
+    procedure UpdateDatabaseSearchPosition;
     procedure UpdateBoardFromBrowseState;
     procedure UpdateBoardHighlights;
     procedure UpdateClockLabels(const AWhiteName, ABlackName: string);
@@ -400,7 +416,7 @@ end;
 constructor TRunningGame.Create(AId: Integer; const ATitle: string;
   ARunner: TGameRunnerThread; AWhitePlayerKind, ABlackPlayerKind: TPlayerKind;
   const AWhiteEngineKey, ABlackEngineKey, AWhiteDisplayName,
-  ABlackDisplayName: string; AReservationKeys: TStrings);
+  ABlackDisplayName: string; AReservationKeys: TStrings; const ASetup: TGameSetup);
 begin
   inherited Create;
   FId := AId;
@@ -418,15 +434,58 @@ begin
   if AReservationKeys <> nil then
     FReservationKeys.AddStrings(AReservationKeys);
   FSnapshot := TGameRunnerSnapshot.Create;
+  CopySetupFrom(ASetup);
   FLifecycle := rglStarting;
 end;
 
 destructor TRunningGame.Destroy;
 begin
   ReleaseRunner;
+  ClearSetup;
   FSnapshot.Free;
   FReservationKeys.Free;
   inherited Destroy;
+end;
+
+procedure TRunningGame.ClearSetup;
+begin
+  FreeAndNil(FSetup.WhiteEngine);
+  FreeAndNil(FSetup.BlackEngine);
+end;
+
+procedure TRunningGame.CopySetupFrom(const ASetup: TGameSetup);
+begin
+  ClearSetup;
+  FSetup := ASetup;
+  FSetup.WhiteEngine := nil;
+  FSetup.BlackEngine := nil;
+  if ASetup.WhiteEngine <> nil then
+  begin
+    FSetup.WhiteEngine := TExternalEngineDefinition.Create;
+    FSetup.WhiteEngine.Assign(ASetup.WhiteEngine);
+  end;
+  if ASetup.BlackEngine <> nil then
+  begin
+    FSetup.BlackEngine := TExternalEngineDefinition.Create;
+    FSetup.BlackEngine.Assign(ASetup.BlackEngine);
+  end;
+end;
+
+procedure TRunningGame.AssignSetupTo(out ASetup: TGameSetup);
+begin
+  ASetup := FSetup;
+  ASetup.WhiteEngine := nil;
+  ASetup.BlackEngine := nil;
+  if FSetup.WhiteEngine <> nil then
+  begin
+    ASetup.WhiteEngine := TExternalEngineDefinition.Create;
+    ASetup.WhiteEngine.Assign(FSetup.WhiteEngine);
+  end;
+  if FSetup.BlackEngine <> nil then
+  begin
+    ASetup.BlackEngine := TExternalEngineDefinition.Create;
+    ASetup.BlackEngine.Assign(FSetup.BlackEngine);
+  end;
 end;
 
 procedure TRunningGame.ReleaseRunner;
@@ -513,6 +572,7 @@ var
   LDatabaseMenu: TMenuItem;
   LFenPopup: TPopupMenu;
   LFileMenu: TMenuItem;
+  LGameMovePopup: TPopupMenu;
   LLeftSplitter: TSplitter;
   LMainMenu: TMainMenu;
   LRightSplitter: TSplitter;
@@ -529,6 +589,7 @@ var
   LPvLabel: TLabel;
   LPvPanel: TPanel;
   LPvPopup: TPopupMenu;
+  LPvScorePanel: TPanel;
   LPvSplitter: TSplitter;
   LPvTextPanel: TPanel;
   LPvTopPanel: TPanel;
@@ -588,6 +649,8 @@ begin
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
   FHighlightedGameMovePly := -1;
+  FHideMoveAnnotations := False;
+  FSearchPositionInDatabase := True;
   FPvHintSource := phsMain;
   FViewedGameId := -1;
   FGameLog := TStringList.Create;
@@ -813,6 +876,10 @@ begin
   LMenuItem.Caption := 'New game...';
   LMenuItem.OnClick := @NewGameClick;
   LGamesPopup.Items.Add(LMenuItem);
+  FReplayGameMenuItem := TMenuItem.Create(Self);
+  FReplayGameMenuItem.Caption := 'Replay game';
+  FReplayGameMenuItem.OnClick := @ReplaySelectedGame;
+  LGamesPopup.Items.Add(FReplayGameMenuItem);
   FShowStdoutMenuItem := TMenuItem.Create(Self);
   FShowStdoutMenuItem.Caption := 'Show stdout';
   FShowStdoutMenuItem.AutoCheck := False;
@@ -905,6 +972,14 @@ begin
   FGameMoveMemo.OnClick := @GameMoveBrowseClick;
   FGameMoveMemo.OnKeyDown := @GameMoveBrowseKeyDown;
 
+  LGameMovePopup := TPopupMenu.Create(Self);
+  FHideMoveAnnotationsMenuItem := TMenuItem.Create(Self);
+  FHideMoveAnnotationsMenuItem.Caption := 'Hide annotation';
+  FHideMoveAnnotationsMenuItem.AutoCheck := False;
+  FHideMoveAnnotationsMenuItem.OnClick := @HideMoveAnnotationsClick;
+  LGameMovePopup.Items.Add(FHideMoveAnnotationsMenuItem);
+  FGameMoveMemo.PopupMenu := LGameMovePopup;
+
   LPvBoardPanel := TPanel.Create(Self);
   LPvBoardPanel.Parent := LPvPanel;
   LPvBoardPanel.Align := alRight;
@@ -935,13 +1010,18 @@ begin
   LPvTopPanel := TPanel.Create(Self);
   LPvTopPanel.Parent := LPvTextPanel;
   LPvTopPanel.Align := alTop;
-  LPvTopPanel.Height := 88;
+  LPvTopPanel.Height := 94;
   LPvTopPanel.BevelOuter := bvNone;
 
+  LPvScorePanel := TPanel.Create(Self);
+  LPvScorePanel.Parent := LPvTopPanel;
+  LPvScorePanel.Align := alTop;
+  LPvScorePanel.Height := 66;
+  LPvScorePanel.BevelOuter := bvNone;
+
   FScoreHistoryControl := TScoreHistoryControl.Create(Self);
-  FScoreHistoryControl.Parent := LPvTopPanel;
-  FScoreHistoryControl.Align := alTop;
-  FScoreHistoryControl.Height := 62;
+  FScoreHistoryControl.Parent := LPvScorePanel;
+  FScoreHistoryControl.Align := alClient;
   FScoreHistoryControl.ParentFont := True;
   FScoreHistoryControl.ShowEvaluationBar := True;
   LScoreHistoryPopup := TPopupMenu.Create(Self);
@@ -1009,6 +1089,7 @@ begin
   FBoardControl.OnMouseDown := @BoardMouseDown;
   FBoardControl.BoardFlipped := FBoardFlipped;
   LBoardPopup := TPopupMenu.Create(Self);
+  LBoardPopup.OnPopup := @BoardPopupPopup;
   FHintFromMainMenuItem := TMenuItem.Create(Self);
   FHintFromMainMenuItem.Caption := 'Show hints from main PV';
   FHintFromMainMenuItem.Checked := True;
@@ -1022,6 +1103,15 @@ begin
   FHintFromAnalyzerMenuItem.GroupIndex := 1;
   FHintFromAnalyzerMenuItem.OnClick := @HintSourceClick;
   LBoardPopup.Items.Add(FHintFromAnalyzerMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := '-';
+  LBoardPopup.Items.Add(LMenuItem);
+  FSearchPositionInDatabaseMenuItem := TMenuItem.Create(Self);
+  FSearchPositionInDatabaseMenuItem.Caption := 'Search position in database';
+  FSearchPositionInDatabaseMenuItem.AutoCheck := False;
+  FSearchPositionInDatabaseMenuItem.Checked := FSearchPositionInDatabase;
+  FSearchPositionInDatabaseMenuItem.OnClick := @SearchPositionInDatabaseClick;
+  LBoardPopup.Items.Add(FSearchPositionInDatabaseMenuItem);
   LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := '-';
   LBoardPopup.Items.Add(LMenuItem);
@@ -1329,6 +1419,7 @@ begin
   UpdateBoardHighlights;
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
+  UpdateDatabaseSearchPosition;
 end;
 
 procedure TMainForm.AnalyzerPopupPopup(Sender: TObject);
@@ -1790,7 +1881,7 @@ begin
     FPrincipalVariationScore := '';
     FPrincipalVariationDepth := '';
     FPrincipalVariationTimeText := '';
-    FGameBrowsePly := -1;
+    FGameBrowsePly := 0;
     FPvBaseBoard.AssignFrom(FBoard);
     FPvBasePly := CurrentMoveCount;
     FWhiteRemainingSeconds := 0;
@@ -1801,6 +1892,7 @@ begin
     if FGamesListBox <> nil then
       FGamesListBox.ItemIndex := -1;
     FGameLog.Clear;
+    UpdateBoardFromBrowseState;
     UpdateMiniBoardFromBoard(FBoard);
     UpdateBoardInfo;
   finally
@@ -1845,7 +1937,7 @@ end;
 procedure TMainForm.BuildAnnotatedMoveText(const AMovesText,
   AAnnotationsText, AStartingFEN: string; out AText: string;
   var AMoveStarts, AMoveLengths, ACommentStarts, ACommentLengths: TIntArray;
-  APlyOffset: Integer);
+  APlyOffset: Integer; AHideAnnotations: Boolean);
 var
   I: Integer;
   LAnnotations: TStringList;
@@ -1886,10 +1978,9 @@ begin
       AMoveLengths[I] := Length(LSegment);
       AText += LSegment;
 
-      if I < LAnnotations.Count then
-        LComment := Trim(LAnnotations[I])
-      else
-        LComment := '';
+      LComment := '';
+      if (not AHideAnnotations) and (I < LAnnotations.Count) then
+        LComment := Trim(LAnnotations[I]);
       if LComment <> '' then
       begin
         LSegment := ' {' + LComment + '}';
@@ -2010,7 +2101,7 @@ begin
   try
     BuildAnnotatedMoveText(FMovesPlayedText, FMoveAnnotationsText,
       FStartingFEN, LText, FGameMoveStarts, FGameMoveLengths,
-      FGameCommentStarts, FGameCommentLengths);
+      FGameCommentStarts, FGameCommentLengths, 0, FHideMoveAnnotations);
     FGameMoveMemo.Text := LText;
     FHighlightedGameMovePly := -2;
   finally
@@ -2153,6 +2244,7 @@ begin
 
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
+  UpdateDatabaseSearchPosition;
 end;
 
 procedure TMainForm.ApplyGameBrowsePly(APly: Integer);
@@ -2167,6 +2259,19 @@ begin
     FGameBrowsePly := 0
   else
     FGameBrowsePly := APly;
+  UpdateBoardFromBrowseState;
+  UpdateBrowseInfo;
+end;
+
+procedure TMainForm.ExitGameBrowseMode;
+begin
+  if FGameBrowsePly < 0 then
+  begin
+    if FGameMoveMemo <> nil then
+      FGameMoveMemo.SelLength := 0;
+    Exit;
+  end;
+  FGameBrowsePly := -1;
   UpdateBoardFromBrowseState;
   UpdateBrowseInfo;
 end;
@@ -2462,6 +2567,14 @@ begin
     end;
 end;
 
+procedure TMainForm.HideMoveAnnotationsClick(Sender: TObject);
+begin
+  FHideMoveAnnotations := not FHideMoveAnnotations;
+  if FHideMoveAnnotationsMenuItem <> nil then
+    FHideMoveAnnotationsMenuItem.Checked := FHideMoveAnnotations;
+  RebuildGameMoveLabels;
+end;
+
 procedure TMainForm.HighlightGameMoveTextSelection(AFocusMemo: Boolean);
 begin
   if FGameMoveMemo = nil then
@@ -2499,16 +2612,36 @@ begin
     ApplyGameBrowsePly(LPly);
     HighlightGameMoveTextSelection(True);
     Key := 0;
+  end
+  else if Key = VK_ESCAPE then
+  begin
+    ExitGameBrowseMode;
+    Key := 0;
   end;
 end;
 
 procedure TMainForm.MainFormKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
-  if ((Key = Ord('F')) or (Key = Ord('f'))) and (Shift = []) then
+  if (Key = VK_ESCAPE) and (Shift = []) then
+  begin
+    ExitGameBrowseMode;
+    Key := 0;
+  end
+  else if ((Key = Ord('F')) or (Key = Ord('f'))) and (Shift = []) then
   begin
     ToggleBoardFlipped;
     Key := 0;
+  end;
+end;
+
+procedure TMainForm.BoardPopupPopup(Sender: TObject);
+begin
+  if FSearchPositionInDatabaseMenuItem <> nil then
+  begin
+    FSearchPositionInDatabaseMenuItem.Enabled :=
+      (FDatabaseForm <> nil) and FDatabaseForm.Visible;
+    FSearchPositionInDatabaseMenuItem.Checked := FSearchPositionInDatabase;
   end;
 end;
 
@@ -2522,6 +2655,8 @@ begin
 
   FShowStdoutMenuItem.Enabled := LGame <> nil;
   FShowStdoutMenuItem.Checked := (LGame <> nil) and LGame.ShowStdout;
+  if FReplayGameMenuItem <> nil then
+    FReplayGameMenuItem.Enabled := LGame <> nil;
   if FPauseGameMenuItem <> nil then
   begin
     FPauseGameMenuItem.Enabled := (LGame <> nil) and
@@ -2575,10 +2710,13 @@ begin
     if FDatabaseForm = nil then
       FDatabaseForm := TDatabaseForm.Create(Self);
     try
+      FDatabaseForm.OnGameSelected := @PdnGameSelected;
       FDatabaseForm.ApplyPreferences(FPreferences);
       FDatabaseForm.CreateDatabase(Dialog.FileName);
       FDatabaseForm.SetSearchFEN(ActiveBoard.CurrentFEN);
+      FLastDatabaseSearchFEN := '';
       ShowFormCenteredOnOwner(FDatabaseForm, Self);
+      UpdateDatabaseSearchPosition;
     except
       on E: Exception do
         ShowGuiOkDialog(Self, 'Create database',
@@ -2604,10 +2742,13 @@ begin
     if FDatabaseForm = nil then
       FDatabaseForm := TDatabaseForm.Create(Self);
     try
+      FDatabaseForm.OnGameSelected := @PdnGameSelected;
       FDatabaseForm.ApplyPreferences(FPreferences);
       FDatabaseForm.OpenDatabase(Dialog.FileName);
       FDatabaseForm.SetSearchFEN(ActiveBoard.CurrentFEN);
+      FLastDatabaseSearchFEN := '';
       ShowFormCenteredOnOwner(FDatabaseForm, Self);
+      UpdateDatabaseSearchPosition;
     except
       on E: Exception do
         ShowGuiOkDialog(Self, 'Open database',
@@ -2771,6 +2912,20 @@ begin
   CloseAction := caHide;
 end;
 
+procedure TMainForm.SearchPositionInDatabaseClick(Sender: TObject);
+begin
+  if (FDatabaseForm = nil) or (not FDatabaseForm.Visible) then
+    Exit;
+  FSearchPositionInDatabase := not FSearchPositionInDatabase;
+  if FSearchPositionInDatabaseMenuItem <> nil then
+    FSearchPositionInDatabaseMenuItem.Checked := FSearchPositionInDatabase;
+  if FSearchPositionInDatabase then
+  begin
+    FLastDatabaseSearchFEN := '';
+    UpdateDatabaseSearchPosition;
+  end;
+end;
+
 procedure TMainForm.GameSetupAccepted(Sender: TObject; const ASetup: TGameSetup);
 begin
   StartGameFromSetup(ASetup);
@@ -2817,7 +2972,7 @@ begin
     @GameFinished);
   Result := TRunningGame.Create(LGameId, LTitle, LRunner,
       ASetup.WhitePlayer, ASetup.BlackPlayer, LWhiteEngineKey,
-      LBlackEngineKey, LWhiteName, LBlackName, LReservationKeys);
+      LBlackEngineKey, LWhiteName, LBlackName, LReservationKeys, ASetup);
   finally
     LReservationKeys.Free;
   end;
@@ -3007,6 +3162,51 @@ end;
 procedure TMainForm.GamesListBoxClick(Sender: TObject);
 begin
   ApplyGameToDisplay(SelectedGame);
+end;
+
+procedure TMainForm.ReplaySelectedGame(Sender: TObject);
+var
+  BusyKeys: TStringList;
+  I: Integer;
+  LGame: TRunningGame;
+  LReplayKeys: TStringList;
+  LSetup: TGameSetup;
+begin
+  LGame := SelectedGame;
+  if LGame = nil then
+    Exit;
+
+  LSetup.WhiteEngine := nil;
+  LSetup.BlackEngine := nil;
+  BusyKeys := TStringList.Create;
+  LReplayKeys := TStringList.Create;
+  try
+    LReplayKeys.Sorted := True;
+    LReplayKeys.Duplicates := dupIgnore;
+    LGame.AssignSetupTo(LSetup);
+    AddEngineReservationKeys(LSetup.WhiteEngine, LReplayKeys);
+    AddEngineReservationKeys(LSetup.BlackEngine, LReplayKeys);
+    if EngineIdentityKey(LSetup.WhiteEngine) <> '' then
+      LReplayKeys.Add(EngineIdentityKey(LSetup.WhiteEngine));
+    if EngineIdentityKey(LSetup.BlackEngine) <> '' then
+      LReplayKeys.Add(EngineIdentityKey(LSetup.BlackEngine));
+
+    CollectBusyEngineKeys(BusyKeys);
+    for I := 0 to LReplayKeys.Count - 1 do
+      if BusyKeys.IndexOf(LReplayKeys[I]) >= 0 then
+      begin
+        ShowGuiOkDialog(Self, 'Replay game',
+          'One or more engines from this game are still busy.');
+        Exit;
+      end;
+
+    StartGameFromSetup(LSetup, 'Replay');
+  finally
+    LSetup.WhiteEngine.Free;
+    LSetup.BlackEngine.Free;
+    LReplayKeys.Free;
+    BusyKeys.Free;
+  end;
 end;
 
 procedure TMainForm.ShowStdoutClick(Sender: TObject);
@@ -3303,6 +3503,23 @@ begin
   HighlightGameMoveTextSelection(False);
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
+  UpdateDatabaseSearchPosition;
+end;
+
+procedure TMainForm.UpdateDatabaseSearchPosition;
+var
+  LFen: string;
+begin
+  if (not FSearchPositionInDatabase) or (FDatabaseForm = nil) or
+    (not FDatabaseForm.Visible) then
+    Exit;
+
+  LFen := ActiveBoard.CurrentFEN;
+  if LFen = FLastDatabaseSearchFEN then
+    Exit;
+  FLastDatabaseSearchFEN := LFen;
+  FDatabaseForm.SetSearchFEN(LFen);
+  FDatabaseForm.SearchCurrentPosition;
 end;
 
 procedure TMainForm.UpdateScoreHistory;

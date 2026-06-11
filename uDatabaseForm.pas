@@ -7,62 +7,89 @@ interface
 uses
   Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
   Grids, Math, Menus, StdCtrls, SysUtils, uBoardControl, uDraughtsBoard,
-  uGameDatabase, uGuiDialogs, uPositionSetupForm, uPreferences;
+  uGameDatabase, uGuiDialogs, uPdn, uPositionSetupForm, uPreferences;
 
 type
+  TDatabaseGameSelectedEvent = procedure(Sender: TObject; AGame: TPdnGame) of object;
+
   TDatabaseForm = class(TForm)
   private
     FBoard: TDraughtsBoard;
     FBoardControl: TDraughtsBoardControl;
+    FApplyFilterButton: TButton;
+    FBlackFilterEdit: TEdit;
     FDatabase: TGameDatabase;
+    FEventFilterEdit: TEdit;
     FFenEdit: TEdit;
     FGameInfos: TList;
+    FGameSortColumn: TDatabaseGameSortColumn;
+    FGameSortDescending: Boolean;
     FGamesGrid: TStringGrid;
     FImportCancel: Boolean;
     FImportProgressBar: TProgressBar;
     FImportProgressForm: TForm;
     FImportProgressLabel: TLabel;
     FImportStartTick: QWord;
+    FOnGameSelected: TDatabaseGameSelectedEvent;
     FPreferences: TGuiPreferences;
     FResults: TList;
     FResultsGrid: TStringGrid;
+    FRowLimitEdit: TEdit;
     FPositionSetupForm: TPositionSetupForm;
     FSearchButton: TButton;
     FStatusLabel: TLabel;
+    FWhiteFilterEdit: TEdit;
+    procedure ApplyFilterClick(Sender: TObject);
     procedure BoardCopyFenClick(Sender: TObject);
     procedure BoardPasteFenClick(Sender: TObject);
     procedure ClearObjectList(AList: TList);
+    function CurrentGameFilterDescription: string;
     procedure FormCloseHandler(Sender: TObject; var CloseAction: TCloseAction);
+    procedure GamesGridDblClick(Sender: TObject);
+    procedure GamesGridMouseDown(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
+    function GameDisplayLimit: Integer;
     procedure ImportProgress(ABytesRead, ATotalBytes: Int64; AImported,
       ADuplicates, AErrors: Integer; var ACancel: Boolean);
     procedure ImportProgressCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure ImportPdnClick(Sender: TObject);
+    procedure OptimizeGameSearchClick(Sender: TObject);
+    procedure OptimizePositionSearchClick(Sender: TObject);
+    procedure PopulateGamesGridFromList(const AStatusText: string);
     procedure PopulateGamesGrid;
     procedure PopulateResultsGrid;
+    procedure PerformSearch(AAllowProcessMessages: Boolean);
     procedure SearchClick(Sender: TObject);
     procedure SetFenClick(Sender: TObject);
+    procedure SetGameFilterControlsEnabled(AEnabled: Boolean);
     procedure SetupPositionAccepted(Sender: TObject; const AFEN: string);
     procedure SetupPositionClick(Sender: TObject);
     procedure StopImportClick(Sender: TObject);
     procedure UpdateBoardFromFen;
+    procedure UpdateGamesGridHeaders;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure ApplyPreferences(const APreferences: TGuiPreferences);
     procedure CreateDatabase(const AFileName: string);
     procedure OpenDatabase(const AFileName: string);
+    procedure SearchCurrentPosition;
     procedure SetSearchFEN(const AFEN: string);
+    property OnGameSelected: TDatabaseGameSelectedEvent read FOnGameSelected
+      write FOnGameSelected;
   end;
 
 implementation
 
 const
-  DatabaseGridGameLimit = 5000;
+  DefaultDatabaseGridGameLimit = 100;
 
 constructor TDatabaseForm.Create(AOwner: TComponent);
 var
   LBoardPanel: TPanel;
   LBoardPopup: TPopupMenu;
+  LFilterLabel: TLabel;
+  LFilterPanel: TPanel;
   LMenuItem: TMenuItem;
   LRootPanel: TPanel;
   LSearchPanel: TPanel;
@@ -84,6 +111,8 @@ begin
   FPreferences := DefaultGuiPreferences;
   FGameInfos := TList.Create;
   FResults := TList.Create;
+  FGameSortColumn := dgscId;
+  FGameSortDescending := False;
 
   LRootPanel := TPanel.Create(Self);
   LRootPanel.Parent := Self;
@@ -103,6 +132,65 @@ begin
   LTopPanel.Height := 260;
   LTopPanel.BevelOuter := bvNone;
 
+  LFilterPanel := TPanel.Create(Self);
+  LFilterPanel.Parent := LTopPanel;
+  LFilterPanel.Align := alTop;
+  LFilterPanel.Height := 36;
+  LFilterPanel.BevelOuter := bvNone;
+
+  LFilterLabel := TLabel.Create(Self);
+  LFilterLabel.Parent := LFilterPanel;
+  LFilterLabel.SetBounds(0, 7, 36, 22);
+  LFilterLabel.Caption := 'White';
+  LFilterLabel.Layout := tlCenter;
+
+  FWhiteFilterEdit := TEdit.Create(Self);
+  FWhiteFilterEdit.Parent := LFilterPanel;
+  FWhiteFilterEdit.SetBounds(40, 4, 90, 26);
+
+  LFilterLabel := TLabel.Create(Self);
+  LFilterLabel.Parent := LFilterPanel;
+  LFilterLabel.SetBounds(136, 7, 34, 22);
+  LFilterLabel.Caption := 'Black';
+  LFilterLabel.Layout := tlCenter;
+
+  FBlackFilterEdit := TEdit.Create(Self);
+  FBlackFilterEdit.Parent := LFilterPanel;
+  FBlackFilterEdit.SetBounds(174, 4, 90, 26);
+
+  LFilterLabel := TLabel.Create(Self);
+  LFilterLabel.Parent := LFilterPanel;
+  LFilterLabel.SetBounds(270, 7, 34, 22);
+  LFilterLabel.Caption := 'Event';
+  LFilterLabel.Layout := tlCenter;
+
+  FEventFilterEdit := TEdit.Create(Self);
+  FEventFilterEdit.Parent := LFilterPanel;
+  FEventFilterEdit.SetBounds(308, 4, 100, 26);
+
+  LFilterLabel := TLabel.Create(Self);
+  LFilterLabel.Parent := LFilterPanel;
+  LFilterLabel.SetBounds(416, 7, 70, 22);
+  LFilterLabel.Caption := 'Show first';
+  LFilterLabel.Layout := tlCenter;
+
+  FRowLimitEdit := TEdit.Create(Self);
+  FRowLimitEdit.Parent := LFilterPanel;
+  FRowLimitEdit.SetBounds(490, 4, 60, 26);
+  FRowLimitEdit.Text := IntToStr(DefaultDatabaseGridGameLimit);
+
+  LFilterLabel := TLabel.Create(Self);
+  LFilterLabel.Parent := LFilterPanel;
+  LFilterLabel.SetBounds(554, 7, 32, 22);
+  LFilterLabel.Caption := 'rows';
+  LFilterLabel.Layout := tlCenter;
+
+  FApplyFilterButton := TButton.Create(Self);
+  FApplyFilterButton.Parent := LFilterPanel;
+  FApplyFilterButton.SetBounds(590, 3, 86, 28);
+  FApplyFilterButton.Caption := 'Apply filter';
+  FApplyFilterButton.OnClick := @ApplyFilterClick;
+
   FGamesGrid := TStringGrid.Create(Self);
   FGamesGrid.Parent := LTopPanel;
   FGamesGrid.Align := alClient;
@@ -112,6 +200,8 @@ begin
   FGamesGrid.RowCount := 2;
   FGamesGrid.Options := FGamesGrid.Options + [goRowSelect] -
     [goEditing, goRangeSelect];
+  FGamesGrid.OnDblClick := @GamesGridDblClick;
+  FGamesGrid.OnMouseDown := @GamesGridMouseDown;
   FGamesGrid.Cells[0, 0] := '#';
   FGamesGrid.Cells[1, 0] := 'White';
   FGamesGrid.Cells[2, 0] := 'Black';
@@ -126,6 +216,7 @@ begin
   FGamesGrid.ColWidths[4] := 70;
   FGamesGrid.ColWidths[5] := 190;
   FGamesGrid.ColWidths[6] := 60;
+  UpdateGamesGridHeaders;
 
   LSplitter := TSplitter.Create(Self);
   LSplitter.Parent := LRootPanel;
@@ -203,6 +294,14 @@ begin
   LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := 'Import PDN...';
   LMenuItem.OnClick := @ImportPdnClick;
+  LBoardPopup.Items.Add(LMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := 'Optimize position search...';
+  LMenuItem.OnClick := @OptimizePositionSearchClick;
+  LBoardPopup.Items.Add(LMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := 'Optimize game search...';
+  LMenuItem.OnClick := @OptimizeGameSearchClick;
   LBoardPopup.Items.Add(LMenuItem);
   PopupMenu := LBoardPopup;
 end;
@@ -297,7 +396,6 @@ begin
   Caption := 'Database - ' + ExtractFileName(AFileName);
   PopulateGamesGrid;
   PopulateResultsGrid;
-  FStatusLabel.Caption := 'Created ' + AFileName;
 end;
 
 procedure TDatabaseForm.OpenDatabase(const AFileName: string);
@@ -306,7 +404,6 @@ begin
   Caption := 'Database - ' + ExtractFileName(AFileName);
   PopulateGamesGrid;
   PopulateResultsGrid;
-  FStatusLabel.Caption := 'Opened ' + AFileName;
 end;
 
 procedure TDatabaseForm.SetSearchFEN(const AFEN: string);
@@ -315,12 +412,94 @@ begin
   UpdateBoardFromFen;
 end;
 
+function TDatabaseForm.GameDisplayLimit: Integer;
+begin
+  Result := StrToIntDef(Trim(FRowLimitEdit.Text), DefaultDatabaseGridGameLimit);
+  if Result < 1 then
+    Result := DefaultDatabaseGridGameLimit;
+  FRowLimitEdit.Text := IntToStr(Result);
+end;
+
+function TDatabaseForm.CurrentGameFilterDescription: string;
+
+  procedure AddPart(var AText: string; const AName, AValue: string);
+  begin
+    if Trim(AValue) = '' then
+      Exit;
+    if AText <> '' then
+      AText := AText + '; ';
+    AText := AText + AName + '=' + Trim(AValue);
+  end;
+
+begin
+  Result := '';
+  AddPart(Result, 'white', FWhiteFilterEdit.Text);
+  AddPart(Result, 'black', FBlackFilterEdit.Text);
+  AddPart(Result, 'event', FEventFilterEdit.Text);
+  if Result = '' then
+    Result := 'none';
+end;
+
+procedure TDatabaseForm.SetGameFilterControlsEnabled(AEnabled: Boolean);
+begin
+  FWhiteFilterEdit.Enabled := AEnabled;
+  FBlackFilterEdit.Enabled := AEnabled;
+  FEventFilterEdit.Enabled := AEnabled;
+  FRowLimitEdit.Enabled := AEnabled;
+  FApplyFilterButton.Enabled := AEnabled;
+  FGamesGrid.Enabled := AEnabled;
+end;
+
+procedure TDatabaseForm.UpdateGamesGridHeaders;
+var
+  Suffix: string;
+begin
+  FGamesGrid.Cells[0, 0] := '#';
+  FGamesGrid.Cells[1, 0] := 'White';
+  FGamesGrid.Cells[2, 0] := 'Black';
+  FGamesGrid.Cells[3, 0] := 'Event';
+  FGamesGrid.Cells[4, 0] := 'Result';
+  FGamesGrid.Cells[5, 0] := 'Starting FEN';
+  FGamesGrid.Cells[6, 0] := 'Plies';
+
+  if FGameSortDescending then
+    Suffix := ' v'
+  else
+    Suffix := ' ^';
+  case FGameSortColumn of
+    dgscWhite:
+      FGamesGrid.Cells[1, 0] := 'White' + Suffix;
+    dgscBlack:
+      FGamesGrid.Cells[2, 0] := 'Black' + Suffix;
+    dgscEvent:
+      FGamesGrid.Cells[3, 0] := 'Event' + Suffix;
+  end;
+end;
+
 procedure TDatabaseForm.PopulateGamesGrid;
+var
+  Limit: Integer;
+  TotalMatches: Integer;
+begin
+  Limit := GameDisplayLimit;
+  FDatabase.LoadGames(FGameInfos, Limit, FWhiteFilterEdit.Text,
+    FBlackFilterEdit.Text, FEventFilterEdit.Text, FGameSortColumn,
+    FGameSortDescending, TotalMatches);
+  if TotalMatches > FGameInfos.Count then
+    PopulateGamesGridFromList(IntToStr(TotalMatches) +
+      ' game(s) found for filter: ' + CurrentGameFilterDescription +
+      '; showing first ' + IntToStr(FGameInfos.Count))
+  else
+    PopulateGamesGridFromList(IntToStr(TotalMatches) +
+      ' game(s) found for filter: ' + CurrentGameFilterDescription);
+end;
+
+procedure TDatabaseForm.PopulateGamesGridFromList(const AStatusText: string);
 var
   Info: TDatabaseGameInfo;
   Row: Integer;
 begin
-  FDatabase.LoadGames(FGameInfos, DatabaseGridGameLimit);
+  UpdateGamesGridHeaders;
   if FGameInfos.Count = 0 then
     FGamesGrid.RowCount := 2
   else
@@ -345,6 +524,87 @@ begin
     FGamesGrid.Cells[4, Row] := Info.ResultText;
     FGamesGrid.Cells[5, Row] := Info.StartingFEN;
     FGamesGrid.Cells[6, Row] := IntToStr(Info.PlyCount);
+  end;
+  FStatusLabel.Caption := AStatusText;
+end;
+
+procedure TDatabaseForm.ApplyFilterClick(Sender: TObject);
+begin
+  SetGameFilterControlsEnabled(False);
+  FStatusLabel.Caption := 'Filtering...';
+  Screen.Cursor := crHourGlass;
+  Application.ProcessMessages;
+  try
+    try
+      PopulateGamesGrid;
+    except
+      on E: Exception do
+      begin
+        FStatusLabel.Caption := 'Filter failed';
+        ShowGuiOkDialog(Self, 'Database filter', E.Message);
+      end;
+    end;
+  finally
+    Screen.Cursor := crDefault;
+    SetGameFilterControlsEnabled(True);
+  end;
+end;
+
+procedure TDatabaseForm.GamesGridMouseDown(Sender: TObject;
+  Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  Col: Integer;
+  Row: Integer;
+  NewSortColumn: TDatabaseGameSortColumn;
+begin
+  if Button <> mbLeft then
+    Exit;
+  FGamesGrid.MouseToCell(X, Y, Col, Row);
+  if Row <> 0 then
+    Exit;
+  case Col of
+    1:
+      NewSortColumn := dgscWhite;
+    2:
+      NewSortColumn := dgscBlack;
+    3:
+      NewSortColumn := dgscEvent;
+  else
+    Exit;
+  end;
+  if FGameSortColumn = NewSortColumn then
+    FGameSortDescending := not FGameSortDescending
+  else
+  begin
+    FGameSortColumn := NewSortColumn;
+    FGameSortDescending := False;
+  end;
+  ApplyFilterClick(Sender);
+end;
+
+procedure TDatabaseForm.GamesGridDblClick(Sender: TObject);
+var
+  Game: TPdnGame;
+  Info: TDatabaseGameInfo;
+  Row: Integer;
+begin
+  Row := FGamesGrid.Row;
+  if (Row <= 0) or (Row > FGameInfos.Count) then
+    Exit;
+
+  Info := TDatabaseGameInfo(FGameInfos[Row - 1]);
+  try
+    Game := FDatabase.LoadGameById(Info.Id);
+    try
+      if Assigned(FOnGameSelected) then
+        FOnGameSelected(Self, Game);
+    finally
+      Game.Free;
+    end;
+  except
+    on E: Exception do
+      ShowGuiOkDialog(Self, 'Database game',
+        'Could not load game: ' + E.Message);
   end;
 end;
 
@@ -393,20 +653,47 @@ begin
   end;
 end;
 
-procedure TDatabaseForm.SearchClick(Sender: TObject);
+procedure TDatabaseForm.PerformSearch(AAllowProcessMessages: Boolean);
+var
+  Limit: Integer;
+  ProbeCount: Integer;
+  TotalGames: Integer;
 begin
   if FSearchButton <> nil then
     FSearchButton.Enabled := False;
   FStatusLabel.Caption := 'Searching...';
   Screen.Cursor := crHourGlass;
-  Application.ProcessMessages;
+  if AAllowProcessMessages then
+    Application.ProcessMessages;
   try
     try
       UpdateBoardFromFen;
       FDatabase.SearchPosition(FBoard.PositionKey, FBoard.SideToMove, FResults);
+      Limit := GameDisplayLimit;
       PopulateResultsGrid;
-      FStatusLabel.Caption := IntToStr(FResults.Count) +
-        ' continuation(s) found for ' + FBoard.CurrentFEN;
+      if FDatabase.GamesForPositionExceedLimit(FBoard.PositionKey,
+        FBoard.SideToMove, Limit, ProbeCount) then
+      begin
+        ClearObjectList(FGameInfos);
+        PopulateGamesGridFromList(IntToStr(FResults.Count) +
+          ' continuation(s); at least ' + IntToStr(ProbeCount) +
+          ' game(s) contain ' + FBoard.CurrentFEN +
+          '; game list skipped')
+      end
+      else
+      begin
+        FDatabase.LoadGamesForPosition(FBoard.PositionKey, FBoard.SideToMove,
+          FGameInfos, Limit, TotalGames);
+        if TotalGames > FGameInfos.Count then
+          PopulateGamesGridFromList(IntToStr(FResults.Count) +
+            ' continuation(s), ' + IntToStr(TotalGames) +
+            ' game(s) containing ' + FBoard.CurrentFEN +
+            '; showing first ' + IntToStr(FGameInfos.Count))
+        else
+          PopulateGamesGridFromList(IntToStr(FResults.Count) +
+            ' continuation(s), ' + IntToStr(TotalGames) +
+            ' game(s) containing ' + FBoard.CurrentFEN);
+      end;
     except
       on E: Exception do
       begin
@@ -419,6 +706,16 @@ begin
     if FSearchButton <> nil then
       FSearchButton.Enabled := True;
   end;
+end;
+
+procedure TDatabaseForm.SearchClick(Sender: TObject);
+begin
+  PerformSearch(True);
+end;
+
+procedure TDatabaseForm.SearchCurrentPosition;
+begin
+  PerformSearch(False);
 end;
 
 procedure TDatabaseForm.BoardPasteFenClick(Sender: TObject);
@@ -521,6 +818,73 @@ begin
     end;
   finally
     Dialog.Free;
+  end;
+end;
+
+procedure TDatabaseForm.OptimizePositionSearchClick(Sender: TObject);
+var
+  ElapsedSeconds: Double;
+  StartTick: QWord;
+begin
+  if ShowGuiConfirmationDialog(Self, 'Optimize position search',
+    'Build a fast position-search summary for this database?' + LineEnding +
+    'This can take a while for a large database, but only needs to be done once.',
+    'Optimize', 'Cancel', mrCancel) <> mrYes then
+    Exit;
+
+  StartTick := GetTickCount64;
+  FStatusLabel.Caption := 'Optimizing position search...';
+  Screen.Cursor := crHourGlass;
+  Application.ProcessMessages;
+  try
+    try
+      FDatabase.RebuildContinuationSummary;
+      ElapsedSeconds := (GetTickCount64 - StartTick) / 1000;
+      FStatusLabel.Caption := 'Position search optimized in ' +
+        FormatFloat('0.0', ElapsedSeconds) + ' seconds';
+    except
+      on E: Exception do
+      begin
+        FStatusLabel.Caption := 'Position search optimization failed';
+        ShowGuiOkDialog(Self, 'Optimize position search', E.Message);
+      end;
+    end;
+  finally
+    Screen.Cursor := crDefault;
+  end;
+end;
+
+procedure TDatabaseForm.OptimizeGameSearchClick(Sender: TObject);
+var
+  ElapsedSeconds: Double;
+  StartTick: QWord;
+begin
+  if ShowGuiConfirmationDialog(Self, 'Optimize game search',
+    'Build a fast index for listing games that contain a searched position?' +
+    LineEnding +
+    'This can take a while for a large database, but only needs to be done once.',
+    'Optimize', 'Cancel', mrCancel) <> mrYes then
+    Exit;
+
+  StartTick := GetTickCount64;
+  FStatusLabel.Caption := 'Optimizing game search...';
+  Screen.Cursor := crHourGlass;
+  Application.ProcessMessages;
+  try
+    try
+      FDatabase.OptimizeGameSearch;
+      ElapsedSeconds := (GetTickCount64 - StartTick) / 1000;
+      FStatusLabel.Caption := 'Game search optimized in ' +
+        FormatFloat('0.0', ElapsedSeconds) + ' seconds';
+    except
+      on E: Exception do
+      begin
+        FStatusLabel.Caption := 'Game search optimization failed';
+        ShowGuiOkDialog(Self, 'Optimize game search', E.Message);
+      end;
+    end;
+  finally
+    Screen.Cursor := crDefault;
   end;
 end;
 

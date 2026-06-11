@@ -71,7 +71,8 @@ type
     destructor Destroy; override;
 
     procedure BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
-      AGameMinutes: Double; AGameMoves: Integer); virtual;
+      AGameMinutes: Double; AGameMoves: Integer;
+      AIncrementSeconds: Double = 0.0); virtual;
     procedure NewGame(const AStartingFEN: string); virtual;
     procedure DoMove(const AMove: string); virtual;
     procedure LogCurrentState(const AReason: string = ''); virtual;
@@ -391,12 +392,13 @@ begin
 end;
 
 procedure TDraughtsEngine.BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
-  AGameMinutes: Double; AGameMoves: Integer);
+  AGameMinutes: Double; AGameMoves: Integer; AIncrementSeconds: Double);
 begin
   NewGame(AStartingFEN);
   Log('game session started; side=' + IntToStr(Ord(ASide)) +
     '; game_minutes=' + FloatToStr(AGameMinutes) +
-    '; game_moves=' + IntToStr(AGameMoves));
+    '; game_moves=' + IntToStr(AGameMoves) +
+    '; increment_seconds=' + FloatToStr(AIncrementSeconds));
 end;
 
 procedure TDraughtsEngine.DoMove(const AMove: string);

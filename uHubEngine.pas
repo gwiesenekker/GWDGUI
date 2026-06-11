@@ -56,7 +56,8 @@ type
     constructor Create(AEngine: TExternalEngineDefinition); reintroduce;
     destructor Destroy; override;
     procedure BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
-      AGameMinutes: Double; AGameMoves: Integer); override;
+      AGameMinutes: Double; AGameMoves: Integer;
+      AIncrementSeconds: Double = 0.0); override;
     function LaunchAndInit: Boolean;
     function ReceiveMessage(const AMessage: string): string; override;
     procedure RequestStop; override;
@@ -634,13 +635,16 @@ var
   Args: TStringList;
   InitLines: TStringList;
   I: Integer;
+  LaunchArguments: string;
   Line: string;
 begin
   Result := False;
   Args := TStringList.Create;
   InitLines := TStringList.Create;
   try
-    SplitLaunchArguments(ExpandEnginePlaceholders(FEngine.Arguments, FEngine), Args);
+    LaunchArguments := EngineParamValue(FParams,
+      EngineLaunchArgumentParamName(eekHub), FEngine.Arguments);
+    SplitLaunchArguments(ExpandEnginePlaceholders(LaunchArguments, FEngine), Args);
     FEngine.IniFileName := EngineParamValue(FParams, 'gui-ini-file',
       FEngine.IniFileName);
     FEngine.IniContent := EngineParamValue(FParams, 'gui-ini-content',
@@ -856,7 +860,7 @@ begin
 end;
 
 procedure THubEngine.BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
-  AGameMinutes: Double; AGameMoves: Integer);
+  AGameMinutes: Double; AGameMoves: Integer; AIncrementSeconds: Double);
 var
   Command: THubWorkerCommand;
 begin

@@ -8,6 +8,8 @@ uses
   Classes, MD5, SQLite3Conn, SQLDB, SysUtils, uDraughtsBoard, uPdn;
 
 type
+  TDatabaseGameSortColumn = (dgscId, dgscWhite, dgscBlack, dgscEvent);
+
   TDatabaseGameInfo = class
   public
     Id: Integer;
@@ -38,8 +40,10 @@ type
     FTransaction: TSQLTransaction;
     procedure ClearObjectList(AList: TList);
     procedure CommitActiveTransaction;
+    function ContinuationSummaryAvailable: Boolean;
     procedure CreateImportIndexes;
     procedure DropImportIndexes;
+    procedure EnsureContinuationTable;
     procedure EnsureGameHashColumn;
     procedure ExecuteSql(const ASql: string);
     procedure SetBulkImportPragmas;
@@ -56,7 +60,18 @@ type
       ADuplicates, AErrors: Integer;
       AOnProgress: TDatabaseImportProgressEvent = nil;
       const AImportLogFileName: string = '');
-    procedure LoadGames(AList: TList; ALimit: Integer = 0);
+    procedure LoadGames(AList: TList; ALimit: Integer;
+      const AWhiteFilter, ABlackFilter, AEventFilter: string;
+      ASortColumn: TDatabaseGameSortColumn; ASortDescending: Boolean;
+      out ATotalMatches: Integer);
+    function LoadGameById(AGameId: Integer): TPdnGame;
+    function GamesForPositionExceedLimit(const APositionKey: string;
+      ASideToMove: TDraughtsSide; ALimit: Integer; out AProbeCount: Integer): Boolean;
+    procedure LoadGamesForPosition(const APositionKey: string;
+      ASideToMove: TDraughtsSide; AList: TList; ALimit: Integer;
+      out ATotalMatches: Integer);
+    procedure OptimizeGameSearch;
+    procedure RebuildContinuationSummary;
     procedure SearchPosition(const APositionKey: string; ASideToMove: TDraughtsSide;
       AList: TList);
 
@@ -85,6 +100,7 @@ type
     FMoves: TStringList;
     FOnProgress: TDatabaseImportProgressEvent;
     FPositionInsertQuery: TSQLQuery;
+    FContinuationUpsertQuery: TSQLQuery;
     procedure CanonicalizeMovesForImport;
     procedure CommitBatchIfNeeded;
     function GameHash: string;
@@ -162,6 +178,15 @@ begin
   FPositionInsertQuery.SQL.Text :=
     'insert into positions(game_id, ply, position_key, side_to_move, next_move, result) ' +
     'values(:game_id, :ply, :position_key, :side_to_move, :next_move, :result)';
+  FContinuationUpsertQuery := FDatabase.Query;
+  FContinuationUpsertQuery.SQL.Text :=
+    'insert into continuations(position_key, side_to_move, next_move, game_count, white_wins, draws, black_wins) ' +
+    'values(:position_key, :side_to_move, :next_move, 1, :white_wins, :draws, :black_wins) ' +
+    'on conflict(position_key, side_to_move, next_move) do update set ' +
+    'game_count = game_count + 1, ' +
+    'white_wins = white_wins + excluded.white_wins, ' +
+    'draws = draws + excluded.draws, ' +
+    'black_wins = black_wins + excluded.black_wins';
   FIdQuery := FDatabase.Query;
   FIdQuery.SQL.Text := 'select last_insert_rowid() as id';
 end;
@@ -177,6 +202,7 @@ begin
     FLogOpen := False;
   end;
   FIdQuery.Free;
+  FContinuationUpsertQuery.Free;
   FPositionInsertQuery.Free;
   FHashQuery.Free;
   FGameInsertQuery.Free;
@@ -289,14 +315,37 @@ end;
 
 procedure TDatabasePdnImporter.InsertPosition(APly: Integer;
   const ANextMove: string);
+var
+  SideText: string;
 begin
+  SideText := SideToText(FBoard.SideToMove);
   FPositionInsertQuery.ParamByName('game_id').AsInteger := FGameId;
   FPositionInsertQuery.ParamByName('ply').AsInteger := APly;
   FPositionInsertQuery.ParamByName('position_key').AsString := FBoard.PositionKey;
-  FPositionInsertQuery.ParamByName('side_to_move').AsString := SideToText(FBoard.SideToMove);
+  FPositionInsertQuery.ParamByName('side_to_move').AsString := SideText;
   FPositionInsertQuery.ParamByName('next_move').AsString := ANextMove;
   FPositionInsertQuery.ParamByName('result').AsString := FGame.ResultText;
   FPositionInsertQuery.ExecSQL;
+
+  if Trim(ANextMove) = '' then
+    Exit;
+  FContinuationUpsertQuery.ParamByName('position_key').AsString :=
+    FBoard.PositionKey;
+  FContinuationUpsertQuery.ParamByName('side_to_move').AsString := SideText;
+  FContinuationUpsertQuery.ParamByName('next_move').AsString := ANextMove;
+  if FGame.ResultText = '2-0' then
+    FContinuationUpsertQuery.ParamByName('white_wins').AsInteger := 1
+  else
+    FContinuationUpsertQuery.ParamByName('white_wins').AsInteger := 0;
+  if FGame.ResultText = '1-1' then
+    FContinuationUpsertQuery.ParamByName('draws').AsInteger := 1
+  else
+    FContinuationUpsertQuery.ParamByName('draws').AsInteger := 0;
+  if FGame.ResultText = '0-2' then
+    FContinuationUpsertQuery.ParamByName('black_wins').AsInteger := 1
+  else
+    FContinuationUpsertQuery.ParamByName('black_wins').AsInteger := 0;
+  FContinuationUpsertQuery.ExecSQL;
 end;
 
 procedure TDatabasePdnImporter.ReportProgress(ABytesRead, ATotalBytes: Int64;
@@ -414,6 +463,25 @@ begin
     FTransaction.Commit;
 end;
 
+function TGameDatabase.ContinuationSummaryAvailable: Boolean;
+var
+  Q: TSQLQuery;
+begin
+  Result := False;
+  if not FConnection.Connected then
+    Exit;
+
+  Q := Query;
+  try
+    Q.SQL.Text := 'select 1 from continuations limit 1';
+    Q.Open;
+    Result := not Q.EOF;
+    Q.Close;
+  finally
+    Q.Free;
+  end;
+end;
+
 procedure TGameDatabase.StartTransactionIfNeeded;
 begin
   if not FTransaction.Active then
@@ -436,14 +504,35 @@ end;
 procedure TGameDatabase.CreateImportIndexes;
 begin
   ExecuteSql('create unique index if not exists idx_games_hash on games(game_hash)');
+  ExecuteSql('create index if not exists idx_games_white on games(white)');
+  ExecuteSql('create index if not exists idx_games_black on games(black)');
+  ExecuteSql('create index if not exists idx_games_event on games(event)');
   ExecuteSql('create index if not exists idx_positions_key on positions(position_key)');
+  ExecuteSql('create index if not exists idx_positions_search on positions(position_key, side_to_move, next_move, result)');
   ExecuteSql('create index if not exists idx_positions_game on positions(game_id)');
+  ExecuteSql('create index if not exists idx_positions_game_search on positions(position_key, side_to_move, game_id, ply)');
 end;
 
 procedure TGameDatabase.DropImportIndexes;
 begin
   ExecuteSql('drop index if exists idx_positions_key');
+  ExecuteSql('drop index if exists idx_positions_search');
   ExecuteSql('drop index if exists idx_positions_game');
+  ExecuteSql('drop index if exists idx_positions_game_search');
+end;
+
+procedure TGameDatabase.EnsureContinuationTable;
+begin
+  ExecuteSql(
+    'create table if not exists continuations (' +
+    'position_key text not null,' +
+    'side_to_move text not null,' +
+    'next_move text not null,' +
+    'game_count integer not null,' +
+    'white_wins integer not null,' +
+    'draws integer not null,' +
+    'black_wins integer not null,' +
+    'primary key(position_key, side_to_move, next_move))');
 end;
 
 procedure TGameDatabase.EnsureGameHashColumn;
@@ -524,6 +613,7 @@ begin
       'next_move text,' +
       'result text)';
     Q.ExecSQL;
+    EnsureContinuationTable;
     CreateImportIndexes;
     FTransaction.Commit;
     FFileName := AFileName;
@@ -585,11 +675,217 @@ begin
   end;
 end;
 
-procedure TGameDatabase.LoadGames(AList: TList; ALimit: Integer);
+procedure TGameDatabase.RebuildContinuationSummary;
+begin
+  if not FConnection.Connected then
+    raise EInvalidOperation.Create('No database is open');
+
+  CommitActiveTransaction;
+  StartTransactionIfNeeded;
+  try
+    EnsureContinuationTable;
+    ExecuteSql('delete from continuations');
+    ExecuteSql(
+      'insert into continuations(position_key, side_to_move, next_move, game_count, white_wins, draws, black_wins) ' +
+      'select position_key, side_to_move, next_move, count(*) as game_count, ' +
+      'sum(case when result = ''2-0'' then 1 else 0 end) as white_wins, ' +
+      'sum(case when result = ''1-1'' then 1 else 0 end) as draws, ' +
+      'sum(case when result = ''0-2'' then 1 else 0 end) as black_wins ' +
+      'from positions ' +
+      'where coalesce(next_move, '''') <> '''' ' +
+      'group by position_key, side_to_move, next_move');
+    CommitActiveTransaction;
+  except
+    if FTransaction.Active then
+      FTransaction.Rollback;
+    raise;
+  end;
+end;
+
+procedure TGameDatabase.OptimizeGameSearch;
+begin
+  if not FConnection.Connected then
+    raise EInvalidOperation.Create('No database is open');
+  CommitActiveTransaction;
+  StartTransactionIfNeeded;
+  try
+    ExecuteSql('create index if not exists idx_positions_game_search on ' +
+      'positions(position_key, side_to_move, game_id, ply)');
+    CommitActiveTransaction;
+  except
+    if FTransaction.Active then
+      FTransaction.Rollback;
+    raise;
+  end;
+end;
+
+procedure TGameDatabase.LoadGames(AList: TList; ALimit: Integer;
+  const AWhiteFilter, ABlackFilter, AEventFilter: string;
+  ASortColumn: TDatabaseGameSortColumn; ASortDescending: Boolean;
+  out ATotalMatches: Integer);
+var
+  Info: TDatabaseGameInfo;
+  OrderBy: string;
+  Q: TSQLQuery;
+  WhereSql: string;
+
+  procedure AddFilter(const AColumn, AParamName, AValue: string);
+  begin
+    if Trim(AValue) = '' then
+      Exit;
+    if WhereSql = '' then
+      WhereSql := ' where '
+    else
+      WhereSql := WhereSql + ' and ';
+    WhereSql := WhereSql + 'lower(' + AColumn + ') like :' + AParamName;
+  end;
+
+  procedure BindFilters(AQuery: TSQLQuery);
+  begin
+    if Trim(AWhiteFilter) <> '' then
+      AQuery.ParamByName('white_filter').AsString :=
+        '%' + AnsiLowerCase(Trim(AWhiteFilter)) + '%';
+    if Trim(ABlackFilter) <> '' then
+      AQuery.ParamByName('black_filter').AsString :=
+        '%' + AnsiLowerCase(Trim(ABlackFilter)) + '%';
+    if Trim(AEventFilter) <> '' then
+      AQuery.ParamByName('event_filter').AsString :=
+        '%' + AnsiLowerCase(Trim(AEventFilter)) + '%';
+  end;
+begin
+  ATotalMatches := 0;
+  ClearObjectList(AList);
+  if not FConnection.Connected then
+    Exit;
+
+  WhereSql := '';
+  AddFilter('white', 'white_filter', AWhiteFilter);
+  AddFilter('black', 'black_filter', ABlackFilter);
+  AddFilter('event', 'event_filter', AEventFilter);
+
+  case ASortColumn of
+    dgscWhite:
+      OrderBy := 'lower(white), lower(black), lower(event), id';
+    dgscBlack:
+      OrderBy := 'lower(black), lower(white), lower(event), id';
+    dgscEvent:
+      OrderBy := 'lower(event), lower(white), lower(black), id';
+  else
+    OrderBy := 'id';
+  end;
+  if ASortDescending then
+    OrderBy := StringReplace(OrderBy, ',', ' desc,', [rfReplaceAll]) + ' desc';
+
+  Q := Query;
+  try
+    Q.SQL.Text := 'select count(*) as game_count from games' + WhereSql;
+    BindFilters(Q);
+    Q.Open;
+    ATotalMatches := Q.FieldByName('game_count').AsInteger;
+    Q.Close;
+
+    Q.SQL.Text :=
+      'select id, white, black, event, result, starting_fen, ply_count ' +
+      'from games' + WhereSql + ' order by ' + OrderBy;
+    if ALimit > 0 then
+      Q.SQL.Text := Q.SQL.Text + ' limit ' + IntToStr(ALimit);
+    BindFilters(Q);
+    Q.Open;
+    while not Q.EOF do
+    begin
+      Info := TDatabaseGameInfo.Create;
+      Info.Id := Q.FieldByName('id').AsInteger;
+      Info.WhiteName := Q.FieldByName('white').AsString;
+      Info.BlackName := Q.FieldByName('black').AsString;
+      Info.EventName := Q.FieldByName('event').AsString;
+      Info.ResultText := Q.FieldByName('result').AsString;
+      Info.StartingFEN := Q.FieldByName('starting_fen').AsString;
+      Info.PlyCount := Q.FieldByName('ply_count').AsInteger;
+      AList.Add(Info);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Q.Free;
+    CommitActiveTransaction;
+  end;
+end;
+
+function TGameDatabase.LoadGameById(AGameId: Integer): TPdnGame;
+var
+  Q: TSQLQuery;
+begin
+  if not FConnection.Connected then
+    raise EInvalidOperation.Create('No database is open');
+
+  Result := nil;
+  Q := Query;
+  try
+    Q.SQL.Text :=
+      'select white, black, event, result, starting_fen, moves_text, annotations_text ' +
+      'from games where id = :id';
+    Q.ParamByName('id').AsInteger := AGameId;
+    Q.Open;
+    if Q.EOF then
+      raise EInvalidOperation.Create('Game not found');
+
+    Result := TPdnGame.Create;
+    Result.WhiteName := Q.FieldByName('white').AsString;
+    Result.BlackName := Q.FieldByName('black').AsString;
+    Result.EventName := Q.FieldByName('event').AsString;
+    Result.ResultText := Q.FieldByName('result').AsString;
+    Result.StartingFEN := Q.FieldByName('starting_fen').AsString;
+    Result.MovesText := Q.FieldByName('moves_text').AsString;
+    Result.MoveAnnotationsText := Q.FieldByName('annotations_text').AsString;
+    Q.Close;
+  finally
+    Q.Free;
+    CommitActiveTransaction;
+  end;
+end;
+
+function TGameDatabase.GamesForPositionExceedLimit(const APositionKey: string;
+  ASideToMove: TDraughtsSide; ALimit: Integer; out AProbeCount: Integer): Boolean;
+var
+  Q: TSQLQuery;
+begin
+  AProbeCount := 0;
+  Result := False;
+  if not FConnection.Connected then
+    Exit;
+  if ALimit < 1 then
+    Exit;
+
+  Q := Query;
+  try
+    Q.SQL.Text :=
+      'select p.game_id from positions p ' +
+      'where p.position_key = :position_key and p.side_to_move = :side_to_move ' +
+      'group by p.game_id limit ' + IntToStr(ALimit + 1);
+    Q.ParamByName('position_key').AsString := APositionKey;
+    Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
+    Q.Open;
+    while not Q.EOF do
+    begin
+      Inc(AProbeCount);
+      Q.Next;
+    end;
+    Q.Close;
+    Result := AProbeCount > ALimit;
+  finally
+    Q.Free;
+    CommitActiveTransaction;
+  end;
+end;
+
+procedure TGameDatabase.LoadGamesForPosition(const APositionKey: string;
+  ASideToMove: TDraughtsSide; AList: TList; ALimit: Integer;
+  out ATotalMatches: Integer);
 var
   Info: TDatabaseGameInfo;
   Q: TSQLQuery;
 begin
+  ATotalMatches := 0;
   ClearObjectList(AList);
   if not FConnection.Connected then
     Exit;
@@ -597,10 +893,27 @@ begin
   Q := Query;
   try
     Q.SQL.Text :=
-      'select id, white, black, event, result, starting_fen, ply_count ' +
-      'from games order by id';
+      'select count(*) as game_count from (' +
+      'select p.game_id from positions p ' +
+      'where p.position_key = :position_key and p.side_to_move = :side_to_move ' +
+      'group by p.game_id)';
+    Q.ParamByName('position_key').AsString := APositionKey;
+    Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
+    Q.Open;
+    ATotalMatches := Q.FieldByName('game_count').AsInteger;
+    Q.Close;
+
+    Q.SQL.Text :=
+      'select g.id, g.white, g.black, g.event, g.result, g.starting_fen, ' +
+      'g.ply_count, min(p.ply) as first_ply ' +
+      'from positions p join games g on g.id = p.game_id ' +
+      'where p.position_key = :position_key and p.side_to_move = :side_to_move ' +
+      'group by g.id, g.white, g.black, g.event, g.result, g.starting_fen, g.ply_count ' +
+      'order by first_ply, g.id';
     if ALimit > 0 then
       Q.SQL.Text := Q.SQL.Text + ' limit ' + IntToStr(ALimit);
+    Q.ParamByName('position_key').AsString := APositionKey;
+    Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
     Q.Open;
     while not Q.EOF do
     begin
@@ -627,14 +940,32 @@ procedure TGameDatabase.SearchPosition(const APositionKey: string;
 var
   ResultItem: TDatabaseSearchResult;
   Q: TSQLQuery;
+  UseSummary: Boolean;
 begin
   ClearObjectList(AList);
   if not FConnection.Connected then
     Exit;
 
+  UseSummary := ContinuationSummaryAvailable;
   Q := Query;
   try
-    if ASideToMove = dsBlack then
+    if UseSummary then
+    begin
+      if ASideToMove = dsBlack then
+        Q.SQL.Text :=
+          'select next_move, game_count, black_wins as wins, draws, white_wins as losses ' +
+          'from continuations ' +
+          'where position_key = :position_key and side_to_move = :side_to_move ' +
+          'order by game_count desc, wins desc, next_move'
+      else
+        Q.SQL.Text :=
+          'select next_move, game_count, white_wins as wins, draws, black_wins as losses ' +
+          'from continuations ' +
+          'where position_key = :position_key and side_to_move = :side_to_move ' +
+          'order by game_count desc, wins desc, next_move';
+      Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
+    end
+    else if ASideToMove = dsBlack then
       Q.SQL.Text :=
         'select next_move, count(*) as game_count, ' +
         'sum(case when result = ''0-2'' then 1 else 0 end) as wins, ' +

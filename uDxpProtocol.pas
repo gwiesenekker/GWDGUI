@@ -10,6 +10,9 @@ uses
 
 function DxpBuildGameReqPacket(ABoard: TDraughtsBoard; AEngineSide: TDraughtsSide;
   AGameMinutes: Double; AGameMoves: Integer; const ANameText: string): string;
+function DxpBuildGameReqFischerPacket(ABoard: TDraughtsBoard;
+  AEngineSide: TDraughtsSide; AInitialSeconds, AIncrementSeconds: Double;
+  const ANameText: string): string;
 function DxpBuildGameEndPacket(ACode: Char): string;
 function DxpBuildGameEndPacketWithStopCode(AReason, AStopCode: Char): string;
 function DxpBuildMovePacket(const AMove: string; ATotalTimeUsedSeconds: Integer): string;
@@ -42,6 +45,34 @@ begin
   if AValue > 9999 then
     AValue := 9999;
   Result := Format('%.4d', [AValue]);
+end;
+
+function Dxp6Seconds(AValue: Double): string;
+var
+  DotPos: Integer;
+  FS: TFormatSettings;
+begin
+  if AValue < 0 then
+    AValue := 0;
+
+  FS := DefaultFormatSettings;
+  FS.DecimalSeparator := '.';
+  Result := FormatFloat('0.###', AValue, FS);
+  while Length(Result) > 6 do
+  begin
+    DotPos := Pos('.', Result);
+    if (DotPos = 0) or (DotPos = Length(Result)) then
+      Break;
+    Delete(Result, Length(Result), 1);
+    if (Length(Result) > 0) and (Result[Length(Result)] = '.') then
+      Delete(Result, Length(Result), 1);
+  end;
+  if Length(Result) > 6 then
+    Result := FormatFloat('0', AValue, FS);
+  if Length(Result) > 6 then
+    SetLength(Result, 6);
+  while Length(Result) < 6 do
+    Result := '0' + Result;
 end;
 
 function DxpSideText(ASide: TDraughtsSide): Char;
@@ -90,35 +121,53 @@ begin
     ASquares.Add(Token);
 end;
 
+function DxpPaddedName(const ANameText: string): string;
+begin
+  Result := ANameText;
+  if Length(Result) > 32 then
+    SetLength(Result, 32);
+  while Length(Result) < 32 do
+    Result += ' ';
+end;
+
+function DxpBoardText(ABoard: TDraughtsBoard): string;
+var
+  I: Integer;
+begin
+  Result := '';
+  for I := 1 to 50 do
+    Result += DxpPieceText(ABoard[I]);
+end;
+
 function DxpBuildGameReqPacket(ABoard: TDraughtsBoard; AEngineSide: TDraughtsSide;
   AGameMinutes: Double; AGameMoves: Integer; const ANameText: string): string;
 var
-  BoardText: string;
   GameTime: Integer;
-  I: Integer;
-  NameText: string;
 begin
   Result := '';
   if ABoard = nil then
     Exit;
 
-  NameText := ANameText;
-  if Length(NameText) > 32 then
-    SetLength(NameText, 32);
-  while Length(NameText) < 32 do
-    NameText += ' ';
-
   GameTime := Round(AGameMinutes);
   if GameTime <= 0 then
     GameTime := 1;
 
-  BoardText := '';
-  for I := 1 to 50 do
-    BoardText += DxpPieceText(ABoard[I]);
-
-  Result := 'R' + '01' + NameText + DxpSideText(AEngineSide) +
+  Result := 'R' + '01' + DxpPaddedName(ANameText) + DxpSideText(AEngineSide) +
     Dxp3(GameTime) + Dxp3(AGameMoves) + 'B' +
-    DxpSideText(ABoard.SideToMove) + BoardText;
+    DxpSideText(ABoard.SideToMove) + DxpBoardText(ABoard);
+end;
+
+function DxpBuildGameReqFischerPacket(ABoard: TDraughtsBoard;
+  AEngineSide: TDraughtsSide; AInitialSeconds, AIncrementSeconds: Double;
+  const ANameText: string): string;
+begin
+  Result := '';
+  if ABoard = nil then
+    Exit;
+
+  Result := 'F' + '01' + DxpPaddedName(ANameText) + DxpSideText(AEngineSide) +
+    Dxp6Seconds(AInitialSeconds) + Dxp6Seconds(AIncrementSeconds) + 'B' +
+    DxpSideText(ABoard.SideToMove) + DxpBoardText(ABoard);
 end;
 
 function DxpBuildGameEndPacket(ACode: Char): string;

@@ -5,7 +5,11 @@ unit uDxpEngine;
 interface
 
 uses
-  Classes, sockets, ssockets, SyncObjs, SysUtils,
+  Classes, sockets, ssockets,
+  {$IFDEF MSWINDOWS}
+  Windows,
+  {$ENDIF}
+  SyncObjs, SysUtils,
   {$IFDEF UNIX}
   BaseUnix,
   {$ENDIF}
@@ -45,6 +49,8 @@ type
     FBuffer: string;
     FEngine: TExternalEngineDefinition;
     FEngineSide: TDraughtsSide;
+    FDxpSupportsFischer: Boolean;
+    FGameIncrementSeconds: Double;
     FGameMoves: Integer;
     FGameMinutes: Double;
     FGameStarted: Boolean;
@@ -63,8 +69,9 @@ type
     procedure CloseSocket;
     function ConnectSocket(ATimeoutMs: Integer): Boolean;
     function CurrentSide: TDraughtsSide;
+    function GameRequestPacket(ASide: TDraughtsSide; out APacketName: string): string;
     procedure DoBeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
-      AGameMinutes: Double; AGameMoves: Integer);
+      AGameMinutes: Double; AGameMoves: Integer; AIncrementSeconds: Double);
     function DoLaunchAndInit: Boolean;
     procedure DoRequestStop;
     procedure DoSetClockInfo(AMovesRemaining: Integer; ARemainingSeconds,
@@ -98,7 +105,8 @@ type
     constructor Create(AEngine: TExternalEngineDefinition); reintroduce;
     destructor Destroy; override;
     procedure BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
-      AGameMinutes: Double; AGameMoves: Integer); override;
+      AGameMinutes: Double; AGameMoves: Integer;
+      AIncrementSeconds: Double = 0.0); override;
     function LaunchAndInit: Boolean;
     procedure RequestStop; override;
     procedure SetClockInfo(AMovesRemaining: Integer; ARemainingSeconds,
@@ -121,6 +129,11 @@ var
   Flags: cint;
 {$ENDIF}
 begin
+  {$IFDEF MSWINDOWS}
+  if AHandle < 0 then
+    Exit;
+  SetHandleInformation(THandle(AHandle), HANDLE_FLAG_INHERIT, 0);
+  {$ENDIF}
   {$IFDEF UNIX}
   if AHandle < 0 then
     Exit;
@@ -153,6 +166,7 @@ type
     FCommandKind: TDxpWorkerCommandKind;
     FCompleted: TSimpleEvent;
     FErrorMessage: string;
+    FGameIncrementSeconds: Double;
     FGameMinutes: Double;
     FGameMoves: Integer;
     FMoves: TStringList;
@@ -171,6 +185,8 @@ type
     property CommandKind: TDxpWorkerCommandKind read FCommandKind;
     property Completed: TSimpleEvent read FCompleted;
     property ErrorMessage: string read FErrorMessage write FErrorMessage;
+    property GameIncrementSeconds: Double read FGameIncrementSeconds
+      write FGameIncrementSeconds;
     property GameMinutes: Double read FGameMinutes write FGameMinutes;
     property GameMoves: Integer read FGameMoves write FGameMoves;
     property Moves: TStringList read FMoves;
@@ -516,6 +532,8 @@ begin
   FWorker := TDxpWorkerThread.Create(Self, FWorkerQueue);
   FGameMinutes := 5;
   FGameMoves := 75;
+  FGameIncrementSeconds := 0;
+  FDxpSupportsFischer := False;
   ChangeState(esWaiting, 'DXP adapter created');
 end;
 
@@ -703,7 +721,8 @@ begin
       DxpCommand.BoolResult := DoLaunchAndInit;
     dwcBeginGame:
       DoBeginGame(DxpCommand.StartingFEN, DxpCommand.Side,
-        DxpCommand.GameMinutes, DxpCommand.GameMoves);
+        DxpCommand.GameMinutes, DxpCommand.GameMoves,
+        DxpCommand.GameIncrementSeconds);
     dwcSetGamePosition:
       DoSetGamePosition(DxpCommand.StartingFEN, DxpCommand.Moves);
     dwcSetClockInfo:
@@ -750,19 +769,24 @@ end;
 function TDxpEngine.LaunchProcess: Boolean;
 var
   Args: TStringList;
+  LaunchArguments: string;
   Params: TEngineParamArray;
 begin
   Result := False;
   Params := nil;
   Args := TStringList.Create;
   try
-    SplitLaunchArguments(ExpandEnginePlaceholders(FEngine.Arguments, FEngine), Args);
     LoadEngineParamsFromJson(EngineParamsFileName(FEngine.ExePath), 'dxp',
       Params);
+    LaunchArguments := EngineParamValue(Params,
+      EngineLaunchArgumentParamName(eekDxp), FEngine.Arguments);
+    SplitLaunchArguments(ExpandEnginePlaceholders(LaunchArguments, FEngine), Args);
     FEngine.IniFileName := EngineParamValue(Params, 'gui-ini-file',
       FEngine.IniFileName);
     FEngine.IniContent := EngineParamValue(Params, 'gui-ini-content',
       FEngine.IniContent);
+    FDxpSupportsFischer := SameText(EngineParamValue(Params,
+      'gui-dxp-supports-fischer', 'false'), 'true');
     WriteEngineIniFile(FEngine.IniFileName, FEngine.IniContent, FEngine);
     if Trim(FEngine.IniFileName) <> '' then
       Log('wrote expanded INI/config file; file=' + FEngine.IniFileName);
@@ -1220,16 +1244,36 @@ begin
     IntToStr(ATimeoutMs));
 end;
 
+function TDxpEngine.GameRequestPacket(ASide: TDraughtsSide;
+  out APacketName: string): string;
+begin
+  if FDxpSupportsFischer and (FGameIncrementSeconds > 0) then
+  begin
+    APacketName := 'DXP_GAMEREQ_FISCHER';
+    Result := DxpBuildGameReqFischerPacket(FBoard, ASide, FGameMinutes * 60,
+      FGameIncrementSeconds, 'International Draughts GUI');
+  end
+  else
+  begin
+    APacketName := 'DXP_GAMEREQ';
+    Result := DxpBuildGameReqPacket(FBoard, ASide, FGameMinutes,
+      FGameMoves, 'International Draughts GUI');
+  end;
+end;
+
 procedure TDxpEngine.DoBeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
-  AGameMinutes: Double; AGameMoves: Integer);
+  AGameMinutes: Double; AGameMoves: Integer; AIncrementSeconds: Double);
 var
   GameReq: string;
+  PacketName: string;
 begin
-  inherited BeginGame(AStartingFEN, ASide, AGameMinutes, AGameMoves);
+  inherited BeginGame(AStartingFEN, ASide, AGameMinutes, AGameMoves,
+    AIncrementSeconds);
   FEngineSide := ASide;
   FBoard.LoadFromFEN(StartingFEN);
   FGameMinutes := AGameMinutes;
   FGameMoves := AGameMoves;
+  FGameIncrementSeconds := AIncrementSeconds;
   FGameStarted := False;
   FSentMoveCount := 0;
   FTotalUsedSeconds := 0;
@@ -1237,9 +1281,8 @@ begin
   if FSocket = nil then
     raise EInvalidOperation.Create('DXP socket is not connected');
 
-  GameReq := DxpBuildGameReqPacket(FBoard, ASide, FGameMinutes,
-    FGameMoves, 'International Draughts GUI');
-  SendPacket('DXP_GAMEREQ', GameReq);
+  GameReq := GameRequestPacket(ASide, PacketName);
+  SendPacket(PacketName, GameReq);
   FGameStarted := True;
   ChangeState(esWaitingForDone, 'waiting for DXP_GAMEACC');
   if not WaitForGameAccepted(DxpGameAcceptedTimeoutMs) then
@@ -1266,15 +1309,15 @@ function TDxpEngine.DoStartThinking: string;
 var
   GameReq: string;
   MovePacket: string;
+  PacketName: string;
 begin
   if FSocket = nil then
     raise EInvalidOperation.Create('DXP socket is not connected');
 
   if not FGameStarted then
   begin
-    GameReq := DxpBuildGameReqPacket(FBoard, CurrentSide, FGameMinutes,
-      FGameMoves, 'International Draughts GUI');
-    SendPacket('DXP_GAMEREQ', GameReq);
+    GameReq := GameRequestPacket(CurrentSide, PacketName);
+    SendPacket(PacketName, GameReq);
     FGameStarted := True;
     FSentMoveCount := MovesPlayed.Count;
   end
@@ -1320,7 +1363,7 @@ begin
 end;
 
 procedure TDxpEngine.BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
-  AGameMinutes: Double; AGameMoves: Integer);
+  AGameMinutes: Double; AGameMoves: Integer; AIncrementSeconds: Double);
 var
   Command: TDxpWorkerCommand;
 begin
@@ -1329,6 +1372,7 @@ begin
   Command.Side := ASide;
   Command.GameMinutes := AGameMinutes;
   Command.GameMoves := AGameMoves;
+  Command.GameIncrementSeconds := AIncrementSeconds;
   QueueProcedureCommand(Command);
 end;
 

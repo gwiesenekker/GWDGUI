@@ -18,17 +18,18 @@ type
     FAcceptedEngine: TExternalEngineDefinition;
     FAcceptButton: TButton;
     FAllowHubIdAutoUpdate: Boolean;
-    FArgsEdit: TEdit;
     FBrowseDialog: TOpenDialog;
     FAcceptingClose: Boolean;
     FCapturedParams: TEngineParamArray;
     FDirectoryDialog: TSelectDirectoryDialog;
+    FDxpArgsEdit: TEdit;
     FDxpThread: TDxpTestConnectionThread;
     FDxpHostEdit: TEdit;
     FDxpIdEdit: TEdit;
     FDxpPortEdit: TEdit;
     FDxpRoleCombo: TComboBox;
     FExeEdit: TEdit;
+    FHubArgsEdit: TEdit;
     FHubIdEdit: TEdit;
     FIniBrowseDialog: TOpenDialog;
     FIniContentMemo: TMemo;
@@ -74,6 +75,7 @@ type
     procedure ReadForMs(AWaitMs: Integer);
     procedure SendHubParamsToProcess;
     procedure StopProcessFor(AEngine: TExternalEngineDefinition);
+    procedure StoreArgumentParams;
     procedure StoreIniParams;
     procedure StoreParamsGrid;
     procedure UpdateFieldsFromParams;
@@ -89,6 +91,18 @@ implementation
 
 uses
   LCLType;
+
+const
+  HubArgsHint =
+    'Command-line arguments passed to the engine, such as hub.';
+  DxpArgsHint =
+    'Command-line arguments passed to the engine, such as dxp.' +
+    LineEnding +
+    'You can use {ip}/{host} and {port} macros. These will be expanded into the configured host and port settings.';
+  EngineIniHint =
+    'You can use {ip}/{host} and {port} macros.' +
+    LineEnding +
+    'These will be expanded into the configured host and port settings.';
 
 constructor TEngineEditForm.Create(AOwner: TComponent);
 var
@@ -244,6 +258,20 @@ begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, 80, 22);
+  LLabel.Caption := 'Hub args';
+  LLabel.Layout := tlCenter;
+
+  FHubArgsEdit := TEdit.Create(Self);
+  FHubArgsEdit.Parent := LFieldsPanel;
+  FHubArgsEdit.SetBounds(86, LTop, LFieldsPanel.Width - 86, 28);
+  FHubArgsEdit.Anchors := [akTop, akLeft, akRight];
+  FHubArgsEdit.Hint := HubArgsHint;
+  FHubArgsEdit.ShowHint := True;
+  Inc(LTop, 36);
+
+  LLabel := TLabel.Create(Self);
+  LLabel.Parent := LFieldsPanel;
+  LLabel.SetBounds(0, LTop, 80, 22);
   LLabel.Caption := 'DXP id';
   LLabel.Layout := tlCenter;
 
@@ -290,13 +318,15 @@ begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, 80, 22);
-  LLabel.Caption := 'Arguments';
+  LLabel.Caption := 'DXP args';
   LLabel.Layout := tlCenter;
 
-  FArgsEdit := TEdit.Create(Self);
-  FArgsEdit.Parent := LFieldsPanel;
-  FArgsEdit.SetBounds(86, LTop, LFieldsPanel.Width - 86, 28);
-  FArgsEdit.Anchors := [akTop, akLeft, akRight];
+  FDxpArgsEdit := TEdit.Create(Self);
+  FDxpArgsEdit.Parent := LFieldsPanel;
+  FDxpArgsEdit.SetBounds(86, LTop, LFieldsPanel.Width - 86, 28);
+  FDxpArgsEdit.Anchors := [akTop, akLeft, akRight];
+  FDxpArgsEdit.Hint := DxpArgsHint;
+  FDxpArgsEdit.ShowHint := True;
   Inc(LTop, 38);
 
   FInitMemo := TMemo.Create(Self);
@@ -317,6 +347,8 @@ begin
   FIniPathEdit.SetBounds(0, LTop, LFieldsPanel.Width, 28);
   FIniPathEdit.Anchors := [akTop, akLeft, akRight];
   FIniPathEdit.ReadOnly := True;
+  FIniPathEdit.Hint := EngineIniHint;
+  FIniPathEdit.ShowHint := True;
   FIniPathEdit.OnClick := @IniPathClick;
   Inc(LTop, 32);
 
@@ -327,6 +359,8 @@ begin
   FIniContentMemo.Anchors := [akTop, akLeft, akRight, akBottom];
   FIniContentMemo.ScrollBars := ssAutoBoth;
   FIniContentMemo.WordWrap := False;
+  FIniContentMemo.Hint := EngineIniHint;
+  FIniContentMemo.ShowHint := True;
 
   FStdoutMemo := TMemo.Create(Self);
   FStdoutMemo.Parent := LRightPanel;
@@ -415,7 +449,8 @@ begin
     FDxpHostEdit.Text := '127.0.0.1';
     FDxpPortEdit.Text := '27531';
     FDxpRoleCombo.ItemIndex := 0;
-    FArgsEdit.Text := '';
+    FHubArgsEdit.Text := '';
+    FDxpArgsEdit.Text := '';
     FInitMemo.Text := 'init';
   end
   else
@@ -428,7 +463,12 @@ begin
       FKindCombo.ItemIndex := 0;
     FHubIdEdit.Text := AEngine.HubId;
     FDxpIdEdit.Text := AEngine.DxpId;
-    FArgsEdit.Text := AEngine.Arguments;
+    FHubArgsEdit.Text := '';
+    FDxpArgsEdit.Text := '';
+    if AEngine.Kind = eekDxp then
+      FDxpArgsEdit.Text := AEngine.Arguments
+    else
+      FHubArgsEdit.Text := AEngine.Arguments;
     FInitMemo.Text := AEngine.InitText;
     FDXpHostEdit.Text := AEngine.DxpHost;
     FDxpPortEdit.Text := IntToStr(AEngine.DxpPort);
@@ -454,6 +494,7 @@ var
   Accepted: Boolean;
 begin
   StoreParamsGrid;
+  StoreArgumentParams;
   FreeAndNil(FAcceptedEngine);
   FAcceptedEngine := CurrentEngineDefinition;
   Accepted := True;
@@ -582,7 +623,12 @@ begin
     Result.DxpRole := derConnect
   else
     Result.DxpRole := derListen;
-  Result.Arguments := Trim(FArgsEdit.Text);
+  if Result.Kind = eekDxp then
+    Result.Arguments := EngineParamValue(FCapturedParams,
+      EngineLaunchArgumentParamName(Result.Kind), Trim(FDxpArgsEdit.Text))
+  else
+    Result.Arguments := EngineParamValue(FCapturedParams,
+      EngineLaunchArgumentParamName(Result.Kind), Trim(FHubArgsEdit.Text));
   Result.IniFileName := Trim(FIniPathEdit.Text);
   Result.IniContent := FIniContentMemo.Lines.Text;
   Result.InitText := FInitMemo.Text;
@@ -613,12 +659,14 @@ var
   Engine: TExternalEngineDefinition;
 begin
   StoreParamsGrid;
+  StoreArgumentParams;
   Engine := CurrentEngineDefinition;
   try
     SeedDefaultGuiParams(FCapturedParams, Engine);
   finally
     Engine.Free;
   end;
+  UpdateFieldsFromParams;
   LoadParamsGrid;
   UpdateKindFields;
 end;
@@ -702,14 +750,16 @@ var
   Engine: TExternalEngineDefinition;
   I: Integer;
   InitLines: TStringList;
+  LaunchArguments: string;
 begin
-  Engine := CurrentEngineDefinition;
   Args := TStringList.Create;
   InitLines := TStringList.Create;
+  StoreParamsGrid;
+  StoreArgumentParams;
+  Engine := CurrentEngineDefinition;
   try
     FStdoutMemo.Clear;
     FTextBuffer := '';
-    StoreParamsGrid;
     FAllowHubIdAutoUpdate := False;
     StopProcessFor(Engine);
 
@@ -735,7 +785,9 @@ begin
       end;
     end;
 
-    SplitLaunchArguments(ExpandEnginePlaceholders(Engine.Arguments, Engine), Args);
+    LaunchArguments := EngineParamValue(FCapturedParams,
+      EngineLaunchArgumentParamName(Engine.Kind), Engine.Arguments);
+    SplitLaunchArguments(ExpandEnginePlaceholders(LaunchArguments, Engine), Args);
     Log('[launching ' + Engine.ExePath + ']');
     if Args.Count > 0 then
       Log('[arguments: ' + Args.DelimitedText + ']');
@@ -790,9 +842,30 @@ end;
 procedure TEngineEditForm.LoadParamsForExecutable;
 var
   Engine: TExternalEngineDefinition;
+  OtherParams: TEngineParamArray;
+  OtherSection: string;
+  OtherValue: string;
   ParamsFileName: string;
   Section: string;
+
+  procedure CopyOtherParam(const AName: string);
+  var
+    OtherParamIndex: Integer;
+  begin
+    for OtherParamIndex := 0 to High(OtherParams) do
+      if SameText(OtherParams[OtherParamIndex].Name, AName) then
+      begin
+        OtherValue := OtherParams[OtherParamIndex].Value;
+        if (OtherValue <> '') and
+          (EngineParamValue(FCapturedParams, AName, '') = '') then
+          AddOrUpdateParam(FCapturedParams, AName,
+            OtherParams[OtherParamIndex].ParamType, OtherValue, False);
+        Break;
+      end;
+  end;
+
 begin
+  OtherParams := nil;
   ParamsFileName := EngineParamsFileName(Trim(FExeEdit.Text));
   if ParamsFileName = '' then
     Exit;
@@ -804,13 +877,30 @@ begin
 
   SetLength(FCapturedParams, 0);
   LoadEngineParamsFromJson(ParamsFileName, Section, FCapturedParams);
+  if Section = 'hub' then
+    OtherSection := 'dxp'
+  else
+    OtherSection := 'hub';
+
   if Length(FCapturedParams) = 0 then
+    LoadEngineParamsFromJson(ParamsFileName, OtherSection, FCapturedParams);
+
+  SetLength(OtherParams, 0);
+  LoadEngineParamsFromJson(ParamsFileName, OtherSection, OtherParams);
+  if OtherSection = 'hub' then
   begin
-    if Section = 'hub' then
-      Section := 'dxp'
-    else
-      Section := 'hub';
-    LoadEngineParamsFromJson(ParamsFileName, Section, FCapturedParams);
+    CopyOtherParam('gui-hub-id');
+    CopyOtherParam('gui-hub-launch-argument');
+    CopyOtherParam('gui-hub-init');
+  end
+  else
+  begin
+    CopyOtherParam('gui-dxp-id');
+    CopyOtherParam('gui-dxp-ip');
+    CopyOtherParam('gui-dxp-socket');
+    CopyOtherParam('gui-dxp-role');
+    CopyOtherParam('gui-dxp-supports-fischer');
+    CopyOtherParam('gui-dxp-launch-arguments');
   end;
 
   UpdateFieldsFromParams;
@@ -835,7 +925,9 @@ begin
   begin
     if SameText(FCapturedParams[I].Name, 'gui-ini-file') or
       SameText(FCapturedParams[I].Name, 'gui-ini-content') or
-      SameText(FCapturedParams[I].Name, 'gui-hub-init') then
+      SameText(FCapturedParams[I].Name, 'gui-hub-init') or
+      SameText(FCapturedParams[I].Name, 'gui-hub-launch-argument') or
+      SameText(FCapturedParams[I].Name, 'gui-dxp-launch-arguments') then
       Continue;
     FParamsGrid.RowCount := FParamsGrid.RowCount + 1;
     FParamsGrid.Cells[0, FParamsGrid.RowCount - 1] := FCapturedParams[I].Name;
@@ -871,12 +963,10 @@ begin
   else if Value = 'listen' then
     FDxpRoleCombo.ItemIndex := 0;
 
-  if FKindCombo.ItemIndex = 1 then
-    FArgsEdit.Text := EngineParamValue(FCapturedParams,
-      'gui-dxp-launch-arguments', FArgsEdit.Text)
-  else
-    FArgsEdit.Text := EngineParamValue(FCapturedParams,
-      'gui-hub-launch-argument', FArgsEdit.Text);
+  FHubArgsEdit.Text := EngineParamValue(FCapturedParams,
+    'gui-hub-launch-argument', FHubArgsEdit.Text);
+  FDxpArgsEdit.Text := EngineParamValue(FCapturedParams,
+    'gui-dxp-launch-arguments', FDxpArgsEdit.Text);
   FInitMemo.Text := EngineParamValue(FCapturedParams, 'gui-hub-init',
     FInitMemo.Text);
   FIniPathEdit.Text := EngineParamValue(FCapturedParams, 'gui-ini-file',
@@ -1098,6 +1188,16 @@ begin
     FCapturedParams[I].Value := FParamsGrid.Cells[2, Row];
   end;
   StoreIniParams;
+end;
+
+procedure TEngineEditForm.StoreArgumentParams;
+begin
+  if (FHubArgsEdit = nil) or (FDxpArgsEdit = nil) then
+    Exit;
+  AddOrUpdateParam(FCapturedParams, EngineLaunchArgumentParamName(eekHub),
+    'string', Trim(FHubArgsEdit.Text), False);
+  AddOrUpdateParam(FCapturedParams, EngineLaunchArgumentParamName(eekDxp),
+    'string', Trim(FDxpArgsEdit.Text), False);
 end;
 
 procedure TEngineEditForm.StoreIniParams;
