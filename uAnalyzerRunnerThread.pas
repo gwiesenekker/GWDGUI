@@ -10,6 +10,11 @@ uses
   uThreadMessageQueue;
 
 type
+  TAnalyzerRunMode = (
+    armAnalyze,
+    armMcts
+  );
+
   TAnalyzerRunnerLogEvent = procedure(Sender: TObject; const AMessage: string) of object;
   TAnalyzerRunnerSnapshotEvent = procedure(Sender: TObject; ASnapshot: TPvSnapshot) of object;
   TAnalyzerRunnerFinishedEvent = procedure(Sender: TObject) of object;
@@ -24,10 +29,12 @@ type
     FOnFinished: TAnalyzerRunnerFinishedEvent;
     FOnLog: TAnalyzerRunnerLogEvent;
     FOnSnapshot: TAnalyzerRunnerSnapshotEvent;
+    FRunMode: TAnalyzerRunMode;
     FPvBaseBoard: TDraughtsBoard;
     FPvBasePly: Integer;
     FPvLock: TCriticalSection;
     procedure DrainCommands;
+    function DisplayName: string;
     procedure HandleCommand(ACommand: TObject);
     procedure PublishSnapshot;
     procedure RuntimeLog(Sender: TObject; const AMessage: string);
@@ -38,7 +45,8 @@ type
     constructor Create(AEngineDefinition: TExternalEngineDefinition;
       ALogEvent: TAnalyzerRunnerLogEvent;
       ASnapshotEvent: TAnalyzerRunnerSnapshotEvent;
-      AFinishedEvent: TAnalyzerRunnerFinishedEvent);
+      AFinishedEvent: TAnalyzerRunnerFinishedEvent;
+      ARunMode: TAnalyzerRunMode = armAnalyze);
     destructor Destroy; override;
 
     procedure PostAnalyze(const AStartingFEN, AMovesText: string;
@@ -99,7 +107,7 @@ end;
 
 constructor TAnalyzerRunnerThread.Create(AEngineDefinition: TExternalEngineDefinition;
   ALogEvent: TAnalyzerRunnerLogEvent; ASnapshotEvent: TAnalyzerRunnerSnapshotEvent;
-  AFinishedEvent: TAnalyzerRunnerFinishedEvent);
+  AFinishedEvent: TAnalyzerRunnerFinishedEvent; ARunMode: TAnalyzerRunMode);
 begin
   inherited Create(True);
   FreeOnTerminate := False;
@@ -111,6 +119,7 @@ begin
   FOnLog := ALogEvent;
   FOnSnapshot := ASnapshotEvent;
   FOnFinished := AFinishedEvent;
+  FRunMode := ARunMode;
 end;
 
 destructor TAnalyzerRunnerThread.Destroy;
@@ -123,6 +132,14 @@ begin
   FCommandQueue.Free;
   FEngineDefinition.Free;
   inherited Destroy;
+end;
+
+function TAnalyzerRunnerThread.DisplayName: string;
+begin
+  if FRunMode = armMcts then
+    Result := 'MCTS annotator'
+  else
+    Result := 'Annotator';
 end;
 
 procedure TAnalyzerRunnerThread.RuntimeLog(Sender: TObject; const AMessage: string);
@@ -192,7 +209,7 @@ begin
           FEngine.StopSearch;
           PublishSnapshot;
           if Assigned(FOnLog) then
-            FOnLog(Self, 'Annotator idle; terminal position');
+            FOnLog(Self, DisplayName + ' idle; terminal position');
           Exit;
         end;
         Moves := TStringList.Create;
@@ -200,7 +217,10 @@ begin
           ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(Command.MovesText)),
             Moves);
           FEngine.SetGamePosition(Command.StartingFEN, Moves);
-          FEngine.StartAnalyzing;
+          if FRunMode = armMcts then
+            FEngine.StartMcts
+          else
+            FEngine.StartAnalyzing;
         finally
           Moves.Free;
         end;
@@ -247,15 +267,16 @@ begin
     FEngine := THubEngine.Create(FEngineDefinition);
     FEngine.OnLog := @RuntimeLog;
     if Assigned(FOnLog) then
-      FOnLog(Self, 'Opening Annotator: ' + EnginePickerDisplayName(FEngineDefinition, 0));
+      FOnLog(Self, 'Opening ' + DisplayName + ': ' +
+        EnginePickerDisplayName(FEngineDefinition, 0));
     if not FEngine.LaunchAndInit then
     begin
       if Assigned(FOnLog) then
-        FOnLog(Self, 'Annotator launch failed');
+        FOnLog(Self, DisplayName + ' launch failed');
       Exit;
     end;
     if Assigned(FOnLog) then
-      FOnLog(Self, 'Annotator ready');
+      FOnLog(Self, DisplayName + ' ready');
 
     while not Terminated do
     begin
@@ -289,7 +310,7 @@ begin
       FEngine := nil;
     end;
     if Assigned(FOnLog) then
-      FOnLog(Self, 'Annotator closed');
+      FOnLog(Self, DisplayName + ' closed');
     if Assigned(FOnFinished) then
       FOnFinished(Self);
   end;

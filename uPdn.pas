@@ -16,6 +16,8 @@ type
     ResultText: string;
     StartingFEN: string;
     MoveAnnotationsText: string;
+    MoveVariationAnnotationsText: string;
+    MoveVariationsText: string;
     MovesText: string;
     constructor Create;
     procedure AssignFrom(ASource: TPdnGame);
@@ -28,6 +30,7 @@ procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList);
 procedure ReadPdnGamesFromFile(const AFileName: string;
   AOnGame: TPdnGameReadEvent);
 procedure AppendPdnGameToFile(const AFileName: string; AGame: TPdnGame);
+procedure AppendPdnTextToFile(const AFileName, APdnText: string);
 function PdnGameToText(AGame: TPdnGame): string;
 function AnnotationWithScore(const AAnnotation, AName, AScore: string): string;
 function ExtractAnnotationValue(const AAnnotation, AName: string): string;
@@ -57,6 +60,8 @@ begin
   ResultText := ASource.ResultText;
   StartingFEN := ASource.StartingFEN;
   MoveAnnotationsText := ASource.MoveAnnotationsText;
+  MoveVariationAnnotationsText := ASource.MoveVariationAnnotationsText;
+  MoveVariationsText := ASource.MoveVariationsText;
   MovesText := ASource.MovesText;
 end;
 
@@ -222,30 +227,61 @@ begin
   Prefix := LowerCase(Copy(AText, AStart, Length(AName) + 1));
   Result := (Prefix = LowerCase(AName) + ':') or
     (Prefix = LowerCase(AName) + '=');
+  if (not Result) and SameText(AName, 'engine') then
+    Result := AnnotationNameMatches(AText, AStart, 'E');
+  if (not Result) and SameText(AName, 'annotator') then
+    Result := AnnotationNameMatches(AText, AStart, 'A');
+end;
+
+function AnnotationContainsName(const AAnnotation, AName: string): Boolean;
+var
+  I: Integer;
+  ItemText: string;
+  Items: TStringList;
+begin
+  Result := False;
+  Items := TStringList.Create;
+  try
+    ExtractStrings([';'], [], PChar(AAnnotation), Items);
+    for I := 0 to Items.Count - 1 do
+    begin
+      ItemText := Trim(Items[I]);
+      if (ItemText <> '') and AnnotationNameMatches(ItemText, 1, AName) then
+        Exit(True);
+    end;
+  finally
+    Items.Free;
+  end;
 end;
 
 function ExtractAnnotationValue(const AAnnotation, AName: string): string;
 var
+  DelimPos: Integer;
   I: Integer;
-  LowerText: string;
-  StartPos: Integer;
+  ItemText: string;
+  Items: TStringList;
 begin
   Result := '';
-  LowerText := LowerCase(AAnnotation);
-  StartPos := Pos(LowerCase(AName) + ':', LowerText);
-  if StartPos <= 0 then
-    StartPos := Pos(LowerCase(AName) + '=', LowerText);
-  if StartPos <= 0 then
-    Exit;
-
-  Inc(StartPos, Length(AName) + 1);
-  while (StartPos <= Length(AAnnotation)) and
-    (AAnnotation[StartPos] in [' ', #9]) do
-    Inc(StartPos);
-  I := StartPos;
-  while (I <= Length(AAnnotation)) and (AAnnotation[I] <> ';') do
-    Inc(I);
-  Result := Trim(Copy(AAnnotation, StartPos, I - StartPos));
+  Items := TStringList.Create;
+  try
+    ExtractStrings([';'], [], PChar(AAnnotation), Items);
+    for I := 0 to Items.Count - 1 do
+    begin
+      ItemText := Trim(Items[I]);
+      if not AnnotationNameMatches(ItemText, 1, AName) then
+        Continue;
+      DelimPos := Pos(':', ItemText);
+      if DelimPos <= 0 then
+        DelimPos := Pos('=', ItemText);
+      if DelimPos > 0 then
+      begin
+        Result := Trim(Copy(ItemText, DelimPos + 1, MaxInt));
+        Exit;
+      end;
+    end;
+  finally
+    Items.Free;
+  end;
 end;
 
 function AnnotationWithScore(const AAnnotation, AName, AScore: string): string;
@@ -263,7 +299,12 @@ begin
   Items := TStringList.Create;
   try
     ExtractStrings([';'], [], PChar(AAnnotation), Items);
-    NewItem := Trim(AName) + ': ' + Trim(AScore);
+    if SameText(AName, 'engine') then
+      NewItem := 'E: ' + Trim(AScore)
+    else if SameText(AName, 'annotator') then
+      NewItem := 'A: ' + Trim(AScore)
+    else
+      NewItem := Trim(AName) + ': ' + Trim(AScore);
     Replaced := False;
     for I := 0 to Items.Count - 1 do
     begin
@@ -292,15 +333,37 @@ begin
   end;
 end;
 
-procedure ExtractMovesAndAnnotationsFromPdnText(const AText: string;
-  AMoves, AAnnotations: TStrings);
+function MoveListText(AMoves: TStrings): string;
+begin
+  if AMoves = nil then
+    Exit('');
+  Result := Trim(StringReplace(AMoves.Text, LineEnding, ' ', [rfReplaceAll]));
+end;
+
+procedure SetTextLine(ALines: TStrings; AIndex: Integer; const AValue: string);
+begin
+  if (ALines = nil) or (AIndex < 0) then
+    Exit;
+  while ALines.Count <= AIndex do
+    ALines.Add('');
+  ALines[AIndex] := Trim(AValue);
+end;
+
+function CommentHasStoredAnnotation(const AComment: string): Boolean;
+begin
+  Result := AnnotationContainsName(AComment, 'score') or
+    AnnotationContainsName(AComment, 'engine') or
+    AnnotationContainsName(AComment, 'annotator');
+end;
+
+procedure ExtractPdnMoveData(const AText: string; AMoves, AAnnotations,
+  AVariations, AVariationAnnotations: TStrings);
 var
   I: Integer;
   LBraceDepth: Integer;
   LComment: string;
   LInLineComment: Boolean;
   LLastMoveIndex: Integer;
-  LParenDepth: Integer;
   LToken: string;
 
   procedure ProcessToken;
@@ -329,25 +392,92 @@ var
   procedure ProcessComment;
   var
     LCommentText: string;
-    LLowerComment: string;
   begin
     LCommentText := Trim(LComment);
     LComment := '';
     if (LLastMoveIndex < 0) or (LLastMoveIndex >= AAnnotations.Count) then
       Exit;
-    LLowerComment := LowerCase(LCommentText);
-    if (Pos('score=', LLowerComment) > 0) or
-      (Pos('engine:', LLowerComment) > 0) or
-      (Pos('engine=', LLowerComment) > 0) or
-      (Pos('annotator:', LLowerComment) > 0) or
-      (Pos('annotator=', LLowerComment) > 0) then
+    if CommentHasStoredAnnotation(LCommentText) then
       AAnnotations[LLastMoveIndex] := LCommentText;
+  end;
+
+  function ReadParenthesizedText: string;
+  var
+    Depth: Integer;
+    InBrace: Integer;
+  begin
+    Result := '';
+    Depth := 1;
+    InBrace := 0;
+    Inc(I);
+    while I <= Length(AText) do
+    begin
+      if InBrace > 0 then
+      begin
+        if AText[I] = '{' then
+          Inc(InBrace)
+        else if AText[I] = '}' then
+          Dec(InBrace);
+        Result += AText[I];
+      end
+      else if AText[I] = '{' then
+      begin
+        Inc(InBrace);
+        Result += AText[I];
+      end
+      else if AText[I] = '(' then
+      begin
+        Inc(Depth);
+        Result += AText[I];
+      end
+      else if AText[I] = ')' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then
+          Exit;
+        Result += AText[I];
+      end
+      else
+        Result += AText[I];
+      Inc(I);
+    end;
+  end;
+
+  procedure ProcessVariation(const AVariationText: string);
+  var
+    LSlot: Integer;
+    LVariationAnnotations: TStringList;
+    LVariationMoves: TStringList;
+  begin
+    if (AVariations = nil) or (AVariationAnnotations = nil) then
+      Exit;
+
+    LSlot := AMoves.Count;
+    LVariationAnnotations := TStringList.Create;
+    LVariationMoves := TStringList.Create;
+    try
+      ExtractPdnMoveData(AVariationText, LVariationMoves,
+        LVariationAnnotations, nil, nil);
+      if LVariationMoves.Count = 0 then
+        Exit;
+      SetTextLine(AVariations, LSlot, MoveListText(LVariationMoves));
+      if LVariationAnnotations.Count > 0 then
+        SetTextLine(AVariationAnnotations, LSlot,
+          LVariationAnnotations[LVariationAnnotations.Count - 1]);
+    finally
+      LVariationMoves.Free;
+      LVariationAnnotations.Free;
+    end;
   end;
 begin
   if AMoves <> nil then
     AMoves.Clear;
   if AAnnotations <> nil then
     AAnnotations.Clear;
+  if AVariations <> nil then
+    AVariations.Clear;
+  if AVariationAnnotations <> nil then
+    AVariationAnnotations.Clear;
   if (AMoves = nil) or (AAnnotations = nil) then
     Exit;
 
@@ -355,9 +485,9 @@ begin
   LComment := '';
   LInLineComment := False;
   LLastMoveIndex := -1;
-  LParenDepth := 0;
   LToken := '';
-  for I := 1 to Length(AText) do
+  I := 1;
+  while I <= Length(AText) do
   begin
     if LInLineComment then
     begin
@@ -366,6 +496,7 @@ begin
         LInLineComment := False;
         ProcessToken;
       end;
+      Inc(I);
       Continue;
     end;
 
@@ -386,15 +517,7 @@ begin
       end
       else
         LComment += AText[I];
-      Continue;
-    end;
-
-    if LParenDepth > 0 then
-    begin
-      if AText[I] = '(' then
-        Inc(LParenDepth)
-      else if AText[I] = ')' then
-        Dec(LParenDepth);
+      Inc(I);
       Continue;
     end;
 
@@ -408,7 +531,7 @@ begin
       '(':
         begin
           ProcessToken;
-          Inc(LParenDepth);
+          ProcessVariation(ReadParenthesizedText);
         end;
       ';':
         begin
@@ -420,8 +543,15 @@ begin
     else
       LToken += AText[I];
     end;
+    Inc(I);
   end;
   ProcessToken;
+end;
+
+procedure ExtractMovesAndAnnotationsFromPdnText(const AText: string;
+  AMoves, AAnnotations: TStrings);
+begin
+  ExtractPdnMoveData(AText, AMoves, AAnnotations, nil, nil);
 end;
 
 function ExtractMovesFromPdnText(const AText: string): string;
@@ -492,16 +622,22 @@ procedure AddCurrentGame(var ACurrent: TPdnGame; AMoveLines: TStrings;
 var
   LAnnotations: TStringList;
   LMoves: TStringList;
+  LVariationAnnotations: TStringList;
+  LVariations: TStringList;
 begin
   if ACurrent = nil then
     Exit;
   LAnnotations := TStringList.Create;
   LMoves := TStringList.Create;
+  LVariationAnnotations := TStringList.Create;
+  LVariations := TStringList.Create;
   try
-    ExtractMovesAndAnnotationsFromPdnText(AMoveLines.Text, LMoves, LAnnotations);
-    ACurrent.MovesText := Trim(StringReplace(LMoves.Text, LineEnding, ' ',
-      [rfReplaceAll]));
+    ExtractPdnMoveData(AMoveLines.Text, LMoves, LAnnotations, LVariations,
+      LVariationAnnotations);
+    ACurrent.MovesText := MoveListText(LMoves);
     ACurrent.MoveAnnotationsText := LAnnotations.Text;
+    ACurrent.MoveVariationsText := LVariations.Text;
+    ACurrent.MoveVariationAnnotationsText := LVariationAnnotations.Text;
     if Trim(ACurrent.StartingFEN) = '' then
       ACurrent.StartingFEN := DefaultPdnFen;
     if Trim(ACurrent.ResultText) = '' then
@@ -513,6 +649,8 @@ begin
     end;
     AMoveLines.Clear;
   finally
+    LVariations.Free;
+    LVariationAnnotations.Free;
     LMoves.Free;
     LAnnotations.Free;
   end;
@@ -652,7 +790,56 @@ begin
   end;
 end;
 
-function FormatMovesForPdn(const AMovesText, AAnnotationsText, AResultText: string;
+function FormatVariationForPdn(const AMovesText, AStartingFEN: string;
+  APlyOffset: Integer): string;
+var
+  I: Integer;
+  LMoves: TStringList;
+  LMoveNumber: Integer;
+  LPly: Integer;
+  LPlyFromWhiteStart: Integer;
+  LSide: TDraughtsSide;
+  LStartingSide: TDraughtsSide;
+begin
+  Result := '';
+  LMoves := TStringList.Create;
+  try
+    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(AMovesText)), LMoves);
+    if LMoves.Count = 0 then
+      Exit;
+
+    LStartingSide := dsWhite;
+    if (Trim(AStartingFEN) <> '') and (UpCase(Trim(AStartingFEN)[1]) = 'B') then
+      LStartingSide := dsBlack;
+
+    for I := 0 to LMoves.Count - 1 do
+    begin
+      LPly := APlyOffset + I + 1;
+      if Result <> '' then
+        Result += ' ';
+      if ((LStartingSide = dsWhite) and Odd(LPly)) or
+        ((LStartingSide = dsBlack) and (not Odd(LPly))) then
+        LSide := dsWhite
+      else
+        LSide := dsBlack;
+      LPlyFromWhiteStart := LPly;
+      if LStartingSide = dsBlack then
+        Inc(LPlyFromWhiteStart);
+      LMoveNumber := ((LPlyFromWhiteStart - 1) div 2) + 1;
+      if LSide = dsWhite then
+        Result += IntToStr(LMoveNumber) + '. ' + LMoves[I]
+      else if I = 0 then
+        Result += IntToStr(LMoveNumber) + '... ' + LMoves[I]
+      else
+        Result += LMoves[I];
+    end;
+  finally
+    LMoves.Free;
+  end;
+end;
+
+function FormatMovesForPdn(const AMovesText, AAnnotationsText,
+  AVariationsText, AVariationAnnotationsText, AResultText: string;
   const AStartingFEN: string): string;
 var
   I: Integer;
@@ -662,17 +849,35 @@ var
   LOut: TStringList;
   LSide: TDraughtsSide;
   LText: string;
+  LVariations: TStringList;
+  LVariationAnnotations: TStringList;
+  LVariationBasePly: Integer;
+  LVariationComment: string;
+  LVariationText: string;
 begin
   LMoves := TStringList.Create;
   LAnnotations := TStringList.Create;
+  LVariations := TStringList.Create;
+  LVariationAnnotations := TStringList.Create;
   LOut := TStringList.Create;
   try
     ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(AMovesText)), LMoves);
     LAnnotations.Text := AAnnotationsText;
+    LVariations.Text := AVariationsText;
+    LVariationAnnotations.Text := AVariationAnnotationsText;
     LSide := dsWhite;
     if (Trim(AStartingFEN) <> '') and (UpCase(Trim(AStartingFEN)[1]) = 'B') then
       LSide := dsBlack;
     LText := '';
+    if (LVariations.Count > 0) and (Trim(LVariations[0]) <> '') then
+    begin
+      LVariationText := FormatVariationForPdn(LVariations[0],
+        AStartingFEN, 0);
+      if (LVariationAnnotations.Count > 0) and
+        (Trim(LVariationAnnotations[0]) <> '') then
+        LVariationText += ' {' + Trim(LVariationAnnotations[0]) + '}';
+      LText := '(' + LVariationText + ')';
+    end;
     for I := 0 to LMoves.Count - 1 do
     begin
       if LText <> '' then
@@ -692,6 +897,21 @@ begin
       end;
       if (I < LAnnotations.Count) and (Trim(LAnnotations[I]) <> '') then
         LText += ' {' + Trim(LAnnotations[I]) + '}';
+      if (I + 1 < LVariations.Count) and (Trim(LVariations[I + 1]) <> '') then
+      begin
+        LVariationComment := '';
+        if I + 1 < LVariationAnnotations.Count then
+          LVariationComment := Trim(LVariationAnnotations[I + 1]);
+        LVariationBasePly := I + 1;
+        if ExtractAnnotationValue(LVariationComment, 'annotator') <> '' then
+          LVariationBasePly := I;
+        LVariationText := FormatVariationForPdn(LVariations[I + 1],
+          AStartingFEN, LVariationBasePly);
+        if LVariationComment <> '' then
+          LVariationText += ' {' + LVariationComment + '}';
+        if LVariationText <> '' then
+          LText += ' (' + LVariationText + ')';
+      end;
       if Length(LText) > 78 then
       begin
         LOut.Add(Trim(LText));
@@ -709,16 +929,27 @@ begin
     Result := LOut.Text;
   finally
     LOut.Free;
+    LVariationAnnotations.Free;
+    LVariations.Free;
     LAnnotations.Free;
     LMoves.Free;
   end;
 end;
 
 procedure AppendPdnGameToFile(const AFileName: string; AGame: TPdnGame);
-var
-  Lines: TStringList;
 begin
   if AGame = nil then
+    Exit;
+  AppendPdnTextToFile(AFileName, PdnGameToText(AGame));
+end;
+
+procedure AppendPdnTextToFile(const AFileName, APdnText: string);
+var
+  Lines: TStringList;
+  Text: string;
+begin
+  Text := TrimRight(APdnText);
+  if Trim(Text) = '' then
     Exit;
   Lines := TStringList.Create;
   try
@@ -726,7 +957,7 @@ begin
       Lines.LoadFromFile(AFileName);
     if (Lines.Count > 0) and (Trim(Lines[Lines.Count - 1]) <> '') then
       Lines.Add('');
-    Lines.Text := Lines.Text + PdnGameToText(AGame);
+    Lines.Text := Lines.Text + Text + LineEnding;
     Lines.SaveToFile(AFileName);
   finally
     Lines.Free;
@@ -751,7 +982,8 @@ begin
     Lines.Add('[FEN "' + PdnQuote(AGame.StartingFEN) + '"]');
     Lines.Add('');
     Lines.Text := Lines.Text + FormatMovesForPdn(AGame.MovesText,
-      AGame.MoveAnnotationsText, AGame.ResultText, AGame.StartingFEN);
+      AGame.MoveAnnotationsText, AGame.MoveVariationsText,
+      AGame.MoveVariationAnnotationsText, AGame.ResultText, AGame.StartingFEN);
     Result := Lines.Text;
   finally
     Lines.Free;

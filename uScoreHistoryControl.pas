@@ -580,14 +580,14 @@ begin
   end;
 
   if HasEngineScore then
-    Result += 'engine: ' + EngineScoreText
+    Result += 'E: ' + EngineScoreText
   else
-    Result += 'engine: no score';
+    Result += 'E: no score';
   Result += '; ';
   if HasAnnotatorScore then
-    Result += 'annotator: ' + AnnotatorScoreText
+    Result += 'A: ' + AnnotatorScoreText
   else
-    Result += 'annotator: no score';
+    Result += 'A: no score';
 end;
 
 procedure TScoreHistoryControl.SetScoreHint(const AText: string; AX,
@@ -625,6 +625,12 @@ begin
     AScoreText := ExtractAnnotationValue(Lines[APly - 1], AName);
     if (AScoreText = '') and SameText(AName, 'engine') then
       AScoreText := ExtractAnnotationValue(Lines[APly - 1], 'score');
+    if (AScoreText = '') and SameText(AName, 'engine') and
+      TryExtractScoreFromAnnotation('score=' + Trim(Lines[APly - 1]), Score) then
+    begin
+      AScoreText := Trim(Lines[APly - 1]);
+      Exit(True);
+    end;
     if AScoreText = '' then
       Exit;
     Result := TryExtractScoreFromAnnotation('score=' + AScoreText, Score);

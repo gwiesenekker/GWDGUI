@@ -5,17 +5,26 @@ unit uMainForm;
 interface
 
 uses
-  Classes, Clipbrd, Controls, Dialogs, ExtCtrls, Forms, Graphics, LCLType,
-  Menus, StdCtrls, SysUtils, uBoardControl, uDraughtsBoard, uEnginesDialog,
+  Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
+  LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uBoardControl,
+  uDraughtsBoard, uEnginesDialog,
   uGameOrchestrator, uGameRunnerThread, uGameSetupForm,
-  uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue,
+  uEngineParamsJson, uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
-  uGuiDialogs, uDatabaseForm, uPositionSetupForm, uPreferences,
-  uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm;
+  uGuiDialogs, uDatabaseForm, uGameTree, uGameTreeBuilder, uGameTreePdn,
+  uGameTreeView, uPositionSetupForm, uPreferences, uPreferencesForm,
+  uScoreHistoryControl, uScoreHistoryForm;
 
 type
   TIntArray = array of Integer;
   TPvHintSource = (phsMain, phsAnalyzer);
+  TMoveVariationHit = record
+    Start: Integer;
+    Length: Integer;
+    VariationIndex: Integer;
+    VariationPly: Integer;
+  end;
+  TMoveVariationHitArray = array of TMoveVariationHit;
 
   TRunnerSnapshotGuiMessage = class(TThreadMessage)
   private
@@ -62,6 +71,22 @@ type
     property Runner: TAnalyzerRunnerThread read FRunner;
   end;
 
+  TMctsLogGuiMessage = class(TThreadMessage)
+  private
+    FMessage: string;
+  public
+    constructor Create(const AMessage: string); reintroduce;
+    property Message: string read FMessage;
+  end;
+
+  TMctsFinishedGuiMessage = class(TThreadMessage)
+  private
+    FRunner: TAnalyzerRunnerThread;
+  public
+    constructor Create(ARunner: TAnalyzerRunnerThread); reintroduce;
+    property Runner: TAnalyzerRunnerThread read FRunner;
+  end;
+
   TRunningGameLifecycle = (
     rglStarting,
     rglRunning,
@@ -73,9 +98,9 @@ type
   TRunningGame = class
   private
     FId: Integer;
-    FAnnotatorAnnotationsText: string;
     FBlackEngineKey: string;
     FBlackPlayerKind: TPlayerKind;
+    FGameTree: TGameTree;
     FPaused: Boolean;
     FReservationKeys: TStringList;
     FReleasingRunner: Boolean;
@@ -106,8 +131,7 @@ type
     function ReservationSummary: string;
     procedure AssignSetupTo(out ASetup: TGameSetup);
     property Id: Integer read FId;
-    property AnnotatorAnnotationsText: string read FAnnotatorAnnotationsText
-      write FAnnotatorAnnotationsText;
+    property GameTree: TGameTree read FGameTree;
     property Lifecycle: TRunningGameLifecycle read FLifecycle;
     property Paused: Boolean read FPaused write FPaused;
     property Runner: TGameRunnerThread read FRunner;
@@ -161,14 +185,25 @@ type
     FGuiEventTimer: TTimer;
     FBlackPlayerEdit: TEdit;
     FFenEdit: TEdit;
-    FGameCommentLengths: TIntArray;
-    FGameCommentStarts: TIntArray;
     FGameMoveLengths: TIntArray;
     FGameMoveMemo: TMemo;
     FGameMoveStarts: TIntArray;
+    FGameTree: TGameTree;
+    FGameTreeBrowseMode: Boolean;
+    FGameTreeForm: TForm;
+    FGameTreeView: TTreeView;
+    FDisplayedMovesSignature: string;
     FHighlightedGameMovePly: Integer;
     FHideMoveAnnotations: Boolean;
     FHideMoveAnnotationsMenuItem: TMenuItem;
+    FMoveShowAnnotatorMove: Boolean;
+    FMoveShowAnnotatorMoveMenuItem: TMenuItem;
+    FMoveShowAnnotatorPV: Boolean;
+    FMoveShowAnnotatorPVMenuItem: TMenuItem;
+    FMoveShowAnnotatorScore: Boolean;
+    FMoveShowClocks: Boolean;
+    FMoveShowEnginePV: Boolean;
+    FMoveShowEngineScore: Boolean;
     FHumanMoveChoices: TStringList;
     FHumanMoveSourceSquare: Integer;
     FLegalMovesMemo: TMemo;
@@ -176,8 +211,14 @@ type
     FMiniBoard: TDraughtsBoard;
     FMiniBoardControl: TDraughtsBoardControl;
     FMiniBoardForm: TForm;
-    FMoveAnnotationsText: string;
-    FMovesPlayedText: string;
+    FMctsCloseMenuItem: TMenuItem;
+    FMctsEngineKey: string;
+    FMctsLastPositionSignature: string;
+    FMctsMemo: TMemo;
+    FMctsOpenMenuItem: TMenuItem;
+    FMctsPopup: TPopupMenu;
+    FMctsRunner: TAnalyzerRunnerThread;
+    FMctsStatsGrid: TStringGrid;
     FNextGameId: Integer;
     FHintFromAnalyzerMenuItem: TMenuItem;
     FHintFromMainMenuItem: TMenuItem;
@@ -204,6 +245,7 @@ type
     FScoreHistoryForm: TScoreHistoryForm;
     FSearchPositionInDatabase: Boolean;
     FSearchPositionInDatabaseMenuItem: TMenuItem;
+    FShowGameTreeMenuItem: TMenuItem;
     FSetupForm: TGameSetupForm;
     FShowStdoutMenuItem: TMenuItem;
     FStartingFEN: string;
@@ -212,11 +254,15 @@ type
     FStandaloneWhitePlayerName: string;
     FTournamentDialog: TTournamentDialog;
     FViewedGameId: Integer;
+    FVariationHits: TMoveVariationHitArray;
+    FVariationIndex: Integer;
+    FVariationBrowsePly: Integer;
     FWhiteClockLabel: TLabel;
     FWhitePlayerEdit: TEdit;
     FWhiteRemainingSeconds: Double;
     FWhiteUsedSeconds: Double;
     function ActiveBoard: TDraughtsBoard;
+    function ActiveGameTree: TGameTree;
     procedure ApplyBoardFlipped;
     procedure ApplyBoardTheme(AControl: TDraughtsBoardControl;
       AUseAnalysisTheme: Boolean);
@@ -233,42 +279,90 @@ type
     procedure AnalyzerPvBoardChanged(Sender: TObject);
     procedure AnalyzerPopupPopup(Sender: TObject);
     procedure AnalyzerSnapshot(Sender: TObject; ASnapshot: TPvSnapshot);
-    procedure ApplyAnalyzerScoreAnnotation(ASnapshot: TPvSnapshot);
-    procedure BuildAnnotatedMoveText(const AMovesText, AAnnotationsText,
-      AStartingFEN: string; out AText: string; var AMoveStarts,
-      AMoveLengths, ACommentStarts, ACommentLengths: TIntArray;
-      APlyOffset: Integer = 0; AHideAnnotations: Boolean = False);
-    procedure BuildMoveText(const AMovesText, AStartingFEN: string;
-      out AText: string; var AStarts, ALengths: TIntArray;
-      APlyOffset: Integer = 0);
+    function RecordAnalyzerSnapshotInGameTree(ASnapshot: TPvSnapshot): TGameTree;
+    procedure ApplyVariationBrowsePly(AVariationIndex, AVariationPly: Integer;
+      AGameTree: TGameTree);
     procedure BoardMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     procedure BoardPopupPopup(Sender: TObject);
+    procedure AddVariationMove(const AMove: string);
+    function CurrentGameTreeHeaderInput(AGame: TRunningGame): TGameTreeHeaderInput;
+    function RunningGameTreeHeaderInput(AGame: TRunningGame;
+      const AEventName: string): TGameTreeHeaderInput;
+    procedure PrepareGameTreeRebuildFromCurrentState(AGame: TRunningGame;
+      AGameTree: TGameTree);
+    procedure UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
+      const AEventName: string = '');
+    function RunningGameTreePdnText(AGame: TRunningGame;
+      const AEventName: string): string;
+    function CanExploreVariation: Boolean;
     function CanAcceptHumanBoardMove: Boolean;
+    function CanRecordCurrentAnnotatorPV: Boolean;
+    function CanRecordCurrentVariationAnnotatorPV(AVariationIndex,
+      AVariationPly: Integer): Boolean;
+    function CurrentGameTreeEnginePvInput(
+      AGameTree: TGameTree): TGameTreePvInput;
+    function CurrentGameTreeAnnotatorPvInput: TGameTreePvInput;
+    function CurrentGameTreeVariationPvInput(AVariation: TGameTreeVariationLine;
+      AVariationIndex, AVariationPly: Integer): TGameTreeVariationPvInput;
     procedure ClearHumanMoveSelection;
+    procedure ClearStoredTreeVariations(AGameTree: TGameTree);
+    procedure ClearVariationExploration;
+    procedure CopyGameTreePdnClick(Sender: TObject);
     procedure CloseQueryHandler(Sender: TObject; var CanClose: Boolean);
     procedure CloseAnalyzerClick(Sender: TObject);
     procedure CopyBoardFenClick(Sender: TObject);
     procedure CreateDatabaseClick(Sender: TObject);
     procedure StopSelectedGame(Sender: TObject);
     function CurrentMoveCount: Integer;
-    function DisplayedMovesText: string;
+    function CurrentVariationMoveCount(AGameTree: TGameTree): Integer;
+    function GameTreeMainlineMovesText(AGameTree: TGameTree): string;
+    function DisplayedMovesText(AGameTree: TGameTree): string;
+    function HasDisplayedGameToSave: Boolean;
+    function EngineSupportsMcts(AEngine: TExternalEngineDefinition): Boolean;
+    function GameForTree(AGameTree: TGameTree): TRunningGame;
+    function GameForTreeRefresh(AGameTree: TGameTree): TRunningGame;
+    function BlackNameForTree(AGameTree: TGameTree): string;
+    function EventNameForTree(AGameTree: TGameTree): string;
+    function ResultForTree(AGameTree: TGameTree): string;
+    function StartingFenForTree(AGameTree: TGameTree): string;
+    function StateForTree(AGameTree: TGameTree): TGameOrchestratorState;
+    function WhiteNameForTree(AGameTree: TGameTree): string;
+    function ClockValuesForTree(AGameTree: TGameTree;
+      out AWhiteRemainingSeconds, ABlackRemainingSeconds, AWhiteUsedSeconds,
+      ABlackUsedSeconds: Double): Boolean;
+    function VisibleMainPvForTree(AGameTree: TGameTree;
+      out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV,
+      AScore, ADepth, ATimeText: string): Boolean;
     function FormatClock(ASeconds: Double): string;
+    function CurrentFilteredGameTreePdnOptions: TGameTreePdnRenderOptions;
     function GameLogLineVisible(const ALine: string; AGame: TRunningGame): Boolean;
     function GameTitleEngineName(AEngine: TExternalEngineDefinition): string;
+    procedure PrepareGameTreeForPdn(AGame: TRunningGame;
+      AGameTree: TGameTree; const AEventName: string;
+      ARefreshTree: Boolean);
+    function CurrentGameTreePdnText(const AEventName: string;
+      ARefreshTree: Boolean = True): string;
     function PlayerSetupDisplayName(AKind: TPlayerKind;
       AEngine: TExternalEngineDefinition): string;
     function FindHumanMoveToTarget(ATargetSquare: Integer; out AMove: string): Boolean;
     procedure GameMoveBrowseClick(Sender: TObject);
     procedure GameMoveBrowseKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
+    procedure GameMovePopupPopup(Sender: TObject);
+    procedure GameTreeFormClose(Sender: TObject; var CloseAction: TCloseAction);
+    procedure GameTreeViewClick(Sender: TObject);
+    procedure GameTreeViewKeyDown(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
     procedure HideMoveAnnotationsClick(Sender: TObject);
-    procedure HighlightGameMoveTextSelection(AFocusMemo: Boolean);
+    procedure HighlightGameMoveTextSelection(AFocusMemo: Boolean;
+      AGameTree: TGameTree);
     procedure GameSetupAccepted(Sender: TObject; const ASetup: TGameSetup);
     procedure GamesPopupPopup(Sender: TObject);
     procedure GamesListBoxClick(Sender: TObject);
     procedure GuiEventTimerTick(Sender: TObject);
     procedure HandleAnalyzerLog(const AMessage: string);
+    procedure HandleMctsLog(const AMessage: string);
     procedure HintSourceClick(Sender: TObject);
     procedure GameFinished(Sender: TObject);
     procedure GameSnapshot(Sender: TObject; ASnapshot: TGameRunnerSnapshot);
@@ -279,10 +373,16 @@ type
     procedure MiniBoardDblClick(Sender: TObject);
     procedure MiniBoardFormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure MiniBoardPopoutClick(Sender: TObject);
+    procedure MoveDisplayFilterClick(Sender: TObject);
+    procedure UpdateGameMovePopupState;
+    procedure MctsFinished(Sender: TObject);
+    procedure MctsLog(Sender: TObject; const AMessage: string);
+    procedure MctsPopupPopup(Sender: TObject);
     procedure PopoutBoardCopyFenClick(Sender: TObject);
     procedure PvBoardChanged(Sender: TObject);
     procedure NewGameClick(Sender: TObject);
     procedure OpenAnalyzerClick(Sender: TObject);
+    procedure OpenMctsClick(Sender: TObject);
     procedure OpenDatabaseClick(Sender: TObject);
     procedure EnginesClick(Sender: TObject);
     procedure ExitGameBrowseMode;
@@ -298,41 +398,70 @@ type
     function MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
     procedure PlayHumanMove(const AMove: string);
     procedure RemoveGame(AGame: TRunningGame);
-    procedure RestartAnalyzer;
+    procedure RestartAnalyzer(AGameTree: TGameTree);
+    procedure RestartMctsAnnotator(AGameTree: TGameTree);
     procedure ReplaySelectedGame(Sender: TObject);
     procedure SelectHumanMoveSource(ASourceSquare: Integer);
-    procedure RebuildGameMoveLabels;
+    procedure RebuildGameMoveLabels(ARefreshTree: Boolean;
+      AGameTree: TGameTree);
+    procedure RecordGameTreeMainlineWithCurrentClock(AGame: TRunningGame;
+      AGameTree: TGameTree; AMoves, AAnnotations: TStrings);
+    procedure RecordGameTreeMainlineFromInput(AGame: TRunningGame;
+      AGameTree: TGameTree; AMoves, AAnnotations: TStrings);
+    procedure RecordGameTreeLiveAnalysis(AGameTree: TGameTree);
+    procedure RecordGameTreeVariationLiveAnalysis(AGameTree: TGameTree;
+      AVariation: TGameTreeVariationLine; AVariationIndex,
+      AVariationPly: Integer);
+    procedure RecordGameTreeVariations(AGameTree: TGameTree);
     procedure UpdateGameMoveHighlight;
     function SelectedGame: TRunningGame;
+    function SelectedDisplayedGame: TRunningGame;
     procedure SavePdnClick(Sender: TObject);
     function SaveCurrentGameWithDialog: Boolean;
+    procedure ScrollMemoToLastTextLine(AMemo: TMemo);
     procedure ScoreHistoryPopoutClick(Sender: TObject);
     procedure ScoreHistoryFormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure SearchPositionInDatabaseClick(Sender: TObject);
     procedure SetupPositionAccepted(Sender: TObject; const AFEN: string);
     procedure SetupPositionClick(Sender: TObject);
+    procedure ShowGameTreeClick(Sender: TObject);
     procedure ShowStdoutClick(Sender: TObject);
     procedure StopAllGames;
+    procedure CloseMctsClick(Sender: TObject);
+    procedure ClearMctsStatsGrid;
     procedure ToggleBoardFlipped;
     procedure TournamentStartGame(Sender: TObject; const ASetup: TGameSetup;
       const ATitlePrefix: string; out AGame: TObject);
+    function TreeVariationLineByIndex(AIndex: Integer;
+      AGameTree: TGameTree): TGameTreeVariationLine;
     procedure LoadStandaloneFen(const AFEN: string);
     procedure LoadPdnGameToDisplay(AGame: TPdnGame);
-    function MergeAnnotatorAnnotations(const ABaseAnnotations,
-      AAnnotatorAnnotations: string): string;
-    function SetAnnotationScoreInText(const AAnnotationsText: string;
-      APly: Integer; const AName, AScore: string): string;
+    procedure LoadTreeVariationsFromLegacyText(AGameTree: TGameTree;
+      const AVariationsText, AVariationAnnotationsText: string);
+    function FindTreeVariationByDisplayAfterPly(ADisplayAfterPly: Integer;
+      AGameTree: TGameTree): Integer;
+    function StoreTreeVariation(ADisplayAfterPly, ABasePly: Integer;
+      const AMovesText, AAnnotationText: string;
+      AGameTree: TGameTree): Boolean;
     procedure UpdateBrowseInfo;
     procedure UpdateBoardInfo;
     procedure UpdateDatabaseSearchPosition;
-    procedure UpdateBoardFromBrowseState;
-    procedure UpdateBoardHighlights;
+    procedure UpdateBoardFromBrowseState(AGameTree: TGameTree);
+    procedure UpdateBoardHighlights(AGameTree: TGameTree);
     procedure UpdateClockLabels(const AWhiteName, ABlackName: string);
-    procedure UpdateScoreHistory;
+    procedure UpdateScoreHistory(ARefreshTree: Boolean; AGameTree: TGameTree);
     procedure UpdateGameListItem(AGame: TRunningGame);
     procedure UpdateLegalMoves;
     procedure UpdateGameLogMemo;
+    procedure UpdateGameTreeFromMoveText(AGame: TRunningGame;
+      AGameTree: TGameTree; const AMovesText, AAnnotationsText: string);
+    procedure UpdateGameTreeFromState(AGame: TRunningGame;
+      AGameTree: TGameTree);
+    procedure RefreshVisibleGameTreeView(ARefreshTree: Boolean;
+      AGameTree: TGameTree);
+    procedure UpdateGameTreeView(AGameTree: TGameTree);
     procedure UpdateMiniBoardFromBoard(ABoard: TDraughtsBoard);
+    procedure UpdateMctsStatsFromLog(const AMessage: string);
     procedure TournamentClick(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
@@ -413,6 +542,18 @@ begin
   FRunner := ARunner;
 end;
 
+constructor TMctsLogGuiMessage.Create(const AMessage: string);
+begin
+  inherited Create('mcts-log');
+  FMessage := AMessage;
+end;
+
+constructor TMctsFinishedGuiMessage.Create(ARunner: TAnalyzerRunnerThread);
+begin
+  inherited Create('mcts-finished');
+  FRunner := ARunner;
+end;
+
 constructor TRunningGame.Create(AId: Integer; const ATitle: string;
   ARunner: TGameRunnerThread; AWhitePlayerKind, ABlackPlayerKind: TPlayerKind;
   const AWhiteEngineKey, ABlackEngineKey, AWhiteDisplayName,
@@ -433,6 +574,7 @@ begin
   FReservationKeys.Duplicates := dupIgnore;
   if AReservationKeys <> nil then
     FReservationKeys.AddStrings(AReservationKeys);
+  FGameTree := TGameTree.Create;
   FSnapshot := TGameRunnerSnapshot.Create;
   CopySetupFrom(ASetup);
   FLifecycle := rglStarting;
@@ -442,6 +584,7 @@ destructor TRunningGame.Destroy;
 begin
   ReleaseRunner;
   ClearSetup;
+  FGameTree.Free;
   FSnapshot.Free;
   FReservationKeys.Free;
   inherited Destroy;
@@ -595,7 +738,9 @@ var
   LPvTopPanel: TPanel;
   LAnalyzerBoardPanel: TPanel;
   LAnalyzerBoardPopup: TPopupMenu;
+  LAnalyzerMiniBoardPanel: TPanel;
   LAnalyzerPanel: TPanel;
+  LAnalyzerStatsPanel: TPanel;
   LAnalyzerTextPanel: TPanel;
   LPvInfoTextWidth: Integer;
   LPvSidePanelWidth: Integer;
@@ -646,15 +791,25 @@ begin
   FGameState := gosWaiting;
   FGameResult := '*';
   FGameBrowsePly := -1;
+  FGameTreeBrowseMode := False;
+  FVariationIndex := -1;
+  FVariationBrowsePly := 0;
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
   FHighlightedGameMovePly := -1;
   FHideMoveAnnotations := False;
+  FMoveShowAnnotatorMove := True;
+  FMoveShowAnnotatorPV := True;
+  FMoveShowAnnotatorScore := True;
+  FMoveShowClocks := True;
+  FMoveShowEnginePV := True;
+  FMoveShowEngineScore := True;
   FSearchPositionInDatabase := True;
   FPvHintSource := phsMain;
   FViewedGameId := -1;
   FGameLog := TStringList.Create;
   FHumanMoveChoices := TStringList.Create;
+  FGameTree := TGameTree.Create;
   FGames := TList.Create;
   FGuiEventQueue := TThreadMessageQueue.Create(True);
   FGuiEventTimer := TTimer.Create(Self);
@@ -731,8 +886,8 @@ begin
   LBottomPanel := TPanel.Create(Self);
   LBottomPanel.Parent := Self;
   LBottomPanel.Align := alBottom;
-  LBottomPanel.Height := 318;
-  LBottomPanel.Constraints.MinHeight := 210;
+  LBottomPanel.Height := 366;
+  LBottomPanel.Constraints.MinHeight := 260;
   LBottomPanel.BevelOuter := bvNone;
   LBottomPanel.Color := clWindow;
   LBottomPanel.BorderSpacing.Left := 8;
@@ -742,8 +897,8 @@ begin
   LAnalyzerPanel := TPanel.Create(Self);
   LAnalyzerPanel.Parent := LBottomPanel;
   LAnalyzerPanel.Align := alBottom;
-  LAnalyzerPanel.Height := 130;
-  LAnalyzerPanel.Constraints.MinHeight := 70;
+  LAnalyzerPanel.Height := 112;
+  LAnalyzerPanel.Constraints.MinHeight := 112;
   LAnalyzerPanel.BevelOuter := bvNone;
 
   FAnalyzerPopup := TPopupMenu.Create(Self);
@@ -756,10 +911,20 @@ begin
   FAnalyzerCloseMenuItem.OnClick := @CloseAnalyzerClick;
   FAnalyzerPopup.Items.Add(FAnalyzerCloseMenuItem);
 
+  FMctsPopup := TPopupMenu.Create(Self);
+  FMctsPopup.OnPopup := @MctsPopupPopup;
+  FMctsOpenMenuItem := TMenuItem.Create(Self);
+  FMctsOpenMenuItem.Caption := 'Open MCTS annotator';
+  FMctsPopup.Items.Add(FMctsOpenMenuItem);
+  FMctsCloseMenuItem := TMenuItem.Create(Self);
+  FMctsCloseMenuItem.Caption := 'Close MCTS annotator';
+  FMctsCloseMenuItem.OnClick := @CloseMctsClick;
+  FMctsPopup.Items.Add(FMctsCloseMenuItem);
+
   LAnalyzerBoardPanel := TPanel.Create(Self);
   LAnalyzerBoardPanel.Parent := LAnalyzerPanel;
   LAnalyzerBoardPanel.Align := alRight;
-  LAnalyzerBoardPanel.Width := 112;
+  LAnalyzerBoardPanel.Width := 300;
   LAnalyzerBoardPanel.BevelOuter := bvNone;
   LAnalyzerBoardPanel.BorderSpacing.Left := 8;
   LAnalyzerBoardPanel.BorderSpacing.Right := 8;
@@ -770,14 +935,45 @@ begin
   LMenuItem.OnClick := @AnalyzerMiniBoardPopoutClick;
   LAnalyzerBoardPopup.Items.Add(LMenuItem);
 
+  LAnalyzerMiniBoardPanel := TPanel.Create(Self);
+  LAnalyzerMiniBoardPanel.Parent := LAnalyzerBoardPanel;
+  LAnalyzerMiniBoardPanel.Align := alLeft;
+  LAnalyzerMiniBoardPanel.Width := 112;
+  LAnalyzerMiniBoardPanel.BevelOuter := bvNone;
+  LAnalyzerMiniBoardPanel.BorderSpacing.Right := 6;
+
   FAnalyzerMiniBoardControl := TDraughtsBoardControl.Create(Self);
-  FAnalyzerMiniBoardControl.Parent := LAnalyzerBoardPanel;
+  FAnalyzerMiniBoardControl.Parent := LAnalyzerMiniBoardPanel;
   FAnalyzerMiniBoardControl.Align := alClient;
   FAnalyzerMiniBoardControl.Board := FAnalyzerMiniBoard;
   FAnalyzerMiniBoardControl.ShowCoordinates := False;
   FAnalyzerMiniBoardControl.PopupMenu := LAnalyzerBoardPopup;
   FAnalyzerMiniBoardControl.OnDblClick := @AnalyzerMiniBoardDblClick;
   FAnalyzerMiniBoardControl.BoardFlipped := FBoardFlipped;
+
+  LAnalyzerStatsPanel := TPanel.Create(Self);
+  LAnalyzerStatsPanel.Parent := LAnalyzerBoardPanel;
+  LAnalyzerStatsPanel.Align := alClient;
+  LAnalyzerStatsPanel.BevelOuter := bvNone;
+
+  FMctsStatsGrid := TStringGrid.Create(Self);
+  FMctsStatsGrid.Parent := LAnalyzerStatsPanel;
+  FMctsStatsGrid.Align := alTop;
+  FMctsStatsGrid.BorderStyle := bsSingle;
+  FMctsStatsGrid.ColCount := 2;
+  FMctsStatsGrid.RowCount := 8;
+  FMctsStatsGrid.FixedCols := 0;
+  FMctsStatsGrid.FixedRows := 0;
+  FMctsStatsGrid.Options := FMctsStatsGrid.Options - [goEditing, goRangeSelect] +
+    [goRowSelect];
+  FMctsStatsGrid.ScrollBars := ssAutoVertical;
+  FMctsStatsGrid.Font.Size := 7;
+  FMctsStatsGrid.DefaultRowHeight := 13;
+  FMctsStatsGrid.Height := FMctsStatsGrid.RowCount *
+    FMctsStatsGrid.DefaultRowHeight + 4;
+  FMctsStatsGrid.ColWidths[0] := 82;
+  FMctsStatsGrid.ColWidths[1] := 92;
+  ClearMctsStatsGrid;
 
   LAnalyzerTextPanel := TPanel.Create(Self);
   LAnalyzerTextPanel.Parent := LAnalyzerPanel;
@@ -787,7 +983,7 @@ begin
   FAnalyzerPvMemo := TMemo.Create(Self);
   FAnalyzerPvMemo.Parent := LAnalyzerTextPanel;
   FAnalyzerPvMemo.Align := alTop;
-  FAnalyzerPvMemo.Height := 52;
+  FAnalyzerPvMemo.Height := 44;
   FAnalyzerPvMemo.ParentFont := True;
   FAnalyzerPvMemo.ReadOnly := True;
   FAnalyzerPvMemo.ScrollBars := ssVertical;
@@ -799,6 +995,18 @@ begin
   FAnalyzerPvBrowser := TPvBrowser.Create(FAnalyzerMiniBoard,
     FAnalyzerMiniBoardControl, nil, FAnalyzerPvMemo);
   FAnalyzerPvBrowser.OnBoardChanged := @AnalyzerPvBoardChanged;
+
+  FMctsMemo := TMemo.Create(Self);
+  FMctsMemo.Parent := LAnalyzerTextPanel;
+  FMctsMemo.Align := alBottom;
+  FMctsMemo.Height := 34;
+  FMctsMemo.ParentFont := True;
+  FMctsMemo.ReadOnly := True;
+  FMctsMemo.ScrollBars := ssAutoBoth;
+  FMctsMemo.WordWrap := False;
+  FMctsMemo.BorderSpacing.Top := 4;
+  FMctsMemo.Lines.Add('MCTS annotator closed');
+  FMctsMemo.PopupMenu := FMctsPopup;
 
   FAnalyzerMemo := TMemo.Create(Self);
   FAnalyzerMemo.Parent := LAnalyzerTextPanel;
@@ -973,12 +1181,66 @@ begin
   FGameMoveMemo.OnKeyDown := @GameMoveBrowseKeyDown;
 
   LGameMovePopup := TPopupMenu.Create(Self);
+  LGameMovePopup.OnPopup := @GameMovePopupPopup;
   FHideMoveAnnotationsMenuItem := TMenuItem.Create(Self);
   FHideMoveAnnotationsMenuItem.Caption := 'Hide annotation';
   FHideMoveAnnotationsMenuItem.AutoCheck := False;
   FHideMoveAnnotationsMenuItem.OnClick := @HideMoveAnnotationsClick;
   LGameMovePopup.Items.Add(FHideMoveAnnotationsMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := '-';
+  LGameMovePopup.Items.Add(LMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := 'Show engine score';
+  LMenuItem.AutoCheck := False;
+  LMenuItem.Checked := FMoveShowEngineScore;
+  LMenuItem.Tag := 1;
+  LMenuItem.OnClick := @MoveDisplayFilterClick;
+  LGameMovePopup.Items.Add(LMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := 'Show engine PV';
+  LMenuItem.AutoCheck := False;
+  LMenuItem.Checked := FMoveShowEnginePV;
+  LMenuItem.Tag := 2;
+  LMenuItem.OnClick := @MoveDisplayFilterClick;
+  LGameMovePopup.Items.Add(LMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := 'Show clocks';
+  LMenuItem.AutoCheck := False;
+  LMenuItem.Checked := FMoveShowClocks;
+  LMenuItem.Tag := 3;
+  LMenuItem.OnClick := @MoveDisplayFilterClick;
+  LGameMovePopup.Items.Add(LMenuItem);
+  FMoveShowAnnotatorMoveMenuItem := TMenuItem.Create(Self);
+  FMoveShowAnnotatorMoveMenuItem.Caption := 'Show annotator move';
+  FMoveShowAnnotatorMoveMenuItem.AutoCheck := False;
+  FMoveShowAnnotatorMoveMenuItem.Checked := FMoveShowAnnotatorMove;
+  FMoveShowAnnotatorMoveMenuItem.Tag := 4;
+  FMoveShowAnnotatorMoveMenuItem.OnClick := @MoveDisplayFilterClick;
+  LGameMovePopup.Items.Add(FMoveShowAnnotatorMoveMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := 'Show annotator score';
+  LMenuItem.AutoCheck := False;
+  LMenuItem.Checked := FMoveShowAnnotatorScore;
+  LMenuItem.Tag := 5;
+  LMenuItem.OnClick := @MoveDisplayFilterClick;
+  LGameMovePopup.Items.Add(LMenuItem);
+  FMoveShowAnnotatorPVMenuItem := TMenuItem.Create(Self);
+  FMoveShowAnnotatorPVMenuItem.Caption := 'Show annotator PV';
+  FMoveShowAnnotatorPVMenuItem.AutoCheck := False;
+  FMoveShowAnnotatorPVMenuItem.Checked := FMoveShowAnnotatorPV;
+  FMoveShowAnnotatorPVMenuItem.Tag := 6;
+  FMoveShowAnnotatorPVMenuItem.OnClick := @MoveDisplayFilterClick;
+  LGameMovePopup.Items.Add(FMoveShowAnnotatorPVMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := '-';
+  LGameMovePopup.Items.Add(LMenuItem);
+  FShowGameTreeMenuItem := TMenuItem.Create(Self);
+  FShowGameTreeMenuItem.Caption := 'Show tree';
+  FShowGameTreeMenuItem.OnClick := @ShowGameTreeClick;
+  LGameMovePopup.Items.Add(FShowGameTreeMenuItem);
   FGameMoveMemo.PopupMenu := LGameMovePopup;
+  UpdateGameMovePopupState;
 
   LPvBoardPanel := TPanel.Create(Self);
   LPvBoardPanel.Parent := LPvPanel;
@@ -1138,6 +1400,7 @@ begin
   if FTournamentDialog <> nil then
     FTournamentDialog.BeginShutdown;
   StopAllGames;
+  FreeAndNil(FMctsRunner);
   FreeAndNil(FAnalyzerRunner);
   if FGuiEventQueue <> nil then
     FGuiEventQueue.Close;
@@ -1152,9 +1415,11 @@ begin
   FreeAndNil(FPdnOpenDialog);
   FreeAndNil(FMiniBoardForm);
   FreeAndNil(FAnalyzerMiniBoardForm);
+  FreeAndNil(FGameTreeForm);
   FreeAndNil(FAnalyzerPvBrowser);
   FreeAndNil(FPvBrowser);
   FHumanMoveChoices.Free;
+  FGameTree.Free;
   FGameLog.Free;
   FGames.Free;
   FAnalyzerPopoutBoard.Free;
@@ -1170,6 +1435,16 @@ end;
 function TMainForm.ActiveBoard: TDraughtsBoard;
 begin
   Result := FBoard;
+end;
+
+function TMainForm.ActiveGameTree: TGameTree;
+var
+  LGame: TRunningGame;
+begin
+  Result := FGameTree;
+  LGame := SelectedDisplayedGame;
+  if (LGame <> nil) and (LGame.GameTree <> nil) then
+    Result := LGame.GameTree;
 end;
 
 procedure TMainForm.ApplyBoardTheme(AControl: TDraughtsBoardControl;
@@ -1209,7 +1484,7 @@ begin
     FPositionSetupForm.ApplyPreferences(FPreferences);
   if FDatabaseForm <> nil then
     FDatabaseForm.ApplyPreferences(FPreferences);
-  UpdateScoreHistory;
+  UpdateScoreHistory(True, ActiveGameTree);
 end;
 
 procedure TMainForm.ApplyBoardFlipped;
@@ -1233,12 +1508,24 @@ begin
   if FGameBrowsePly >= 0 then
     Exit(False);
 
-  if not FGameActive then
-    Exit(False);
-
-  LGame := SelectedGame;
+  LGame := SelectedDisplayedGame;
   Result := (LGame <> nil) and (LGame.Runner <> nil) and
     (LGame.Snapshot.State = gosRunning) and LGame.IsHumanToMove;
+end;
+
+function TMainForm.CanExploreVariation: Boolean;
+var
+  LGame: TRunningGame;
+begin
+  Result := False;
+  if FGameBrowsePly < 0 then
+    Exit;
+
+  LGame := SelectedDisplayedGame;
+  if LGame <> nil then
+    Result := LGame.Lifecycle = rglFinished
+  else
+    Result := Trim(StartingFenForTree(ActiveGameTree)) <> '';
 end;
 
 procedure TMainForm.ClearHumanMoveSelection;
@@ -1250,6 +1537,12 @@ begin
     FBoardControl.ClearTargetSquares;
 end;
 
+procedure TMainForm.ClearVariationExploration;
+begin
+  FVariationIndex := -1;
+  FVariationBrowsePly := 0;
+end;
+
 procedure TMainForm.ToggleBoardFlipped;
 begin
   FBoardFlipped := not FBoardFlipped;
@@ -1257,6 +1550,16 @@ begin
   ApplyBoardFlipped;
   if FGameActive then
     UpdateClockLabels(FWhitePlayerEdit.Text, FBlackPlayerEdit.Text);
+end;
+
+function TMainForm.TreeVariationLineByIndex(AIndex: Integer;
+  AGameTree: TGameTree): TGameTreeVariationLine;
+begin
+  Result := nil;
+  if (AGameTree = nil) or (AIndex < 0) or
+    (AIndex >= AGameTree.VariationLineCount) then
+    Exit;
+  Result := AGameTree.VariationLine[AIndex];
 end;
 
 function TMainForm.FindHumanMoveToTarget(ATargetSquare: Integer;
@@ -1288,13 +1591,65 @@ begin
     Exit;
 
   ClearHumanMoveSelection;
-  if not FGameActive then
+  if CanExploreVariation then
+  begin
+    AddVariationMove(LMove);
     Exit;
+  end;
 
-  LGame := SelectedGame;
+  LGame := SelectedDisplayedGame;
   if (LGame <> nil) and (LGame.Runner <> nil) and
     (LGame.Snapshot.State = gosRunning) and LGame.IsHumanToMove then
     LGame.Runner.PostHumanMove(LMove);
+end;
+
+procedure TMainForm.AddVariationMove(const AMove: string);
+var
+  LGameTree: TGameTree;
+  LIndex: Integer;
+  LMove: string;
+  LMovesText: string;
+  VariationLine: TGameTreeVariationLine;
+begin
+  LGameTree := ActiveGameTree;
+  if LGameTree = nil then
+    Exit;
+
+  LMove := NormalizeMoveNotation(AMove);
+  if (FGameBrowsePly < 0) or (LMove = '') then
+    Exit;
+
+  LIndex := FVariationIndex;
+  VariationLine := TreeVariationLineByIndex(LIndex, LGameTree);
+  if (VariationLine = nil) or (VariationLine.BasePly <> FGameBrowsePly) then
+  begin
+    LIndex := FindTreeVariationByDisplayAfterPly(FGameBrowsePly, LGameTree);
+    VariationLine := TreeVariationLineByIndex(LIndex, LGameTree);
+    if (VariationLine = nil) or (VariationLine.BasePly <> FGameBrowsePly) then
+    begin
+      StoreTreeVariation(FGameBrowsePly, FGameBrowsePly, '', '',
+        LGameTree);
+      LIndex := FindTreeVariationByDisplayAfterPly(FGameBrowsePly,
+        LGameTree);
+      VariationLine := TreeVariationLineByIndex(LIndex, LGameTree);
+    end;
+    FVariationBrowsePly := 0;
+  end;
+
+  if (LIndex < 0) or (VariationLine = nil) then
+    Exit;
+
+  LMovesText := Trim(VariationLine.MovesText);
+  if LMovesText <> '' then
+    LMovesText += ' ';
+  LMovesText += LMove;
+  StoreTreeVariation(VariationLine.DisplayAfterPly, VariationLine.BasePly,
+    LMovesText, VariationLine.AnnotationText, LGameTree);
+  FVariationIndex := LIndex;
+  Inc(FVariationBrowsePly);
+  UpdateBoardFromBrowseState(LGameTree);
+  UpdateBrowseInfo;
+  RebuildGameMoveLabels(False, LGameTree);
 end;
 
 procedure TMainForm.SelectHumanMoveSource(ASourceSquare: Integer);
@@ -1308,7 +1663,7 @@ var
 begin
   LTargets := nil;
   ClearHumanMoveSelection;
-  if not CanAcceptHumanBoardMove then
+  if (not CanAcceptHumanBoardMove) and (not CanExploreVariation) then
     Exit;
 
   LBoard := ActiveBoard;
@@ -1396,12 +1751,165 @@ begin
   PostGuiEvent(TAnalyzerSnapshotGuiMessage.Create(ASnapshot));
 end;
 
+procedure TMainForm.MctsLog(Sender: TObject; const AMessage: string);
+begin
+  PostGuiEvent(TMctsLogGuiMessage.Create(AMessage));
+end;
+
+procedure TMainForm.MctsFinished(Sender: TObject);
+begin
+  PostGuiEvent(TMctsFinishedGuiMessage.Create(TAnalyzerRunnerThread(Sender)));
+end;
+
 procedure TMainForm.HandleAnalyzerLog(const AMessage: string);
 begin
   if FAnalyzerMemo = nil then
     Exit;
   FAnalyzerMemo.Lines.Add(AMessage);
-  FAnalyzerMemo.SelStart := Length(FAnalyzerMemo.Text);
+  ScrollMemoToLastTextLine(FAnalyzerMemo);
+end;
+
+procedure TMainForm.HandleMctsLog(const AMessage: string);
+begin
+  if FMctsMemo = nil then
+    Exit;
+  UpdateMctsStatsFromLog(AMessage);
+  FMctsMemo.Lines.Add(AMessage);
+  ScrollMemoToLastTextLine(FMctsMemo);
+end;
+
+procedure TMainForm.ScrollMemoToLastTextLine(AMemo: TMemo);
+var
+  LastLineIndex: Integer;
+  LastTextPoint: TPoint;
+begin
+  if (AMemo = nil) or (AMemo.Lines.Count = 0) then
+    Exit;
+
+  LastLineIndex := AMemo.Lines.Count - 1;
+  LastTextPoint.X := 0;
+  LastTextPoint.Y := LastLineIndex;
+  AMemo.CaretPos := LastTextPoint;
+end;
+
+procedure TMainForm.ClearMctsStatsGrid;
+const
+  Labels: array[0..7] of string = (
+    'nshootouts',
+    'nwon',
+    'ndraw',
+    'nlost',
+    '(W-L)/N',
+    'won lcb',
+    'lost ucb',
+    'lcb-ucb'
+  );
+var
+  I: Integer;
+begin
+  if FMctsStatsGrid = nil then
+    Exit;
+
+  FMctsStatsGrid.RowCount := Length(Labels);
+  for I := 0 to High(Labels) do
+  begin
+    FMctsStatsGrid.Cells[0, I] := Labels[I];
+    FMctsStatsGrid.Cells[1, I] := '';
+  end;
+end;
+
+procedure TMainForm.UpdateMctsStatsFromLog(const AMessage: string);
+const
+  Z95 = 1.95996398454005;
+
+  function MctsFloatText(AValue: Double): string;
+  var
+    FormatSettings: TFormatSettings;
+  begin
+    FormatSettings := DefaultFormatSettings;
+    FormatSettings.DecimalSeparator := '.';
+    Result := FormatFloat('0.000000', AValue, FormatSettings);
+  end;
+
+  procedure WilsonBounds(ASuccesses, ATotal: Int64; out ALower, AUpper: Double);
+  var
+    Center: Double;
+    Denominator: Double;
+    Margin: Double;
+    P: Double;
+    N: Double;
+  begin
+    ALower := 0.0;
+    AUpper := 0.0;
+    if ATotal <= 0 then
+      Exit;
+
+    N := ATotal;
+    P := ASuccesses / N;
+    Denominator := 1.0 + Sqr(Z95) / N;
+    Center := P + Sqr(Z95) / (2.0 * N);
+    Margin := Z95 * Sqrt((P * (1.0 - P) + Sqr(Z95) / (4.0 * N)) / N);
+    ALower := (Center - Margin) / Denominator;
+    AUpper := (Center + Margin) / Denominator;
+  end;
+
+  procedure SetValue(ARow: Integer; const AValue: string);
+  begin
+    if (FMctsStatsGrid <> nil) and (ARow >= 0) and
+      (ARow < FMctsStatsGrid.RowCount) then
+      FMctsStatsGrid.Cells[1, ARow] := AValue;
+  end;
+
+var
+  DrawCount: Int64;
+  LostCount: Int64;
+  LossLower: Double;
+  LossUpper: Double;
+  Payload: string;
+  PayloadPos: SizeInt;
+  ShootOuts: Int64;
+  Total: Int64;
+  WinLower: Double;
+  WinUpper: Double;
+  WonCount: Int64;
+begin
+  if FMctsStatsGrid = nil then
+    Exit;
+
+  PayloadPos := Pos('stdout; text=', LowerCase(AMessage));
+  if PayloadPos = 0 then
+    Exit;
+  Payload := Trim(Copy(AMessage, PayloadPos + Length('stdout; text='), MaxInt));
+  PayloadPos := Pos('\n', Payload);
+  if PayloadPos > 0 then
+    Delete(Payload, PayloadPos, MaxInt);
+  Payload := Trim(Payload);
+
+  if Pos('info ', LowerCase(Payload)) <> 1 then
+    Exit;
+
+  if not TryStrToInt64(ExtractHubArgument(Payload, 'nwon'), WonCount) then
+    WonCount := 0;
+  if not TryStrToInt64(ExtractHubArgument(Payload, 'ndraw'), DrawCount) then
+    DrawCount := 0;
+  if not TryStrToInt64(ExtractHubArgument(Payload, 'nlost'), LostCount) then
+    LostCount := 0;
+
+  Total := WonCount + DrawCount + LostCount;
+  ShootOuts := Total;
+  SetValue(0, IntToStr(ShootOuts));
+  SetValue(1, IntToStr(WonCount));
+  SetValue(2, IntToStr(DrawCount));
+  SetValue(3, IntToStr(LostCount));
+  if Total > 0 then
+  begin
+    SetValue(4, MctsFloatText((WonCount - LostCount) / Total));
+    WilsonBounds(WonCount, Total, WinLower, WinUpper);
+    WilsonBounds(LostCount, Total, LossLower, LossUpper);
+    SetValue(5, MctsFloatText(WinLower));
+    SetValue(6, MctsFloatText(LossUpper));
+    SetValue(7, MctsFloatText(WinLower - LossUpper));
+  end;
 end;
 
 procedure TMainForm.HintSourceClick(Sender: TObject);
@@ -1416,7 +1924,7 @@ begin
   if FHintFromAnalyzerMenuItem <> nil then
     FHintFromAnalyzerMenuItem.Checked := FPvHintSource = phsAnalyzer;
 
-  UpdateBoardHighlights;
+  UpdateBoardHighlights(ActiveGameTree);
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
   UpdateDatabaseSearchPosition;
@@ -1506,7 +2014,7 @@ begin
     FAnalyzerRunner := TAnalyzerRunnerThread.Create(Engine, @AnalyzerLog,
       @AnalyzerSnapshot, @AnalyzerFinished);
     FAnalyzerRunner.Start;
-    RestartAnalyzer;
+    RestartAnalyzer(ActiveGameTree);
   finally
     Engines.Free;
   end;
@@ -1526,11 +2034,116 @@ begin
     FAnalyzerPvBrowser.Clear;
 end;
 
-procedure TMainForm.RestartAnalyzer;
+procedure TMainForm.MctsPopupPopup(Sender: TObject);
 var
+  BusyKeys: TStringList;
+  EngineKey: string;
+  Engines: TExternalEngineList;
+  I: Integer;
+  Item: TMenuItem;
+begin
+  FMctsOpenMenuItem.Clear;
+  FMctsOpenMenuItem.Enabled := FMctsRunner = nil;
+  FMctsCloseMenuItem.Enabled := FMctsRunner <> nil;
+
+  if FMctsRunner <> nil then
+    Exit;
+
+  BusyKeys := TStringList.Create;
+  Engines := TExternalEngineList.Create;
+  try
+    BusyKeys.Sorted := True;
+    BusyKeys.Duplicates := dupIgnore;
+    CollectBusyEngineKeys(BusyKeys);
+    LoadExternalEngines(EnginesJsonFileName, Engines);
+    for I := 0 to Engines.Count - 1 do
+    begin
+      if not EngineSupportsMcts(Engines[I]) then
+        Continue;
+      EngineKey := EngineIdentityKey(Engines[I]);
+      if BusyKeys.IndexOf(EngineKey) >= 0 then
+        Continue;
+      Item := TMenuItem.Create(Self);
+      Item.Caption := EnginePickerDisplayName(Engines[I], I + 1);
+      Item.Hint := EngineKey;
+      Item.OnClick := @OpenMctsClick;
+      FMctsOpenMenuItem.Add(Item);
+    end;
+  finally
+    Engines.Free;
+    BusyKeys.Free;
+  end;
+
+  if FMctsOpenMenuItem.Count = 0 then
+  begin
+    Item := TMenuItem.Create(Self);
+    Item.Caption := '(no available MCTS Hub engines)';
+    Item.Enabled := False;
+    FMctsOpenMenuItem.Add(Item);
+  end;
+end;
+
+procedure TMainForm.OpenMctsClick(Sender: TObject);
+var
+  Engine: TExternalEngineDefinition;
+  EngineKey: string;
+  Engines: TExternalEngineList;
+  I: Integer;
+begin
+  if FMctsRunner <> nil then
+    Exit;
+  if not (Sender is TMenuItem) then
+    Exit;
+
+  EngineKey := TMenuItem(Sender).Hint;
+  Engines := TExternalEngineList.Create;
+  try
+    LoadExternalEngines(EnginesJsonFileName, Engines);
+    Engine := nil;
+    for I := 0 to Engines.Count - 1 do
+      if (EngineIdentityKey(Engines[I]) = EngineKey) and
+        EngineSupportsMcts(Engines[I]) then
+      begin
+        Engine := Engines[I];
+        Break;
+      end;
+    if Engine = nil then
+      Exit;
+
+    FMctsMemo.Clear;
+    ClearMctsStatsGrid;
+    FMctsEngineKey := EngineKey;
+    FMctsLastPositionSignature := '';
+    FMctsRunner := TAnalyzerRunnerThread.Create(Engine, @MctsLog, nil,
+      @MctsFinished, armMcts);
+    FMctsRunner.Start;
+    RestartMctsAnnotator(ActiveGameTree);
+  finally
+    Engines.Free;
+  end;
+end;
+
+procedure TMainForm.CloseMctsClick(Sender: TObject);
+begin
+  if FMctsRunner <> nil then
+  begin
+    if FMctsMemo <> nil then
+      FMctsMemo.Lines.Add('Closing MCTS annotator');
+    FMctsRunner.PostShutdown;
+  end;
+  FMctsEngineKey := '';
+  FMctsLastPositionSignature := '';
+  ClearMctsStatsGrid;
+end;
+
+procedure TMainForm.RestartAnalyzer(AGameTree: TGameTree);
+var
+  LGameTree: TGameTree;
   LDisplayedMoveCount: Integer;
   LDisplayedMoves: TStringList;
   LDisplayedMovesText: string;
+  LGameState: TGameOrchestratorState;
+  LStartingFEN: string;
   LTotalMoveCount: Integer;
   LTerminal: Boolean;
   Signature: string;
@@ -1538,7 +2151,11 @@ begin
   if FAnalyzerRunner = nil then
     Exit;
 
-  LDisplayedMovesText := DisplayedMovesText;
+  LGameTree := AGameTree;
+  if LGameTree = nil then
+    Exit;
+  LStartingFEN := StartingFenForTree(LGameTree);
+  LDisplayedMovesText := DisplayedMovesText(LGameTree);
   LDisplayedMoves := TStringList.Create;
   try
     ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(LDisplayedMovesText)),
@@ -1548,9 +2165,10 @@ begin
     LDisplayedMoves.Free;
   end;
   LTotalMoveCount := CurrentMoveCount;
+  LGameState := StateForTree(LGameTree);
 
-  Signature := FStartingFEN + #10 + LDisplayedMovesText + #10 +
-    IntToStr(Ord(FGameState));
+  Signature := LStartingFEN + #10 + LDisplayedMovesText + #10 +
+    IntToStr(Ord(LGameState));
   if Signature = FAnalyzerLastPositionSignature then
     Exit;
   FAnalyzerLastPositionSignature := Signature;
@@ -1558,12 +2176,57 @@ begin
   FAnalyzerPvBaseBoard.AssignFrom(ActiveBoard);
   FAnalyzerPvBasePly := LDisplayedMoveCount;
   LTerminal := (ActiveBoard.LegalMoves.Count = 0) or
-    ((FGameState = gosGameOver) and
+    ((LGameState = gosGameOver) and
       ((FGameBrowsePly < 0) or (LDisplayedMoveCount >= LTotalMoveCount)));
   if LTerminal and (FAnalyzerPvBrowser <> nil) then
     FAnalyzerPvBrowser.Clear;
-  FAnalyzerRunner.PostAnalyze(FStartingFEN, LDisplayedMovesText,
+  FAnalyzerRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText,
     FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, LTerminal);
+end;
+
+procedure TMainForm.RestartMctsAnnotator(AGameTree: TGameTree);
+var
+  LGameTree: TGameTree;
+  LDisplayedMoveCount: Integer;
+  LDisplayedMoves: TStringList;
+  LDisplayedMovesText: string;
+  LGameState: TGameOrchestratorState;
+  LStartingFEN: string;
+  LTotalMoveCount: Integer;
+  LTerminal: Boolean;
+  Signature: string;
+begin
+  if FMctsRunner = nil then
+    Exit;
+
+  LGameTree := AGameTree;
+  if LGameTree = nil then
+    Exit;
+  LStartingFEN := StartingFenForTree(LGameTree);
+  LDisplayedMovesText := DisplayedMovesText(LGameTree);
+  LDisplayedMoves := TStringList.Create;
+  try
+    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(LDisplayedMovesText)),
+      LDisplayedMoves);
+    LDisplayedMoveCount := LDisplayedMoves.Count;
+  finally
+    LDisplayedMoves.Free;
+  end;
+  LTotalMoveCount := CurrentMoveCount;
+  LGameState := StateForTree(LGameTree);
+
+  Signature := LStartingFEN + #10 + LDisplayedMovesText + #10 +
+    IntToStr(Ord(LGameState));
+  if Signature = FMctsLastPositionSignature then
+    Exit;
+  FMctsLastPositionSignature := Signature;
+  ClearMctsStatsGrid;
+
+  LTerminal := (ActiveBoard.LegalMoves.Count = 0) or
+    ((LGameState = gosGameOver) and
+      ((FGameBrowsePly < 0) or (LDisplayedMoveCount >= LTotalMoveCount)));
+  FMctsRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText, ActiveBoard,
+    LDisplayedMoveCount, LTerminal);
 end;
 
 function TMainForm.LiveGameCount: Integer;
@@ -1603,7 +2266,7 @@ begin
       Exit;
   end;
 
-  if Trim(FMovesPlayedText) <> '' then
+  if HasDisplayedGameToSave then
   begin
     LResponse := ShowGuiConfirmationDialog(Self, 'Close GWDGUI',
       'Save the currently displayed game as PDN before closing?', 'Yes',
@@ -1682,8 +2345,8 @@ begin
   FGameState := gosWaiting;
   FGameResult := '*';
   FStartingFEN := FBoard.StartingFEN;
-  FMovesPlayedText := '';
-  FMoveAnnotationsText := '';
+  FDisplayedMovesSignature := '';
+  ClearStoredTreeVariations(FGameTree);
   FStandaloneWhitePlayerName := 'White';
   FStandaloneBlackPlayerName := 'Black';
   FStandaloneEventName := '?';
@@ -1745,97 +2408,52 @@ begin
   ShowFormCenteredOnOwner(FPreferencesForm, Self);
 end;
 
-procedure TextToMoveList(const AMovesText: string; AMoves: TStrings);
-begin
-  if AMoves = nil then
-    Exit;
-  AMoves.Clear;
-  ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(AMovesText)), AMoves);
-end;
-
-function TMainForm.SetAnnotationScoreInText(const AAnnotationsText: string;
-  APly: Integer; const AName, AScore: string): string;
-var
-  Lines: TStringList;
-begin
-  Lines := TStringList.Create;
-  try
-    Lines.Text := AAnnotationsText;
-    while Lines.Count < APly do
-      Lines.Add('');
-    if APly > 0 then
-      Lines[APly - 1] := AnnotationWithScore(Lines[APly - 1], AName,
-        AScore);
-    Result := Lines.Text;
-  finally
-    Lines.Free;
-  end;
-end;
-
-function TMainForm.MergeAnnotatorAnnotations(const ABaseAnnotations,
-  AAnnotatorAnnotations: string): string;
-var
-  BaseLines: TStringList;
-  I: Integer;
-  AnnotatorLines: TStringList;
-  AnnotatorScore: string;
-begin
-  BaseLines := TStringList.Create;
-  AnnotatorLines := TStringList.Create;
-  try
-    BaseLines.Text := ABaseAnnotations;
-    AnnotatorLines.Text := AAnnotatorAnnotations;
-    while BaseLines.Count < AnnotatorLines.Count do
-      BaseLines.Add('');
-    for I := 0 to AnnotatorLines.Count - 1 do
-    begin
-      AnnotatorScore := ExtractAnnotationValue(AnnotatorLines[I],
-        'annotator');
-      if AnnotatorScore <> '' then
-        BaseLines[I] := AnnotationWithScore(BaseLines[I], 'annotator',
-          AnnotatorScore);
-    end;
-    Result := BaseLines.Text;
-  finally
-    AnnotatorLines.Free;
-    BaseLines.Free;
-  end;
-end;
-
-procedure TMainForm.ApplyAnalyzerScoreAnnotation(ASnapshot: TPvSnapshot);
+function TMainForm.RecordAnalyzerSnapshotInGameTree(
+  ASnapshot: TPvSnapshot): TGameTree;
 var
   LGame: TRunningGame;
-  LAnnotationsText: string;
+  LGameTree: TGameTree;
+  VariationLine: TGameTreeVariationLine;
 begin
+  Result := nil;
   if ASnapshot = nil then
     Exit;
   if Trim(ASnapshot.Score) = '' then
     Exit;
-  if ASnapshot.BasePly <= 0 then
-    Exit;
-  if ASnapshot.BasePly > CurrentMoveCount then
-    Exit;
-  if ASnapshot.BaseBoard.PositionKey <> FBoard.PositionKey then
+  if Trim(ASnapshot.PrincipalVariation) = '' then
     Exit;
 
-  LGame := SelectedGame;
-  if (LGame <> nil) and FGameActive then
+  LGame := SelectedDisplayedGame;
+  if LGame <> nil then
   begin
-    LGame.AnnotatorAnnotationsText := SetAnnotationScoreInText(
-      LGame.AnnotatorAnnotationsText, ASnapshot.BasePly, 'annotator',
-      ASnapshot.Score);
-    LAnnotationsText := MergeAnnotatorAnnotations(
-      LGame.Snapshot.MoveAnnotationsText, LGame.AnnotatorAnnotationsText);
+    UpdateRunningGameTreeFromSnapshot(LGame);
+    LGameTree := LGame.GameTree;
   end
   else
-    LAnnotationsText := SetAnnotationScoreInText(FMoveAnnotationsText,
-      ASnapshot.BasePly, 'annotator', ASnapshot.Score);
+  begin
+    LGameTree := FGameTree;
+    UpdateGameTreeFromState(nil, LGameTree);
+  end;
 
-  if LAnnotationsText = FMoveAnnotationsText then
+  if LGameTree = nil then
     Exit;
-  FMoveAnnotationsText := LAnnotationsText;
-  RebuildGameMoveLabels;
-  UpdateScoreHistory;
+  Result := LGameTree;
+
+  VariationLine := nil;
+  if (FVariationIndex >= 0) and
+    (FVariationIndex < LGameTree.VariationLineCount) then
+    VariationLine := LGameTree.VariationLine[FVariationIndex];
+  if (VariationLine <> nil) and (FVariationBrowsePly > 0) then
+    uGameTreeBuilder.RecordGameTreeVariationAnnotatorPV(LGameTree,
+      GameTreeVariationPvInput(VariationLine, FVariationIndex,
+        FVariationBrowsePly, ASnapshot.Score, ASnapshot.PrincipalVariation))
+  else
+    uGameTreeBuilder.RecordGameTreeAnalysis(LGameTree,
+      GameTreePvInput(False, 0, '', ''),
+      GameTreePvInput(True, ASnapshot.BasePly, ASnapshot.Score,
+        ASnapshot.PrincipalVariation));
+  RebuildGameMoveLabels(False, LGameTree);
+  UpdateScoreHistory(False, LGameTree);
 end;
 
 procedure TMainForm.LoadPdnGameToDisplay(AGame: TPdnGame);
@@ -1870,10 +2488,11 @@ begin
     FGameState := gosWaiting;
     FGameResult := AGame.ResultText;
     if Trim(FGameResult) = '' then
-      FGameResult := '*';
+    FGameResult := '*';
     FStartingFEN := AGame.StartingFEN;
-    FMovesPlayedText := AGame.MovesText;
-    FMoveAnnotationsText := AGame.MoveAnnotationsText;
+    FDisplayedMovesSignature := AGame.MovesText;
+    LoadTreeVariationsFromLegacyText(FGameTree, AGame.MoveVariationsText,
+      AGame.MoveVariationAnnotationsText);
     FStandaloneWhitePlayerName := PlayerNameOrFallback(AGame.WhiteName, 'White');
     FStandaloneBlackPlayerName := PlayerNameOrFallback(AGame.BlackName, 'Black');
     FStandaloneEventName := PlayerNameOrFallback(AGame.EventName, '?');
@@ -1882,6 +2501,8 @@ begin
     FPrincipalVariationDepth := '';
     FPrincipalVariationTimeText := '';
     FGameBrowsePly := 0;
+    UpdateGameTreeFromMoveText(nil, FGameTree, AGame.MovesText,
+      AGame.MoveAnnotationsText);
     FPvBaseBoard.AssignFrom(FBoard);
     FPvBasePly := CurrentMoveCount;
     FWhiteRemainingSeconds := 0;
@@ -1892,7 +2513,7 @@ begin
     if FGamesListBox <> nil then
       FGamesListBox.ItemIndex := -1;
     FGameLog.Clear;
-    UpdateBoardFromBrowseState;
+    UpdateBoardFromBrowseState(FGameTree);
     UpdateMiniBoardFromBoard(FBoard);
     UpdateBoardInfo;
   finally
@@ -1909,153 +2530,118 @@ begin
     Result := dsWhite;
 end;
 
-function MoveSegmentText(APly, ADisplayedIndex: Integer; const AMove: string;
-  AStartingSide: TDraughtsSide): string;
+procedure TMainForm.ApplyVariationBrowsePly(AVariationIndex,
+  AVariationPly: Integer; AGameTree: TGameTree);
 var
-  LMoveNumber: Integer;
-  LSide: TDraughtsSide;
-  LPlyFromWhiteStart: Integer;
-begin
-  LPlyFromWhiteStart := APly;
-  if AStartingSide = dsBlack then
-    Inc(LPlyFromWhiteStart);
-  LMoveNumber := ((LPlyFromWhiteStart - 1) div 2) + 1;
-  if ((AStartingSide = dsWhite) and Odd(APly)) or
-    ((AStartingSide = dsBlack) and (not Odd(APly))) then
-    LSide := dsWhite
-  else
-    LSide := dsBlack;
-
-  if LSide = dsWhite then
-    Result := IntToStr(LMoveNumber) + '.' + AMove
-  else if ADisplayedIndex = 0 then
-    Result := IntToStr(LMoveNumber) + '...' + AMove
-  else
-    Result := AMove;
-end;
-
-procedure TMainForm.BuildAnnotatedMoveText(const AMovesText,
-  AAnnotationsText, AStartingFEN: string; out AText: string;
-  var AMoveStarts, AMoveLengths, ACommentStarts, ACommentLengths: TIntArray;
-  APlyOffset: Integer; AHideAnnotations: Boolean);
-var
-  I: Integer;
-  LAnnotations: TStringList;
+  LGameTree: TGameTree;
+  LMoveCount: Integer;
   LMoves: TStringList;
-  LComment: string;
-  LSegment: string;
-  LStartingSide: TDraughtsSide;
+  VariationLine: TGameTreeVariationLine;
 begin
-  AText := '';
-  SetLength(AMoveStarts, 0);
-  SetLength(AMoveLengths, 0);
-  SetLength(ACommentStarts, 0);
-  SetLength(ACommentLengths, 0);
-
-  LMoves := TStringList.Create;
-  LAnnotations := TStringList.Create;
-  try
-    TextToMoveList(AMovesText, LMoves);
-    LAnnotations.Text := AAnnotationsText;
-    if LMoves.Count = 0 then
-    begin
-      AText := '(none)';
-      Exit;
-    end;
-
-    SetLength(AMoveStarts, LMoves.Count);
-    SetLength(AMoveLengths, LMoves.Count);
-    SetLength(ACommentStarts, LMoves.Count);
-    SetLength(ACommentLengths, LMoves.Count);
-    LStartingSide := FenSideToMove(AStartingFEN);
-    for I := 0 to LMoves.Count - 1 do
-    begin
-      if AText <> '' then
-        AText += ' ';
-      LSegment := MoveSegmentText(APlyOffset + I + 1, I, LMoves[I],
-        LStartingSide);
-      AMoveStarts[I] := Length(AText);
-      AMoveLengths[I] := Length(LSegment);
-      AText += LSegment;
-
-      LComment := '';
-      if (not AHideAnnotations) and (I < LAnnotations.Count) then
-        LComment := Trim(LAnnotations[I]);
-      if LComment <> '' then
-      begin
-        LSegment := ' {' + LComment + '}';
-        AText += LSegment;
-        ACommentStarts[I] := Length(AText) - Length(LSegment);
-        ACommentLengths[I] := Length(LSegment);
-      end;
-    end;
-  finally
-    LAnnotations.Free;
-    LMoves.Free;
+  ClearHumanMoveSelection;
+  LGameTree := AGameTree;
+  if LGameTree = nil then
+    Exit;
+  UpdateGameTreeFromState(GameForTreeRefresh(LGameTree), LGameTree);
+  VariationLine := TreeVariationLineByIndex(AVariationIndex, LGameTree);
+  if VariationLine = nil then
+    Exit;
+  if AVariationPly <= 0 then
+  begin
+    ApplyGameBrowsePly(VariationLine.BasePly);
+    Exit;
   end;
-end;
 
-procedure TMainForm.BuildMoveText(const AMovesText, AStartingFEN: string;
-  out AText: string; var AStarts, ALengths: TIntArray; APlyOffset: Integer);
-var
-  I: Integer;
-  LMoves: TStringList;
-  LSegment: string;
-  LStartingSide: TDraughtsSide;
-begin
-  AText := '';
-  SetLength(AStarts, 0);
-  SetLength(ALengths, 0);
   LMoves := TStringList.Create;
   try
-    TextToMoveList(AMovesText, LMoves);
-    if LMoves.Count = 0 then
-    begin
-      AText := '(none)';
+    TextToMoveList(VariationLine.MovesText, LMoves);
+    LMoveCount := LMoves.Count;
+    if LMoveCount = 0 then
       Exit;
-    end;
+    if AVariationPly > LMoveCount then
+      AVariationPly := LMoveCount;
 
-    SetLength(AStarts, LMoves.Count);
-    SetLength(ALengths, LMoves.Count);
-    LStartingSide := FenSideToMove(AStartingFEN);
-    for I := 0 to LMoves.Count - 1 do
-    begin
-      if AText <> '' then
-        AText += ' ';
-      LSegment := MoveSegmentText(APlyOffset + I + 1, I, LMoves[I],
-        LStartingSide);
-      AStarts[I] := Length(AText);
-      ALengths[I] := Length(LSegment);
-      AText += LSegment;
-    end;
+    FGameBrowsePly := VariationLine.BasePly;
+    FVariationIndex := AVariationIndex;
+    FVariationBrowsePly := AVariationPly;
+    { Keep the local move list parsed above to validate the requested ply. }
   finally
     LMoves.Free;
   end;
+
+  UpdateBoardFromBrowseState(LGameTree);
+  UpdateBrowseInfo;
 end;
 
 function TMainForm.CurrentMoveCount: Integer;
 var
-  LMoves: TStringList;
+  LGameTree: TGameTree;
 begin
+  Result := 0;
+  LGameTree := ActiveGameTree;
+  if LGameTree <> nil then
+    Result := LGameTree.MainlineCount;
+end;
+
+function TMainForm.CurrentVariationMoveCount(AGameTree: TGameTree): Integer;
+var
+  LMoves: TStringList;
+  VariationLine: TGameTreeVariationLine;
+begin
+  Result := 0;
+  VariationLine := TreeVariationLineByIndex(FVariationIndex, AGameTree);
+  if VariationLine = nil then
+    Exit;
+
   LMoves := TStringList.Create;
   try
-    TextToMoveList(FMovesPlayedText, LMoves);
+    TextToMoveList(VariationLine.MovesText, LMoves);
     Result := LMoves.Count;
   finally
     LMoves.Free;
   end;
 end;
 
-function TMainForm.DisplayedMovesText: string;
+function TMainForm.GameTreeMainlineMovesText(AGameTree: TGameTree): string;
 var
   I: Integer;
   LMoves: TStringList;
-  LPly: Integer;
 begin
   Result := '';
+  if AGameTree = nil then
+    Exit;
+
   LMoves := TStringList.Create;
   try
-    TextToMoveList(FMovesPlayedText, LMoves);
+    AGameTree.CopyMainlineMovesTo(LMoves);
+    for I := 0 to LMoves.Count - 1 do
+    begin
+      if Result <> '' then
+        Result += ' ';
+      Result += LMoves[I];
+    end;
+  finally
+    LMoves.Free;
+  end;
+end;
+
+function TMainForm.DisplayedMovesText(AGameTree: TGameTree): string;
+var
+  I: Integer;
+  LLimit: Integer;
+  LMoves: TStringList;
+  LPly: Integer;
+  VariationLine: TGameTreeVariationLine;
+  LVariationMoves: TStringList;
+begin
+  Result := '';
+  if AGameTree = nil then
+    Exit;
+
+  LMoves := TStringList.Create;
+  LVariationMoves := TStringList.Create;
+  try
+    AGameTree.CopyMainlineMovesTo(LMoves);
     LPly := FGameBrowsePly;
     if (LPly < 0) or (LPly > LMoves.Count) then
       LPly := LMoves.Count;
@@ -2065,9 +2651,277 @@ begin
         Result += ' ';
       Result += LMoves[I];
     end;
+    VariationLine := TreeVariationLineByIndex(FVariationIndex, AGameTree);
+    if (VariationLine <> nil) and (VariationLine.BasePly = LPly) and
+      (FVariationBrowsePly > 0) then
+    begin
+      TextToMoveList(VariationLine.MovesText, LVariationMoves);
+      LLimit := FVariationBrowsePly;
+      if LLimit > LVariationMoves.Count then
+        LLimit := LVariationMoves.Count;
+      for I := 0 to LLimit - 1 do
+      begin
+        if Result <> '' then
+          Result += ' ';
+        Result += LVariationMoves[I];
+      end;
+    end;
   finally
+    LVariationMoves.Free;
     LMoves.Free;
   end;
+end;
+
+function TMainForm.HasDisplayedGameToSave: Boolean;
+var
+  LGameTree: TGameTree;
+begin
+  LGameTree := ActiveGameTree;
+  Result := (LGameTree <> nil) and (LGameTree.MainlineCount > 0);
+end;
+
+procedure TMainForm.ClearStoredTreeVariations(AGameTree: TGameTree);
+begin
+  SetLength(FVariationHits, 0);
+  if AGameTree <> nil then
+    AGameTree.ClearStoredVariations;
+  ClearVariationExploration;
+end;
+
+procedure TMainForm.LoadTreeVariationsFromLegacyText(AGameTree: TGameTree;
+  const AVariationsText, AVariationAnnotationsText: string);
+var
+  I: Integer;
+  AnnotationText: string;
+  BasePly: Integer;
+  Lines: TStringList;
+  AnnotationLines: TStringList;
+begin
+  if AGameTree = nil then
+    Exit;
+
+  AGameTree.ClearStoredVariations;
+  SetLength(FVariationHits, 0);
+  ClearVariationExploration;
+  Lines := TStringList.Create;
+  AnnotationLines := TStringList.Create;
+  try
+    Lines.Text := AVariationsText;
+    AnnotationLines.Text := AVariationAnnotationsText;
+    for I := 0 to Lines.Count - 1 do
+      if Trim(Lines[I]) <> '' then
+      begin
+        AnnotationText := '';
+        if I < AnnotationLines.Count then
+          AnnotationText := Trim(AnnotationLines[I]);
+        if ExtractAnnotationValue(AnnotationText, 'annotator') <> '' then
+        begin
+          BasePly := I - 1;
+          if BasePly < 0 then
+            BasePly := 0;
+          StoreTreeVariation(I, BasePly, Lines[I], AnnotationText, AGameTree);
+        end
+        else
+          StoreTreeVariation(I, I, Lines[I], AnnotationText, AGameTree);
+      end;
+  finally
+    AnnotationLines.Free;
+    Lines.Free;
+  end;
+end;
+
+function TMainForm.FindTreeVariationByDisplayAfterPly(
+  ADisplayAfterPly: Integer; AGameTree: TGameTree): Integer;
+begin
+  Result := -1;
+  if AGameTree <> nil then
+    Result := AGameTree.FindStoredVariationByDisplayAfterPly(
+      ADisplayAfterPly);
+end;
+
+function TMainForm.StoreTreeVariation(ADisplayAfterPly, ABasePly: Integer;
+  const AMovesText, AAnnotationText: string; AGameTree: TGameTree): Boolean;
+var
+  LExisting: TGameTreeVariationLine;
+begin
+  Result := False;
+  if (ADisplayAfterPly < 0) or (ABasePly < 0) or (AGameTree = nil) then
+    Exit;
+
+  LExisting := TreeVariationLineByIndex(
+    AGameTree.FindStoredVariationByDisplayAfterPly(ADisplayAfterPly),
+    AGameTree);
+  if (LExisting <> nil) and
+    (LExisting.DisplayAfterPly = ADisplayAfterPly) and
+    (LExisting.BasePly = ABasePly) and
+    (Trim(LExisting.MovesText) = Trim(AMovesText)) and
+    (Trim(LExisting.AnnotationText) = Trim(AAnnotationText)) then
+    Exit;
+
+  AGameTree.StoreVariationLine(ADisplayAfterPly, ABasePly, AMovesText,
+    AAnnotationText);
+  Result := True;
+end;
+
+function TMainForm.EngineSupportsMcts(AEngine: TExternalEngineDefinition): Boolean;
+var
+  Params: TEngineParamArray;
+  Value: string;
+begin
+  Result := False;
+  SetLength(Params, 0);
+  if (AEngine = nil) or (AEngine.Kind <> eekHub) then
+    Exit;
+
+  LoadEngineParamsFromJson(EngineParamsFileName(AEngine.ExePath), 'hub',
+    Params);
+  Value := LowerCase(Trim(EngineParamValue(Params,
+    'gui-engine-supports-mcts', 'false')));
+  Result := (Value = 'true') or (Value = '1') or (Value = 'yes') or
+    (Value = 'on');
+end;
+
+function TMainForm.GameForTree(AGameTree: TGameTree): TRunningGame;
+var
+  I: Integer;
+  LGame: TRunningGame;
+begin
+  Result := nil;
+  if (AGameTree = nil) or (FGames = nil) then
+    Exit;
+
+  for I := 0 to FGames.Count - 1 do
+  begin
+    LGame := TRunningGame(FGames[I]);
+    if (LGame <> nil) and (LGame.GameTree = AGameTree) then
+      Exit(LGame);
+  end;
+end;
+
+function TMainForm.GameForTreeRefresh(AGameTree: TGameTree): TRunningGame;
+begin
+  Result := GameForTree(AGameTree);
+  if (Result = nil) and (AGameTree <> nil) and (AGameTree <> FGameTree) then
+    Result := SelectedDisplayedGame;
+end;
+
+function TMainForm.StartingFenForTree(AGameTree: TGameTree): string;
+begin
+  Result := '';
+  if AGameTree <> nil then
+    Result := Trim(AGameTree.StartingFEN);
+  if Result = '' then
+    Result := FStartingFEN;
+end;
+
+function TMainForm.StateForTree(AGameTree: TGameTree): TGameOrchestratorState;
+var
+  LGame: TRunningGame;
+begin
+  LGame := GameForTreeRefresh(AGameTree);
+  if LGame <> nil then
+    Result := LGame.Snapshot.State
+  else
+    Result := FGameState;
+end;
+
+function TMainForm.ResultForTree(AGameTree: TGameTree): string;
+begin
+  Result := '';
+  if AGameTree <> nil then
+    Result := Trim(AGameTree.ResultText);
+  if Result = '' then
+    Result := PlayerNameOrFallback(FGameResult, '*');
+end;
+
+function TMainForm.WhiteNameForTree(AGameTree: TGameTree): string;
+begin
+  Result := '';
+  if AGameTree <> nil then
+    Result := Trim(AGameTree.WhiteName);
+  if Result = '' then
+    Result := PlayerNameOrFallback(FStandaloneWhitePlayerName, 'White');
+end;
+
+function TMainForm.BlackNameForTree(AGameTree: TGameTree): string;
+begin
+  Result := '';
+  if AGameTree <> nil then
+    Result := Trim(AGameTree.BlackName);
+  if Result = '' then
+    Result := PlayerNameOrFallback(FStandaloneBlackPlayerName, 'Black');
+end;
+
+function TMainForm.EventNameForTree(AGameTree: TGameTree): string;
+begin
+  Result := '';
+  if AGameTree <> nil then
+    Result := Trim(AGameTree.EventName);
+  if Result = '' then
+    Result := PlayerNameOrFallback(FStandaloneEventName, '?');
+end;
+
+function TMainForm.ClockValuesForTree(AGameTree: TGameTree;
+  out AWhiteRemainingSeconds, ABlackRemainingSeconds, AWhiteUsedSeconds,
+  ABlackUsedSeconds: Double): Boolean;
+begin
+  Result := (AGameTree <> nil) and AGameTree.HasClockInfo;
+  if Result then
+  begin
+    AWhiteRemainingSeconds := AGameTree.WhiteRemainingSeconds;
+    ABlackRemainingSeconds := AGameTree.BlackRemainingSeconds;
+    AWhiteUsedSeconds := AGameTree.WhiteUsedSeconds;
+    ABlackUsedSeconds := AGameTree.BlackUsedSeconds;
+  end
+  else
+  begin
+    AWhiteRemainingSeconds := FWhiteRemainingSeconds;
+    ABlackRemainingSeconds := FBlackRemainingSeconds;
+    AWhiteUsedSeconds := FWhiteUsedSeconds;
+    ABlackUsedSeconds := FBlackUsedSeconds;
+  end;
+end;
+
+function TMainForm.VisibleMainPvForTree(AGameTree: TGameTree;
+  out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV, AScore,
+  ADepth, ATimeText: string): Boolean;
+var
+  LGame: TRunningGame;
+begin
+  LGame := GameForTreeRefresh(AGameTree);
+  APV := '';
+  AScore := '';
+  ADepth := '';
+  ATimeText := '';
+  ABaseBoard := ActiveBoard;
+  ABasePly := CurrentMoveCount;
+
+  if LGame <> nil then
+  begin
+    APV := LGame.Snapshot.PrincipalVariation;
+    AScore := LGame.Snapshot.PvScore;
+    ADepth := LGame.Snapshot.PvSnapshot.Depth;
+    ATimeText := LGame.Snapshot.PvSnapshot.TimeText;
+    if Trim(APV) <> '' then
+    begin
+      ABaseBoard := LGame.Snapshot.PvBaseBoard;
+      ABasePly := LGame.Snapshot.PvBasePly;
+    end;
+  end
+  else
+  begin
+    APV := FPrincipalVariation;
+    AScore := FPrincipalVariationScore;
+    ADepth := FPrincipalVariationDepth;
+    ATimeText := FPrincipalVariationTimeText;
+    if Trim(APV) <> '' then
+    begin
+      ABaseBoard := FPvBaseBoard;
+      ABasePly := FPvBasePly;
+    end;
+  end;
+
+  Result := Trim(APV) <> '';
 end;
 
 function TMainForm.PlayerNameOrFallback(const AName, AFallback: string): string;
@@ -2090,18 +2944,48 @@ begin
   Result := FGuiEventQueue.TryPost(AEvent);
 end;
 
-procedure TMainForm.RebuildGameMoveLabels;
+procedure TMainForm.RebuildGameMoveLabels(ARefreshTree: Boolean;
+  AGameTree: TGameTree);
 var
+  LGame: TRunningGame;
+  LGameTree: TGameTree;
+  I: Integer;
+  LOptions: TGameTreePdnRenderOptions;
+  LRenderResult: TGameTreePdnRenderResult;
   LText: string;
 begin
   if FGameMoveMemo = nil then
     Exit;
 
+  LOptions := CurrentFilteredGameTreePdnOptions;
+  LGameTree := AGameTree;
+  if LGameTree = nil then
+    Exit;
+  if ARefreshTree then
+  begin
+    LGame := GameForTreeRefresh(LGameTree);
+    UpdateGameTreeFromState(LGame, LGameTree);
+  end;
+  RenderGameTreeMovesToPdn(LGameTree, LOptions, LRenderResult);
+  LText := LRenderResult.Text;
+  SetLength(FGameMoveStarts, Length(LRenderResult.MoveStarts));
+  SetLength(FGameMoveLengths, Length(LRenderResult.MoveLengths));
+  for I := 0 to High(LRenderResult.MoveStarts) do
+  begin
+    FGameMoveStarts[I] := LRenderResult.MoveStarts[I];
+    FGameMoveLengths[I] := LRenderResult.MoveLengths[I];
+  end;
+  SetLength(FVariationHits, Length(LRenderResult.VariationStarts));
+  for I := 0 to High(LRenderResult.VariationStarts) do
+  begin
+    FVariationHits[I].Start := LRenderResult.VariationStarts[I];
+    FVariationHits[I].Length := LRenderResult.VariationLengths[I];
+    FVariationHits[I].VariationIndex := LRenderResult.VariationIndexes[I];
+    FVariationHits[I].VariationPly := LRenderResult.VariationPlies[I];
+  end;
+
   FGameMoveMemo.Lines.BeginUpdate;
   try
-    BuildAnnotatedMoveText(FMovesPlayedText, FMoveAnnotationsText,
-      FStartingFEN, LText, FGameMoveStarts, FGameMoveLengths,
-      FGameCommentStarts, FGameCommentLengths, 0, FHideMoveAnnotations);
     FGameMoveMemo.Text := LText;
     FHighlightedGameMovePly := -2;
   finally
@@ -2110,17 +2994,336 @@ begin
   UpdateGameMoveHighlight;
 end;
 
+function TMainForm.CurrentGameTreeHeaderInput(
+  AGame: TRunningGame): TGameTreeHeaderInput;
+var
+  LBlackName: string;
+  LMovesText: string;
+  LRecordTimeControl: Boolean;
+  LStartingFEN: string;
+  LTimeControl: TTimeControl;
+  LTreeSignature: string;
+  LWhiteName: string;
+begin
+  if AGame <> nil then
+  begin
+    LWhiteName := PlayerNameOrFallback(AGame.Snapshot.WhitePlayerName,
+      PlayerNameOrFallback(AGame.WhiteDisplayName, 'White'));
+    LBlackName := PlayerNameOrFallback(AGame.Snapshot.BlackPlayerName,
+      PlayerNameOrFallback(AGame.BlackDisplayName, 'Black'));
+  end
+  else
+  begin
+    LWhiteName := WhiteNameForTree(FGameTree);
+    LBlackName := BlackNameForTree(FGameTree);
+  end;
+
+  if AGame <> nil then
+    LTreeSignature := 'running:' + IntToStr(AGame.Id)
+  else
+  begin
+    LStartingFEN := StartingFenForTree(FGameTree);
+    LMovesText := GameTreeMainlineMovesText(FGameTree);
+    LTreeSignature := 'standalone:' + LStartingFEN + '|' +
+      EventNameForTree(FGameTree) + '|' + LWhiteName +
+      '|' + LBlackName + '|moves=' + LMovesText;
+  end;
+
+  LRecordTimeControl := AGame <> nil;
+  if LRecordTimeControl then
+    LTimeControl := AGame.FSetup.TimeControl
+  else
+    FillChar(LTimeControl, SizeOf(LTimeControl), 0);
+
+  if AGame <> nil then
+    Result := GameTreeHeaderInput(LTreeSignature,
+      EventNameForTree(FGameTree), LWhiteName, LBlackName,
+      PlayerNameOrFallback(AGame.Snapshot.GameResult, '*'),
+      PlayerNameOrFallback(AGame.Snapshot.StartingFEN, AGame.FSetup.StartingFEN),
+      LRecordTimeControl, LTimeControl)
+  else
+  begin
+    LStartingFEN := StartingFenForTree(FGameTree);
+    Result := GameTreeHeaderInput(LTreeSignature,
+      EventNameForTree(FGameTree), LWhiteName, LBlackName,
+      ResultForTree(FGameTree), LStartingFEN,
+      LRecordTimeControl, LTimeControl);
+  end;
+end;
+
+function TMainForm.RunningGameTreeHeaderInput(AGame: TRunningGame;
+  const AEventName: string): TGameTreeHeaderInput;
+var
+  LBlackName: string;
+  LEventName: string;
+  LResultText: string;
+  LStartingFEN: string;
+  LTimeControl: TTimeControl;
+  LWhiteName: string;
+begin
+  LTimeControl := DefaultTimeControl;
+  if AGame = nil then
+  begin
+    Result := GameTreeHeaderInput('', '?', 'White', 'Black', '*', '',
+      False, LTimeControl);
+    Exit;
+  end;
+
+  LEventName := PlayerNameOrFallback(AEventName,
+    EventNameForTree(AGame.GameTree));
+  LWhiteName := PlayerNameOrFallback(AGame.Snapshot.WhitePlayerName,
+    PlayerNameOrFallback(AGame.WhiteDisplayName, 'White'));
+  LBlackName := PlayerNameOrFallback(AGame.Snapshot.BlackPlayerName,
+    PlayerNameOrFallback(AGame.BlackDisplayName, 'Black'));
+  LResultText := PlayerNameOrFallback(AGame.Snapshot.GameResult, '*');
+  LStartingFEN := PlayerNameOrFallback(AGame.Snapshot.StartingFEN,
+    AGame.FSetup.StartingFEN);
+
+  Result := GameTreeHeaderInput('running:' + IntToStr(AGame.Id),
+    LEventName, LWhiteName, LBlackName, LResultText, LStartingFEN, True,
+    AGame.FSetup.TimeControl);
+end;
+
+procedure TMainForm.PrepareGameTreeRebuildFromCurrentState(
+  AGame: TRunningGame; AGameTree: TGameTree);
+begin
+  if AGameTree = nil then
+    Exit;
+
+  uGameTreeBuilder.BeginGameTreeRebuild(AGameTree,
+    CurrentGameTreeHeaderInput(AGame));
+end;
+
+procedure TMainForm.UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
+  const AEventName: string);
+var
+  LAnnotations: TStringList;
+  LGameTree: TGameTree;
+  LMoves: TStringList;
+begin
+  if (AGame = nil) or (AGame.GameTree = nil) then
+    Exit;
+
+  LGameTree := AGame.GameTree;
+  LMoves := TStringList.Create;
+  LAnnotations := TStringList.Create;
+  try
+    TextToMoveList(AGame.Snapshot.MovesPlayedText, LMoves);
+    LAnnotations.Text := AGame.Snapshot.MoveAnnotationsText;
+
+    uGameTreeBuilder.BeginGameTreeRebuild(LGameTree,
+      RunningGameTreeHeaderInput(AGame, AEventName));
+    uGameTreeBuilder.RecordGameTreeMainline(LGameTree,
+      GameTreeMainlineInput(LMoves, LAnnotations, True,
+        AGame.Snapshot.WhiteRemainingSeconds,
+        AGame.Snapshot.BlackRemainingSeconds,
+        AGame.Snapshot.WhiteUsedSeconds,
+        AGame.Snapshot.BlackUsedSeconds));
+    uGameTreeBuilder.RecordGameTreeAnalysis(LGameTree,
+      GameTreePvInput(Trim(AGame.Snapshot.PrincipalVariation) <> '',
+        AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
+        AGame.Snapshot.PrincipalVariation),
+      GameTreePvInput(False, 0, '', ''));
+  finally
+    LAnnotations.Free;
+    LMoves.Free;
+  end;
+end;
+
+function TMainForm.RunningGameTreePdnText(AGame: TRunningGame;
+  const AEventName: string): string;
+var
+  LOptions: TGameTreePdnRenderOptions;
+begin
+  Result := '';
+  if (AGame = nil) or (AGame.GameTree = nil) then
+    Exit;
+
+  UpdateRunningGameTreeFromSnapshot(AGame, AEventName);
+  LOptions := DefaultGameTreePdnRenderOptions;
+  Result := GameTreeToPdnTextEx(AGame.GameTree, LOptions);
+end;
+
+procedure TMainForm.RecordGameTreeMainlineWithCurrentClock(AGame: TRunningGame;
+  AGameTree: TGameTree; AMoves, AAnnotations: TStrings);
+begin
+  uGameTreeBuilder.RecordGameTreeMainline(AGameTree,
+    GameTreeMainlineInput(AMoves, AAnnotations,
+      (AGame <> nil) and (AGame = SelectedDisplayedGame),
+      FWhiteRemainingSeconds, FBlackRemainingSeconds, FWhiteUsedSeconds,
+      FBlackUsedSeconds));
+end;
+
+procedure TMainForm.RecordGameTreeMainlineFromInput(AGame: TRunningGame;
+  AGameTree: TGameTree; AMoves, AAnnotations: TStrings);
+begin
+  RecordGameTreeMainlineWithCurrentClock(AGame, AGameTree, AMoves,
+    AAnnotations);
+end;
+
+function TMainForm.CanRecordCurrentAnnotatorPV: Boolean;
+var
+  LDisplayedPly: Integer;
+begin
+  Result := False;
+  if FAnalyzerPvBrowser = nil then
+    Exit;
+  if Trim(FAnalyzerPvBrowser.PrincipalVariation) = '' then
+    Exit;
+  if (FVariationIndex >= 0) and (FVariationBrowsePly > 0) then
+    Exit;
+
+  if FGameBrowsePly >= 0 then
+    LDisplayedPly := FGameBrowsePly
+  else
+    LDisplayedPly := CurrentMoveCount;
+  if FAnalyzerPvBasePly <> LDisplayedPly then
+    Exit;
+  if FAnalyzerPvBaseBoard.PositionKey <> ActiveBoard.PositionKey then
+    Exit;
+
+  Result := True;
+end;
+
+function TMainForm.CanRecordCurrentVariationAnnotatorPV(AVariationIndex,
+  AVariationPly: Integer): Boolean;
+begin
+  Result := False;
+  if FAnalyzerPvBrowser = nil then
+    Exit;
+  if Trim(FAnalyzerPvBrowser.PrincipalVariation) = '' then
+    Exit;
+  if (FVariationIndex <> AVariationIndex) or
+    (FVariationBrowsePly <> AVariationPly) then
+    Exit;
+
+  Result := True;
+end;
+
+function TMainForm.CurrentGameTreeEnginePvInput(
+  AGameTree: TGameTree): TGameTreePvInput;
+var
+  LGame: TRunningGame;
+begin
+  LGame := GameForTreeRefresh(AGameTree);
+  if LGame <> nil then
+  begin
+    Result := GameTreePvInput(Trim(LGame.Snapshot.PrincipalVariation) <> '',
+      LGame.Snapshot.PvBasePly, LGame.Snapshot.PvScore,
+      LGame.Snapshot.PrincipalVariation);
+    Exit;
+  end;
+
+  Result := GameTreePvInput(Trim(FPrincipalVariation) <> '', FPvBasePly,
+    FPrincipalVariationScore, FPrincipalVariation);
+end;
+
+function TMainForm.CurrentGameTreeAnnotatorPvInput: TGameTreePvInput;
+var
+  LRecordAnnotatorPV: Boolean;
+  LAnnotatorPV: string;
+  LAnnotatorScore: string;
+begin
+  LRecordAnnotatorPV := CanRecordCurrentAnnotatorPV;
+  LAnnotatorPV := '';
+  LAnnotatorScore := '';
+  if LRecordAnnotatorPV then
+  begin
+    LAnnotatorPV := FAnalyzerPvBrowser.PrincipalVariation;
+    LAnnotatorScore := FAnalyzerPvBrowser.Score;
+  end;
+
+  Result := GameTreePvInput(LRecordAnnotatorPV, FAnalyzerPvBasePly,
+    LAnnotatorScore, LAnnotatorPV);
+end;
+
+procedure TMainForm.RecordGameTreeLiveAnalysis(AGameTree: TGameTree);
+begin
+  uGameTreeBuilder.RecordGameTreeAnalysis(AGameTree,
+    CurrentGameTreeEnginePvInput(AGameTree), CurrentGameTreeAnnotatorPvInput);
+end;
+
+function TMainForm.CurrentGameTreeVariationPvInput(
+  AVariation: TGameTreeVariationLine; AVariationIndex,
+  AVariationPly: Integer): TGameTreeVariationPvInput;
+begin
+  Result := GameTreeVariationPvInput(AVariation, AVariationIndex,
+    AVariationPly, FAnalyzerPvBrowser.Score,
+    FAnalyzerPvBrowser.PrincipalVariation);
+end;
+
+procedure TMainForm.RecordGameTreeVariationLiveAnalysis(AGameTree: TGameTree;
+  AVariation: TGameTreeVariationLine; AVariationIndex,
+  AVariationPly: Integer);
+begin
+  if (AGameTree = nil) or (AVariation = nil) then
+    Exit;
+  if not CanRecordCurrentVariationAnnotatorPV(AVariationIndex,
+    AVariationPly) then
+    Exit;
+
+  uGameTreeBuilder.RecordGameTreeVariationAnnotatorPV(AGameTree,
+    CurrentGameTreeVariationPvInput(AVariation, AVariationIndex,
+      AVariationPly));
+end;
+
+procedure TMainForm.RecordGameTreeVariations(AGameTree: TGameTree);
+var
+  I: Integer;
+  LTreeVariation: TGameTreeVariationLine;
+  LVariationMoves: TStringList;
+begin
+  if AGameTree = nil then
+    Exit;
+
+  LVariationMoves := TStringList.Create;
+  try
+    for I := 0 to AGameTree.VariationLineCount - 1 do
+    begin
+      LTreeVariation := AGameTree.VariationLine[I];
+      if LTreeVariation = nil then
+        Continue;
+
+      LVariationMoves.Clear;
+      TextToMoveList(LTreeVariation.MovesText, LVariationMoves);
+      if LVariationMoves.Count = 0 then
+        Continue;
+
+      uGameTreeBuilder.RecordGameTreeVariationLine(AGameTree,
+        GameTreeVariationLineInput(LTreeVariation, I, LVariationMoves,
+          @RecordGameTreeVariationLiveAnalysis));
+    end;
+  finally
+    LVariationMoves.Free;
+  end;
+end;
+
 procedure TMainForm.UpdateGameMoveHighlight;
+var
+  I: Integer;
 begin
   if FGameMoveMemo = nil then
     Exit;
   if Length(FGameMoveStarts) <> Length(FGameMoveLengths) then
   begin
-    RebuildGameMoveLabels;
+    RebuildGameMoveLabels(True, ActiveGameTree);
     Exit;
   end;
-  if FHighlightedGameMovePly = FGameBrowsePly then
+  if (FHighlightedGameMovePly = FGameBrowsePly) and
+    (not ((FVariationIndex >= 0) and (FVariationBrowsePly > 0))) then
     Exit;
+  if (FVariationIndex >= 0) and (FVariationBrowsePly > 0) then
+  begin
+    for I := 0 to High(FVariationHits) do
+      if (FVariationHits[I].VariationIndex = FVariationIndex) and
+        (FVariationHits[I].VariationPly = FVariationBrowsePly) then
+      begin
+        FGameMoveMemo.SelStart := FVariationHits[I].Start;
+        FGameMoveMemo.SelLength := FVariationHits[I].Length;
+        FHighlightedGameMovePly := -2;
+        Exit;
+      end;
+  end;
   if (FGameBrowsePly > 0) and (FGameBrowsePly <= Length(FGameMoveStarts)) then
   begin
     FGameMoveMemo.SelStart := FGameMoveStarts[FGameBrowsePly - 1];
@@ -2163,22 +3366,28 @@ begin
   end;
 end;
 
-procedure TMainForm.UpdateBoardHighlights;
+procedure TMainForm.UpdateBoardHighlights(AGameTree: TGameTree);
 var
   LDisplayedGamePly: Integer;
   LGameMoves: TStringList;
   LPvBaseBoard: TDraughtsBoard;
+  LPvBasePly: Integer;
+  LPvDepth: string;
   LPvHighlightsActive: Boolean;
   LPvMoves: TStringList;
+  LPvScore: string;
+  LPvTimeText: string;
   LPvText: string;
 begin
   if FBoardControl = nil then
+    Exit;
+  if AGameTree = nil then
     Exit;
 
   LGameMoves := TStringList.Create;
   LPvMoves := TStringList.Create;
   try
-    TextToMoveList(FMovesPlayedText, LGameMoves);
+    AGameTree.CopyMainlineMovesTo(LGameMoves);
     if FPvHintSource = phsAnalyzer then
     begin
       LPvBaseBoard := FAnalyzerPvBaseBoard;
@@ -2188,10 +3397,8 @@ begin
         LPvText := '';
     end
     else
-    begin
-      LPvBaseBoard := FPvBaseBoard;
-      LPvText := FPrincipalVariation;
-    end;
+      VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
+        LPvScore, LPvDepth, LPvTimeText);
     TextToMoveList(LPvText, LPvMoves);
     if FGameBrowsePly < 0 then
       LDisplayedGamePly := LGameMoves.Count
@@ -2222,23 +3429,42 @@ begin
   end;
 end;
 
-procedure TMainForm.UpdateBoardFromBrowseState;
+procedure TMainForm.UpdateBoardFromBrowseState(AGameTree: TGameTree);
 var
   I: Integer;
   LGameMoves: TStringList;
+  LLimit: Integer;
   LPly: Integer;
+  VariationLine: TGameTreeVariationLine;
+  LVariationMoves: TStringList;
 begin
+  if AGameTree = nil then
+    Exit;
+
   LGameMoves := TStringList.Create;
+  LVariationMoves := TStringList.Create;
   try
-    TextToMoveList(FMovesPlayedText, LGameMoves);
-    FBoard.LoadFromFEN(FStartingFEN);
+    AGameTree.CopyMainlineMovesTo(LGameMoves);
+    FBoard.LoadFromFEN(StartingFenForTree(AGameTree));
 
     LPly := FGameBrowsePly;
     if (LPly < 0) or (LPly > LGameMoves.Count) then
       LPly := LGameMoves.Count;
     for I := 0 to LPly - 1 do
       FBoard.PlayMove(LGameMoves[I], True, False);
+    VariationLine := TreeVariationLineByIndex(FVariationIndex, AGameTree);
+    if (VariationLine <> nil) and (VariationLine.BasePly = LPly) and
+      (FVariationBrowsePly > 0) then
+    begin
+      TextToMoveList(VariationLine.MovesText, LVariationMoves);
+      LLimit := FVariationBrowsePly;
+      if LLimit > LVariationMoves.Count then
+        LLimit := LVariationMoves.Count;
+      for I := 0 to LLimit - 1 do
+        FBoard.PlayMove(LVariationMoves[I], True, False);
+    end;
   finally
+    LVariationMoves.Free;
     LGameMoves.Free;
   end;
 
@@ -2252,6 +3478,7 @@ var
   LMoveCount: Integer;
 begin
   ClearHumanMoveSelection;
+  ClearVariationExploration;
   LMoveCount := CurrentMoveCount;
   if APly < 0 then
     FGameBrowsePly := LMoveCount
@@ -2259,7 +3486,7 @@ begin
     FGameBrowsePly := 0
   else
     FGameBrowsePly := APly;
-  UpdateBoardFromBrowseState;
+  UpdateBoardFromBrowseState(ActiveGameTree);
   UpdateBrowseInfo;
 end;
 
@@ -2271,8 +3498,9 @@ begin
       FGameMoveMemo.SelLength := 0;
     Exit;
   end;
+  ClearVariationExploration;
   FGameBrowsePly := -1;
-  UpdateBoardFromBrowseState;
+  UpdateBoardFromBrowseState(ActiveGameTree);
   UpdateBrowseInfo;
 end;
 
@@ -2290,8 +3518,8 @@ begin
     FPrincipalVariationScore := '';
     FPrincipalVariationDepth := '';
     FPrincipalVariationTimeText := '';
-    FMovesPlayedText := '';
-    FMoveAnnotationsText := '';
+    FDisplayedMovesSignature := '';
+    ClearStoredTreeVariations(FGameTree);
     FStandaloneWhitePlayerName := 'White';
     FStandaloneBlackPlayerName := 'Black';
     FStandaloneEventName := '?';
@@ -2312,15 +3540,18 @@ begin
     ClearHumanMoveSelection;
     FViewedGameId := AGame.Id;
     FGameBrowsePly := -1;
+    ClearStoredTreeVariations(AGame.GameTree);
   end;
 
-  if FMovesPlayedText <> AGame.Snapshot.MovesPlayedText then
+  if FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText then
+  begin
     ClearHumanMoveSelection;
+    ClearVariationExploration;
+  end;
   UpdateMiniBoardFromBoard(AGame.Snapshot.Board);
   FStartingFEN := AGame.Snapshot.StartingFEN;
-  FMovesPlayedText := AGame.Snapshot.MovesPlayedText;
-  FMoveAnnotationsText := MergeAnnotatorAnnotations(
-    AGame.Snapshot.MoveAnnotationsText, AGame.AnnotatorAnnotationsText);
+  FDisplayedMovesSignature := AGame.Snapshot.MovesPlayedText;
+  ClearStoredTreeVariations(AGame.GameTree);
   FGameState := AGame.Snapshot.State;
   FGameResult := AGame.Snapshot.GameResult;
   FPrincipalVariation := AGame.Snapshot.PrincipalVariation;
@@ -2338,10 +3569,12 @@ begin
     if GameLogLineVisible(AGame.Snapshot.LogLines[I], AGame) then
       FGameLog.Add(AGame.Snapshot.LogLines[I]);
   FGameActive := True;
+  UpdateGameTreeFromMoveText(AGame, AGame.GameTree,
+    AGame.Snapshot.MovesPlayedText, AGame.Snapshot.MoveAnnotationsText);
   LMoveCount := CurrentMoveCount;
   if FGameBrowsePly > LMoveCount then
     FGameBrowsePly := -1;
-  UpdateBoardFromBrowseState;
+  UpdateBoardFromBrowseState(AGame.GameTree);
   UpdateBoardInfo;
 end;
 
@@ -2410,7 +3643,7 @@ begin
   end;
   if FPvHintSource = phsMain then
   begin
-    UpdateBoardHighlights;
+    UpdateBoardHighlights(ActiveGameTree);
     if FBoardControl <> nil then
       FBoardControl.Invalidate;
   end;
@@ -2482,7 +3715,7 @@ begin
   end;
   if FPvHintSource = phsAnalyzer then
   begin
-    UpdateBoardHighlights;
+    UpdateBoardHighlights(ActiveGameTree);
     if FBoardControl <> nil then
       FBoardControl.Invalidate;
   end;
@@ -2507,6 +3740,18 @@ begin
   LMinutes := Trunc(ASeconds) div 60;
   LSeconds := Trunc(ASeconds) mod 60;
   Result := Format('%d:%.2d', [LMinutes, LSeconds]);
+end;
+
+function TMainForm.CurrentFilteredGameTreePdnOptions: TGameTreePdnRenderOptions;
+begin
+  Result := DefaultGameTreePdnRenderOptions;
+  Result.HideAnnotations := FHideMoveAnnotations;
+  Result.ShowEngineScore := FMoveShowEngineScore;
+  Result.ShowEnginePV := FMoveShowEnginePV;
+  Result.ShowClocks := FMoveShowClocks;
+  Result.ShowAnnotatorMove := FMoveShowAnnotatorMove;
+  Result.ShowAnnotatorScore := FMoveShowAnnotatorScore;
+  Result.ShowAnnotatorPV := FMoveShowAnnotatorPV;
 end;
 
 function TMainForm.GameLogLineVisible(const ALine: string;
@@ -2536,6 +3781,66 @@ begin
     Result := 'Engine';
 end;
 
+procedure TMainForm.PrepareGameTreeForPdn(AGame: TRunningGame;
+  AGameTree: TGameTree; const AEventName: string; ARefreshTree: Boolean);
+var
+  LBlackName: string;
+  LEventName: string;
+  LResultText: string;
+  LStartingFEN: string;
+  LWhiteName: string;
+begin
+  if AGameTree = nil then
+    Exit;
+
+  if ARefreshTree then
+    UpdateGameTreeFromState(AGame, AGameTree);
+
+  if AGame <> nil then
+  begin
+    LEventName := PlayerNameOrFallback(AEventName,
+      EventNameForTree(AGameTree));
+    LWhiteName := PlayerNameOrFallback(AGame.Snapshot.WhitePlayerName,
+      PlayerNameOrFallback(AGame.WhiteDisplayName, 'White'));
+    LBlackName := PlayerNameOrFallback(AGame.Snapshot.BlackPlayerName,
+      PlayerNameOrFallback(AGame.BlackDisplayName, 'Black'));
+    LResultText := PlayerNameOrFallback(AGame.Snapshot.GameResult, '*');
+    LStartingFEN := PlayerNameOrFallback(AGame.Snapshot.StartingFEN,
+      AGame.FSetup.StartingFEN);
+    AGameTree.SetHeader(LEventName, LWhiteName, LBlackName, LResultText,
+      LStartingFEN);
+    Exit;
+  end;
+
+  LEventName := PlayerNameOrFallback(AEventName, EventNameForTree(AGameTree));
+  LWhiteName := PlayerNameOrFallback(FWhitePlayerEdit.Text,
+    WhiteNameForTree(AGameTree));
+  LBlackName := PlayerNameOrFallback(FBlackPlayerEdit.Text,
+    BlackNameForTree(AGameTree));
+  LResultText := ResultForTree(AGameTree);
+
+  AGameTree.SetHeader(LEventName, LWhiteName, LBlackName,
+    LResultText, StartingFenForTree(AGameTree));
+end;
+
+function TMainForm.CurrentGameTreePdnText(const AEventName: string;
+  ARefreshTree: Boolean): string;
+var
+  LGame: TRunningGame;
+  LGameTree: TGameTree;
+  LOptions: TGameTreePdnRenderOptions;
+begin
+  Result := '';
+  LGameTree := ActiveGameTree;
+  if LGameTree = nil then
+    Exit;
+
+  LGame := GameForTreeRefresh(LGameTree);
+  PrepareGameTreeForPdn(LGame, LGameTree, AEventName, ARefreshTree);
+  LOptions := DefaultGameTreePdnRenderOptions;
+  Result := GameTreeToPdnTextEx(LGameTree, LOptions);
+end;
+
 function TMainForm.PlayerSetupDisplayName(AKind: TPlayerKind;
   AEngine: TExternalEngineDefinition): string;
 begin
@@ -2552,17 +3857,29 @@ end;
 procedure TMainForm.GameMoveBrowseClick(Sender: TObject);
 var
   I: Integer;
+  LGameTree: TGameTree;
   LPos: Integer;
 begin
   if FGameMoveMemo = nil then
     Exit;
+  LGameTree := ActiveGameTree;
   LPos := FGameMoveMemo.SelStart;
+  for I := 0 to High(FVariationHits) do
+    if (LPos >= FVariationHits[I].Start) and
+      (LPos <= FVariationHits[I].Start + FVariationHits[I].Length) then
+    begin
+      ApplyVariationBrowsePly(FVariationHits[I].VariationIndex,
+        FVariationHits[I].VariationPly, LGameTree);
+      HighlightGameMoveTextSelection(True, LGameTree);
+      Exit;
+    end;
+
   for I := 0 to High(FGameMoveStarts) do
     if (LPos >= FGameMoveStarts[I]) and
       (LPos <= FGameMoveStarts[I] + FGameMoveLengths[I]) then
     begin
       ApplyGameBrowsePly(I + 1);
-      HighlightGameMoveTextSelection(True);
+      HighlightGameMoveTextSelection(True, LGameTree);
       Exit;
     end;
 end;
@@ -2572,13 +3889,165 @@ begin
   FHideMoveAnnotations := not FHideMoveAnnotations;
   if FHideMoveAnnotationsMenuItem <> nil then
     FHideMoveAnnotationsMenuItem.Checked := FHideMoveAnnotations;
-  RebuildGameMoveLabels;
+  RebuildGameMoveLabels(False, ActiveGameTree);
 end;
 
-procedure TMainForm.HighlightGameMoveTextSelection(AFocusMemo: Boolean);
+procedure TMainForm.GameMovePopupPopup(Sender: TObject);
+begin
+  UpdateGameMovePopupState;
+end;
+
+procedure TMainForm.UpdateGameMovePopupState;
+begin
+  if FMoveShowAnnotatorMoveMenuItem <> nil then
+    FMoveShowAnnotatorMoveMenuItem.Checked := FMoveShowAnnotatorMove;
+  if FMoveShowAnnotatorPVMenuItem <> nil then
+  begin
+    FMoveShowAnnotatorPVMenuItem.Checked := FMoveShowAnnotatorPV;
+    FMoveShowAnnotatorPVMenuItem.Enabled := FMoveShowAnnotatorMove;
+  end;
+end;
+
+procedure TMainForm.MoveDisplayFilterClick(Sender: TObject);
+var
+  LItem: TMenuItem;
+  LGameTree: TGameTree;
+begin
+  if not (Sender is TMenuItem) then
+    Exit;
+
+  LGameTree := ActiveGameTree;
+  LItem := TMenuItem(Sender);
+  LItem.Checked := not LItem.Checked;
+  case LItem.Tag of
+    1:
+      FMoveShowEngineScore := LItem.Checked;
+    2:
+      FMoveShowEnginePV := LItem.Checked;
+    3:
+      FMoveShowClocks := LItem.Checked;
+    4:
+      FMoveShowAnnotatorMove := LItem.Checked;
+    5:
+      FMoveShowAnnotatorScore := LItem.Checked;
+    6:
+      FMoveShowAnnotatorPV := LItem.Checked;
+  end;
+  UpdateGameMovePopupState;
+  RebuildGameMoveLabels(False, LGameTree);
+end;
+
+procedure TMainForm.GameTreeFormClose(Sender: TObject;
+  var CloseAction: TCloseAction);
+begin
+  FGameTreeBrowseMode := False;
+  CloseAction := caHide;
+end;
+
+procedure TMainForm.GameTreeViewClick(Sender: TObject);
+begin
+  FGameTreeBrowseMode := True;
+  if (FGameTreeView <> nil) and FGameTreeView.CanFocus then
+    FGameTreeView.SetFocus;
+end;
+
+procedure TMainForm.GameTreeViewKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+var
+  LGameTree: TGameTree;
+begin
+  if Key <> VK_ESCAPE then
+    Exit;
+
+  FGameTreeBrowseMode := False;
+  LGameTree := ActiveGameTree;
+  UpdateGameTreeFromState(GameForTreeRefresh(LGameTree), LGameTree);
+  UpdateGameTreeView(LGameTree);
+  Key := 0;
+end;
+
+procedure TMainForm.CopyGameTreePdnClick(Sender: TObject);
+var
+  LGame: TRunningGame;
+  LGameTree: TGameTree;
+  LOptions: TGameTreePdnRenderOptions;
+begin
+  LGameTree := ActiveGameTree;
+  if LGameTree = nil then
+    Exit;
+  LGame := GameForTreeRefresh(LGameTree);
+  PrepareGameTreeForPdn(LGame, LGameTree, '', True);
+  LOptions := CurrentFilteredGameTreePdnOptions;
+  Clipboard.AsText := GameTreeToPdnTextEx(LGameTree, LOptions);
+end;
+
+procedure TMainForm.ShowGameTreeClick(Sender: TObject);
+var
+  LGameTree: TGameTree;
+  LMenuItem: TMenuItem;
+  LPopup: TPopupMenu;
+begin
+  if FGameTreeForm = nil then
+  begin
+    FGameTreeForm := TForm.Create(Self);
+    FGameTreeForm.Caption := 'Game tree';
+    FGameTreeForm.Position := poDesigned;
+    FGameTreeForm.Width := 520;
+    FGameTreeForm.Height := 640;
+    FGameTreeForm.Constraints.MinWidth := 320;
+    FGameTreeForm.Constraints.MinHeight := 360;
+    FGameTreeForm.OnClose := @GameTreeFormClose;
+    CenterFormOnLaptopPanel(FGameTreeForm, 0);
+
+    FGameTreeView := TTreeView.Create(FGameTreeForm);
+    FGameTreeView.Parent := FGameTreeForm;
+    FGameTreeView.Align := alClient;
+    FGameTreeView.ReadOnly := True;
+    FGameTreeView.HideSelection := False;
+    FGameTreeView.ShowHint := True;
+    FGameTreeView.Hint := 'Click to browse/freeze updates. Press Escape to resume live updates.';
+    FGameTreeView.OnClick := @GameTreeViewClick;
+    FGameTreeView.OnKeyDown := @GameTreeViewKeyDown;
+
+    LPopup := TPopupMenu.Create(FGameTreeForm);
+    LMenuItem := TMenuItem.Create(FGameTreeForm);
+    LMenuItem.Caption := 'Copy tree PDN to clipboard';
+    LMenuItem.OnClick := @CopyGameTreePdnClick;
+    LPopup.Items.Add(LMenuItem);
+    FGameTreeView.PopupMenu := LPopup;
+  end;
+
+  FGameTreeBrowseMode := False;
+  LGameTree := ActiveGameTree;
+  UpdateGameTreeFromState(GameForTreeRefresh(LGameTree), LGameTree);
+  UpdateGameTreeView(LGameTree);
+  FGameTreeForm.Show;
+  FGameTreeForm.BringToFront;
+end;
+
+procedure TMainForm.HighlightGameMoveTextSelection(AFocusMemo: Boolean;
+  AGameTree: TGameTree);
+var
+  I: Integer;
+  VariationLine: TGameTreeVariationLine;
 begin
   if FGameMoveMemo = nil then
     Exit;
+  VariationLine := TreeVariationLineByIndex(FVariationIndex, AGameTree);
+  if (VariationLine <> nil) and (VariationLine.BasePly = FGameBrowsePly) and
+    (FVariationBrowsePly > 0) then
+  begin
+    for I := 0 to High(FVariationHits) do
+      if (FVariationHits[I].VariationIndex = FVariationIndex) and
+        (FVariationHits[I].VariationPly = FVariationBrowsePly) then
+      begin
+        FGameMoveMemo.SelStart := FVariationHits[I].Start;
+        FGameMoveMemo.SelLength := FVariationHits[I].Length;
+        if AFocusMemo and FGameMoveMemo.CanFocus then
+          FGameMoveMemo.SetFocus;
+        Exit;
+      end;
+  end;
   if (FGameBrowsePly > 0) and (FGameBrowsePly <= Length(FGameMoveStarts)) then
   begin
     FGameMoveMemo.SelStart := FGameMoveStarts[FGameBrowsePly - 1];
@@ -2591,26 +4060,57 @@ end;
 procedure TMainForm.GameMoveBrowseKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 var
+  LGameTree: TGameTree;
   LPly: Integer;
+  LVariationMoveCount: Integer;
+  VariationLine: TGameTreeVariationLine;
 begin
+  LGameTree := ActiveGameTree;
   if Key = VK_LEFT then
   begin
+    VariationLine := TreeVariationLineByIndex(FVariationIndex, LGameTree);
+    if (VariationLine <> nil) and (VariationLine.BasePly = FGameBrowsePly) and
+      (FVariationBrowsePly > 0) then
+    begin
+      if FVariationBrowsePly > 1 then
+        ApplyVariationBrowsePly(FVariationIndex, FVariationBrowsePly - 1,
+          LGameTree)
+      else
+        ApplyGameBrowsePly(VariationLine.BasePly);
+      HighlightGameMoveTextSelection(True, LGameTree);
+      Key := 0;
+      Exit;
+    end;
+
     if FGameBrowsePly < 0 then
       LPly := CurrentMoveCount
     else
       LPly := FGameBrowsePly - 1;
     ApplyGameBrowsePly(LPly);
-    HighlightGameMoveTextSelection(True);
+    HighlightGameMoveTextSelection(True, LGameTree);
     Key := 0;
   end
   else if Key = VK_RIGHT then
   begin
+    VariationLine := TreeVariationLineByIndex(FVariationIndex, LGameTree);
+    if (VariationLine <> nil) and (VariationLine.BasePly = FGameBrowsePly) and
+      (FVariationBrowsePly > 0) then
+    begin
+      LVariationMoveCount := CurrentVariationMoveCount(LGameTree);
+      if FVariationBrowsePly < LVariationMoveCount then
+        ApplyVariationBrowsePly(FVariationIndex, FVariationBrowsePly + 1,
+          LGameTree);
+      HighlightGameMoveTextSelection(True, LGameTree);
+      Key := 0;
+      Exit;
+    end;
+
     if FGameBrowsePly < 0 then
       LPly := 0
     else
       LPly := FGameBrowsePly + 1;
     ApplyGameBrowsePly(LPly);
-    HighlightGameMoveTextSelection(True);
+    HighlightGameMoveTextSelection(True, LGameTree);
     Key := 0;
   end
   else if Key = VK_ESCAPE then
@@ -2649,7 +4149,7 @@ procedure TMainForm.GamesPopupPopup(Sender: TObject);
 var
   LGame: TRunningGame;
 begin
-  LGame := SelectedGame;
+  LGame := SelectedDisplayedGame;
   if FShowStdoutMenuItem = nil then
     Exit;
 
@@ -2820,9 +4320,17 @@ procedure TMainForm.AppendRunningGameToPdn(AGame: TRunningGame;
   const AFileName, AEventName: string);
 var
   Game: TPdnGame;
+  LPdnText: string;
 begin
   if (AGame = nil) or (Trim(AFileName) = '') then
     Exit;
+
+  LPdnText := RunningGameTreePdnText(AGame, AEventName);
+  if Trim(LPdnText) <> '' then
+  begin
+    AppendPdnTextToFile(AFileName, LPdnText);
+    Exit;
+  end;
 
   Game := TPdnGame.Create;
   try
@@ -2834,8 +4342,7 @@ begin
     Game.ResultText := AGame.Snapshot.GameResult;
     Game.StartingFEN := AGame.Snapshot.StartingFEN;
     Game.MovesText := AGame.Snapshot.MovesPlayedText;
-    Game.MoveAnnotationsText := MergeAnnotatorAnnotations(
-      AGame.Snapshot.MoveAnnotationsText, AGame.AnnotatorAnnotationsText);
+    Game.MoveAnnotationsText := AGame.Snapshot.MoveAnnotationsText;
     AppendPdnGameToFile(AFileName, Game);
   finally
     Game.Free;
@@ -2845,7 +4352,7 @@ end;
 function TMainForm.SaveCurrentGameWithDialog: Boolean;
 var
   Dialog: TSaveDialog;
-  Game: TPdnGame;
+  LPdnText: string;
   RunningGame: TRunningGame;
 begin
   Result := False;
@@ -2858,33 +4365,18 @@ begin
     if not Dialog.Execute then
       Exit;
 
-    Game := TPdnGame.Create;
-    try
-      RunningGame := SelectedGame;
-      if (RunningGame <> nil) and FGameActive then
-      begin
-        AppendRunningGameToPdn(RunningGame, Dialog.FileName,
-          PlayerNameOrFallback(FStandaloneEventName, '?'));
-        Result := True;
-        Exit;
-      end
-      else
-      begin
-        Game.WhiteName := PlayerNameOrFallback(FStandaloneWhitePlayerName,
-          PlayerNameOrFallback(FWhitePlayerEdit.Text, 'White'));
-        Game.BlackName := PlayerNameOrFallback(FStandaloneBlackPlayerName,
-          PlayerNameOrFallback(FBlackPlayerEdit.Text, 'Black'));
-      end;
-      Game.EventName := PlayerNameOrFallback(FStandaloneEventName, '?');
-      Game.ResultText := FGameResult;
-      Game.StartingFEN := FStartingFEN;
-      Game.MovesText := FMovesPlayedText;
-      Game.MoveAnnotationsText := FMoveAnnotationsText;
-      AppendPdnGameToFile(Dialog.FileName, Game);
+    RunningGame := SelectedDisplayedGame;
+    if RunningGame <> nil then
+    begin
+      AppendRunningGameToPdn(RunningGame, Dialog.FileName,
+        EventNameForTree(RunningGame.GameTree));
       Result := True;
-    finally
-      Game.Free;
+      Exit;
     end;
+
+    LPdnText := CurrentGameTreePdnText(EventNameForTree(FGameTree));
+    AppendPdnTextToFile(Dialog.FileName, LPdnText);
+    Result := True;
   finally
     Dialog.Free;
   end;
@@ -2902,7 +4394,7 @@ begin
     FScoreHistoryForm := TScoreHistoryForm.Create(Self);
     FScoreHistoryForm.OnClose := @ScoreHistoryFormClose;
   end;
-  UpdateScoreHistory;
+  UpdateScoreHistory(True, ActiveGameTree);
   ShowFormCenteredOnOwner(FScoreHistoryForm, Self);
 end;
 
@@ -2983,8 +4475,8 @@ begin
   ClearHumanMoveSelection;
   FBoard.LoadFromFEN(ASetup.StartingFEN);
   FStartingFEN := ASetup.StartingFEN;
-  FMovesPlayedText := '';
-  FMoveAnnotationsText := '';
+  FDisplayedMovesSignature := '';
+  ClearStoredTreeVariations(Result.GameTree);
   FGameBrowsePly := -1;
   FWhiteRemainingSeconds := ASetup.TimeControl.MinutesPerPeriod * 60;
   FBlackRemainingSeconds := FWhiteRemainingSeconds;
@@ -3004,6 +4496,7 @@ begin
   FGameLogMemo.Clear;
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
+  UpdateGameTreeFromMoveText(Result, Result.GameTree, '', '');
   UpdateBoardInfo;
 
   LRunner.Start;
@@ -3020,6 +4513,8 @@ begin
   AKeys.Clear;
   if FAnalyzerEngineKey <> '' then
     AKeys.Add(FAnalyzerEngineKey);
+  if FMctsEngineKey <> '' then
+    AKeys.Add(FMctsEngineKey);
   for I := 0 to FGames.Count - 1 do
   begin
     LGame := TRunningGame(FGames[I]);
@@ -3053,6 +4548,7 @@ procedure TMainForm.GuiEventTimerTick(Sender: TObject);
 var
   EventObject: TObject;
   LGame: TRunningGame;
+  LGameTree: TGameTree;
   RemoveAfterFinish: Boolean;
   SnapshotMessage: TRunnerSnapshotGuiMessage;
 begin
@@ -3066,20 +4562,24 @@ begin
       begin
         if EventObject is TAnalyzerLogGuiMessage then
           HandleAnalyzerLog(TAnalyzerLogGuiMessage(EventObject).Message)
+        else if EventObject is TMctsLogGuiMessage then
+          HandleMctsLog(TMctsLogGuiMessage(EventObject).Message)
         else if EventObject is TAnalyzerSnapshotGuiMessage then
         begin
           FAnalyzerPvBaseBoard.AssignFrom(
             TAnalyzerSnapshotGuiMessage(EventObject).Snapshot.BaseBoard);
           FAnalyzerPvBasePly :=
             TAnalyzerSnapshotGuiMessage(EventObject).Snapshot.BasePly;
+          LGameTree := RecordAnalyzerSnapshotInGameTree(
+            TAnalyzerSnapshotGuiMessage(EventObject).Snapshot);
           if FAnalyzerPvBrowser <> nil then
             FAnalyzerPvBrowser.SetSnapshot(
-              TAnalyzerSnapshotGuiMessage(EventObject).Snapshot, FStartingFEN);
-          ApplyAnalyzerScoreAnnotation(
-            TAnalyzerSnapshotGuiMessage(EventObject).Snapshot);
+              TAnalyzerSnapshotGuiMessage(EventObject).Snapshot,
+              StartingFenForTree(LGameTree));
+          RefreshVisibleGameTreeView(False, LGameTree);
           if FPvHintSource = phsAnalyzer then
           begin
-            UpdateBoardHighlights;
+            UpdateBoardHighlights(LGameTree);
             if FBoardControl <> nil then
               FBoardControl.Invalidate;
           end;
@@ -3090,6 +4590,13 @@ begin
             FreeAndNil(FAnalyzerRunner);
           FAnalyzerEngineKey := '';
           FAnalyzerLastPositionSignature := '';
+        end
+        else if EventObject is TMctsFinishedGuiMessage then
+        begin
+          if FMctsRunner = TMctsFinishedGuiMessage(EventObject).Runner then
+            FreeAndNil(FMctsRunner);
+          FMctsEngineKey := '';
+          FMctsLastPositionSignature := '';
         end
         else if EventObject is TRunnerFinishedGuiMessage then
         begin
@@ -3113,6 +4620,7 @@ begin
         Continue;
 
       LGame.Snapshot.AssignFrom(SnapshotMessage.Snapshot);
+      UpdateRunningGameTreeFromSnapshot(LGame);
       if LGame.FLifecycle = rglStarting then
         LGame.FLifecycle := rglRunning;
       if (LGame.FLifecycle in [rglStopRequested, rglRemoveRequested]) and
@@ -3230,6 +4738,14 @@ begin
   Result := nil;
   if (FGamesListBox.ItemIndex >= 0) and (FGamesListBox.ItemIndex < FGamesListBox.Items.Count) then
     Result := TRunningGame(FGamesListBox.Items.Objects[FGamesListBox.ItemIndex]);
+end;
+
+function TMainForm.SelectedDisplayedGame: TRunningGame;
+begin
+  Result := nil;
+  if not FGameActive then
+    Exit;
+  Result := SelectedGame;
 end;
 
 procedure TMainForm.RemoveGame(AGame: TRunningGame);
@@ -3374,40 +4890,41 @@ end;
 
 procedure TMainForm.UpdateBrowseInfo;
 var
-  LBoard: TDraughtsBoard;
+  LGameTree: TGameTree;
   LPvBaseBoard: TDraughtsBoard;
   LPvBasePly: Integer;
+  LPvDepth: string;
+  LPvScore: string;
+  LPvText: string;
+  LPvTimeText: string;
 begin
-  LBoard := ActiveBoard;
-  UpdateBoardHighlights;
+  LGameTree := ActiveGameTree;
+  UpdateBoardHighlights(LGameTree);
 
   UpdateGameMoveHighlight;
-  HighlightGameMoveTextSelection(False);
+  HighlightGameMoveTextSelection(False, LGameTree);
   UpdateLegalMoves;
-  RestartAnalyzer;
-  UpdateScoreHistory;
-  if Trim(FPrincipalVariation) = '' then
-  begin
-    LPvBaseBoard := LBoard;
-    LPvBasePly := CurrentMoveCount;
-  end
-  else
-  begin
-    LPvBaseBoard := FPvBaseBoard;
-    LPvBasePly := FPvBasePly;
-  end;
+  RestartAnalyzer(LGameTree);
+  RestartMctsAnnotator(LGameTree);
+  UpdateScoreHistory(True, LGameTree);
+  VisibleMainPvForTree(LGameTree, LPvBaseBoard, LPvBasePly, LPvText,
+    LPvScore, LPvDepth, LPvTimeText);
   if FPvBrowser <> nil then
-    FPvBrowser.SetData(LPvBaseBoard, LPvBasePly, FStartingFEN,
-      FPrincipalVariation, FPrincipalVariationScore, FPrincipalVariationDepth,
-      FPrincipalVariationTimeText);
+    FPvBrowser.SetData(LPvBaseBoard, LPvBasePly,
+      StartingFenForTree(LGameTree), LPvText, LPvScore, LPvDepth,
+      LPvTimeText);
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
 end;
 
 procedure TMainForm.UpdateClockLabels(const AWhiteName, ABlackName: string);
 var
+  LBlackRemainingSeconds: Double;
   LBlackCaption: string;
+  LBlackUsedSeconds: Double;
+  LWhiteRemainingSeconds: Double;
   LWhiteCaption: string;
+  LWhiteUsedSeconds: Double;
 begin
   if not FGameActive then
   begin
@@ -3418,10 +4935,13 @@ begin
     Exit;
   end;
 
-  LBlackCaption := ABlackName + '  ' + FormatClock(FBlackRemainingSeconds) +
-    '   used ' + FormatFloat('0.000', FBlackUsedSeconds) + ' s';
-  LWhiteCaption := AWhiteName + '  ' + FormatClock(FWhiteRemainingSeconds) +
-    '   used ' + FormatFloat('0.000', FWhiteUsedSeconds) + ' s';
+  ClockValuesForTree(ActiveGameTree, LWhiteRemainingSeconds,
+    LBlackRemainingSeconds, LWhiteUsedSeconds, LBlackUsedSeconds);
+
+  LBlackCaption := ABlackName + '  ' + FormatClock(LBlackRemainingSeconds) +
+    '   used ' + FormatFloat('0.000', LBlackUsedSeconds) + ' s';
+  LWhiteCaption := AWhiteName + '  ' + FormatClock(LWhiteRemainingSeconds) +
+    '   used ' + FormatFloat('0.000', LWhiteUsedSeconds) + ' s';
 
   if FBoardFlipped then
   begin
@@ -3443,31 +4963,48 @@ procedure TMainForm.UpdateBoardInfo;
 var
   LGame: TRunningGame;
   LBlackName: string;
+  LFenText: string;
+  LGameTree: TGameTree;
   LPvBaseBoard: TDraughtsBoard;
   LPvBasePly: Integer;
+  LPvDepth: string;
+  LPvScore: string;
+  LPvText: string;
+  LPvTimeText: string;
   LResultText: string;
   LWhiteName: string;
 begin
   LGame := SelectedGame;
-  UpdateBoardHighlights;
-  if (LGame <> nil) and FGameActive then
+  LGameTree := ActiveGameTree;
+  UpdateGameTreeFromState(LGame, LGameTree);
+
+  if LGameTree <> nil then
+  begin
+    LWhiteName := PlayerNameOrFallback(LGameTree.WhiteName, 'White');
+    LBlackName := PlayerNameOrFallback(LGameTree.BlackName, 'Black');
+    LResultText := PlayerNameOrFallback(LGameTree.ResultText, '*');
+    LFenText := LGameTree.StartingFEN;
+  end
+  else if LGame <> nil then
   begin
     LWhiteName := PlayerNameOrFallback(LGame.Snapshot.WhitePlayerName,
       PlayerNameOrFallback(LGame.WhiteDisplayName, 'White'));
     LBlackName := PlayerNameOrFallback(LGame.Snapshot.BlackPlayerName,
       PlayerNameOrFallback(LGame.BlackDisplayName, 'Black'));
+    LResultText := PlayerNameOrFallback(LGame.Snapshot.GameResult, '*');
+    LFenText := PlayerNameOrFallback(LGame.Snapshot.StartingFEN,
+      LGame.FSetup.StartingFEN);
   end
   else
   begin
-    LWhiteName := PlayerNameOrFallback(FStandaloneWhitePlayerName, 'White');
-    LBlackName := PlayerNameOrFallback(FStandaloneBlackPlayerName, 'Black');
+    LWhiteName := WhiteNameForTree(FGameTree);
+    LBlackName := BlackNameForTree(FGameTree);
+    LResultText := ResultForTree(FGameTree);
+    LFenText := StartingFenForTree(FGameTree);
   end;
 
   UpdateClockLabels(LWhiteName, LBlackName);
 
-  LResultText := FGameResult;
-  if Trim(LResultText) = '' then
-    LResultText := '*';
   if FWhitePlayerEdit <> nil then
     FWhitePlayerEdit.Text := LWhiteName;
   if FBlackPlayerEdit <> nil then
@@ -3475,32 +5012,26 @@ begin
   if FResultEdit <> nil then
     FResultEdit.Text := LResultText;
   if FFenEdit <> nil then
-    FFenEdit.Text := FStartingFEN;
+    FFenEdit.Text := LFenText;
 
-  RebuildGameMoveLabels;
-  UpdateScoreHistory;
+  UpdateBoardHighlights(LGameTree);
+  RebuildGameMoveLabels(False, LGameTree);
+  UpdateScoreHistory(False, LGameTree);
+  RefreshVisibleGameTreeView(False, LGameTree);
 
   UpdateLegalMoves;
-  RestartAnalyzer;
+  RestartAnalyzer(LGameTree);
+  RestartMctsAnnotator(LGameTree);
 
   UpdateGameLogMemo;
 
-  if Trim(FPrincipalVariation) = '' then
-  begin
-    LPvBaseBoard := FBoard;
-    LPvBasePly := CurrentMoveCount;
-  end
-  else
-  begin
-    LPvBaseBoard := FPvBaseBoard;
-    LPvBasePly := FPvBasePly;
-  end;
+  VisibleMainPvForTree(LGameTree, LPvBaseBoard, LPvBasePly, LPvText,
+    LPvScore, LPvDepth, LPvTimeText);
 
   if FPvBrowser <> nil then
-    FPvBrowser.SetData(LPvBaseBoard, LPvBasePly, FStartingFEN,
-      FPrincipalVariation, FPrincipalVariationScore, FPrincipalVariationDepth,
-      FPrincipalVariationTimeText);
-  HighlightGameMoveTextSelection(False);
+    FPvBrowser.SetData(LPvBaseBoard, LPvBasePly, LFenText,
+      LPvText, LPvScore, LPvDepth, LPvTimeText);
+  HighlightGameMoveTextSelection(False, LGameTree);
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
   UpdateDatabaseSearchPosition;
@@ -3522,26 +5053,120 @@ begin
   FDatabaseForm.SearchCurrentPosition;
 end;
 
-procedure TMainForm.UpdateScoreHistory;
+procedure TMainForm.UpdateScoreHistory(ARefreshTree: Boolean;
+  AGameTree: TGameTree);
 var
+  LAnnotationsText: string;
+  LGame: TRunningGame;
+  LGameTree: TGameTree;
   LPly: Integer;
+  LStartingFEN: string;
 begin
   if FScoreHistoryControl = nil then
     Exit;
+
+  LGameTree := AGameTree;
+  if LGameTree = nil then
+    Exit;
+  if ARefreshTree then
+  begin
+    LGame := GameForTreeRefresh(LGameTree);
+    UpdateGameTreeFromState(LGame, LGameTree);
+  end;
+  LAnnotationsText := GameTreeScoreAnnotationsText(LGameTree);
+  LStartingFEN := StartingFenForTree(LGameTree);
 
   LPly := FGameBrowsePly;
   if LPly < 0 then
     LPly := CurrentMoveCount;
   FScoreHistoryControl.MaxScore := FPreferences.EvaluationMaxScore;
   FScoreHistoryControl.Scale := FPreferences.EvaluationScale;
-  FScoreHistoryControl.StartingSide := FenSideToMove(FStartingFEN);
+  FScoreHistoryControl.StartingSide := FenSideToMove(LStartingFEN);
   FScoreHistoryControl.PlyCount := CurrentMoveCount;
-  FScoreHistoryControl.AnnotationsText := FMoveAnnotationsText;
+  FScoreHistoryControl.AnnotationsText := LAnnotationsText;
   FScoreHistoryControl.CurrentPly := LPly;
   if FScoreHistoryForm <> nil then
-    FScoreHistoryForm.UpdateScores(FMoveAnnotationsText, CurrentMoveCount, LPly,
+    FScoreHistoryForm.UpdateScores(LAnnotationsText, CurrentMoveCount, LPly,
       FPreferences.EvaluationMaxScore, FPreferences.EvaluationScale,
-      FenSideToMove(FStartingFEN));
+      FenSideToMove(LStartingFEN));
+end;
+
+procedure TMainForm.UpdateGameTreeFromMoveText(AGame: TRunningGame;
+  AGameTree: TGameTree; const AMovesText, AAnnotationsText: string);
+var
+  LAnnotations: TStringList;
+  LMoves: TStringList;
+begin
+  if AGameTree = nil then
+    Exit;
+
+  LMoves := TStringList.Create;
+  LAnnotations := TStringList.Create;
+  try
+    TextToMoveList(AMovesText, LMoves);
+    LAnnotations.Text := AAnnotationsText;
+
+    PrepareGameTreeRebuildFromCurrentState(AGame, AGameTree);
+    RecordGameTreeMainlineFromInput(AGame, AGameTree, LMoves, LAnnotations);
+    RecordGameTreeLiveAnalysis(AGameTree);
+    RecordGameTreeVariations(AGameTree);
+  finally
+    LAnnotations.Free;
+    LMoves.Free;
+  end;
+end;
+
+procedure TMainForm.UpdateGameTreeFromState(AGame: TRunningGame;
+  AGameTree: TGameTree);
+var
+  LAnnotations: TStringList;
+  LMoves: TStringList;
+begin
+  if AGameTree = nil then
+    Exit;
+
+  LMoves := TStringList.Create;
+  LAnnotations := TStringList.Create;
+  try
+    AGameTree.CopyMainlineMovesTo(LMoves);
+
+    PrepareGameTreeRebuildFromCurrentState(AGame, AGameTree);
+    RecordGameTreeMainlineFromInput(AGame, AGameTree, LMoves, LAnnotations);
+    RecordGameTreeLiveAnalysis(AGameTree);
+    RecordGameTreeVariations(AGameTree);
+  finally
+    LAnnotations.Free;
+    LMoves.Free;
+  end;
+end;
+
+procedure TMainForm.RefreshVisibleGameTreeView(ARefreshTree: Boolean;
+  AGameTree: TGameTree);
+var
+  LGame: TRunningGame;
+  LGameTree: TGameTree;
+begin
+  if (FGameTreeForm = nil) or (not FGameTreeForm.Visible) or
+    FGameTreeBrowseMode then
+    Exit;
+
+  LGameTree := AGameTree;
+  if LGameTree = nil then
+    Exit;
+  if ARefreshTree then
+  begin
+    LGame := GameForTreeRefresh(LGameTree);
+    UpdateGameTreeFromState(LGame, LGameTree);
+  end;
+  UpdateGameTreeView(LGameTree);
+end;
+
+procedure TMainForm.UpdateGameTreeView(AGameTree: TGameTree);
+begin
+  if (FGameTreeView = nil) or (AGameTree = nil) then
+    Exit;
+
+  PopulateGameTreeView(FGameTreeView, AGameTree);
 end;
 
 procedure TMainForm.UpdateGameListItem(AGame: TRunningGame);

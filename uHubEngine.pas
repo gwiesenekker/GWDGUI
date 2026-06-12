@@ -30,6 +30,7 @@ type
     procedure DoSetClockInfo(AMovesRemaining: Integer; ARemainingSeconds,
       ATotalUsedSeconds: Double);
     procedure DoStartAnalyzing;
+    procedure DoStartMcts;
     procedure DoStopSearch;
     procedure DoStop;
     procedure DoPollOutput;
@@ -65,6 +66,7 @@ type
       ATotalUsedSeconds: Double); override;
     procedure SetGamePosition(const AStartingFEN: string; AMoves: TStrings); override;
     procedure StartAnalyzing;
+    procedure StartMcts;
     function StartThinking: string; override;
     procedure PollOutput;
     procedure StopSearch;
@@ -85,6 +87,7 @@ type
     hwcSetClockInfo,
     hwcStartThinking,
     hwcStartAnalyzing,
+    hwcStartMcts,
     hwcPollOutput,
     hwcProcessData,
     hwcStopSearch,
@@ -209,6 +212,7 @@ const
     'hub-set-clock-info',
     'hub-start-thinking',
     'hub-start-analyzing',
+    'hub-start-mcts',
     'hub-poll-output',
     'hub-process-data',
     'hub-stop-search',
@@ -543,6 +547,8 @@ begin
       HubCommand.StringResult := inherited StartThinking;
     hwcStartAnalyzing:
       DoStartAnalyzing;
+    hwcStartMcts:
+      DoStartMcts;
     hwcPollOutput:
       DoPollOutput;
     hwcProcessData:
@@ -845,6 +851,15 @@ begin
   ChangeState(esThinking, 'analysis started');
 end;
 
+procedure THubEngine.DoStartMcts;
+begin
+  DoStopSearch;
+  SendLine(BuildHubPositionCommand);
+  SendLine('level time=1000');
+  SendLine('go mcts');
+  ChangeState(esThinking, 'MCTS started');
+end;
+
 procedure THubEngine.DoPollOutput;
 begin
   if (FProcess <> nil) and FProcess.NeedsPolling then
@@ -908,6 +923,11 @@ end;
 procedure THubEngine.StartAnalyzing;
 begin
   QueueProcedureCommand(THubWorkerCommand.Create(hwcStartAnalyzing));
+end;
+
+procedure THubEngine.StartMcts;
+begin
+  QueueProcedureCommand(THubWorkerCommand.Create(hwcStartMcts));
 end;
 
 procedure THubEngine.PollOutput;
