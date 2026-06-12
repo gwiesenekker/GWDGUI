@@ -5,7 +5,7 @@ unit uGameDatabase;
 interface
 
 uses
-  Classes, MD5, SQLite3Conn, SQLDB, SysUtils, uDraughtsBoard, uPdn;
+  Classes, SQLite3Conn, SQLDB, SysUtils, uDraughtsBoard, uPdn;
 
 type
   TDatabaseGameSortColumn = (dgscId, dgscWhite, dgscBlack, dgscEvent);
@@ -44,10 +44,11 @@ type
     procedure CreateImportIndexes;
     procedure DropImportIndexes;
     procedure EnsureContinuationTable;
-    procedure EnsureGameHashColumn;
+    procedure EnsureGameHashColumns;
     procedure ExecuteSql(const ASql: string);
     procedure SetBulkImportPragmas;
     procedure StartTransactionIfNeeded;
+    function TableColumnExists(const ATableName, AColumnName: string): Boolean;
     function Query: TSQLQuery;
   public
     constructor Create;
@@ -61,16 +62,16 @@ type
       AOnProgress: TDatabaseImportProgressEvent = nil;
       const AImportLogFileName: string = '');
     procedure LoadGames(AList: TList; ALimit: Integer;
-      const AWhiteFilter, ABlackFilter, AEventFilter: string;
+      const AWhiteFilter, ABlackFilter, AEventFilter, APlayerFilter: string;
       ASortColumn: TDatabaseGameSortColumn; ASortDescending: Boolean;
       out ATotalMatches: Integer);
+    procedure LoadGames(AList: TList);
     function LoadGameById(AGameId: Integer): TPdnGame;
     function GamesForPositionExceedLimit(const APositionKey: string;
       ASideToMove: TDraughtsSide; ALimit: Integer; out AProbeCount: Integer): Boolean;
     procedure LoadGamesForPosition(const APositionKey: string;
       ASideToMove: TDraughtsSide; AList: TList; ALimit: Integer;
       out ATotalMatches: Integer);
-    procedure OptimizeGameSearch;
     procedure RebuildContinuationSummary;
     procedure SearchPosition(const APositionKey: string; ASideToMove: TDraughtsSide;
       AList: TList);
@@ -81,6 +82,11 @@ type
 implementation
 
 type
+  THash128 = record
+    Lo: Int64;
+    Hi: Int64;
+  end;
+
   TDatabasePdnImporter = class
   private
     FBoard: TDraughtsBoard;
@@ -100,15 +106,14 @@ type
     FMoves: TStringList;
     FOnProgress: TDatabaseImportProgressEvent;
     FPositionInsertQuery: TSQLQuery;
-    FContinuationUpsertQuery: TSQLQuery;
     procedure CanonicalizeMovesForImport;
     procedure CommitBatchIfNeeded;
-    function GameHash: string;
+    function GameHash: THash128;
     procedure ImportGame(AGame: TPdnGame; ABytesRead, ATotalBytes: Int64;
       var AStop: Boolean);
-    function IsDuplicateGame(const AGameHash: string): Boolean;
+    function IsDuplicateGame(const AGameHash: THash128): Boolean;
     procedure InsertPosition(APly: Integer; const ANextMove: string);
-    procedure LogDuplicate(const AGameHash: string);
+    procedure LogDuplicate(const AGameHash: THash128);
     procedure LogError(const AMessage: string);
     procedure LogLine(const ALine: string);
     procedure ReportProgress(ABytesRead, ATotalBytes: Int64;
@@ -152,6 +157,185 @@ begin
   Result := StringReplace(Result, #13, ' ', [rfReplaceAll]);
 end;
 
+function QWordAsInt64(AValue: QWord): Int64;
+begin
+  Result := 0;
+  Move(AValue, Result, SizeOf(Result));
+end;
+
+function QWordLo32(AValue: QWord): QWord;
+begin
+  Result := AValue and QWord($FFFFFFFF);
+end;
+
+function QWordHi32(AValue: QWord): QWord;
+begin
+  Result := AValue shr 32;
+end;
+
+procedure Add128(var ALo, AHi: QWord; BLo, BHi: QWord);
+var
+  OldLo: QWord;
+begin
+  OldLo := ALo;
+  ALo := ALo + BLo;
+  AHi := AHi + BHi;
+  if ALo < OldLo then
+    Inc(AHi);
+end;
+
+procedure Mul128ByFNVPrime(var ALo, AHi: QWord);
+var
+  Carry: QWord;
+  L0: QWord;
+  L1: QWord;
+  L2: QWord;
+  L3: QWord;
+  OldLo: QWord;
+  Product: QWord;
+  ShiftHi: QWord;
+begin
+  { FNV-1a-128 prime = 2^88 + 0x13B.  Modulo 2^128:
+    hash * prime = (hash << 88) + (hash * 0x13B). }
+  OldLo := ALo;
+
+  Product := QWordLo32(ALo) * QWord($13B);
+  L0 := QWordLo32(Product);
+  Carry := QWordHi32(Product);
+
+  Product := QWordHi32(ALo) * QWord($13B) + Carry;
+  L1 := QWordLo32(Product);
+  Carry := QWordHi32(Product);
+
+  Product := QWordLo32(AHi) * QWord($13B) + Carry;
+  L2 := QWordLo32(Product);
+  Carry := QWordHi32(Product);
+
+  Product := QWordHi32(AHi) * QWord($13B) + Carry;
+  L3 := QWordLo32(Product);
+
+  ALo := L0 or (L1 shl 32);
+  AHi := L2 or (L3 shl 32);
+  ShiftHi := OldLo shl 24;
+  Add128(ALo, AHi, 0, ShiftHi);
+end;
+
+function Fnv1a128Value(const AText: string): THash128;
+var
+  HashHi: QWord;
+  HashLo: QWord;
+  I: Integer;
+begin
+  HashHi := (QWord($6C62272E) shl 32) or QWord($07BB0142);
+  HashLo := (QWord($62B82175) shl 32) or QWord($6295C58D);
+  for I := 1 to Length(AText) do
+  begin
+    HashLo := HashLo xor Ord(AText[I]);
+    Mul128ByFNVPrime(HashLo, HashHi);
+  end;
+  Result.Lo := QWordAsInt64(HashLo);
+  Result.Hi := QWordAsInt64(HashHi);
+end;
+
+function PositionStateDigit(AState: Char): QWord;
+begin
+  case AState of
+    'e':
+      Result := 0;
+    'w':
+      Result := 1;
+    'b':
+      Result := 2;
+    'W':
+      Result := 3;
+    'B':
+      Result := 4;
+  else
+    raise EConvertError.CreateFmt('Invalid position key square state: %s',
+      [AState]);
+  end;
+end;
+
+procedure Mul128By5Add(var ALo, AHi: QWord; ADigit: QWord);
+var
+  Carry: QWord;
+  L0: QWord;
+  L1: QWord;
+  L2: QWord;
+  L3: QWord;
+  Product: QWord;
+begin
+  Product := QWordLo32(ALo) * 5 + ADigit;
+  L0 := QWordLo32(Product);
+  Carry := QWordHi32(Product);
+
+  Product := QWordHi32(ALo) * 5 + Carry;
+  L1 := QWordLo32(Product);
+  Carry := QWordHi32(Product);
+
+  Product := QWordLo32(AHi) * 5 + Carry;
+  L2 := QWordLo32(Product);
+  Carry := QWordHi32(Product);
+
+  Product := QWordHi32(AHi) * 5 + Carry;
+  L3 := QWordLo32(Product);
+
+  ALo := L0 or (L1 shl 32);
+  AHi := L2 or (L3 shl 32);
+end;
+
+function PackedPositionKey128Value(const APositionKey: string): THash128;
+var
+  KeyHi: QWord;
+  KeyLo: QWord;
+  I: Integer;
+  SquareOffset: Integer;
+begin
+  if (Length(APositionKey) = 52) and (APositionKey[2] = '|') then
+    SquareOffset := 2
+  else if Length(APositionKey) = 51 then
+    SquareOffset := 1
+  else
+    raise EConvertError.CreateFmt('Invalid position key length: %d',
+      [Length(APositionKey)]);
+
+  if APositionKey[1] = 'B' then
+    KeyLo := 1
+  else if APositionKey[1] = 'W' then
+    KeyLo := 0
+  else
+    raise EConvertError.CreateFmt('Invalid position key side to move: %s',
+      [APositionKey[1]]);
+  KeyHi := 0;
+
+  for I := SquareOffset + 1 to Length(APositionKey) do
+    Mul128By5Add(KeyLo, KeyHi, PositionStateDigit(APositionKey[I]));
+
+  Result.Lo := QWordAsInt64(KeyLo);
+  Result.Hi := QWordAsInt64(KeyHi);
+end;
+
+function Hash128ToHex(const AHash: THash128): string;
+var
+  HashHi: QWord;
+  HashLo: QWord;
+begin
+  HashHi := 0;
+  HashLo := 0;
+  Move(AHash.Hi, HashHi, SizeOf(HashHi));
+  Move(AHash.Lo, HashLo, SizeOf(HashLo));
+  Result := IntToHex(HashHi, 16) + IntToHex(HashLo, 16);
+end;
+
+procedure BindPositionKey(AQuery: TSQLQuery; const APositionKey: string);
+var
+  PositionKey: THash128;
+begin
+  PositionKey := PackedPositionKey128Value(APositionKey);
+  AQuery.ParamByName('position_key_lo').AsLargeInt := PositionKey.Lo;
+  AQuery.ParamByName('position_key_hi').AsLargeInt := PositionKey.Hi;
+end;
+
 constructor TDatabasePdnImporter.Create(ADatabase: TGameDatabase;
   AOnProgress: TDatabaseImportProgressEvent; const AImportLogFileName: string);
 begin
@@ -169,24 +353,15 @@ begin
   FMoves := TStringList.Create;
   FGameInsertQuery := FDatabase.Query;
   FGameInsertQuery.SQL.Text :=
-    'insert into games(game_hash, white, black, event, result, starting_fen, moves_text, annotations_text, ply_count) ' +
-    'values(:game_hash, :white, :black, :event, :result, :starting_fen, :moves_text, :annotations_text, :ply_count)';
+    'insert into games(game_hash_lo, game_hash_hi, white, black, event, result, starting_fen, moves_text, annotations_text, ply_count) ' +
+    'values(:game_hash_lo, :game_hash_hi, :white, :black, :event, :result, :starting_fen, :moves_text, :annotations_text, :ply_count)';
   FHashQuery := FDatabase.Query;
   FHashQuery.SQL.Text :=
-    'select id from games where game_hash = :game_hash limit 1';
+    'select id from games where game_hash_lo = :game_hash_lo and game_hash_hi = :game_hash_hi limit 1';
   FPositionInsertQuery := FDatabase.Query;
   FPositionInsertQuery.SQL.Text :=
-    'insert into positions(game_id, ply, position_key, side_to_move, next_move, result) ' +
-    'values(:game_id, :ply, :position_key, :side_to_move, :next_move, :result)';
-  FContinuationUpsertQuery := FDatabase.Query;
-  FContinuationUpsertQuery.SQL.Text :=
-    'insert into continuations(position_key, side_to_move, next_move, game_count, white_wins, draws, black_wins) ' +
-    'values(:position_key, :side_to_move, :next_move, 1, :white_wins, :draws, :black_wins) ' +
-    'on conflict(position_key, side_to_move, next_move) do update set ' +
-    'game_count = game_count + 1, ' +
-    'white_wins = white_wins + excluded.white_wins, ' +
-    'draws = draws + excluded.draws, ' +
-    'black_wins = black_wins + excluded.black_wins';
+    'insert into positions(game_id, ply, position_key_lo, position_key_hi, side_to_move, next_move, result) ' +
+    'values(:game_id, :ply, :position_key_lo, :position_key_hi, :side_to_move, :next_move, :result)';
   FIdQuery := FDatabase.Query;
   FIdQuery.SQL.Text := 'select last_insert_rowid() as id';
 end;
@@ -202,7 +377,6 @@ begin
     FLogOpen := False;
   end;
   FIdQuery.Free;
-  FContinuationUpsertQuery.Free;
   FPositionInsertQuery.Free;
   FHashQuery.Free;
   FGameInsertQuery.Free;
@@ -219,7 +393,7 @@ begin
     ALine);
 end;
 
-procedure TDatabasePdnImporter.LogDuplicate(const AGameHash: string);
+procedure TDatabasePdnImporter.LogDuplicate(const AGameHash: THash128);
 var
   LPlyCount: Integer;
 begin
@@ -227,7 +401,7 @@ begin
   if (LPlyCount = 0) and (FMoves <> nil) then
     LPlyCount := FMoves.Count;
   LogLine('duplicate' + #9 +
-    'hash=' + LogField(AGameHash) + #9 +
+    'hash=' + LogField(Hash128ToHex(AGameHash)) + #9 +
     'event=' + LogField(FGame.EventName) + #9 +
     'white=' + LogField(FGame.WhiteName) + #9 +
     'black=' + LogField(FGame.BlackName) + #9 +
@@ -286,25 +460,26 @@ begin
   end;
 end;
 
-function TDatabasePdnImporter.GameHash: string;
+function TDatabasePdnImporter.GameHash: THash128;
 var
   LHashText: string;
 begin
   LHashText :=
-    'gwdgui-db-v2' + #10 +
+    'gwdgui-db-v3-game-fnv1a128' + #10 +
     Trim(FGame.EventName) + #10 +
     Trim(FGame.WhiteName) + #10 +
     Trim(FGame.BlackName) + #10 +
     Trim(FGame.ResultText) + #10 +
     Trim(FGame.StartingFEN) + #10 +
     Trim(FGame.MovesText);
-  Result := MD5Print(MD5String(LHashText));
+  Result := Fnv1a128Value(LHashText);
 end;
 
-function TDatabasePdnImporter.IsDuplicateGame(const AGameHash: string): Boolean;
+function TDatabasePdnImporter.IsDuplicateGame(const AGameHash: THash128): Boolean;
 begin
   FHashQuery.Close;
-  FHashQuery.ParamByName('game_hash').AsString := AGameHash;
+  FHashQuery.ParamByName('game_hash_lo').AsLargeInt := AGameHash.Lo;
+  FHashQuery.ParamByName('game_hash_hi').AsLargeInt := AGameHash.Hi;
   FHashQuery.Open;
   try
     Result := not FHashQuery.EOF;
@@ -316,36 +491,19 @@ end;
 procedure TDatabasePdnImporter.InsertPosition(APly: Integer;
   const ANextMove: string);
 var
+  PositionKey: THash128;
   SideText: string;
 begin
+  PositionKey := PackedPositionKey128Value(FBoard.PositionKey);
   SideText := SideToText(FBoard.SideToMove);
   FPositionInsertQuery.ParamByName('game_id').AsInteger := FGameId;
   FPositionInsertQuery.ParamByName('ply').AsInteger := APly;
-  FPositionInsertQuery.ParamByName('position_key').AsString := FBoard.PositionKey;
+  FPositionInsertQuery.ParamByName('position_key_lo').AsLargeInt := PositionKey.Lo;
+  FPositionInsertQuery.ParamByName('position_key_hi').AsLargeInt := PositionKey.Hi;
   FPositionInsertQuery.ParamByName('side_to_move').AsString := SideText;
   FPositionInsertQuery.ParamByName('next_move').AsString := ANextMove;
   FPositionInsertQuery.ParamByName('result').AsString := FGame.ResultText;
   FPositionInsertQuery.ExecSQL;
-
-  if Trim(ANextMove) = '' then
-    Exit;
-  FContinuationUpsertQuery.ParamByName('position_key').AsString :=
-    FBoard.PositionKey;
-  FContinuationUpsertQuery.ParamByName('side_to_move').AsString := SideText;
-  FContinuationUpsertQuery.ParamByName('next_move').AsString := ANextMove;
-  if FGame.ResultText = '2-0' then
-    FContinuationUpsertQuery.ParamByName('white_wins').AsInteger := 1
-  else
-    FContinuationUpsertQuery.ParamByName('white_wins').AsInteger := 0;
-  if FGame.ResultText = '1-1' then
-    FContinuationUpsertQuery.ParamByName('draws').AsInteger := 1
-  else
-    FContinuationUpsertQuery.ParamByName('draws').AsInteger := 0;
-  if FGame.ResultText = '0-2' then
-    FContinuationUpsertQuery.ParamByName('black_wins').AsInteger := 1
-  else
-    FContinuationUpsertQuery.ParamByName('black_wins').AsInteger := 0;
-  FContinuationUpsertQuery.ExecSQL;
 end;
 
 procedure TDatabasePdnImporter.ReportProgress(ABytesRead, ATotalBytes: Int64;
@@ -364,7 +522,7 @@ end;
 procedure TDatabasePdnImporter.ImportGame(AGame: TPdnGame; ABytesRead,
   ATotalBytes: Int64; var AStop: Boolean);
 var
-  LGameHash: string;
+  LGameHash: THash128;
   Points: Integer;
 begin
   FGame := AGame;
@@ -384,7 +542,8 @@ begin
 
     FBoard.LoadFromFEN(FGame.StartingFEN);
 
-    FGameInsertQuery.ParamByName('game_hash').AsString := LGameHash;
+    FGameInsertQuery.ParamByName('game_hash_lo').AsLargeInt := LGameHash.Lo;
+    FGameInsertQuery.ParamByName('game_hash_hi').AsLargeInt := LGameHash.Hi;
     FGameInsertQuery.ParamByName('white').AsString := FGame.WhiteName;
     FGameInsertQuery.ParamByName('black').AsString := FGame.BlackName;
     FGameInsertQuery.ParamByName('event').AsString := FGame.EventName;
@@ -503,14 +662,12 @@ end;
 
 procedure TGameDatabase.CreateImportIndexes;
 begin
-  ExecuteSql('create unique index if not exists idx_games_hash on games(game_hash)');
+  ExecuteSql('create unique index if not exists idx_games_hash on games(game_hash_lo, game_hash_hi)');
   ExecuteSql('create index if not exists idx_games_white on games(white)');
   ExecuteSql('create index if not exists idx_games_black on games(black)');
   ExecuteSql('create index if not exists idx_games_event on games(event)');
-  ExecuteSql('create index if not exists idx_positions_key on positions(position_key)');
-  ExecuteSql('create index if not exists idx_positions_search on positions(position_key, side_to_move, next_move, result)');
+  ExecuteSql('create index if not exists idx_positions_search on positions(position_key_lo, position_key_hi, side_to_move, next_move, result)');
   ExecuteSql('create index if not exists idx_positions_game on positions(game_id)');
-  ExecuteSql('create index if not exists idx_positions_game_search on positions(position_key, side_to_move, game_id, ply)');
 end;
 
 procedure TGameDatabase.DropImportIndexes;
@@ -525,31 +682,40 @@ procedure TGameDatabase.EnsureContinuationTable;
 begin
   ExecuteSql(
     'create table if not exists continuations (' +
-    'position_key text not null,' +
+    'position_key_lo integer not null,' +
+    'position_key_hi integer not null,' +
     'side_to_move text not null,' +
     'next_move text not null,' +
     'game_count integer not null,' +
     'white_wins integer not null,' +
     'draws integer not null,' +
     'black_wins integer not null,' +
-    'primary key(position_key, side_to_move, next_move))');
+    'primary key(position_key_lo, position_key_hi, side_to_move, next_move))');
 end;
 
-procedure TGameDatabase.EnsureGameHashColumn;
+procedure TGameDatabase.EnsureGameHashColumns;
+begin
+  if (not TableColumnExists('games', 'game_hash_lo')) or
+    (not TableColumnExists('games', 'game_hash_hi')) then
+    raise EInvalidOperation.Create(
+      'This database uses the old game hash schema. Create a new database and reimport the PDN file.');
+end;
+
+function TGameDatabase.TableColumnExists(const ATableName,
+  AColumnName: string): Boolean;
 var
-  Found: Boolean;
   Q: TSQLQuery;
 begin
-  Found := False;
+  Result := False;
   Q := Query;
   try
-    Q.SQL.Text := 'pragma table_info(games)';
+    Q.SQL.Text := 'pragma table_info(' + ATableName + ')';
     Q.Open;
     while not Q.EOF do
     begin
-      if SameText(Q.FieldByName('name').AsString, 'game_hash') then
+      if SameText(Q.FieldByName('name').AsString, AColumnName) then
       begin
-        Found := True;
+        Result := True;
         Break;
       end;
       Q.Next;
@@ -558,8 +724,6 @@ begin
   finally
     Q.Free;
   end;
-  if not Found then
-    ExecuteSql('alter table games add column game_hash text');
 end;
 
 procedure TGameDatabase.SetBulkImportPragmas;
@@ -597,22 +761,28 @@ begin
     Q.SQL.Text :=
       'create table if not exists games (' +
       'id integer primary key autoincrement,' +
-      'game_hash text,' +
+      'game_hash_lo integer not null,' +
+      'game_hash_hi integer not null,' +
       'white text, black text, event text, result text,' +
       'starting_fen text, moves_text text, annotations_text text,' +
       'ply_count integer)';
     Q.ExecSQL;
-    EnsureGameHashColumn;
+    EnsureGameHashColumns;
     Q.SQL.Text :=
       'create table if not exists positions (' +
       'id integer primary key autoincrement,' +
       'game_id integer not null,' +
       'ply integer not null,' +
-      'position_key text not null,' +
+      'position_key_lo integer not null,' +
+      'position_key_hi integer not null,' +
       'side_to_move text not null,' +
       'next_move text,' +
       'result text)';
     Q.ExecSQL;
+    if (not TableColumnExists('positions', 'position_key_lo')) or
+      (not TableColumnExists('positions', 'position_key_hi')) then
+      raise EInvalidOperation.Create(
+        'This database uses the old position schema. Create a new database and reimport the PDN file.');
     EnsureContinuationTable;
     CreateImportIndexes;
     FTransaction.Commit;
@@ -652,12 +822,15 @@ begin
       Importer.Run(AFileName);
       CommitActiveTransaction;
       StartTransactionIfNeeded;
+      RebuildContinuationSummary;
+      StartTransactionIfNeeded;
       CreateImportIndexes;
       CommitActiveTransaction;
     except
       if FTransaction.Active then
         FTransaction.Rollback;
       try
+        RebuildContinuationSummary;
         StartTransactionIfNeeded;
         CreateImportIndexes;
         CommitActiveTransaction;
@@ -686,31 +859,14 @@ begin
     EnsureContinuationTable;
     ExecuteSql('delete from continuations');
     ExecuteSql(
-      'insert into continuations(position_key, side_to_move, next_move, game_count, white_wins, draws, black_wins) ' +
-      'select position_key, side_to_move, next_move, count(*) as game_count, ' +
+      'insert into continuations(position_key_lo, position_key_hi, side_to_move, next_move, game_count, white_wins, draws, black_wins) ' +
+      'select position_key_lo, position_key_hi, side_to_move, next_move, count(*) as game_count, ' +
       'sum(case when result = ''2-0'' then 1 else 0 end) as white_wins, ' +
       'sum(case when result = ''1-1'' then 1 else 0 end) as draws, ' +
       'sum(case when result = ''0-2'' then 1 else 0 end) as black_wins ' +
       'from positions ' +
       'where coalesce(next_move, '''') <> '''' ' +
-      'group by position_key, side_to_move, next_move');
-    CommitActiveTransaction;
-  except
-    if FTransaction.Active then
-      FTransaction.Rollback;
-    raise;
-  end;
-end;
-
-procedure TGameDatabase.OptimizeGameSearch;
-begin
-  if not FConnection.Connected then
-    raise EInvalidOperation.Create('No database is open');
-  CommitActiveTransaction;
-  StartTransactionIfNeeded;
-  try
-    ExecuteSql('create index if not exists idx_positions_game_search on ' +
-      'positions(position_key, side_to_move, game_id, ply)');
+      'group by position_key_lo, position_key_hi, side_to_move, next_move');
     CommitActiveTransaction;
   except
     if FTransaction.Active then
@@ -720,7 +876,7 @@ begin
 end;
 
 procedure TGameDatabase.LoadGames(AList: TList; ALimit: Integer;
-  const AWhiteFilter, ABlackFilter, AEventFilter: string;
+  const AWhiteFilter, ABlackFilter, AEventFilter, APlayerFilter: string;
   ASortColumn: TDatabaseGameSortColumn; ASortDescending: Boolean;
   out ATotalMatches: Integer);
 var
@@ -740,6 +896,18 @@ var
     WhereSql := WhereSql + 'lower(' + AColumn + ') like :' + AParamName;
   end;
 
+  procedure AddPlayerFilter;
+  begin
+    if Trim(APlayerFilter) = '' then
+      Exit;
+    if WhereSql = '' then
+      WhereSql := ' where '
+    else
+      WhereSql := WhereSql + ' and ';
+    WhereSql := WhereSql +
+      '(lower(white) like :player_filter or lower(black) like :player_filter)';
+  end;
+
   procedure BindFilters(AQuery: TSQLQuery);
   begin
     if Trim(AWhiteFilter) <> '' then
@@ -751,6 +919,9 @@ var
     if Trim(AEventFilter) <> '' then
       AQuery.ParamByName('event_filter').AsString :=
         '%' + AnsiLowerCase(Trim(AEventFilter)) + '%';
+    if Trim(APlayerFilter) <> '' then
+      AQuery.ParamByName('player_filter').AsString :=
+        '%' + AnsiLowerCase(Trim(APlayerFilter)) + '%';
   end;
 begin
   ATotalMatches := 0;
@@ -762,6 +933,7 @@ begin
   AddFilter('white', 'white_filter', AWhiteFilter);
   AddFilter('black', 'black_filter', ABlackFilter);
   AddFilter('event', 'event_filter', AEventFilter);
+  AddPlayerFilter;
 
   case ASortColumn of
     dgscWhite:
@@ -809,6 +981,13 @@ begin
     Q.Free;
     CommitActiveTransaction;
   end;
+end;
+
+procedure TGameDatabase.LoadGames(AList: TList);
+var
+  TotalMatches: Integer;
+begin
+  LoadGames(AList, 0, '', '', '', '', dgscId, False, TotalMatches);
 end;
 
 function TGameDatabase.LoadGameById(AGameId: Integer): TPdnGame;
@@ -860,9 +1039,10 @@ begin
   try
     Q.SQL.Text :=
       'select p.game_id from positions p ' +
-      'where p.position_key = :position_key and p.side_to_move = :side_to_move ' +
+      'where p.position_key_lo = :position_key_lo and p.position_key_hi = :position_key_hi ' +
+      'and p.side_to_move = :side_to_move ' +
       'group by p.game_id limit ' + IntToStr(ALimit + 1);
-    Q.ParamByName('position_key').AsString := APositionKey;
+    BindPositionKey(Q, APositionKey);
     Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
     Q.Open;
     while not Q.EOF do
@@ -895,9 +1075,10 @@ begin
     Q.SQL.Text :=
       'select count(*) as game_count from (' +
       'select p.game_id from positions p ' +
-      'where p.position_key = :position_key and p.side_to_move = :side_to_move ' +
+      'where p.position_key_lo = :position_key_lo and p.position_key_hi = :position_key_hi ' +
+      'and p.side_to_move = :side_to_move ' +
       'group by p.game_id)';
-    Q.ParamByName('position_key').AsString := APositionKey;
+    BindPositionKey(Q, APositionKey);
     Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
     Q.Open;
     ATotalMatches := Q.FieldByName('game_count').AsInteger;
@@ -907,12 +1088,13 @@ begin
       'select g.id, g.white, g.black, g.event, g.result, g.starting_fen, ' +
       'g.ply_count, min(p.ply) as first_ply ' +
       'from positions p join games g on g.id = p.game_id ' +
-      'where p.position_key = :position_key and p.side_to_move = :side_to_move ' +
+      'where p.position_key_lo = :position_key_lo and p.position_key_hi = :position_key_hi ' +
+      'and p.side_to_move = :side_to_move ' +
       'group by g.id, g.white, g.black, g.event, g.result, g.starting_fen, g.ply_count ' +
       'order by first_ply, g.id';
     if ALimit > 0 then
       Q.SQL.Text := Q.SQL.Text + ' limit ' + IntToStr(ALimit);
-    Q.ParamByName('position_key').AsString := APositionKey;
+    BindPositionKey(Q, APositionKey);
     Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
     Q.Open;
     while not Q.EOF do
@@ -953,39 +1135,46 @@ begin
     begin
       if ASideToMove = dsBlack then
         Q.SQL.Text :=
-          'select next_move, game_count, black_wins as wins, draws, white_wins as losses ' +
-          'from continuations ' +
-          'where position_key = :position_key and side_to_move = :side_to_move ' +
-          'order by game_count desc, wins desc, next_move'
+          'select c.next_move, c.game_count, c.black_wins as wins, c.draws, c.white_wins as losses ' +
+          'from continuations c ' +
+          'where c.position_key_lo = :position_key_lo and c.position_key_hi = :position_key_hi ' +
+          'and c.side_to_move = :side_to_move ' +
+          'order by c.game_count desc, wins desc, c.next_move'
       else
         Q.SQL.Text :=
-          'select next_move, game_count, white_wins as wins, draws, black_wins as losses ' +
-          'from continuations ' +
-          'where position_key = :position_key and side_to_move = :side_to_move ' +
-          'order by game_count desc, wins desc, next_move';
+          'select c.next_move, c.game_count, c.white_wins as wins, c.draws, c.black_wins as losses ' +
+          'from continuations c ' +
+          'where c.position_key_lo = :position_key_lo and c.position_key_hi = :position_key_hi ' +
+          'and c.side_to_move = :side_to_move ' +
+          'order by c.game_count desc, wins desc, c.next_move';
       Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
     end
     else if ASideToMove = dsBlack then
       Q.SQL.Text :=
-        'select next_move, count(*) as game_count, ' +
-        'sum(case when result = ''0-2'' then 1 else 0 end) as wins, ' +
-        'sum(case when result = ''1-1'' then 1 else 0 end) as draws, ' +
-        'sum(case when result = ''2-0'' then 1 else 0 end) as losses ' +
-        'from positions ' +
-        'where position_key = :position_key and coalesce(next_move, '''') <> '''' ' +
-        'group by next_move ' +
-        'order by game_count desc, wins desc, next_move'
+        'select p.next_move, count(*) as game_count, ' +
+        'sum(case when p.result = ''0-2'' then 1 else 0 end) as wins, ' +
+        'sum(case when p.result = ''1-1'' then 1 else 0 end) as draws, ' +
+        'sum(case when p.result = ''2-0'' then 1 else 0 end) as losses ' +
+        'from positions p ' +
+        'where p.position_key_lo = :position_key_lo and p.position_key_hi = :position_key_hi ' +
+        'and p.side_to_move = :side_to_move ' +
+        'and coalesce(p.next_move, '''') <> '''' ' +
+        'group by p.next_move ' +
+        'order by game_count desc, wins desc, p.next_move'
     else
       Q.SQL.Text :=
-        'select next_move, count(*) as game_count, ' +
-        'sum(case when result = ''2-0'' then 1 else 0 end) as wins, ' +
-        'sum(case when result = ''1-1'' then 1 else 0 end) as draws, ' +
-        'sum(case when result = ''0-2'' then 1 else 0 end) as losses ' +
-        'from positions ' +
-        'where position_key = :position_key and coalesce(next_move, '''') <> '''' ' +
-        'group by next_move ' +
-        'order by game_count desc, wins desc, next_move';
-    Q.ParamByName('position_key').AsString := APositionKey;
+        'select p.next_move, count(*) as game_count, ' +
+        'sum(case when p.result = ''2-0'' then 1 else 0 end) as wins, ' +
+        'sum(case when p.result = ''1-1'' then 1 else 0 end) as draws, ' +
+        'sum(case when p.result = ''0-2'' then 1 else 0 end) as losses ' +
+        'from positions p ' +
+        'where p.position_key_lo = :position_key_lo and p.position_key_hi = :position_key_hi ' +
+        'and p.side_to_move = :side_to_move ' +
+        'and coalesce(p.next_move, '''') <> '''' ' +
+        'group by p.next_move ' +
+        'order by game_count desc, wins desc, p.next_move';
+    BindPositionKey(Q, APositionKey);
+    Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
     Q.Open;
     while not Q.EOF do
     begin
