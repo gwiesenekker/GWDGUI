@@ -3,7 +3,7 @@ program game_tree_pdn_filter_check;
 {$mode objfpc}{$H+}
 
 uses
-  SysUtils, uGameTree, uGameTreePdn;
+  Classes, SysUtils, uGameTree, uGameTreeBuilder, uGameTreePdn;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -110,7 +110,53 @@ begin
   end;
 end;
 
+procedure CheckSamePlyVariationsDoNotOverwrite;
+var
+  GameTree: TGameTree;
+  Moves: TStringList;
+  Options: TGameTreePdnRenderOptions;
+  Text: string;
+  VariationIndex: Integer;
+begin
+  GameTree := TGameTree.Create;
+  Moves := TStringList.Create;
+  try
+    GameTree.BeginRebuild('variations', 'Event', 'White', 'Black', '*',
+      'W:W31-50:B1-20');
+    GameTree.RecordMainlineMove(1, '32-28');
+    GameTree.RecordMainlineMove(2, '16-21');
+
+    VariationIndex := GameTree.StoreVariationLine(1, 1, '18-23',
+      'annotator=0.10');
+    TextToMoveList('18-23', Moves);
+    RecordGameTreeVariationLine(GameTree,
+      GameTreeVariationLineInput(GameTree.VariationLine[VariationIndex],
+      VariationIndex, Moves, nil));
+
+    VariationIndex := GameTree.StoreVariationLine(1, 1, '20-24',
+      'annotator=0.20');
+    TextToMoveList('20-24', Moves);
+    RecordGameTreeVariationLine(GameTree,
+      GameTreeVariationLineInput(GameTree.VariationLine[VariationIndex],
+      VariationIndex, Moves, nil));
+
+    Check(GameTree.VariationLineCount = 2,
+      'same-ply variations should be stored as separate lines');
+
+    Options := DefaultGameTreePdnRenderOptions;
+    Text := RenderWithOptions(GameTree, Options);
+    CheckContains(Text, '(1...18-23 {A: 0.10})',
+      'first same-ply variation should be rendered');
+    CheckContains(Text, '(1...20-24 {A: 0.20})',
+      'second same-ply variation should be rendered');
+  finally
+    Moves.Free;
+    GameTree.Free;
+  end;
+end;
+
 begin
   CheckPdnDisplayFilters;
+  CheckSamePlyVariationsDoNotOverwrite;
   Writeln('OK');
 end.

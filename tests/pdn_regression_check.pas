@@ -146,6 +146,92 @@ begin
   end;
 end;
 
+procedure CheckPdnVariationImportExport;
+var
+  BasePly: Integer;
+  DisplayPly: Integer;
+  FileName: string;
+  Game: TPdnGame;
+  Games: TList;
+  Lines: TStringList;
+  VariationAnnotations: TStringList;
+  Variations: TStringList;
+  MovesText: string;
+  PdnText: string;
+  VisibleAnnotation: string;
+begin
+  FileName := IncludeTrailingPathDelimiter(GetTempDir(False)) +
+    'gwdgui_pdn_variation_check.pdn';
+  Lines := TStringList.Create;
+  Games := TList.Create;
+  VariationAnnotations := TStringList.Create;
+  Variations := TStringList.Create;
+  try
+    Lines.Add('[Event "Variations"]');
+    Lines.Add('[White "Alpha"]');
+    Lines.Add('[Black "Beta"]');
+    Lines.Add('[Result "*"]');
+    Lines.Add('[FEN "W:W31-50:B1-20"]');
+    Lines.Add('');
+    Lines.Add('1. 32-28 (1... 18-23 {A: 0.10}) (1... 20-24 {A: 0.20}) 16-21 *');
+    Lines.SaveToFile(FileName);
+
+    LoadPdnGamesFromFile(FileName, Games);
+    CheckEqual(IntToStr(Games.Count), '1',
+      'variation game should be parsed');
+    Game := TPdnGame(Games[0]);
+    CheckEqual(Game.MovesText, '32-28 16-21',
+      'variation import should keep main line only in MovesText');
+    Variations.Text := Game.MoveVariationsText;
+    VariationAnnotations.Text := Game.MoveVariationAnnotationsText;
+    CheckEqual(IntToStr(Variations.Count), '2',
+      'both same-ply variations should be stored');
+    Check(DecodePdnVariationLine(Variations[0], VariationAnnotations[0], 0,
+      DisplayPly, BasePly, MovesText, VisibleAnnotation),
+      'first variation row should decode');
+    CheckEqual(IntToStr(DisplayPly), '1',
+      'first variation display ply');
+    CheckEqual(IntToStr(BasePly), '1',
+      'first variation base ply should come from 1...');
+    CheckEqual(MovesText, '18-23', 'first variation moves');
+    CheckEqual(VisibleAnnotation, 'A: 0.10',
+      'first variation visible annotation');
+    Check(DecodePdnVariationLine(Variations[1], VariationAnnotations[1], 0,
+      DisplayPly, BasePly, MovesText, VisibleAnnotation),
+      'second variation row should decode');
+    CheckEqual(MovesText, '20-24', 'second variation moves');
+
+    Game := TPdnGame.Create;
+    try
+      Game.EventName := 'Export';
+      Game.WhiteName := 'Alpha';
+      Game.BlackName := 'Beta';
+      Game.ResultText := '*';
+      Game.StartingFEN := 'W:W31-50:B1-20';
+      Game.MovesText := '32-28 16-21';
+      Game.MoveVariationsText := EncodePdnVariationLine(2, 1, '18-23') +
+        LineEnding;
+      Game.MoveVariationAnnotationsText := 'A: -0.03' + LineEnding;
+      PdnText := PdnGameToText(Game);
+      Check(Pos('1. 32-28 16-21 (1... 18-23 {A: -0.03})', PdnText) > 0,
+        'explicit base ply should render after the display move; pdn="' +
+        PdnText + '"');
+      Check(Pos('base_ply', LowerCase(PdnText)) = 0,
+        'internal variation metadata should not be exported as PDN comment');
+    finally
+      Game.Free;
+    end;
+  finally
+    Variations.Free;
+    VariationAnnotations.Free;
+    ClearGames(Games);
+    Games.Free;
+    Lines.Free;
+    if FileExists(FileName) then
+      DeleteFile(FileName);
+  end;
+end;
+
 procedure CheckMoveHistoryKeepsMoveAndAnnotationTogether;
 var
   History: TGameMoveHistory;
@@ -265,6 +351,7 @@ end;
 begin
   CheckPdnLoadAndAppend;
   CheckPdnGluedMoveNumbers;
+  CheckPdnVariationImportExport;
   CheckMoveHistoryKeepsMoveAndAnnotationTogether;
   CheckDatabaseImportSkipsExactDuplicates;
   Writeln('OK');

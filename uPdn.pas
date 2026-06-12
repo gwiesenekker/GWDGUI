@@ -34,6 +34,11 @@ procedure AppendPdnTextToFile(const AFileName, APdnText: string);
 function PdnGameToText(AGame: TPdnGame): string;
 function AnnotationWithScore(const AAnnotation, AName, AScore: string): string;
 function ExtractAnnotationValue(const AAnnotation, AName: string): string;
+function EncodePdnVariationLine(ADisplayAfterPly, ABasePly: Integer;
+  const AMovesText: string): string;
+function DecodePdnVariationLine(const ALine, AAnnotation: string;
+  ADefaultDisplayAfterPly: Integer; out ADisplayAfterPly, ABasePly: Integer;
+  out AMovesText, AVisibleAnnotation: string): Boolean;
 
 implementation
 
@@ -233,6 +238,29 @@ begin
     Result := AnnotationNameMatches(AText, AStart, 'A');
 end;
 
+procedure SplitAnnotationItems(const AAnnotation: string; AItems: TStrings);
+var
+  I: Integer;
+  ItemText: string;
+begin
+  if AItems = nil then
+    Exit;
+  AItems.Clear;
+  ItemText := '';
+  for I := 1 to Length(AAnnotation) do
+  begin
+    if AAnnotation[I] = ';' then
+    begin
+      AItems.Add(Trim(ItemText));
+      ItemText := '';
+    end
+    else
+      ItemText += AAnnotation[I];
+  end;
+  if (ItemText <> '') or (AItems.Count = 0) then
+    AItems.Add(Trim(ItemText));
+end;
+
 function AnnotationContainsName(const AAnnotation, AName: string): Boolean;
 var
   I: Integer;
@@ -242,7 +270,7 @@ begin
   Result := False;
   Items := TStringList.Create;
   try
-    ExtractStrings([';'], [], PChar(AAnnotation), Items);
+    SplitAnnotationItems(AAnnotation, Items);
     for I := 0 to Items.Count - 1 do
     begin
       ItemText := Trim(Items[I]);
@@ -264,7 +292,7 @@ begin
   Result := '';
   Items := TStringList.Create;
   try
-    ExtractStrings([';'], [], PChar(AAnnotation), Items);
+    SplitAnnotationItems(AAnnotation, Items);
     for I := 0 to Items.Count - 1 do
     begin
       ItemText := Trim(Items[I]);
@@ -298,7 +326,7 @@ begin
 
   Items := TStringList.Create;
   try
-    ExtractStrings([';'], [], PChar(AAnnotation), Items);
+    SplitAnnotationItems(AAnnotation, Items);
     if SameText(AName, 'engine') then
       NewItem := 'E: ' + Trim(AScore)
     else if SameText(AName, 'annotator') then
@@ -333,20 +361,35 @@ begin
   end;
 end;
 
+function AnnotationWithoutName(const AAnnotation, AName: string): string;
+var
+  I: Integer;
+  ItemText: string;
+  Items: TStringList;
+begin
+  Result := '';
+  Items := TStringList.Create;
+  try
+    SplitAnnotationItems(AAnnotation, Items);
+    for I := 0 to Items.Count - 1 do
+    begin
+      ItemText := Trim(Items[I]);
+      if (ItemText = '') or AnnotationNameMatches(ItemText, 1, AName) then
+        Continue;
+      if Result <> '' then
+        Result += '; ';
+      Result += ItemText;
+    end;
+  finally
+    Items.Free;
+  end;
+end;
+
 function MoveListText(AMoves: TStrings): string;
 begin
   if AMoves = nil then
     Exit('');
   Result := Trim(StringReplace(AMoves.Text, LineEnding, ' ', [rfReplaceAll]));
-end;
-
-procedure SetTextLine(ALines: TStrings; AIndex: Integer; const AValue: string);
-begin
-  if (ALines = nil) or (AIndex < 0) then
-    Exit;
-  while ALines.Count <= AIndex do
-    ALines.Add('');
-  ALines[AIndex] := Trim(AValue);
 end;
 
 function CommentHasStoredAnnotation(const AComment: string): Boolean;
@@ -356,8 +399,142 @@ begin
     AnnotationContainsName(AComment, 'annotator');
 end;
 
+function EncodePdnVariationLine(ADisplayAfterPly, ABasePly: Integer;
+  const AMovesText: string): string;
+begin
+  Result := IntToStr(ADisplayAfterPly) + #9 + IntToStr(ABasePly) + #9 +
+    Trim(AMovesText);
+end;
+
+function DecodePdnVariationLine(const ALine, AAnnotation: string;
+  ADefaultDisplayAfterPly: Integer; out ADisplayAfterPly, ABasePly: Integer;
+  out AMovesText, AVisibleAnnotation: string): Boolean;
+var
+  BaseText: string;
+  FirstTab: Integer;
+  SecondTab: Integer;
+begin
+  Result := False;
+  ADisplayAfterPly := ADefaultDisplayAfterPly;
+  ABasePly := ADefaultDisplayAfterPly;
+  AMovesText := '';
+  AVisibleAnnotation := Trim(AAnnotation);
+
+  FirstTab := Pos(#9, ALine);
+  SecondTab := 0;
+  if FirstTab > 0 then
+    SecondTab := FirstTab + Pos(#9, Copy(ALine, FirstTab + 1, MaxInt));
+  if (FirstTab > 0) and (SecondTab > FirstTab) and
+    (StrToIntDef(Trim(Copy(ALine, 1, FirstTab - 1)), -1) >= 0) and
+    (StrToIntDef(Trim(Copy(ALine, FirstTab + 1,
+    SecondTab - FirstTab - 1)), -1) >= 0) then
+  begin
+    ADisplayAfterPly := StrToIntDef(Trim(Copy(ALine, 1, FirstTab - 1)),
+      ADefaultDisplayAfterPly);
+    ABasePly := StrToIntDef(Trim(Copy(ALine, FirstTab + 1,
+      SecondTab - FirstTab - 1)), ADisplayAfterPly);
+    AMovesText := Trim(Copy(ALine, SecondTab + 1, MaxInt));
+  end
+  else
+  begin
+    AMovesText := Trim(ALine);
+    BaseText := ExtractAnnotationValue(AVisibleAnnotation, 'base_ply');
+    if BaseText <> '' then
+      ABasePly := StrToIntDef(BaseText, ADisplayAfterPly)
+    else if ExtractAnnotationValue(AVisibleAnnotation, 'annotator') <> '' then
+    begin
+      ABasePly := ADisplayAfterPly - 1;
+      if ABasePly < 0 then
+        ABasePly := 0;
+    end;
+  end;
+
+  AVisibleAnnotation := AnnotationWithoutName(AVisibleAnnotation, 'base_ply');
+  Result := AMovesText <> '';
+end;
+
+function StartingSideFromFen(const AStartingFEN: string): TDraughtsSide;
+begin
+  Result := dsWhite;
+  if (Trim(AStartingFEN) <> '') and (UpCase(Trim(AStartingFEN)[1]) = 'B') then
+    Result := dsBlack;
+end;
+
+function PlyForMoveNumberAndSide(AMoveNumber: Integer;
+  ASide, AStartingSide: TDraughtsSide): Integer;
+begin
+  if AMoveNumber <= 0 then
+    Exit(-1);
+  if AStartingSide = dsWhite then
+  begin
+    if ASide = dsWhite then
+      Result := (AMoveNumber - 1) * 2 + 1
+    else
+      Result := (AMoveNumber - 1) * 2 + 2;
+  end
+  else
+  begin
+    if ASide = dsBlack then
+      Result := (AMoveNumber - 1) * 2 + 1
+    else
+      Result := AMoveNumber * 2;
+  end;
+end;
+
+function InferVariationBasePly(const AVariationText, AStartingFEN: string;
+  ADefaultBasePly: Integer): Integer;
+var
+  DotCount: Integer;
+  DotPos: Integer;
+  I: Integer;
+  MoveNumber: Integer;
+  Prefix: string;
+  Side: TDraughtsSide;
+  Text: string;
+  Token: string;
+  VariationPly: Integer;
+begin
+  Result := ADefaultBasePly;
+  Text := Trim(AVariationText);
+  Token := '';
+  for I := 1 to Length(Text) do
+  begin
+    if Text[I] in [' ', #9, #10, #13, '{', '('] then
+    begin
+      if Token <> '' then
+        Break;
+    end
+    else
+      Token += Text[I];
+  end;
+
+  DotPos := Pos('.', Token);
+  if DotPos <= 1 then
+    Exit;
+  Prefix := Copy(Token, 1, DotPos - 1);
+  MoveNumber := StrToIntDef(Prefix, -1);
+  if MoveNumber <= 0 then
+    Exit;
+
+  DotCount := 0;
+  for I := DotPos to Length(Token) do
+    if Token[I] = '.' then
+      Inc(DotCount)
+    else
+      Break;
+  if DotCount >= 3 then
+    Side := dsBlack
+  else
+    Side := dsWhite;
+
+  VariationPly := PlyForMoveNumberAndSide(MoveNumber, Side,
+    StartingSideFromFen(AStartingFEN));
+  if VariationPly > 0 then
+    Result := VariationPly - 1;
+end;
+
 procedure ExtractPdnMoveData(const AText: string; AMoves, AAnnotations,
-  AVariations, AVariationAnnotations: TStrings);
+  AVariations, AVariationAnnotations: TStrings; const AStartingFEN: string = '');
 var
   I: Integer;
   LBraceDepth: Integer;
@@ -445,7 +622,9 @@ var
 
   procedure ProcessVariation(const AVariationText: string);
   var
+    LBasePly: Integer;
     LSlot: Integer;
+    LVariationAnnotation: string;
     LVariationAnnotations: TStringList;
     LVariationMoves: TStringList;
   begin
@@ -457,13 +636,25 @@ var
     LVariationMoves := TStringList.Create;
     try
       ExtractPdnMoveData(AVariationText, LVariationMoves,
-        LVariationAnnotations, nil, nil);
+        LVariationAnnotations, nil, nil, AStartingFEN);
       if LVariationMoves.Count = 0 then
         Exit;
-      SetTextLine(AVariations, LSlot, MoveListText(LVariationMoves));
+      LBasePly := InferVariationBasePly(AVariationText, AStartingFEN, LSlot);
       if LVariationAnnotations.Count > 0 then
-        SetTextLine(AVariationAnnotations, LSlot,
+      begin
+        LVariationAnnotation := Trim(
           LVariationAnnotations[LVariationAnnotations.Count - 1]);
+        LBasePly := StrToIntDef(ExtractAnnotationValue(LVariationAnnotation,
+          'base_ply'), LSlot);
+      end
+      else
+        LVariationAnnotation := '';
+      AVariations.Add(EncodePdnVariationLine(LSlot, LBasePly,
+        MoveListText(LVariationMoves)));
+      if LVariationAnnotations.Count > 0 then
+        AVariationAnnotations.Add(LVariationAnnotation)
+      else
+        AVariationAnnotations.Add('');
     finally
       LVariationMoves.Free;
       LVariationAnnotations.Free;
@@ -633,7 +824,7 @@ begin
   LVariations := TStringList.Create;
   try
     ExtractPdnMoveData(AMoveLines.Text, LMoves, LAnnotations, LVariations,
-      LVariationAnnotations);
+      LVariationAnnotations, ACurrent.StartingFEN);
     ACurrent.MovesText := MoveListText(LMoves);
     ACurrent.MoveAnnotationsText := LAnnotations.Text;
     ACurrent.MoveVariationsText := LVariations.Text;
@@ -844,6 +1035,7 @@ function FormatMovesForPdn(const AMovesText, AAnnotationsText,
 var
   I: Integer;
   LAnnotations: TStringList;
+  LDisplayAfterPly: Integer;
   LMoves: TStringList;
   LMoveNumber: Integer;
   LOut: TStringList;
@@ -853,7 +1045,37 @@ var
   LVariationAnnotations: TStringList;
   LVariationBasePly: Integer;
   LVariationComment: string;
+  LVariationMovesText: string;
+  LVariationRawComment: string;
   LVariationText: string;
+
+  procedure AppendVariationsAfterPly(ADisplayAfterPly: Integer);
+  var
+    J: Integer;
+  begin
+    for J := 0 to LVariations.Count - 1 do
+    begin
+      LVariationRawComment := '';
+      if J < LVariationAnnotations.Count then
+        LVariationRawComment := Trim(LVariationAnnotations[J]);
+      if not DecodePdnVariationLine(LVariations[J], LVariationRawComment,
+        ADisplayAfterPly, LDisplayAfterPly, LVariationBasePly,
+        LVariationMovesText, LVariationComment) then
+        Continue;
+      if LDisplayAfterPly <> ADisplayAfterPly then
+        Continue;
+      LVariationText := FormatVariationForPdn(LVariationMovesText,
+        AStartingFEN, LVariationBasePly);
+      if LVariationComment <> '' then
+        LVariationText += ' {' + LVariationComment + '}';
+      if LVariationText <> '' then
+      begin
+        if LText <> '' then
+          LText += ' ';
+        LText += '(' + LVariationText + ')';
+      end;
+    end;
+  end;
 begin
   LMoves := TStringList.Create;
   LAnnotations := TStringList.Create;
@@ -869,15 +1091,7 @@ begin
     if (Trim(AStartingFEN) <> '') and (UpCase(Trim(AStartingFEN)[1]) = 'B') then
       LSide := dsBlack;
     LText := '';
-    if (LVariations.Count > 0) and (Trim(LVariations[0]) <> '') then
-    begin
-      LVariationText := FormatVariationForPdn(LVariations[0],
-        AStartingFEN, 0);
-      if (LVariationAnnotations.Count > 0) and
-        (Trim(LVariationAnnotations[0]) <> '') then
-        LVariationText += ' {' + Trim(LVariationAnnotations[0]) + '}';
-      LText := '(' + LVariationText + ')';
-    end;
+    AppendVariationsAfterPly(0);
     for I := 0 to LMoves.Count - 1 do
     begin
       if LText <> '' then
@@ -897,21 +1111,7 @@ begin
       end;
       if (I < LAnnotations.Count) and (Trim(LAnnotations[I]) <> '') then
         LText += ' {' + Trim(LAnnotations[I]) + '}';
-      if (I + 1 < LVariations.Count) and (Trim(LVariations[I + 1]) <> '') then
-      begin
-        LVariationComment := '';
-        if I + 1 < LVariationAnnotations.Count then
-          LVariationComment := Trim(LVariationAnnotations[I + 1]);
-        LVariationBasePly := I + 1;
-        if ExtractAnnotationValue(LVariationComment, 'annotator') <> '' then
-          LVariationBasePly := I;
-        LVariationText := FormatVariationForPdn(LVariations[I + 1],
-          AStartingFEN, LVariationBasePly);
-        if LVariationComment <> '' then
-          LVariationText += ' {' + LVariationComment + '}';
-        if LVariationText <> '' then
-          LText += ' (' + LVariationText + ')';
-      end;
+      AppendVariationsAfterPly(I + 1);
       if Length(LText) > 78 then
       begin
         LOut.Add(Trim(LText));

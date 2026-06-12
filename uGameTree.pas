@@ -93,6 +93,8 @@ type
     procedure ApplyStoredVariationAnalysis(ANode: TGameTreePlyNode;
       const AVariationKey: string);
     function GetStoredClockState(APlyNumber: Integer): TGameTreeClockState;
+    function FindStoredVariation(ADisplayAfterPly, ABasePly: Integer;
+      const AMovesText: string): Integer;
     procedure StoreKeyValue(AList: TStringList; const AKey, AValue: string);
     procedure StoreClockState(APlyNumber: Integer; AWhiteRemainingSeconds,
       ABlackRemainingSeconds, AWhiteUsedSeconds, ABlackUsedSeconds: Double);
@@ -488,24 +490,32 @@ procedure TGameTree.RecordVariationEnginePV(ABasePlyNumber,
   ADisplayAfterPly, AVariationIndex, AVariationPlyNumber: Integer;
   const AScore, APV: string);
 var
+  LNode: TGameTreePlyNode;
   LVariationKey: string;
 begin
   LVariationKey := BuildVariationKey(ABasePlyNumber, ADisplayAfterPly,
     AVariationIndex, AVariationPlyNumber);
   StoreKeyValue(FVariationEngineScoresByKey, LVariationKey, AScore);
   StoreKeyValue(FVariationEnginePvsByKey, LVariationKey, APV);
+  LNode := FindVariationNodeByKey(LVariationKey);
+  if LNode <> nil then
+    ApplyStoredVariationAnalysis(LNode, LVariationKey);
 end;
 
 procedure TGameTree.RecordVariationAnnotatorPV(ABasePlyNumber,
   ADisplayAfterPly, AVariationIndex, AVariationPlyNumber: Integer;
   const AScore, APV: string);
 var
+  LNode: TGameTreePlyNode;
   LVariationKey: string;
 begin
   LVariationKey := BuildVariationKey(ABasePlyNumber, ADisplayAfterPly,
     AVariationIndex, AVariationPlyNumber);
   StoreKeyValue(FVariationAnnotatorScoresByKey, LVariationKey, AScore);
   StoreKeyValue(FVariationAnnotatorPvsByKey, LVariationKey, APV);
+  LNode := FindVariationNodeByKey(LVariationKey);
+  if LNode <> nil then
+    ApplyStoredVariationAnalysis(LNode, LVariationKey);
 end;
 
 procedure TGameTree.RecordVariationAnnotation(ABasePlyNumber,
@@ -538,6 +548,46 @@ begin
   end;
 end;
 
+function FirstMoveInText(const AMovesText: string): string;
+var
+  Moves: TStringList;
+begin
+  Result := '';
+  Moves := TStringList.Create;
+  try
+    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(AMovesText)), Moves);
+    if Moves.Count > 0 then
+      Result := NormalizeMoveNotation(Moves[0]);
+  finally
+    Moves.Free;
+  end;
+end;
+
+function TGameTree.FindStoredVariation(ADisplayAfterPly, ABasePly: Integer;
+  const AMovesText: string): Integer;
+var
+  I: Integer;
+  NewFirstMove: string;
+  StoredFirstMove: string;
+  VariationEntry: TGameTreeVariationLine;
+begin
+  Result := -1;
+  NewFirstMove := FirstMoveInText(AMovesText);
+  for I := 0 to FVariationLines.Count - 1 do
+  begin
+    VariationEntry := TGameTreeVariationLine(FVariationLines[I]);
+    if (VariationEntry = nil) or
+      (VariationEntry.DisplayAfterPly <> ADisplayAfterPly) or
+      (VariationEntry.BasePly <> ABasePly) then
+      Continue;
+
+    StoredFirstMove := FirstMoveInText(VariationEntry.MovesText);
+    if (StoredFirstMove = NewFirstMove) or
+      ((StoredFirstMove = '') and (NewFirstMove <> '')) then
+      Exit(I);
+  end;
+end;
+
 function TGameTree.StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
   const AMovesText, AAnnotationText: string): Integer;
 var
@@ -547,7 +597,7 @@ begin
   if (ADisplayAfterPly < 0) or (ABasePly < 0) then
     Exit;
 
-  Result := FindStoredVariationByDisplayAfterPly(ADisplayAfterPly);
+  Result := FindStoredVariation(ADisplayAfterPly, ABasePly, AMovesText);
   if Result < 0 then
   begin
     VariationEntry := TGameTreeVariationLine.Create;

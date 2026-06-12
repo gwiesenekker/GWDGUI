@@ -439,7 +439,7 @@ begin
   end;
 end;
 
-function RenderMainline(ARoot: TGameTreePlyNode; const AResultText: string;
+function RenderMainline(AGameTree: TGameTree; const AResultText: string;
   const AOptions: TGameTreePdnRenderOptions; ACompact: Boolean;
   var ARenderResult: TGameTreePdnRenderResult): string;
 var
@@ -453,21 +453,21 @@ var
   LVirtualVariation: string;
 begin
   Result := '';
-  if ARoot = nil then
+  if (AGameTree = nil) or (AGameTree.Root = nil) then
     Exit;
 
   Result := '';
-  for I := 0 to ARoot.ChildCount - 1 do
+  for I := 1 to AGameTree.MainlineCount do
   begin
-    LChild := ARoot.Children[I];
-    if (LChild = nil) or (Trim(LChild.VariationKey) <> '') then
+    LChild := AGameTree.MainlineNode[I];
+    if LChild = nil then
       Continue;
 
     if Result <> '' then
       Result += ' ';
-    LPreviousPosition := ARoot;
-    if (LChild.PlyNumber > 1) and (LChild.PlyNumber - 2 < ARoot.ChildCount) then
-      LPreviousPosition := ARoot.Children[LChild.PlyNumber - 2];
+    LPreviousPosition := AGameTree.Root;
+    if LChild.PlyNumber > 1 then
+      LPreviousPosition := AGameTree.MainlineNode[LChild.PlyNumber - 1];
     LSegment := NodeMoveCaption(LChild, Result = '', ACompact) +
       NodeAnnotation(LChild, AOptions) +
       PreviousPositionAnnotation(LPreviousPosition, LChild, AOptions);
@@ -516,8 +516,8 @@ begin
     Lines.Add('[FEN "' + PdnQuote(AGameTree.StartingFEN) + '"]');
     Lines.Add('');
     ClearRenderResult(RenderResult);
-    Lines.Text := Lines.Text + RenderMainline(AGameTree.Root,
-      AGameTree.ResultText, AOptions, False, RenderResult);
+    Lines.Text := Lines.Text + RenderMainline(AGameTree, AGameTree.ResultText,
+      AOptions, False, RenderResult);
     Result := Lines.Text;
   finally
     Lines.Free;
@@ -539,7 +539,7 @@ begin
     ARenderResult.Text := '(none)';
     Exit;
   end;
-  ARenderResult.Text := RenderMainline(AGameTree.Root, AGameTree.ResultText,
+  ARenderResult.Text := RenderMainline(AGameTree, AGameTree.ResultText,
     AOptions, True, ARenderResult);
   if Trim(ARenderResult.Text) = '' then
     ARenderResult.Text := '(none)';

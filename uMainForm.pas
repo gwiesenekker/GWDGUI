@@ -2694,7 +2694,10 @@ var
   I: Integer;
   AnnotationText: string;
   BasePly: Integer;
+  DisplayAfterPly: Integer;
   Lines: TStringList;
+  MovesText: string;
+  RawAnnotationText: string;
   AnnotationLines: TStringList;
 begin
   if AGameTree = nil then
@@ -2711,18 +2714,13 @@ begin
     for I := 0 to Lines.Count - 1 do
       if Trim(Lines[I]) <> '' then
       begin
-        AnnotationText := '';
+        RawAnnotationText := '';
         if I < AnnotationLines.Count then
-          AnnotationText := Trim(AnnotationLines[I]);
-        if ExtractAnnotationValue(AnnotationText, 'annotator') <> '' then
-        begin
-          BasePly := I - 1;
-          if BasePly < 0 then
-            BasePly := 0;
-          StoreTreeVariation(I, BasePly, Lines[I], AnnotationText, AGameTree);
-        end
-        else
-          StoreTreeVariation(I, I, Lines[I], AnnotationText, AGameTree);
+          RawAnnotationText := Trim(AnnotationLines[I]);
+        if DecodePdnVariationLine(Lines[I], RawAnnotationText, I,
+          DisplayAfterPly, BasePly, MovesText, AnnotationText) then
+          StoreTreeVariation(DisplayAfterPly, BasePly, MovesText,
+            AnnotationText, AGameTree);
       end;
   finally
     AnnotationLines.Free;
