@@ -816,20 +816,40 @@ end;
 
 function THubEngine.DoStartThinking: string;
 var
+  ElapsedMs: QWord;
   Line: string;
+  RemainingMs: Integer;
+  StartTick: QWord;
 begin
   SendLine(BuildHubPositionCommand);
   if FLevelCommand <> '' then
     SendLine(FLevelCommand);
   SendLine('go think');
   ChangeState(esWaitingForDone, 'search started; waiting for done');
-  if WaitForLine('done', 60000, Line) then
-    Result := ExtractDoneMove(Line)
-  else
-  begin
-    ChangeState(esError, 'waiting for done failed; reason=' + FLastWaitFailure);
-    Result := '';
-  end;
+
+  Result := '';
+  StartTick := GetTickCount64;
+  repeat
+    ElapsedMs := GetTickCount64 - StartTick;
+    if ElapsedMs >= 60000 then
+      Break;
+    RemainingMs := 60000 - Integer(ElapsedMs);
+    if not WaitForLine('done', RemainingMs, Line) then
+    begin
+      ChangeState(esError, 'waiting for done failed; reason=' +
+        FLastWaitFailure);
+      Exit('');
+    end;
+
+    Result := ExtractDoneMove(Line);
+    if Result <> '' then
+      Exit;
+
+    Log('ignored done without move while waiting for think move; line=' + Line);
+  until False;
+
+  ChangeState(esError, 'waiting for done failed; reason=timeout');
+  Exit('');
 end;
 
 procedure THubEngine.DoStopSearch;

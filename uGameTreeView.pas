@@ -12,7 +12,7 @@ procedure PopulateGameTreeView(ATreeView: TTreeView; AGameTree: TGameTree);
 implementation
 
 uses
-  Classes, SysUtils, uDraughtsBoard;
+  SysUtils, uDraughtsBoard;
 
 function FormatClock(ASeconds: Double): string;
 var
@@ -29,21 +29,6 @@ end;
 function SecondsCaption(ASeconds: Double): string;
 begin
   Result := FormatFloat('0.000', ASeconds) + ' s';
-end;
-
-function FirstPvMove(const APv: string): string;
-var
-  Moves: TStringList;
-begin
-  Result := '';
-  Moves := TStringList.Create;
-  try
-    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(APv)), Moves);
-    if Moves.Count > 0 then
-      Result := Moves[0];
-  finally
-    Moves.Free;
-  end;
 end;
 
 function NodeCaption(ANode: TGameTreePlyNode): string;
@@ -76,8 +61,6 @@ end;
 
 procedure AddAnalysisChildren(ATreeView: TTreeView; ATreeParent: TTreeNode;
   AModelNode: TGameTreePlyNode);
-var
-  LMove: string;
 begin
   if (ATreeView = nil) or (ATreeParent = nil) or (AModelNode = nil) then
     Exit;
@@ -86,25 +69,15 @@ begin
     ATreeView.Items.AddChild(ATreeParent, 'Engine score: ' +
       AModelNode.EngineScore);
   if AModelNode.EnginePV <> '' then
-  begin
-    LMove := FirstPvMove(AModelNode.EnginePV);
-    if LMove <> '' then
-      ATreeView.Items.AddChild(ATreeParent, 'Engine move: ' + LMove);
     ATreeView.Items.AddChild(ATreeParent, 'Engine PV: ' +
       AModelNode.EnginePV);
-  end;
 
   if AModelNode.AnnotatorScore <> '' then
     ATreeView.Items.AddChild(ATreeParent, 'Annotator score: ' +
       AModelNode.AnnotatorScore);
   if AModelNode.AnnotatorPV <> '' then
-  begin
-    LMove := FirstPvMove(AModelNode.AnnotatorPV);
-    if LMove <> '' then
-      ATreeView.Items.AddChild(ATreeParent, 'Annotator move: ' + LMove);
     ATreeView.Items.AddChild(ATreeParent, 'Annotator PV: ' +
       AModelNode.AnnotatorPV);
-  end;
 end;
 
 procedure AddChildren(ATreeView: TTreeView; ATreeParent: TTreeNode;
