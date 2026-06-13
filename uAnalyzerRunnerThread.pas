@@ -18,8 +18,6 @@ type
   TAnalyzerRunnerLogEvent = procedure(Sender: TObject; const AMessage: string) of object;
   TAnalyzerRunnerSnapshotEvent = procedure(Sender: TObject; ASnapshot: TPvSnapshot) of object;
   TAnalyzerRunnerFinishedEvent = procedure(Sender: TObject) of object;
-  TAnalyzerRunnerMoveEvent = procedure(Sender: TObject; const AMove: string;
-    ABasePly: Integer; const APositionSignature: string) of object;
 
   TAnalyzerRunnerThread = class(TThread)
   private
@@ -30,7 +28,6 @@ type
     FLastPublishedPv: string;
     FOnFinished: TAnalyzerRunnerFinishedEvent;
     FOnLog: TAnalyzerRunnerLogEvent;
-    FOnMove: TAnalyzerRunnerMoveEvent;
     FOnSnapshot: TAnalyzerRunnerSnapshotEvent;
     FRunMode: TAnalyzerRunMode;
     FPvBaseBoard: TDraughtsBoard;
@@ -49,15 +46,11 @@ type
       ALogEvent: TAnalyzerRunnerLogEvent;
       ASnapshotEvent: TAnalyzerRunnerSnapshotEvent;
       AFinishedEvent: TAnalyzerRunnerFinishedEvent;
-      ARunMode: TAnalyzerRunMode = armAnalyze;
-      AMoveEvent: TAnalyzerRunnerMoveEvent = nil);
+      ARunMode: TAnalyzerRunMode = armAnalyze);
     destructor Destroy; override;
 
     procedure PostAnalyze(const AStartingFEN, AMovesText: string;
       ABaseBoard: TDraughtsBoard; ABasePly: Integer; ATerminal: Boolean);
-    procedure PostPlayMove(const AStartingFEN, AMovesText: string;
-      ABaseBoard: TDraughtsBoard; ABasePly: Integer; ATerminal: Boolean;
-      AThinkSeconds: Double; const APositionSignature: string);
     procedure PostStopSearch;
     procedure PostShutdown;
   end;
@@ -70,7 +63,6 @@ const
 type
   TAnalyzerCommandKind = (
     accAnalyze,
-    accPlayMove,
     accStopSearch,
     accShutdown
   );
@@ -83,8 +75,6 @@ type
     FMovesText: string;
     FStartingFEN: string;
     FTerminal: Boolean;
-    FThinkSeconds: Double;
-    FPositionSignature: string;
   public
     constructor Create(ACommandKind: TAnalyzerCommandKind); reintroduce;
     destructor Destroy; override;
@@ -94,15 +84,12 @@ type
     property MovesText: string read FMovesText write FMovesText;
     property StartingFEN: string read FStartingFEN write FStartingFEN;
     property Terminal: Boolean read FTerminal write FTerminal;
-    property ThinkSeconds: Double read FThinkSeconds write FThinkSeconds;
-    property PositionSignature: string read FPositionSignature write FPositionSignature;
   end;
 
 constructor TAnalyzerCommand.Create(ACommandKind: TAnalyzerCommandKind);
 const
   CommandNames: array[TAnalyzerCommandKind] of string = (
     'analyzer-analyze',
-    'analyzer-play-move',
     'analyzer-stop-search',
     'analyzer-shutdown'
   );
@@ -120,8 +107,7 @@ end;
 
 constructor TAnalyzerRunnerThread.Create(AEngineDefinition: TExternalEngineDefinition;
   ALogEvent: TAnalyzerRunnerLogEvent; ASnapshotEvent: TAnalyzerRunnerSnapshotEvent;
-  AFinishedEvent: TAnalyzerRunnerFinishedEvent; ARunMode: TAnalyzerRunMode;
-  AMoveEvent: TAnalyzerRunnerMoveEvent);
+  AFinishedEvent: TAnalyzerRunnerFinishedEvent; ARunMode: TAnalyzerRunMode);
 begin
   inherited Create(True);
   FreeOnTerminate := False;
@@ -133,7 +119,6 @@ begin
   FOnLog := ALogEvent;
   FOnSnapshot := ASnapshotEvent;
   FOnFinished := AFinishedEvent;
-  FOnMove := AMoveEvent;
   FRunMode := ARunMode;
 end;
 
@@ -201,7 +186,6 @@ end;
 procedure TAnalyzerRunnerThread.HandleCommand(ACommand: TObject);
 var
   Command: TAnalyzerCommand;
-  Move: string;
   Moves: TStringList;
 begin
   if not (ACommand is TAnalyzerCommand) then
@@ -232,6 +216,7 @@ begin
         try
           ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(Command.MovesText)),
             Moves);
+          FEngine.StopSearch;
           FEngine.SetGamePosition(Command.StartingFEN, Moves);
           if FRunMode = armMcts then
             FEngine.StartMcts
@@ -241,41 +226,11 @@ begin
           Moves.Free;
         end;
       end;
-    accPlayMove:
-      begin
-        FPvLock.Acquire;
-        try
-          FPvBaseBoard.AssignFrom(Command.BaseBoard);
-          FPvBasePly := Command.BasePly;
-          FLastPublishedPv := '';
-        finally
-          FPvLock.Release;
-        end;
-        if FEngine = nil then
-          Exit;
-        FEngine.StopSearch;
-        if Command.Terminal then
-        begin
-          if Assigned(FOnLog) then
-            FOnLog(Self, DisplayName + ' autoplay idle; terminal position');
-          Exit;
-        end;
-        Moves := TStringList.Create;
-        try
-          ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(Command.MovesText)),
-            Moves);
-          FEngine.SetGamePosition(Command.StartingFEN, Moves);
-          FEngine.SetClockInfo(0, Command.ThinkSeconds, 0);
-          Move := Trim(FEngine.StartThinking);
-        finally
-          Moves.Free;
-        end;
-        if Assigned(FOnMove) then
-          FOnMove(Self, Move, Command.BasePly, Command.PositionSignature);
-      end;
     accStopSearch:
-      if FEngine <> nil then
-        FEngine.StopSearch;
+      begin
+        if FEngine <> nil then
+          FEngine.StopSearch;
+      end;
     accShutdown:
       Terminate;
   end;
@@ -374,24 +329,6 @@ begin
   Command.MovesText := AMovesText;
   Command.BasePly := ABasePly;
   Command.Terminal := ATerminal;
-  if ABaseBoard <> nil then
-    Command.BaseBoard.AssignFrom(ABaseBoard);
-  PostCommand(Command);
-end;
-
-procedure TAnalyzerRunnerThread.PostPlayMove(const AStartingFEN,
-  AMovesText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer;
-  ATerminal: Boolean; AThinkSeconds: Double; const APositionSignature: string);
-var
-  Command: TAnalyzerCommand;
-begin
-  Command := TAnalyzerCommand.Create(accPlayMove);
-  Command.StartingFEN := AStartingFEN;
-  Command.MovesText := AMovesText;
-  Command.BasePly := ABasePly;
-  Command.Terminal := ATerminal;
-  Command.ThinkSeconds := AThinkSeconds;
-  Command.PositionSignature := APositionSignature;
   if ABaseBoard <> nil then
     Command.BaseBoard.AssignFrom(ABaseBoard);
   PostCommand(Command);

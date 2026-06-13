@@ -17,6 +17,7 @@ type
     esWaitingForReady,
     esReady,
     esThinking,
+    esStopping,
     esWaitingForDone,
     esError
   );
@@ -143,6 +144,8 @@ begin
       Result := 'ready';
     esThinking:
       Result := 'thinking';
+    esStopping:
+      Result := 'stopping';
     esWaitingForDone:
       Result := 'waiting for done';
     esError:

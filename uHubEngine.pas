@@ -26,6 +26,7 @@ type
     FWorkerThreadId: TThreadID;
     function BuildHubPositionCommand: string;
     function DoLaunchAndInit: Boolean;
+    procedure DiscardDoneLinesBeforeNewSearch(const AReason: string);
     procedure DoRequestStop;
     procedure DoSetClockInfo(AMovesRemaining: Integer; ARemainingSeconds,
       ATotalUsedSeconds: Double);
@@ -47,8 +48,12 @@ type
     function QueueStringCommand(ACommand: TObject): string;
     procedure SendHubParams;
     procedure SendLine(const ALine: string);
+    function TakeReceivedLine(const APrefix: string; out ALine: string): Boolean;
+    function WaitForDoneMove(ATimeoutMs: Integer; out AMove: string): Boolean;
     procedure WaitForWorkerCommand(ACommand: TThreadMessage;
       ACompleted: TSimpleEvent; const AErrorText: string);
+    function DrainDoneLinesAfterStop(AQuietMs: Integer): Integer;
+    procedure WaitForSearchStopped;
     function WaitForLine(const APrefix: string; ATimeoutMs: Integer;
       out ALine: string): Boolean;
   protected
@@ -589,7 +594,6 @@ end;
 function THubEngine.WaitForLine(const APrefix: string; ATimeoutMs: Integer;
   out ALine: string): Boolean;
 var
-  I: Integer;
   StartTick: QWord;
 begin
   Result := False;
@@ -604,19 +608,8 @@ begin
     end;
     if FProcess.NeedsPolling then
       FProcess.ReadAvailable;
-    FLineLock.Acquire;
-    try
-      for I := 0 to FReceivedLines.Count - 1 do
-        if (APrefix = '') or (CompareText(Copy(FReceivedLines[I], 1,
-          Length(APrefix)), APrefix) = 0) then
-        begin
-          ALine := FReceivedLines[I];
-          FReceivedLines.Delete(I);
-          Exit(True);
-        end;
-    finally
-      FLineLock.Release;
-    end;
+    if TakeReceivedLine(APrefix, ALine) then
+      Exit(True);
     if not FProcess.HasProcess then
     begin
       FLastWaitFailure := 'process missing';
@@ -634,6 +627,123 @@ begin
   FLastWaitFailure := 'timeout';
   Log('wait timeout; expected=' + APrefix + '; timeout_ms=' +
     IntToStr(ATimeoutMs));
+end;
+
+function THubEngine.TakeReceivedLine(const APrefix: string; out ALine: string
+  ): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  ALine := '';
+  FLineLock.Acquire;
+  try
+    for I := 0 to FReceivedLines.Count - 1 do
+      if (APrefix = '') or (CompareText(Copy(FReceivedLines[I], 1,
+        Length(APrefix)), APrefix) = 0) then
+      begin
+        ALine := FReceivedLines[I];
+        FReceivedLines.Delete(I);
+        Exit(True);
+      end;
+  finally
+    FLineLock.Release;
+  end;
+end;
+
+procedure THubEngine.DiscardDoneLinesBeforeNewSearch(const AReason: string);
+var
+  Count: Integer;
+  Line: string;
+begin
+  if FProcess.NeedsPolling then
+    FProcess.ReadAvailable;
+
+  Count := 0;
+  while TakeReceivedLine('done', Line) do
+    Inc(Count);
+
+  if Count > 0 then
+    Log('discarded pre-search done lines; count=' + IntToStr(Count) +
+      '; reason=' + AReason);
+end;
+
+function THubEngine.WaitForDoneMove(ATimeoutMs: Integer;
+  out AMove: string): Boolean;
+var
+  ElapsedMs: QWord;
+  Line: string;
+  MoveText: string;
+  RemainingMs: Integer;
+  StartTick: QWord;
+begin
+  Result := False;
+  AMove := '';
+  StartTick := GetTickCount64;
+  repeat
+    ElapsedMs := GetTickCount64 - StartTick;
+    if ElapsedMs >= QWord(ATimeoutMs) then
+      Break;
+    RemainingMs := ATimeoutMs - Integer(ElapsedMs);
+    if not WaitForLine('done', RemainingMs, Line) then
+      Exit(False);
+
+    MoveText := ExtractDoneMove(Line);
+    if MoveText <> '' then
+    begin
+      AMove := MoveText;
+      Exit(True);
+    end;
+
+    Log('ignored done without move while waiting for think result; line=' +
+      Line);
+  until False;
+
+  FLastWaitFailure := 'timeout';
+  Log('wait timeout; expected=done move; timeout_ms=' + IntToStr(ATimeoutMs));
+end;
+
+function THubEngine.DrainDoneLinesAfterStop(AQuietMs: Integer): Integer;
+var
+  Line: string;
+  QuietStart: QWord;
+  SawLine: Boolean;
+begin
+  Result := 0;
+  QuietStart := GetTickCount64;
+  repeat
+    if FProcess.NeedsPolling then
+      FProcess.ReadAvailable;
+
+    SawLine := False;
+    while TakeReceivedLine('done', Line) do
+    begin
+      Inc(Result);
+      SawLine := True;
+    end;
+
+    if SawLine then
+      QuietStart := GetTickCount64
+    else
+      Sleep(25);
+  until GetTickCount64 - QuietStart >= QWord(AQuietMs);
+end;
+
+procedure THubEngine.WaitForSearchStopped;
+var
+  ExtraDoneCount: Integer;
+  Line: string;
+begin
+  if WaitForLine('done', 2000, Line) then
+  begin
+    Log('search stop acknowledged; line=' + Line);
+    ExtraDoneCount := DrainDoneLinesAfterStop(100);
+    if ExtraDoneCount > 0 then
+      Log('discarded post-stop done lines; count=' + IntToStr(ExtraDoneCount));
+  end
+  else
+    Log('search stop acknowledgement not received; reason=' +
+      FLastWaitFailure);
 end;
 
 function THubEngine.DoLaunchAndInit: Boolean;
@@ -815,51 +925,39 @@ begin
 end;
 
 function THubEngine.DoStartThinking: string;
-var
-  ElapsedMs: QWord;
-  Line: string;
-  RemainingMs: Integer;
-  StartTick: QWord;
 begin
   SendLine(BuildHubPositionCommand);
   if FLevelCommand <> '' then
     SendLine(FLevelCommand);
+  DiscardDoneLinesBeforeNewSearch('before go think');
   SendLine('go think');
   ChangeState(esWaitingForDone, 'search started; waiting for done');
 
-  Result := '';
-  StartTick := GetTickCount64;
-  repeat
-    ElapsedMs := GetTickCount64 - StartTick;
-    if ElapsedMs >= 60000 then
-      Break;
-    RemainingMs := 60000 - Integer(ElapsedMs);
-    if not WaitForLine('done', RemainingMs, Line) then
-    begin
-      ChangeState(esError, 'waiting for done failed; reason=' +
-        FLastWaitFailure);
-      Exit('');
-    end;
-
-    Result := ExtractDoneMove(Line);
-    if Result <> '' then
-      Exit;
-
-    Log('ignored done without move while waiting for think move; line=' + Line);
-  until False;
-
-  ChangeState(esError, 'waiting for done failed; reason=timeout');
-  Exit('');
+  if not WaitForDoneMove(60000, Result) then
+  begin
+    ChangeState(esError, 'waiting for done move failed; reason=' +
+      FLastWaitFailure);
+    Result := '';
+  end;
 end;
 
 procedure THubEngine.DoStopSearch;
+var
+  SearchWasActive: Boolean;
 begin
+  SearchWasActive := CurrentState in [esThinking, esWaitingForDone, esStopping];
   try
     SendLine('stop');
+    if SearchWasActive and (CurrentState <> esStopping) then
+      ChangeState(esStopping, 'stop sent; waiting for done');
+    if SearchWasActive then
+      WaitForSearchStopped;
   except
     on E: Exception do
       Log('stop search command failed; message=' + E.Message);
   end;
+  if SearchWasActive and (CurrentState <> esError) then
+    ChangeState(esReady, 'search stopped');
 end;
 
 procedure THubEngine.DoStartAnalyzing;
@@ -867,6 +965,7 @@ begin
   DoStopSearch;
   SendLine(BuildHubPositionCommand);
   SendLine('level time=1000');
+  DiscardDoneLinesBeforeNewSearch('before go analyze');
   SendLine('go analyze');
   ChangeState(esThinking, 'analysis started');
 end;
@@ -876,6 +975,7 @@ begin
   DoStopSearch;
   SendLine(BuildHubPositionCommand);
   SendLine('level time=1000');
+  DiscardDoneLinesBeforeNewSearch('before go mcts');
   SendLine('go mcts');
   ChangeState(esThinking, 'MCTS started');
 end;

@@ -19,6 +19,9 @@ type
     LastMoveColor: TColor;
     PvMoveColor: TColor;
     HintMoveColor: TColor;
+    DefaultGameMinutes: Double;
+    DefaultGameMoves: Integer;
+    DefaultGameIncrementSeconds: Double;
     EvaluationMaxScore: Double;
     EvaluationScale: TScoreScale;
   end;
@@ -49,6 +52,9 @@ begin
   Result.LastMoveColor := clYellow;
   Result.PvMoveColor := RGBToColor(255, 165, 0);
   Result.HintMoveColor := clRed;
+  Result.DefaultGameMinutes := 5;
+  Result.DefaultGameMoves := 75;
+  Result.DefaultGameIncrementSeconds := 0;
   Result.EvaluationMaxScore := 10.0;
   Result.EvaluationScale := ssLogarithmic;
 end;
@@ -128,6 +134,12 @@ begin
       LoadColor(TJSONObject(Data), 'last_move', APrefs.LastMoveColor);
       LoadColor(TJSONObject(Data), 'pv_move', APrefs.PvMoveColor);
       LoadColor(TJSONObject(Data), 'hint_move', APrefs.HintMoveColor);
+      APrefs.DefaultGameMinutes := TJSONObject(Data).Get(
+        'default_game_minutes', APrefs.DefaultGameMinutes);
+      APrefs.DefaultGameMoves := TJSONObject(Data).Get(
+        'default_game_moves', APrefs.DefaultGameMoves);
+      APrefs.DefaultGameIncrementSeconds := TJSONObject(Data).Get(
+        'default_game_increment_seconds', APrefs.DefaultGameIncrementSeconds);
       APrefs.EvaluationMaxScore := TJSONObject(Data).Get(
         'evaluation_max_score', APrefs.EvaluationMaxScore);
       if SameText(TJSONObject(Data).Get('evaluation_scale', 'logarithmic'),
@@ -159,6 +171,10 @@ begin
     Data.Add('last_move', ColorToJsonText(APrefs.LastMoveColor));
     Data.Add('pv_move', ColorToJsonText(APrefs.PvMoveColor));
     Data.Add('hint_move', ColorToJsonText(APrefs.HintMoveColor));
+    Data.Add('default_game_minutes', APrefs.DefaultGameMinutes);
+    Data.Add('default_game_moves', APrefs.DefaultGameMoves);
+    Data.Add('default_game_increment_seconds',
+      APrefs.DefaultGameIncrementSeconds);
     Data.Add('evaluation_max_score', APrefs.EvaluationMaxScore);
     if APrefs.EvaluationScale = ssLinear then
       Data.Add('evaluation_scale', 'linear')

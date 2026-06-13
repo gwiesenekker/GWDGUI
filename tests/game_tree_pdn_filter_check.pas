@@ -53,25 +53,42 @@ begin
     Options := DefaultGameTreePdnRenderOptions;
     Text := RenderWithOptions(GameTree, Options);
     CheckContains(Text, 'E: 0.12', 'engine score should be shown');
-    CheckContains(Text, 'E PV: 16-21 37-32', 'engine PV should be shown');
+    CheckContains(Text, 'E PV: 16-21 37-32', 'engine full PV should be shown');
     CheckContains(Text, 'A: 0.11', 'annotator score should be shown');
     CheckContains(Text, 'clk:', 'clocks should be shown');
     CheckContains(Text, '(1.34-30 {A: 0.50} 20-25)',
-      'PV move and full PV should be shown');
+      'annotator full PV should be shown');
 
     Options.ShowEngineScore := False;
     Text := RenderWithOptions(GameTree, Options);
     CheckNotContains(Text, 'E: 0.12', 'engine score toggle should hide score');
     CheckContains(Text, 'E PV: 16-21 37-32',
-      'engine score toggle should not hide PV');
+      'engine score toggle should not hide engine full PV');
     Options.ShowEngineScore := True;
 
-    Options.ShowFullPV := False;
+    Options.ShowEngineFullPV := False;
     Text := RenderWithOptions(GameTree, Options);
-    CheckContains(Text, 'E: 0.12', 'full PV toggle should not hide score');
-    CheckNotContains(Text, 'E PV:', 'full PV toggle should hide engine PV');
-    CheckNotContains(Text, 'A PV:', 'full PV toggle should hide annotator PV');
-    Options.ShowFullPV := True;
+    CheckContains(Text, 'E PV: 16-21',
+      'engine full PV toggle should fall back to engine PV move');
+    CheckNotContains(Text, 'E PV: 16-21 37-32',
+      'engine full PV toggle should hide engine PV tail');
+    Options.ShowEngineFullPV := True;
+
+    Options.ShowEnginePVMove := False;
+    Text := RenderWithOptions(GameTree, Options);
+    CheckContains(Text, 'E: 0.12', 'engine PV move toggle should not hide score');
+    CheckContains(Text, 'E PV: 16-21 37-32',
+      'engine PV move toggle should not hide engine full PV');
+    CheckContains(Text, 'A PV:', 'engine PV move toggle should not hide annotator PV move');
+    Options.ShowEnginePVMove := True;
+
+    Options.ShowEngineFullPV := False;
+    Options.ShowEnginePVMove := False;
+    Text := RenderWithOptions(GameTree, Options);
+    CheckNotContains(Text, 'E PV:',
+      'engine PV toggles should hide engine PV completely');
+    Options.ShowEnginePVMove := True;
+    Options.ShowEngineFullPV := True;
 
     Options.ShowClocks := False;
     Text := RenderWithOptions(GameTree, Options);
@@ -85,18 +102,31 @@ begin
       'annotator score toggle should keep PV moves');
     Options.ShowAnnotatorScore := True;
 
-    Options.ShowFullPV := False;
+    Options.ShowAnnotatorFullPV := False;
     Text := RenderWithOptions(GameTree, Options);
     CheckContains(Text, '(1.34-30 {A: 0.50})',
-      'full PV toggle should keep only the first PV move');
-    CheckNotContains(Text, '20-25)', 'full PV toggle should hide PV tail');
-    Options.ShowFullPV := True;
+      'annotator full PV toggle should fall back to annotator PV move');
+    CheckNotContains(Text, '20-25)',
+      'annotator full PV toggle should hide annotator PV tail');
+    Options.ShowAnnotatorFullPV := True;
 
-    Options.ShowPVMove := False;
+    Options.ShowAnnotatorPVMove := False;
+    Text := RenderWithOptions(GameTree, Options);
+    CheckContains(Text, '(1.34-30 {A: 0.50} 20-25)',
+      'annotator PV move toggle should not hide annotator full PV variation');
+    CheckContains(Text, 'A PV: 16-21 37-32',
+      'annotator PV move toggle should not hide annotator full PV annotation');
+    Options.ShowAnnotatorPVMove := True;
+
+    Options.ShowAnnotatorFullPV := False;
+    Options.ShowAnnotatorPVMove := False;
     Text := RenderWithOptions(GameTree, Options);
     CheckNotContains(Text, '(1.34-30',
-      'PV move toggle should hide PV move alternative');
-    Options.ShowPVMove := True;
+      'annotator PV toggles should hide annotator PV variation');
+    CheckNotContains(Text, 'A PV:',
+      'annotator PV toggles should hide annotator PV annotation');
+    Options.ShowAnnotatorPVMove := True;
+    Options.ShowAnnotatorFullPV := True;
 
     Options.HideAnnotations := True;
     Text := RenderWithOptions(GameTree, Options);

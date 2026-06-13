@@ -13,9 +13,11 @@ type
   TGameTreePdnRenderOptions = record
     HideAnnotations: Boolean;
     ShowEngineScore: Boolean;
-    ShowFullPV: Boolean;
     ShowClocks: Boolean;
-    ShowPVMove: Boolean;
+    ShowEnginePVMove: Boolean;
+    ShowEngineFullPV: Boolean;
+    ShowAnnotatorPVMove: Boolean;
+    ShowAnnotatorFullPV: Boolean;
     ShowAnnotatorScore: Boolean;
   end;
 
@@ -44,9 +46,11 @@ function DefaultGameTreePdnRenderOptions: TGameTreePdnRenderOptions;
 begin
   Result.HideAnnotations := False;
   Result.ShowEngineScore := True;
-  Result.ShowFullPV := True;
   Result.ShowClocks := True;
-  Result.ShowPVMove := True;
+  Result.ShowEnginePVMove := True;
+  Result.ShowEngineFullPV := True;
+  Result.ShowAnnotatorPVMove := True;
+  Result.ShowAnnotatorFullPV := True;
   Result.ShowAnnotatorScore := True;
 end;
 
@@ -115,10 +119,26 @@ begin
     ', B=' + ClockSecondsCaption(ANode.BlackUsedSeconds);
 end;
 
+function FirstPvMove(const APv: string): string;
+var
+  Moves: TStringList;
+begin
+  Result := '';
+  Moves := TStringList.Create;
+  try
+    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(APv)), Moves);
+    if Moves.Count > 0 then
+      Result := NormalizeMoveNotation(Moves[0]);
+  finally
+    Moves.Free;
+  end;
+end;
+
 function NodeAnnotation(ANode: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions): string;
 var
   LClockText: string;
+  LPvMove: string;
 begin
   Result := '';
   if ANode = nil then
@@ -127,17 +147,37 @@ begin
     Exit;
   if AOptions.ShowEngineScore and (Trim(ANode.EngineScore) <> '') then
     Result := 'E: ' + Trim(ANode.EngineScore);
-  if AOptions.ShowFullPV and (Trim(ANode.EnginePV) <> '') then
+  if AOptions.ShowEngineFullPV and (Trim(ANode.EnginePV) <> '') then
   begin
     if Result <> '' then
       Result += '; ';
     Result += 'E PV: ' + Trim(ANode.EnginePV);
+  end
+  else if AOptions.ShowEnginePVMove and (Trim(ANode.EnginePV) <> '') then
+  begin
+    LPvMove := FirstPvMove(ANode.EnginePV);
+    if LPvMove <> '' then
+    begin
+      if Result <> '' then
+        Result += '; ';
+      Result += 'E PV: ' + LPvMove;
+    end;
   end;
-  if AOptions.ShowFullPV and (Trim(ANode.AnnotatorPV) <> '') then
+  if AOptions.ShowAnnotatorFullPV and (Trim(ANode.AnnotatorPV) <> '') then
   begin
     if Result <> '' then
       Result += '; ';
     Result += 'A PV: ' + Trim(ANode.AnnotatorPV);
+  end
+  else if AOptions.ShowAnnotatorPVMove and (Trim(ANode.AnnotatorPV) <> '') then
+  begin
+    LPvMove := FirstPvMove(ANode.AnnotatorPV);
+    if LPvMove <> '' then
+    begin
+      if Result <> '' then
+        Result += '; ';
+      Result += 'A PV: ' + LPvMove;
+    end;
   end;
   if AOptions.ShowAnnotatorScore and (Trim(ANode.AnnotatorScore) <> '') then
   begin
@@ -157,21 +197,6 @@ begin
   end;
   if Result <> '' then
     Result := ' {' + Result + '}';
-end;
-
-function FirstPvMove(const APv: string): string;
-var
-  Moves: TStringList;
-begin
-  Result := '';
-  Moves := TStringList.Create;
-  try
-    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(APv)), Moves);
-    if Moves.Count > 0 then
-      Result := NormalizeMoveNotation(Moves[0]);
-  finally
-    Moves.Free;
-  end;
 end;
 
 function NodeIsAnnotatorAlternative(APrevious, ANode: TGameTreePlyNode): Boolean;
@@ -250,7 +275,8 @@ begin
   Result := '';
   if (APrevious = nil) or (APlayedMove = nil) or
     (not NodeIsAnnotatorAlternative(APrevious, APlayedMove)) or
-    (not AOptions.ShowPVMove) then
+    ((not AOptions.ShowAnnotatorPVMove) and
+    (not AOptions.ShowAnnotatorFullPV)) then
     Exit;
 
   LMoves := TStringList.Create;
@@ -259,9 +285,9 @@ begin
       LMoves);
     if LMoves.Count = 0 then
       Exit;
-    LLimit := LMoves.Count;
-    if not AOptions.ShowFullPV then
-      LLimit := 1;
+    LLimit := 1;
+    if AOptions.ShowAnnotatorFullPV then
+      LLimit := LMoves.Count;
     LSide := APlayedMove.SideToMove;
     for I := 0 to LLimit - 1 do
     begin
@@ -371,7 +397,8 @@ begin
       (Trim(LChild.VariationKey) = '') then
       Continue;
     if NodeIsAnnotatorAlternative(ANode, LChild) and
-      (not AOptions.ShowPVMove) then
+      (not AOptions.ShowAnnotatorPVMove) and
+      (not AOptions.ShowAnnotatorFullPV) then
       Continue;
     LLineOffset := ABaseOffset + Length(Result);
     if Result <> '' then
@@ -405,7 +432,7 @@ begin
 
   LContinuation := FindContinuationChild(ANode);
   if NodeIsAnnotatorAlternative(APreviousPosition, ANode) and
-    (not AOptions.ShowFullPV) then
+    (not AOptions.ShowAnnotatorFullPV) then
     LContinuation := nil;
 
   Result := NodeMoveCaption(ANode, True, ACompact) +

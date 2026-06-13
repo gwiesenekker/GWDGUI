@@ -63,19 +63,6 @@ type
     property Snapshot: TPvSnapshot read FSnapshot;
   end;
 
-  TAnalyzerMoveGuiMessage = class(TThreadMessage)
-  private
-    FBasePly: Integer;
-    FMove: string;
-    FPositionSignature: string;
-  public
-    constructor Create(const AMove: string; ABasePly: Integer;
-      const APositionSignature: string); reintroduce;
-    property BasePly: Integer read FBasePly;
-    property Move: string read FMove;
-    property PositionSignature: string read FPositionSignature;
-  end;
-
   TAnalyzerFinishedGuiMessage = class(TThreadMessage)
   private
     FRunner: TAnalyzerRunnerThread;
@@ -174,12 +161,10 @@ type
     FAnalyzerPvBrowser: TPvBrowser;
     FAnalyzerPvMemo: TMemo;
     FAnalyzerRunner: TAnalyzerRunnerThread;
+    FAutorandomButton: TButton;
     FAutoplayButton: TButton;
-    FAutoplayEnabled: Boolean;
-    FAutoplayLastPositionSignature: string;
     FAutoplaySecondsEdit: TEdit;
     FAutoplayThinkSeconds: Double;
-    FAutoplayWaiting: Boolean;
     FBoard: TDraughtsBoard;
     FBoardControl: TDraughtsBoardControl;
     FBoardFlipped: Boolean;
@@ -215,10 +200,14 @@ type
     FHighlightedGameMovePly: Integer;
     FHideMoveAnnotations: Boolean;
     FHideMoveAnnotationsMenuItem: TMenuItem;
-    FMoveShowPVMove: Boolean;
-    FMoveShowPVMoveMenuItem: TMenuItem;
-    FMoveShowFullPV: Boolean;
-    FMoveShowFullPVMenuItem: TMenuItem;
+    FMoveShowEnginePVMove: Boolean;
+    FMoveShowEnginePVMoveMenuItem: TMenuItem;
+    FMoveShowEngineFullPV: Boolean;
+    FMoveShowEngineFullPVMenuItem: TMenuItem;
+    FMoveShowAnnotatorPVMove: Boolean;
+    FMoveShowAnnotatorPVMoveMenuItem: TMenuItem;
+    FMoveShowAnnotatorFullPV: Boolean;
+    FMoveShowAnnotatorFullPVMenuItem: TMenuItem;
     FMoveShowAnnotatorScore: Boolean;
     FMoveShowClocks: Boolean;
     FMoveShowEngineScore: Boolean;
@@ -290,8 +279,6 @@ type
     procedure ApplyGameToDisplay(AGame: TRunningGame);
     procedure ApplyGameBrowsePly(APly: Integer);
     procedure AnalyzerLog(Sender: TObject; const AMessage: string);
-    procedure AnalyzerMove(Sender: TObject; const AMove: string;
-      ABasePly: Integer; const APositionSignature: string);
     procedure AnalyzerFinished(Sender: TObject);
     procedure AnalyzerMiniBoardDblClick(Sender: TObject);
     procedure AnalyzerMiniBoardFormClose(Sender: TObject;
@@ -301,12 +288,9 @@ type
     procedure AnalyzerPvBoardChanged(Sender: TObject);
     procedure AnalyzerPopupPopup(Sender: TObject);
     procedure AnalyzerSnapshot(Sender: TObject; ASnapshot: TPvSnapshot);
-    procedure ApplyAutoplayMove(const AMove: string; ABasePly: Integer;
-      const APositionSignature: string);
-    function AutoplayCanRun: Boolean;
     procedure AutoplayClick(Sender: TObject);
+    procedure AutorandomClick(Sender: TObject);
     function ReadAutoplaySecondsFromToolbar: Boolean;
-    procedure StopAutoplay(const AMessage: string);
     procedure UpdateAutoplayControls;
     function RecordAnalyzerSnapshotInGameTree(ASnapshot: TPvSnapshot): TGameTree;
     procedure ApplyVariationBrowsePly(AVariationIndex, AVariationPly: Integer;
@@ -354,6 +338,7 @@ type
     function BlackNameForTree(AGameTree: TGameTree): string;
     function EventNameForTree(AGameTree: TGameTree): string;
     function ResultForTree(AGameTree: TGameTree): string;
+    function RunningGameTreeExtendsSnapshot(AGame: TRunningGame): Boolean;
     function StartingFenForTree(AGameTree: TGameTree): string;
     function StateForTree(AGameTree: TGameTree): TGameOrchestratorState;
     function WhiteNameForTree(AGameTree: TGameTree): string;
@@ -429,7 +414,6 @@ type
     procedure RemoveGame(AGame: TRunningGame);
     procedure RemoveSelectedGame(Sender: TObject);
     procedure RestartAnalyzer(AGameTree: TGameTree);
-    function RestartAutoplay(AGameTree: TGameTree): Boolean;
     procedure RestartMctsAnnotator(AGameTree: TGameTree);
     procedure ReplaySelectedGame(Sender: TObject);
     procedure SelectHumanMoveSource(ASourceSquare: Integer);
@@ -565,15 +549,6 @@ destructor TAnalyzerSnapshotGuiMessage.Destroy;
 begin
   FSnapshot.Free;
   inherited Destroy;
-end;
-
-constructor TAnalyzerMoveGuiMessage.Create(const AMove: string;
-  ABasePly: Integer; const APositionSignature: string);
-begin
-  inherited Create('analyzer-move');
-  FMove := AMove;
-  FBasePly := ABasePly;
-  FPositionSignature := APositionSignature;
 end;
 
 constructor TAnalyzerFinishedGuiMessage.Create(ARunner: TAnalyzerRunnerThread);
@@ -839,15 +814,14 @@ begin
   FGameLogMemoLineCount := -1;
   FHighlightedGameMovePly := -1;
   FHideMoveAnnotations := False;
-  FMoveShowPVMove := False;
-  FMoveShowFullPV := False;
+  FMoveShowEnginePVMove := False;
+  FMoveShowEngineFullPV := False;
+  FMoveShowAnnotatorPVMove := False;
+  FMoveShowAnnotatorFullPV := False;
   FMoveShowAnnotatorScore := True;
   FMoveShowClocks := False;
   FMoveShowEngineScore := True;
-  FAutoplayEnabled := False;
   FAutoplayThinkSeconds := 1.0;
-  FAutoplayLastPositionSignature := '';
-  FAutoplayWaiting := False;
   FSearchPositionInDatabase := True;
   FPvHintSource := phsMain;
   FViewedGameId := -1;
@@ -864,6 +838,7 @@ begin
   FStandaloneBlackPlayerName := 'Black';
   FStandaloneEventName := '?';
   LoadGuiPreferences(FPreferences);
+  Randomize;
 
   LMainMenu := TMainMenu.Create(Self);
   LFileMenu := TMenuItem.Create(Self);
@@ -912,6 +887,14 @@ begin
   FAutoplayButton.BorderSpacing.Left := 6;
   FAutoplayButton.Caption := 'Autoplay';
   FAutoplayButton.OnClick := @AutoplayClick;
+
+  FAutorandomButton := TButton.Create(Self);
+  FAutorandomButton.Parent := LToolbar;
+  FAutorandomButton.Align := alLeft;
+  FAutorandomButton.Width := 96;
+  FAutorandomButton.BorderSpacing.Left := 6;
+  FAutorandomButton.Caption := 'Autorandom';
+  FAutorandomButton.OnClick := @AutorandomClick;
 
   FAutoplaySecondsEdit := TEdit.Create(Self);
   FAutoplaySecondsEdit.Parent := LToolbar;
@@ -1281,20 +1264,34 @@ begin
   LMenuItem.Tag := 5;
   LMenuItem.OnClick := @MoveDisplayFilterClick;
   LGameMovePopup.Items.Add(LMenuItem);
-  FMoveShowPVMoveMenuItem := TMenuItem.Create(Self);
-  FMoveShowPVMoveMenuItem.Caption := 'Show PV move';
-  FMoveShowPVMoveMenuItem.AutoCheck := False;
-  FMoveShowPVMoveMenuItem.Checked := FMoveShowPVMove;
-  FMoveShowPVMoveMenuItem.Tag := 2;
-  FMoveShowPVMoveMenuItem.OnClick := @MoveDisplayFilterClick;
-  LGameMovePopup.Items.Add(FMoveShowPVMoveMenuItem);
-  FMoveShowFullPVMenuItem := TMenuItem.Create(Self);
-  FMoveShowFullPVMenuItem.Caption := 'Show full PV';
-  FMoveShowFullPVMenuItem.AutoCheck := False;
-  FMoveShowFullPVMenuItem.Checked := FMoveShowFullPV;
-  FMoveShowFullPVMenuItem.Tag := 4;
-  FMoveShowFullPVMenuItem.OnClick := @MoveDisplayFilterClick;
-  LGameMovePopup.Items.Add(FMoveShowFullPVMenuItem);
+  FMoveShowEnginePVMoveMenuItem := TMenuItem.Create(Self);
+  FMoveShowEnginePVMoveMenuItem.Caption := 'Show engine PV move';
+  FMoveShowEnginePVMoveMenuItem.AutoCheck := False;
+  FMoveShowEnginePVMoveMenuItem.Checked := FMoveShowEnginePVMove;
+  FMoveShowEnginePVMoveMenuItem.Tag := 2;
+  FMoveShowEnginePVMoveMenuItem.OnClick := @MoveDisplayFilterClick;
+  LGameMovePopup.Items.Add(FMoveShowEnginePVMoveMenuItem);
+  FMoveShowEngineFullPVMenuItem := TMenuItem.Create(Self);
+  FMoveShowEngineFullPVMenuItem.Caption := 'Show engine full PV';
+  FMoveShowEngineFullPVMenuItem.AutoCheck := False;
+  FMoveShowEngineFullPVMenuItem.Checked := FMoveShowEngineFullPV;
+  FMoveShowEngineFullPVMenuItem.Tag := 6;
+  FMoveShowEngineFullPVMenuItem.OnClick := @MoveDisplayFilterClick;
+  LGameMovePopup.Items.Add(FMoveShowEngineFullPVMenuItem);
+  FMoveShowAnnotatorPVMoveMenuItem := TMenuItem.Create(Self);
+  FMoveShowAnnotatorPVMoveMenuItem.Caption := 'Show annotator PV move';
+  FMoveShowAnnotatorPVMoveMenuItem.AutoCheck := False;
+  FMoveShowAnnotatorPVMoveMenuItem.Checked := FMoveShowAnnotatorPVMove;
+  FMoveShowAnnotatorPVMoveMenuItem.Tag := 4;
+  FMoveShowAnnotatorPVMoveMenuItem.OnClick := @MoveDisplayFilterClick;
+  LGameMovePopup.Items.Add(FMoveShowAnnotatorPVMoveMenuItem);
+  FMoveShowAnnotatorFullPVMenuItem := TMenuItem.Create(Self);
+  FMoveShowAnnotatorFullPVMenuItem.Caption := 'Show annotator full PV';
+  FMoveShowAnnotatorFullPVMenuItem.AutoCheck := False;
+  FMoveShowAnnotatorFullPVMenuItem.Checked := FMoveShowAnnotatorFullPV;
+  FMoveShowAnnotatorFullPVMenuItem.Tag := 7;
+  FMoveShowAnnotatorFullPVMenuItem.OnClick := @MoveDisplayFilterClick;
+  LGameMovePopup.Items.Add(FMoveShowAnnotatorFullPVMenuItem);
   LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := 'Show clocks';
   LMenuItem.AutoCheck := False;
@@ -1552,6 +1549,8 @@ begin
 
   if FPositionSetupForm <> nil then
     FPositionSetupForm.ApplyPreferences(FPreferences);
+  if FSetupForm <> nil then
+    FSetupForm.ApplyPreferences(FPreferences);
   if FDatabaseForm <> nil then
     FDatabaseForm.ApplyPreferences(FPreferences);
   UpdateScoreHistory(True, ActiveGameTree);
@@ -1593,7 +1592,8 @@ begin
 
   LGame := SelectedDisplayedGame;
   if LGame <> nil then
-    Result := LGame.Lifecycle = rglFinished
+    Result := (LGame.Lifecycle = rglFinished) or
+      (LGame.Snapshot.State in [gosStopped, gosGameOver])
   else
     Result := Trim(StartingFenForTree(ActiveGameTree)) <> '';
 end;
@@ -1653,10 +1653,12 @@ procedure TMainForm.PlayHumanMove(const AMove: string);
 var
   LBoard: TDraughtsBoard;
   LGame: TRunningGame;
+  LGameTree: TGameTree;
+  LMainlinePly: Integer;
   LMove: string;
 begin
   LBoard := ActiveBoard;
-  LMove := Trim(AMove);
+  LMove := NormalizeMoveNotation(AMove);
   if (LBoard = nil) or (not LBoard.IsLegalMove(LMove)) then
     Exit;
 
@@ -1668,6 +1670,28 @@ begin
   end;
 
   LGame := SelectedDisplayedGame;
+  if (LGame <> nil) and
+    (LGame.Snapshot.State in [gosStopped, gosGameOver]) and
+    (FGameBrowsePly < 0) then
+  begin
+    LGameTree := ActiveGameTree;
+    if LGameTree = nil then
+      Exit;
+    LMainlinePly := LGameTree.MainlineCount + 1;
+    LGameTree.RecordMainlineMove(LMainlinePly, LMove);
+    ClearVariationExploration;
+    FGameBrowsePly := -1;
+    FGameResult := '*';
+    UpdateBoardFromBrowseState(LGameTree);
+    UpdateBrowseInfo;
+    RebuildGameMoveLabels(False, LGameTree);
+    UpdateBoardInfo;
+    UpdateLegalMoves;
+    UpdateScoreHistory(True, LGameTree);
+    RefreshVisibleGameTreeView(False, LGameTree);
+    Exit;
+  end;
+
   if (LGame <> nil) and (LGame.Runner <> nil) and
     (LGame.Snapshot.State = gosRunning) and LGame.IsHumanToMove then
     LGame.Runner.PostHumanMove(LMove);
@@ -1675,11 +1699,45 @@ end;
 
 procedure TMainForm.AddVariationMove(const AMove: string);
 var
+  LDisplayAfterPly: Integer;
   LGameTree: TGameTree;
   LIndex: Integer;
   LMove: string;
   LMovesText: string;
+  LShouldAppendToVariation: Boolean;
   VariationLine: TGameTreeVariationLine;
+
+  function FindVariationByDisplayBaseAndFirstMove(ADisplayAfterPly,
+    ABasePly: Integer; const AFirstMove: string): Integer;
+  var
+    I: Integer;
+    LFirstMove: string;
+    LMoves: TStringList;
+    LVariationLine: TGameTreeVariationLine;
+  begin
+    Result := -1;
+    if LGameTree = nil then
+      Exit;
+    LMoves := TStringList.Create;
+    try
+      for I := 0 to LGameTree.VariationLineCount - 1 do
+      begin
+        LVariationLine := LGameTree.VariationLine[I];
+        if (LVariationLine = nil) or
+          (LVariationLine.DisplayAfterPly <> ADisplayAfterPly) or
+          (LVariationLine.BasePly <> ABasePly) then
+          Continue;
+        TextToMoveList(LVariationLine.MovesText, LMoves);
+        LFirstMove := '';
+        if LMoves.Count > 0 then
+          LFirstMove := NormalizeMoveNotation(LMoves[0]);
+        if SameText(LFirstMove, NormalizeMoveNotation(AFirstMove)) then
+          Exit(I);
+      end;
+    finally
+      LMoves.Free;
+    end;
+  end;
 begin
   LGameTree := ActiveGameTree;
   if LGameTree = nil then
@@ -1691,19 +1749,28 @@ begin
 
   LIndex := FVariationIndex;
   VariationLine := TreeVariationLineByIndex(LIndex, LGameTree);
-  if (VariationLine = nil) or (VariationLine.BasePly <> FGameBrowsePly) then
+  LShouldAppendToVariation := (VariationLine <> nil) and
+    (VariationLine.BasePly = FGameBrowsePly) and (FVariationBrowsePly > 0);
+  if not LShouldAppendToVariation then
   begin
-    LIndex := FindTreeVariationByDisplayAfterPly(FGameBrowsePly, LGameTree);
+    LDisplayAfterPly := FGameBrowsePly;
+    if FGameBrowsePly < LGameTree.MainlineCount then
+      LDisplayAfterPly := FGameBrowsePly + 1;
+
+    StoreTreeVariation(LDisplayAfterPly, FGameBrowsePly, LMove, '',
+      LGameTree);
+    LIndex := FindVariationByDisplayBaseAndFirstMove(LDisplayAfterPly,
+      FGameBrowsePly, LMove);
     VariationLine := TreeVariationLineByIndex(LIndex, LGameTree);
-    if (VariationLine = nil) or (VariationLine.BasePly <> FGameBrowsePly) then
-    begin
-      StoreTreeVariation(FGameBrowsePly, FGameBrowsePly, '', '',
-        LGameTree);
-      LIndex := FindTreeVariationByDisplayAfterPly(FGameBrowsePly,
-        LGameTree);
-      VariationLine := TreeVariationLineByIndex(LIndex, LGameTree);
-    end;
-    FVariationBrowsePly := 0;
+    if (LIndex < 0) or (VariationLine = nil) then
+      Exit;
+
+    FVariationIndex := LIndex;
+    FVariationBrowsePly := 1;
+    UpdateBoardFromBrowseState(LGameTree);
+    UpdateBrowseInfo;
+    RebuildGameMoveLabels(False, LGameTree);
+    Exit;
   end;
 
   if (LIndex < 0) or (VariationLine = nil) then
@@ -1807,13 +1874,6 @@ end;
 procedure TMainForm.AnalyzerLog(Sender: TObject; const AMessage: string);
 begin
   PostGuiEvent(TAnalyzerLogGuiMessage.Create(AMessage));
-end;
-
-procedure TMainForm.AnalyzerMove(Sender: TObject; const AMove: string;
-  ABasePly: Integer; const APositionSignature: string);
-begin
-  PostGuiEvent(TAnalyzerMoveGuiMessage.Create(AMove, ABasePly,
-    APositionSignature));
 end;
 
 procedure TMainForm.AnalyzerFinished(Sender: TObject);
@@ -2057,21 +2117,6 @@ begin
   end;
 end;
 
-function TMainForm.AutoplayCanRun: Boolean;
-var
-  LGame: TRunningGame;
-begin
-  Result := False;
-  if FAnalyzerRunner = nil then
-    Exit;
-  if ActiveGameTree = nil then
-    Exit;
-  LGame := SelectedDisplayedGame;
-  if (LGame <> nil) and (LGame.Lifecycle <> rglFinished) then
-    Exit;
-  Result := (ActiveBoard <> nil) and (ActiveBoard.LegalMoves.Count > 0);
-end;
-
 function TMainForm.ReadAutoplaySecondsFromToolbar: Boolean;
 var
   LText: string;
@@ -2091,70 +2136,53 @@ begin
   FAutoplayThinkSeconds := LValue;
 end;
 
-procedure TMainForm.StopAutoplay(const AMessage: string);
-begin
-  if not FAutoplayEnabled then
-    Exit;
-
-  FAutoplayEnabled := False;
-  FAutoplayWaiting := False;
-  FAutoplayLastPositionSignature := '';
-  if FAnalyzerRunner <> nil then
-    FAnalyzerRunner.PostStopSearch;
-  if (AMessage <> '') and (FAnalyzerMemo <> nil) then
-    FAnalyzerMemo.Lines.Add(AMessage);
-  UpdateAutoplayControls;
-end;
-
 procedure TMainForm.UpdateAutoplayControls;
-var
-  LCanStart: Boolean;
 begin
   if FAutoplayButton <> nil then
   begin
-    if FAutoplayEnabled then
-      FAutoplayButton.Caption := 'Stop'
-    else
-      FAutoplayButton.Caption := 'Autoplay';
-    LCanStart := (FAnalyzerRunner <> nil) and AutoplayCanRun;
-    FAutoplayButton.Enabled := FAutoplayEnabled or LCanStart;
+    FAutoplayButton.Caption := 'Autoplay';
+    FAutoplayButton.Enabled := True;
   end;
   if FAutoplaySecondsEdit <> nil then
   begin
-    FAutoplaySecondsEdit.Enabled := not FAutoplayEnabled;
+    FAutoplaySecondsEdit.Enabled := True;
     if not FAutoplaySecondsEdit.Focused then
       FAutoplaySecondsEdit.Text := FloatToStr(FAutoplayThinkSeconds);
   end;
+  if FAutorandomButton <> nil then
+    FAutorandomButton.Enabled := (ActiveBoard <> nil) and
+      (ActiveBoard.LegalMoves.Count > 0);
 end;
 
 procedure TMainForm.AutoplayClick(Sender: TObject);
 begin
-  if FAutoplayEnabled then
-  begin
-    StopAutoplay('Autoplay stopped');
-    Exit;
-  end;
-
-  if not AutoplayCanRun then
-  begin
-    ShowGuiOkDialog(Self, 'Autoplay',
-      'Autoplay is only available when an annotator is open and the displayed game is stopped.');
-    Exit;
-  end;
   if not ReadAutoplaySecondsFromToolbar then
   begin
     UpdateAutoplayControls;
     Exit;
   end;
 
-  FAutoplayEnabled := True;
-  FAutoplayWaiting := False;
-  FAutoplayLastPositionSignature := '';
   if FAnalyzerMemo <> nil then
-    FAnalyzerMemo.Lines.Add(Format('Autoplay started; time=%.3g seconds',
+    FAnalyzerMemo.Lines.Add(Format('Autoplay disabled; time=%.3g seconds',
       [FAutoplayThinkSeconds]));
   UpdateAutoplayControls;
-  RestartAutoplay(ActiveGameTree);
+end;
+
+procedure TMainForm.AutorandomClick(Sender: TObject);
+var
+  LBoard: TDraughtsBoard;
+  LMove: string;
+begin
+  LBoard := ActiveBoard;
+  if (LBoard = nil) or (LBoard.LegalMoves.Count = 0) then
+  begin
+    ShowGuiOkDialog(Self, 'Autorandom',
+      'The displayed position has no legal moves.');
+    Exit;
+  end;
+
+  LMove := LBoard.LegalMoves[Random(LBoard.LegalMoves.Count)];
+  PlayHumanMove(LMove);
 end;
 
 procedure TMainForm.OpenAnalyzerClick(Sender: TObject);
@@ -2190,7 +2218,7 @@ begin
     FAnalyzerEngineKey := EngineKey;
     FAnalyzerLastPositionSignature := '';
     FAnalyzerRunner := TAnalyzerRunnerThread.Create(Engine, @AnalyzerLog,
-      @AnalyzerSnapshot, @AnalyzerFinished, armAnalyze, @AnalyzerMove);
+      @AnalyzerSnapshot, @AnalyzerFinished, armAnalyze);
     FAnalyzerRunner.Start;
     UpdateAutoplayControls;
     RestartAnalyzer(ActiveGameTree);
@@ -2201,9 +2229,6 @@ end;
 
 procedure TMainForm.CloseAnalyzerClick(Sender: TObject);
 begin
-  FAutoplayEnabled := False;
-  FAutoplayWaiting := False;
-  FAutoplayLastPositionSignature := '';
   UpdateAutoplayControls;
   if FAnalyzerRunner <> nil then
   begin
@@ -2338,9 +2363,6 @@ begin
   if LGameTree = nil then
     Exit;
 
-  if FAutoplayEnabled and RestartAutoplay(LGameTree) then
-    Exit;
-
   LStartingFEN := StartingFenForTree(LGameTree);
   LDisplayedMovesText := DisplayedMovesText(LGameTree);
   LDisplayedMoves := TStringList.Create;
@@ -2369,144 +2391,6 @@ begin
     FAnalyzerPvBrowser.Clear;
   FAnalyzerRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText,
     FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, LTerminal);
-end;
-
-function TMainForm.RestartAutoplay(AGameTree: TGameTree): Boolean;
-var
-  LDisplayedMoveCount: Integer;
-  LDisplayedMoves: TStringList;
-  LDisplayedMovesText: string;
-  LGameState: TGameOrchestratorState;
-  LStartingFEN: string;
-  LTerminal: Boolean;
-  Signature: string;
-begin
-  Result := False;
-  if (not FAutoplayEnabled) or (FAnalyzerRunner = nil) then
-    Exit;
-  Result := True;
-  if FAutoplayWaiting then
-    Exit;
-  if not AutoplayCanRun then
-  begin
-    FAutoplayEnabled := False;
-    FAutoplayWaiting := False;
-    FAutoplayLastPositionSignature := '';
-    UpdateAutoplayControls;
-    Exit(False);
-  end;
-
-  LStartingFEN := StartingFenForTree(AGameTree);
-  LDisplayedMovesText := DisplayedMovesText(AGameTree);
-  LDisplayedMoves := TStringList.Create;
-  try
-    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(LDisplayedMovesText)),
-      LDisplayedMoves);
-    LDisplayedMoveCount := LDisplayedMoves.Count;
-  finally
-    LDisplayedMoves.Free;
-  end;
-  LGameState := StateForTree(AGameTree);
-  LTerminal := ActiveBoard.LegalMoves.Count = 0;
-  if LTerminal then
-  begin
-    FAutoplayEnabled := False;
-    FAutoplayWaiting := False;
-    FAutoplayLastPositionSignature := '';
-    UpdateAutoplayControls;
-    if FAnalyzerMemo <> nil then
-      FAnalyzerMemo.Lines.Add('Autoplay stopped; terminal position');
-    Exit;
-  end;
-
-  Signature := LStartingFEN + #10 + LDisplayedMovesText + #10 +
-    ActiveBoard.PositionKey + #10 + IntToStr(Ord(LGameState));
-  if Signature = FAutoplayLastPositionSignature then
-    Exit;
-
-  FAutoplayLastPositionSignature := Signature;
-  FAutoplayWaiting := True;
-  FAnalyzerPvBaseBoard.AssignFrom(ActiveBoard);
-  FAnalyzerPvBasePly := LDisplayedMoveCount;
-  FAnalyzerRunner.PostPlayMove(LStartingFEN, LDisplayedMovesText,
-    FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, LTerminal,
-    FAutoplayThinkSeconds, Signature);
-end;
-
-procedure TMainForm.ApplyAutoplayMove(const AMove: string; ABasePly: Integer;
-  const APositionSignature: string);
-var
-  LGameTree: TGameTree;
-  LLegalMove: string;
-  LMainlinePly: Integer;
-  LMove: string;
-begin
-  FAutoplayWaiting := False;
-  if not FAutoplayEnabled then
-    Exit;
-  if APositionSignature <> FAutoplayLastPositionSignature then
-    Exit;
-
-  LMove := NormalizeMoveNotation(AMove);
-  if LMove = '' then
-  begin
-    FAutoplayEnabled := False;
-    FAutoplayLastPositionSignature := '';
-    UpdateAutoplayControls;
-    if FAnalyzerMemo <> nil then
-      FAnalyzerMemo.Lines.Add('Autoplay stopped; annotator returned no move');
-    Exit;
-  end;
-
-  if (ActiveBoard = nil) or (not ActiveBoard.TryGetLegalMove(LMove, LLegalMove)) then
-  begin
-    FAutoplayEnabled := False;
-    FAutoplayLastPositionSignature := '';
-    UpdateAutoplayControls;
-    if FAnalyzerMemo <> nil then
-      FAnalyzerMemo.Lines.Add('Autoplay stopped; illegal move=' + LMove);
-    Exit;
-  end;
-
-  LGameTree := ActiveGameTree;
-  if LGameTree = nil then
-    Exit;
-
-  if (FVariationIndex >= 0) or
-    ((FGameBrowsePly >= 0) and (FGameBrowsePly < LGameTree.MainlineCount)) then
-  begin
-    AddVariationMove(LLegalMove);
-    RestartAnalyzer(LGameTree);
-    Exit;
-  end;
-
-  LMainlinePly := LGameTree.MainlineCount + 1;
-  if (ABasePly >= 0) and (ABasePly <> LMainlinePly - 1) then
-    Exit;
-
-  LGameTree.RecordMainlineMove(LMainlinePly, LLegalMove);
-  ClearVariationExploration;
-  FGameBrowsePly := -1;
-  FGameResult := '*';
-  UpdateBoardFromBrowseState(LGameTree);
-  UpdateBrowseInfo;
-  RebuildGameMoveLabels(False, LGameTree);
-  UpdateBoardInfo;
-  UpdateLegalMoves;
-  UpdateScoreHistory(True, LGameTree);
-  RefreshVisibleGameTreeView(False, LGameTree);
-
-  if ActiveBoard.LegalMoves.Count = 0 then
-  begin
-    FAutoplayEnabled := False;
-    FAutoplayLastPositionSignature := '';
-    UpdateAutoplayControls;
-    if FAnalyzerMemo <> nil then
-      FAnalyzerMemo.Lines.Add('Autoplay stopped; terminal position');
-    Exit;
-  end;
-
-  RestartAnalyzer(LGameTree);
 end;
 
 procedure TMainForm.RestartMctsAnnotator(AGameTree: TGameTree);
@@ -3157,6 +3041,28 @@ begin
     Result := PlayerNameOrFallback(FGameResult, '*');
 end;
 
+function TMainForm.RunningGameTreeExtendsSnapshot(
+  AGame: TRunningGame): Boolean;
+var
+  LMoves: TStringList;
+begin
+  Result := False;
+  if (AGame = nil) or (AGame.GameTree = nil) then
+    Exit;
+  if not (AGame.Snapshot.State in [gosStopped, gosGameOver]) then
+    Exit;
+  if AGame.GameTree.VariationLineCount > 0 then
+    Exit(True);
+
+  LMoves := TStringList.Create;
+  try
+    TextToMoveList(AGame.Snapshot.MovesPlayedText, LMoves);
+    Result := AGame.GameTree.MainlineCount > LMoves.Count;
+  finally
+    LMoves.Free;
+  end;
+end;
+
 function TMainForm.WhiteNameForTree(AGameTree: TGameTree): string;
 begin
   Result := '';
@@ -3425,6 +3331,8 @@ var
   LMoves: TStringList;
 begin
   if (AGame = nil) or (AGame.GameTree = nil) then
+    Exit;
+  if RunningGameTreeExtendsSnapshot(AGame) then
     Exit;
 
   LGameTree := AGame.GameTree;
@@ -3873,8 +3781,13 @@ begin
   end;
   UpdateMiniBoardFromBoard(AGame.Snapshot.Board);
   FStartingFEN := AGame.Snapshot.StartingFEN;
-  FDisplayedMovesSignature := AGame.Snapshot.MovesPlayedText;
-  ClearStoredTreeVariations(AGame.GameTree);
+  if RunningGameTreeExtendsSnapshot(AGame) then
+    FDisplayedMovesSignature := GameTreeMainlineMovesText(AGame.GameTree)
+  else
+  begin
+    FDisplayedMovesSignature := AGame.Snapshot.MovesPlayedText;
+    ClearStoredTreeVariations(AGame.GameTree);
+  end;
   FGameState := AGame.Snapshot.State;
   FGameResult := AGame.Snapshot.GameResult;
   FPrincipalVariation := AGame.Snapshot.PrincipalVariation;
@@ -3892,8 +3805,9 @@ begin
     if GameLogLineVisible(AGame.Snapshot.LogLines[I], AGame) then
       FGameLog.Add(AGame.Snapshot.LogLines[I]);
   FGameActive := True;
-  UpdateGameTreeFromMoveText(AGame, AGame.GameTree,
-    AGame.Snapshot.MovesPlayedText, AGame.Snapshot.MoveAnnotationsText);
+  if not RunningGameTreeExtendsSnapshot(AGame) then
+    UpdateGameTreeFromMoveText(AGame, AGame.GameTree,
+      AGame.Snapshot.MovesPlayedText, AGame.Snapshot.MoveAnnotationsText);
   LMoveCount := CurrentMoveCount;
   if FGameBrowsePly > LMoveCount then
     FGameBrowsePly := -1;
@@ -4070,8 +3984,10 @@ begin
   Result := DefaultGameTreePdnRenderOptions;
   Result.HideAnnotations := FHideMoveAnnotations;
   Result.ShowEngineScore := FMoveShowEngineScore;
-  Result.ShowPVMove := FMoveShowPVMove;
-  Result.ShowFullPV := FMoveShowFullPV;
+  Result.ShowEnginePVMove := FMoveShowEnginePVMove;
+  Result.ShowEngineFullPV := FMoveShowEngineFullPV;
+  Result.ShowAnnotatorPVMove := FMoveShowAnnotatorPVMove;
+  Result.ShowAnnotatorFullPV := FMoveShowAnnotatorFullPV;
   Result.ShowClocks := FMoveShowClocks;
   Result.ShowAnnotatorScore := FMoveShowAnnotatorScore;
 end;
@@ -4221,10 +4137,14 @@ end;
 
 procedure TMainForm.UpdateGameMovePopupState;
 begin
-  if FMoveShowPVMoveMenuItem <> nil then
-    FMoveShowPVMoveMenuItem.Checked := FMoveShowPVMove;
-  if FMoveShowFullPVMenuItem <> nil then
-    FMoveShowFullPVMenuItem.Checked := FMoveShowFullPV;
+  if FMoveShowEnginePVMoveMenuItem <> nil then
+    FMoveShowEnginePVMoveMenuItem.Checked := FMoveShowEnginePVMove;
+  if FMoveShowEngineFullPVMenuItem <> nil then
+    FMoveShowEngineFullPVMenuItem.Checked := FMoveShowEngineFullPV;
+  if FMoveShowAnnotatorPVMoveMenuItem <> nil then
+    FMoveShowAnnotatorPVMoveMenuItem.Checked := FMoveShowAnnotatorPVMove;
+  if FMoveShowAnnotatorFullPVMenuItem <> nil then
+    FMoveShowAnnotatorFullPVMenuItem.Checked := FMoveShowAnnotatorFullPV;
 end;
 
 procedure TMainForm.MoveDisplayFilterClick(Sender: TObject);
@@ -4242,13 +4162,17 @@ begin
     1:
       FMoveShowEngineScore := LItem.Checked;
     2:
-      FMoveShowPVMove := LItem.Checked;
+      FMoveShowEnginePVMove := LItem.Checked;
     3:
       FMoveShowClocks := LItem.Checked;
     4:
-      FMoveShowFullPV := LItem.Checked;
+      FMoveShowAnnotatorPVMove := LItem.Checked;
     5:
       FMoveShowAnnotatorScore := LItem.Checked;
+    6:
+      FMoveShowEngineFullPV := LItem.Checked;
+    7:
+      FMoveShowAnnotatorFullPV := LItem.Checked;
   end;
   UpdateGameMovePopupState;
   RebuildGameMoveLabels(False, LGameTree);
@@ -4500,6 +4424,7 @@ begin
     FSetupForm := TGameSetupForm.Create(Self);
     FSetupForm.OnAccepted := @GameSetupAccepted;
   end;
+  FSetupForm.ApplyPreferences(FPreferences);
   LBusyEngineKeys := TStringList.Create;
   try
     CollectBusyEngineKeys(LBusyEngineKeys);
@@ -4907,19 +4832,12 @@ begin
               FBoardControl.Invalidate;
           end;
         end
-        else if EventObject is TAnalyzerMoveGuiMessage then
-          ApplyAutoplayMove(TAnalyzerMoveGuiMessage(EventObject).Move,
-            TAnalyzerMoveGuiMessage(EventObject).BasePly,
-            TAnalyzerMoveGuiMessage(EventObject).PositionSignature)
         else if EventObject is TAnalyzerFinishedGuiMessage then
         begin
           if FAnalyzerRunner = TAnalyzerFinishedGuiMessage(EventObject).Runner then
             FreeAndNil(FAnalyzerRunner);
           FAnalyzerEngineKey := '';
           FAnalyzerLastPositionSignature := '';
-          FAutoplayEnabled := False;
-          FAutoplayWaiting := False;
-          FAutoplayLastPositionSignature := '';
           UpdateAutoplayControls;
         end
         else if EventObject is TMctsFinishedGuiMessage then
@@ -4939,7 +4857,11 @@ begin
             if RemoveAfterFinish then
               RemoveGame(LGame)
             else if not FClosing then
+            begin
               UpdateGameListItem(LGame);
+              if SelectedGame = LGame then
+                UpdateAutoplayControls;
+            end;
           end;
         end;
         Continue;
@@ -5000,8 +4922,6 @@ end;
 
 procedure TMainForm.GamesListBoxClick(Sender: TObject);
 begin
-  if FAutoplayEnabled then
-    StopAutoplay('Autoplay stopped; selected another game');
   ApplyGameToDisplay(SelectedGame);
 end;
 

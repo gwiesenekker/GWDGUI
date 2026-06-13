@@ -1,0 +1,6 @@
+*.lpi
+*.lpr
+*.pas
+*.pp
+*.lfm
+*.ttf

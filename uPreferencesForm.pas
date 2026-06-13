@@ -5,7 +5,7 @@ unit uPreferencesForm;
 interface
 
 uses
-  Classes, Controls, Dialogs, ExtCtrls, Forms, Graphics, StdCtrls,
+  Classes, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics, StdCtrls,
   uPreferences;
 
 type
@@ -15,6 +15,9 @@ type
   TPreferencesForm = class(TForm)
   private
     FColorDialog: TColorDialog;
+    FDefaultGameIncrementEdit: TEdit;
+    FDefaultGameMinutesEdit: TEdit;
+    FDefaultGameMovesEdit: TEdit;
     FEvaluationMaxEdit: TEdit;
     FEvaluationScaleGroup: TRadioGroup;
     FOnAccepted: TPreferencesAcceptedEvent;
@@ -44,23 +47,42 @@ uses
 constructor TPreferencesForm.Create(AOwner: TComponent);
 var
   LApplyButton: TButton;
+  LButtonPanel: TPanel;
   LCancelButton: TButton;
   LDefaultsButton: TButton;
   LGroup: TGroupBox;
+  LPageControl: TPageControl;
+  LTab: TTabSheet;
 begin
   inherited Create(AOwner);
   Caption := 'Preferences';
   Position := poDesigned;
   BorderStyle := bsSizeable;
-  Width := 500;
+  Width := 520;
   Height := 647;
   Constraints.MinWidth := 460;
   Constraints.MinHeight := 587;
 
   FColorDialog := TColorDialog.Create(Self);
 
+  LButtonPanel := TPanel.Create(Self);
+  LButtonPanel.Parent := Self;
+  LButtonPanel.Align := alBottom;
+  LButtonPanel.Height := 52;
+  LButtonPanel.BevelOuter := bvNone;
+  LButtonPanel.BorderSpacing.Around := 8;
+
+  LPageControl := TPageControl.Create(Self);
+  LPageControl.Parent := Self;
+  LPageControl.Align := alClient;
+  LPageControl.BorderSpacing.Around := 8;
+
+  LTab := TTabSheet.Create(Self);
+  LTab.PageControl := LPageControl;
+  LTab.Caption := 'Appearance';
+
   LGroup := TGroupBox.Create(Self);
-  LGroup.Parent := Self;
+  LGroup.Parent := LTab;
   LGroup.Align := alTop;
   LGroup.Height := 184;
   LGroup.BorderSpacing.Around := 8;
@@ -71,7 +93,7 @@ begin
   AddColorRow(LGroup, 'Analysis board dark', 3, 138);
 
   LGroup := TGroupBox.Create(Self);
-  LGroup.Parent := Self;
+  LGroup.Parent := LTab;
   LGroup.Align := alTop;
   LGroup.Height := 184;
   LGroup.BorderSpacing.Left := 8;
@@ -83,13 +105,15 @@ begin
   AddColorRow(LGroup, 'PV move', 6, 102);
   AddColorRow(LGroup, 'Hint move', 7, 138);
 
+  LTab := TTabSheet.Create(Self);
+  LTab.PageControl := LPageControl;
+  LTab.Caption := 'Evaluation';
+
   LGroup := TGroupBox.Create(Self);
-  LGroup.Parent := Self;
+  LGroup.Parent := LTab;
   LGroup.Align := alTop;
   LGroup.Height := 144;
-  LGroup.BorderSpacing.Left := 8;
-  LGroup.BorderSpacing.Right := 8;
-  LGroup.BorderSpacing.Bottom := 8;
+  LGroup.BorderSpacing.Around := 8;
   LGroup.Caption := 'Evaluation bar / score history';
 
   FEvaluationMaxEdit := TEdit.Create(Self);
@@ -111,40 +135,66 @@ begin
   FEvaluationScaleGroup.Items.Add('Linear');
   FEvaluationScaleGroup.Items.Add('Logarithmic');
 
+  LTab := TTabSheet.Create(Self);
+  LTab.PageControl := LPageControl;
+  LTab.Caption := 'Game';
+
+  LGroup := TGroupBox.Create(Self);
+  LGroup.Parent := LTab;
+  LGroup.Align := alTop;
+  LGroup.Height := 144;
+  LGroup.BorderSpacing.Around := 8;
+  LGroup.Caption := 'Default time control';
+
+  with TLabel.Create(Self) do
+  begin
+    Parent := LGroup;
+    SetBounds(12, 32, 220, 22);
+    Caption := 'Minutes per period';
+  end;
+  FDefaultGameMinutesEdit := TEdit.Create(Self);
+  FDefaultGameMinutesEdit.Parent := LGroup;
+  FDefaultGameMinutesEdit.SetBounds(250, 28, 80, 24);
+
+  with TLabel.Create(Self) do
+  begin
+    Parent := LGroup;
+    SetBounds(12, 66, 220, 22);
+    Caption := 'Moves per period';
+  end;
+  FDefaultGameMovesEdit := TEdit.Create(Self);
+  FDefaultGameMovesEdit.Parent := LGroup;
+  FDefaultGameMovesEdit.SetBounds(250, 62, 80, 24);
+
+  with TLabel.Create(Self) do
+  begin
+    Parent := LGroup;
+    SetBounds(12, 100, 220, 22);
+    Caption := 'Increment seconds';
+  end;
+  FDefaultGameIncrementEdit := TEdit.Create(Self);
+  FDefaultGameIncrementEdit.Parent := LGroup;
+  FDefaultGameIncrementEdit.SetBounds(250, 96, 80, 24);
+
   LDefaultsButton := TButton.Create(Self);
-  LDefaultsButton.Parent := Self;
-  LDefaultsButton.SetBounds(8, 306, 96, 28);
-  LDefaultsButton.AnchorSide[akLeft].Control := Self;
-  LDefaultsButton.AnchorSide[akBottom].Control := Self;
-  LDefaultsButton.AnchorSide[akBottom].Side := asrBottom;
-  LDefaultsButton.Anchors := [akLeft, akBottom];
-  LDefaultsButton.BorderSpacing.Bottom := 12;
+  LDefaultsButton.Parent := LButtonPanel;
+  LDefaultsButton.Align := alLeft;
+  LDefaultsButton.Width := 96;
   LDefaultsButton.Caption := 'Defaults';
   LDefaultsButton.OnClick := @DefaultsClick;
 
   LCancelButton := TButton.Create(Self);
-  LCancelButton.Parent := Self;
-  LCancelButton.SetBounds(304, 306, 96, 28);
-  LCancelButton.AnchorSide[akRight].Control := Self;
-  LCancelButton.AnchorSide[akRight].Side := asrRight;
-  LCancelButton.AnchorSide[akBottom].Control := Self;
-  LCancelButton.AnchorSide[akBottom].Side := asrBottom;
-  LCancelButton.Anchors := [akRight, akBottom];
-  LCancelButton.BorderSpacing.Right := 12;
-  LCancelButton.BorderSpacing.Bottom := 12;
+  LCancelButton.Parent := LButtonPanel;
+  LCancelButton.Align := alRight;
+  LCancelButton.Width := 96;
   LCancelButton.Caption := 'Close';
   LCancelButton.OnClick := @CancelClick;
 
   LApplyButton := TButton.Create(Self);
-  LApplyButton.Parent := Self;
-  LApplyButton.SetBounds(200, 306, 96, 28);
-  LApplyButton.AnchorSide[akRight].Control := LCancelButton;
-  LApplyButton.AnchorSide[akRight].Side := asrLeft;
-  LApplyButton.AnchorSide[akBottom].Control := Self;
-  LApplyButton.AnchorSide[akBottom].Side := asrBottom;
-  LApplyButton.Anchors := [akRight, akBottom];
+  LApplyButton.Parent := LButtonPanel;
+  LApplyButton.Align := alRight;
+  LApplyButton.Width := 96;
   LApplyButton.BorderSpacing.Right := 8;
-  LApplyButton.BorderSpacing.Bottom := 12;
   LApplyButton.Caption := 'Save';
   LApplyButton.OnClick := @ApplyClick;
 end;
@@ -218,6 +268,14 @@ begin
   if FEvaluationMaxEdit <> nil then
     FEvaluationMaxEdit.Text := FormatFloat('0.###',
       FPreferences.EvaluationMaxScore);
+  if FDefaultGameMinutesEdit <> nil then
+    FDefaultGameMinutesEdit.Text := FormatFloat('0.###',
+      FPreferences.DefaultGameMinutes);
+  if FDefaultGameMovesEdit <> nil then
+    FDefaultGameMovesEdit.Text := IntToStr(FPreferences.DefaultGameMoves);
+  if FDefaultGameIncrementEdit <> nil then
+    FDefaultGameIncrementEdit.Text := FormatFloat('0.###',
+      FPreferences.DefaultGameIncrementSeconds);
   if FEvaluationScaleGroup <> nil then
   begin
     if FPreferences.EvaluationScale = ssLinear then
@@ -249,6 +307,14 @@ begin
   if FEvaluationMaxEdit <> nil then
     FEvaluationMaxEdit.Text := FormatFloat('0.###',
       FPreferences.EvaluationMaxScore);
+  if FDefaultGameMinutesEdit <> nil then
+    FDefaultGameMinutesEdit.Text := FormatFloat('0.###',
+      FPreferences.DefaultGameMinutes);
+  if FDefaultGameMovesEdit <> nil then
+    FDefaultGameMovesEdit.Text := IntToStr(FPreferences.DefaultGameMoves);
+  if FDefaultGameIncrementEdit <> nil then
+    FDefaultGameIncrementEdit.Text := FormatFloat('0.###',
+      FPreferences.DefaultGameIncrementSeconds);
   if FEvaluationScaleGroup <> nil then
     FEvaluationScaleGroup.ItemIndex := 1;
   UpdateSwatches;
@@ -256,8 +322,23 @@ end;
 
 procedure TPreferencesForm.ApplyClick(Sender: TObject);
 var
+  IncrementSeconds: Double;
   MaxScore: Double;
+  Minutes: Double;
+  Moves: Integer;
 begin
+  if (FDefaultGameMinutesEdit <> nil) and
+    TryStrToFloat(Trim(FDefaultGameMinutesEdit.Text), Minutes) and
+    (Minutes > 0.0) then
+    FPreferences.DefaultGameMinutes := Minutes;
+  if (FDefaultGameMovesEdit <> nil) and
+    TryStrToInt(Trim(FDefaultGameMovesEdit.Text), Moves) and
+    (Moves > 0) then
+    FPreferences.DefaultGameMoves := Moves;
+  if (FDefaultGameIncrementEdit <> nil) and
+    TryStrToFloat(Trim(FDefaultGameIncrementEdit.Text), IncrementSeconds) and
+    (IncrementSeconds >= 0.0) then
+    FPreferences.DefaultGameIncrementSeconds := IncrementSeconds;
   if (FEvaluationMaxEdit <> nil) and
     TryStrToFloat(Trim(FEvaluationMaxEdit.Text), MaxScore) and
     (MaxScore > 0.0) then
