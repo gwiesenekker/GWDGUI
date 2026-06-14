@@ -301,7 +301,7 @@ var
   Actor: TGameTreeActor;
   DoneCommand: TGameTreeCommand;
   MainlineNode: TGameTreePlyNode;
-  SearchId: Int64;
+  Search: TGameTreeSearchRef;
   StartCommand: TGameTreeCommand;
   StoreCommand: TGameTreeCommand;
   VariationIndex: Integer;
@@ -313,7 +313,7 @@ begin
       'W:W31-50:B1-20');
 
     StartCommand := Actor.CreateStartSearchCommand(Actor.GameTree.Root.NodeId,
-      SearchId);
+      Search);
     try
       Actor.ExecuteCommand(StartCommand);
       Check(StartCommand.Accepted, 'root search should start');
@@ -321,7 +321,7 @@ begin
       StartCommand.Free;
     end;
 
-    DoneCommand := Actor.CreateSearchDoneCommand(SearchId, '31-26');
+    DoneCommand := Actor.CreateSearchDoneCommand(Search, '31-26');
     try
       Actor.ExecuteCommand(DoneCommand);
       Check(DoneCommand.Accepted, 'root search done should be accepted');
@@ -329,7 +329,7 @@ begin
       DoneCommand.Free;
     end;
 
-    StoreCommand := Actor.CreateStoreSearchMoveVariationCommand(SearchId,
+    StoreCommand := Actor.CreateStoreSearchMoveVariationCommand(Search,
       gmsAutoplay);
     try
       Actor.ExecuteCommand(StoreCommand);
@@ -353,7 +353,7 @@ begin
     Check(VariationNode <> nil, 'variation node should exist for search');
 
     StartCommand := Actor.CreateStartSearchCommand(VariationNode.NodeId,
-      SearchId);
+      Search);
     try
       Actor.ExecuteCommand(StartCommand);
       Check(StartCommand.Accepted, 'variation search should start');
@@ -361,7 +361,7 @@ begin
       StartCommand.Free;
     end;
 
-    DoneCommand := Actor.CreateSearchDoneCommand(SearchId, '20-24');
+    DoneCommand := Actor.CreateSearchDoneCommand(Search, '20-24');
     try
       Actor.ExecuteCommand(DoneCommand);
       Check(DoneCommand.Accepted, 'variation search done should be accepted');
@@ -369,7 +369,7 @@ begin
       DoneCommand.Free;
     end;
 
-    StoreCommand := Actor.CreateStoreSearchMoveVariationCommand(SearchId,
+    StoreCommand := Actor.CreateStoreSearchMoveVariationCommand(Search,
       gmsAutoplay);
     try
       Actor.ExecuteCommand(StoreCommand);
