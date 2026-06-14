@@ -122,6 +122,7 @@ type
     FSnapshot: TGameRunnerSnapshot;
     FLastSnapshotTreePvSignature: string;
     FLastSnapshotTreeSyncSignature: string;
+    FListCaption: string;
     FStopReason: string;
     FSetup: TGameSetup;
     FTitle: string;
@@ -6599,7 +6600,7 @@ var
   LCaption: string;
   LWhiteName: string;
 begin
-  if AGame = nil then
+  if (AGame = nil) or (FGamesListBox = nil) then
     Exit;
 
   LWhiteName := PlayerNameOrFallback(AGame.Snapshot.WhitePlayerName,
@@ -6632,11 +6633,14 @@ begin
   if AGame.Paused and (AGame.Snapshot.State in [gosWaiting, gosRunning]) then
     LCaption := LCaption + ' (paused)';
   LCaption := LCaption + ' - ' + IntToStr(AGame.Snapshot.PlyCount) + ' plies';
+  if AGame.FListCaption = LCaption then
+    Exit;
   for I := 0 to FGamesListBox.Items.Count - 1 do
     if FGamesListBox.Items.Objects[I] = AGame then
     begin
       FGamesListBox.Items[I] := LCaption;
       FGamesListBox.Items.Objects[I] := AGame;
+      AGame.FListCaption := LCaption;
       Exit;
     end;
 end;
