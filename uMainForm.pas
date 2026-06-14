@@ -1930,11 +1930,13 @@ begin
     Exit;
   end;
 
-  Command := AActor.CreateSearchDoneCommand(ASearch.SearchId, AMoveText);
+  Command := AActor.CreateSearchDoneCommand(ASearch, AMoveText);
   try
-    if Command.NodeId <> ASearch.NodeId then
+    if (Command.GameTreeId <> ASearch.GameTreeId) or
+      (Command.SearchId <> ASearch.SearchId) or
+      (Command.NodeId <> ASearch.NodeId) then
     begin
-      AErrorText := 'search node mismatch';
+      AErrorText := 'search reference mismatch';
       Exit;
     end;
 
@@ -1954,7 +1956,7 @@ begin
   if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
     Exit;
 
-  Command := AActor.CreateCancelSearchCommand(ASearch.SearchId);
+  Command := AActor.CreateCancelSearchCommand(ASearch);
   try
     Result := ExecuteGameTreeCommand(AActor, Command, LErrorText);
   finally
@@ -1972,7 +1974,7 @@ begin
   if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
     Exit;
 
-  Command := AActor.CreateReleaseSearchCommand(ASearch.SearchId);
+  Command := AActor.CreateReleaseSearchCommand(ASearch);
   try
     Result := ExecuteGameTreeCommand(AActor, Command, LErrorText);
   finally
@@ -2009,8 +2011,7 @@ begin
   end;
 
   LGameTree := AActor.GameTree;
-  Command := AActor.CreateStoreSearchMoveVariationCommand(ASearch.SearchId,
-    ASource);
+  Command := AActor.CreateStoreSearchMoveVariationCommand(ASearch, ASource);
   try
     Result := ExecuteAndApplyGameTreeCommand(AActor, LGameTree, Command,
       True, False, AErrorText);

@@ -105,14 +105,23 @@ type
       const AMoveText: string; ASource: TGameTreeMoveSource): TGameTreeCommand;
     function CreateAppendMainlineMoveCommand(const AMoveText: string;
       ASource: TGameTreeMoveSource): TGameTreeCommand;
-    function CreateCancelSearchCommand(ASearchId: Int64): TGameTreeCommand;
-    function CreateReleaseSearchCommand(ASearchId: Int64): TGameTreeCommand;
+    function CreateCancelSearchCommand(ASearchId: Int64): TGameTreeCommand; overload;
+    function CreateCancelSearchCommand(
+      const ASearch: TGameTreeSearchRef): TGameTreeCommand; overload;
+    function CreateReleaseSearchCommand(ASearchId: Int64): TGameTreeCommand; overload;
+    function CreateReleaseSearchCommand(
+      const ASearch: TGameTreeSearchRef): TGameTreeCommand; overload;
     function CreateSearchDoneCommand(ASearchId: Int64;
-      const AMoveText: string): TGameTreeCommand;
+      const AMoveText: string): TGameTreeCommand; overload;
+    function CreateSearchDoneCommand(const ASearch: TGameTreeSearchRef;
+      const AMoveText: string): TGameTreeCommand; overload;
     function CreateRecordAnnotatorPVCommand(ANodeId: Int64; const AScore,
       APV: string): TGameTreeCommand;
     function CreateStoreSearchMoveVariationCommand(ASearchId: Int64;
-      ASource: TGameTreeMoveSource): TGameTreeCommand;
+      ASource: TGameTreeMoveSource): TGameTreeCommand; overload;
+    function CreateStoreSearchMoveVariationCommand(
+      const ASearch: TGameTreeSearchRef;
+      ASource: TGameTreeMoveSource): TGameTreeCommand; overload;
     function CreateStoreMoveVariationCommand(ANodeId: Int64;
       const AMoveText: string; ASource: TGameTreeMoveSource): TGameTreeCommand;
     function CreateClearStoredVariationsCommand: TGameTreeCommand;
@@ -287,6 +296,13 @@ begin
   Result.SearchId := ASearchId;
 end;
 
+function TGameTreeActor.CreateCancelSearchCommand(
+  const ASearch: TGameTreeSearchRef): TGameTreeCommand;
+begin
+  Result := CreateCancelSearchCommand(ASearch.SearchId);
+  Result.SetSearchRef(ASearch);
+end;
+
 function TGameTreeActor.CreateReleaseSearchCommand(
   ASearchId: Int64): TGameTreeCommand;
 begin
@@ -294,6 +310,13 @@ begin
   Result.CommandId := NextCommandId;
   Result.GameTreeId := FGameTree.GameTreeId;
   Result.SearchId := ASearchId;
+end;
+
+function TGameTreeActor.CreateReleaseSearchCommand(
+  const ASearch: TGameTreeSearchRef): TGameTreeCommand;
+begin
+  Result := CreateReleaseSearchCommand(ASearch.SearchId);
+  Result.SetSearchRef(ASearch);
 end;
 
 function TGameTreeActor.CreateSearchDoneCommand(ASearchId: Int64;
@@ -310,6 +333,12 @@ begin
     Result.SetSearchRef(Search.SearchRef)
   else
     Result.GameTreeId := FGameTree.GameTreeId;
+end;
+
+function TGameTreeActor.CreateSearchDoneCommand(
+  const ASearch: TGameTreeSearchRef; const AMoveText: string): TGameTreeCommand;
+begin
+  Result := CreateSearchDoneCommand(ASearch.SearchId, AMoveText);
 end;
 
 function TGameTreeActor.CreateRecordAnnotatorPVCommand(ANodeId: Int64;
@@ -331,6 +360,14 @@ begin
   Result.GameTreeId := FGameTree.GameTreeId;
   Result.SearchId := ASearchId;
   Result.MoveSource := ASource;
+end;
+
+function TGameTreeActor.CreateStoreSearchMoveVariationCommand(
+  const ASearch: TGameTreeSearchRef;
+  ASource: TGameTreeMoveSource): TGameTreeCommand;
+begin
+  Result := CreateStoreSearchMoveVariationCommand(ASearch.SearchId, ASource);
+  Result.SetSearchRef(ASearch);
 end;
 
 function TGameTreeActor.CreateStoreMoveVariationCommand(ANodeId: Int64;
