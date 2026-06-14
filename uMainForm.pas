@@ -329,11 +329,11 @@ type
       const AMove: string; ASource: TGameTreeMoveSource): TGameTreePlyNode;
     procedure ApplyGameTreeCommandResult(AGameTree: TGameTree;
       ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean);
+    function ExecuteGameTreeRebuildFromInput(AGame: TRunningGame;
+      AGameTree: TGameTree; AMoves, AAnnotations: TStrings): Boolean;
     function CurrentGameTreeHeaderInput(AGame: TRunningGame): TGameTreeHeaderInput;
     function RunningGameTreeHeaderInput(AGame: TRunningGame;
       const AEventName: string): TGameTreeHeaderInput;
-    procedure PrepareGameTreeRebuildFromCurrentState(AGame: TRunningGame;
-      AGameTree: TGameTree);
     procedure UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
       const AEventName: string = '');
     function RunningGameTreePdnText(AGame: TRunningGame;
@@ -459,15 +459,9 @@ type
     procedure SelectHumanMoveSource(ASourceSquare: Integer);
     procedure RebuildGameMoveLabels(ARefreshTree: Boolean;
       AGameTree: TGameTree);
-    procedure RecordGameTreeMainlineWithCurrentClock(AGame: TRunningGame;
-      AGameTree: TGameTree; AMoves, AAnnotations: TStrings);
-    procedure RecordGameTreeMainlineFromInput(AGame: TRunningGame;
-      AGameTree: TGameTree; AMoves, AAnnotations: TStrings);
-    procedure RecordGameTreeLiveAnalysis(AGameTree: TGameTree);
     procedure RecordGameTreeVariationLiveAnalysis(AGameTree: TGameTree;
       AVariation: TGameTreeVariationLine; AVariationIndex,
       AVariationPly: Integer);
-    procedure RecordGameTreeVariations(AGameTree: TGameTree);
     procedure UpdateGameMoveHighlight;
     function SelectedGame: TRunningGame;
     function SelectedDisplayedGame: TRunningGame;
@@ -1772,6 +1766,34 @@ begin
   RebuildGameMoveLabels(False, AGameTree);
   UpdateScoreHistory(False, AGameTree);
   RefreshVisibleGameTreeView(False, AGameTree);
+end;
+
+function TMainForm.ExecuteGameTreeRebuildFromInput(AGame: TRunningGame;
+  AGameTree: TGameTree; AMoves, AAnnotations: TStrings): Boolean;
+var
+  Actor: TGameTreeActor;
+  Command: TGameTreeCommand;
+begin
+  Result := False;
+  Actor := ActorForGameTree(AGameTree);
+  if Actor = nil then
+    Exit;
+
+  Command := Actor.CreateRebuildFromInputsCommand(
+    CurrentGameTreeHeaderInput(AGame),
+    GameTreeMainlineInput(AMoves, AAnnotations,
+      (AGame <> nil) and (AGame = SelectedDisplayedGame),
+      FWhiteRemainingSeconds, FBlackRemainingSeconds, FWhiteUsedSeconds,
+      FBlackUsedSeconds),
+    CurrentGameTreeEnginePvInput(AGameTree),
+    CurrentGameTreeAnnotatorPvInput,
+    @RecordGameTreeVariationLiveAnalysis);
+  try
+    Actor.ExecuteCommand(Command);
+    Result := Command.Accepted;
+  finally
+    Command.Free;
+  end;
 end;
 
 function TMainForm.FindHumanMoveToTarget(ATargetSquare: Integer;
@@ -3741,19 +3763,11 @@ begin
     AGame.FSetup.TimeControl);
 end;
 
-procedure TMainForm.PrepareGameTreeRebuildFromCurrentState(
-  AGame: TRunningGame; AGameTree: TGameTree);
-begin
-  if AGameTree = nil then
-    Exit;
-
-  uGameTreeBuilder.BeginGameTreeRebuild(AGameTree,
-    CurrentGameTreeHeaderInput(AGame));
-end;
-
 procedure TMainForm.UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
   const AEventName: string);
 var
+  Actor: TGameTreeActor;
+  Command: TGameTreeCommand;
   LAnnotations: TStringList;
   LGameTree: TGameTree;
   LMoves: TStringList;
@@ -3770,19 +3784,26 @@ begin
     TextToMoveList(AGame.Snapshot.MovesPlayedText, LMoves);
     LAnnotations.Text := AGame.Snapshot.MoveAnnotationsText;
 
-    uGameTreeBuilder.BeginGameTreeRebuild(LGameTree,
-      RunningGameTreeHeaderInput(AGame, AEventName));
-    uGameTreeBuilder.RecordGameTreeMainline(LGameTree,
+    Actor := ActorForGameTree(LGameTree);
+    if Actor = nil then
+      Exit;
+    Command := Actor.CreateRebuildFromInputsCommand(
+      RunningGameTreeHeaderInput(AGame, AEventName),
       GameTreeMainlineInput(LMoves, LAnnotations, True,
         AGame.Snapshot.WhiteRemainingSeconds,
         AGame.Snapshot.BlackRemainingSeconds,
         AGame.Snapshot.WhiteUsedSeconds,
-        AGame.Snapshot.BlackUsedSeconds));
-    uGameTreeBuilder.RecordGameTreeAnalysis(LGameTree,
+        AGame.Snapshot.BlackUsedSeconds),
       GameTreePvInput(Trim(AGame.Snapshot.PrincipalVariation) <> '',
         AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
         AGame.Snapshot.PrincipalVariation),
-      GameTreePvInput(False, 0, '', ''));
+      GameTreePvInput(False, 0, '', ''),
+      @RecordGameTreeVariationLiveAnalysis);
+    try
+      Actor.ExecuteCommand(Command);
+    finally
+      Command.Free;
+    end;
   finally
     LAnnotations.Free;
     LMoves.Free;
@@ -3801,23 +3822,6 @@ begin
   UpdateRunningGameTreeFromSnapshot(AGame, AEventName);
   LOptions := DefaultGameTreePdnRenderOptions;
   Result := GameTreeToPdnTextEx(AGame.GameTree, LOptions);
-end;
-
-procedure TMainForm.RecordGameTreeMainlineWithCurrentClock(AGame: TRunningGame;
-  AGameTree: TGameTree; AMoves, AAnnotations: TStrings);
-begin
-  uGameTreeBuilder.RecordGameTreeMainline(AGameTree,
-    GameTreeMainlineInput(AMoves, AAnnotations,
-      (AGame <> nil) and (AGame = SelectedDisplayedGame),
-      FWhiteRemainingSeconds, FBlackRemainingSeconds, FWhiteUsedSeconds,
-      FBlackUsedSeconds));
-end;
-
-procedure TMainForm.RecordGameTreeMainlineFromInput(AGame: TRunningGame;
-  AGameTree: TGameTree; AMoves, AAnnotations: TStrings);
-begin
-  RecordGameTreeMainlineWithCurrentClock(AGame, AGameTree, AMoves,
-    AAnnotations);
 end;
 
 function TMainForm.CanRecordCurrentAnnotatorPV: Boolean;
@@ -3896,12 +3900,6 @@ begin
     LAnnotatorScore, LAnnotatorPV);
 end;
 
-procedure TMainForm.RecordGameTreeLiveAnalysis(AGameTree: TGameTree);
-begin
-  uGameTreeBuilder.RecordGameTreeAnalysis(AGameTree,
-    CurrentGameTreeEnginePvInput(AGameTree), CurrentGameTreeAnnotatorPvInput);
-end;
-
 function TMainForm.CurrentGameTreeVariationPvInput(
   AVariation: TGameTreeVariationLine; AVariationIndex,
   AVariationPly: Integer): TGameTreeVariationPvInput;
@@ -3924,37 +3922,6 @@ begin
   uGameTreeBuilder.RecordGameTreeVariationAnnotatorPV(AGameTree,
     CurrentGameTreeVariationPvInput(AVariation, AVariationIndex,
       AVariationPly));
-end;
-
-procedure TMainForm.RecordGameTreeVariations(AGameTree: TGameTree);
-var
-  I: Integer;
-  LTreeVariation: TGameTreeVariationLine;
-  LVariationMoves: TStringList;
-begin
-  if AGameTree = nil then
-    Exit;
-
-  LVariationMoves := TStringList.Create;
-  try
-    for I := 0 to AGameTree.VariationLineCount - 1 do
-    begin
-      LTreeVariation := AGameTree.VariationLine[I];
-      if LTreeVariation = nil then
-        Continue;
-
-      LVariationMoves.Clear;
-      TextToMoveList(LTreeVariation.MovesText, LVariationMoves);
-      if LVariationMoves.Count = 0 then
-        Continue;
-
-      uGameTreeBuilder.RecordGameTreeVariationLine(AGameTree,
-        GameTreeVariationLineInput(LTreeVariation, I, LVariationMoves,
-          @RecordGameTreeVariationLiveAnalysis));
-    end;
-  finally
-    LVariationMoves.Free;
-  end;
 end;
 
 procedure TMainForm.UpdateGameMoveHighlight;
@@ -5823,10 +5790,8 @@ begin
     TextToMoveList(AMovesText, LMoves);
     LAnnotations.Text := AAnnotationsText;
 
-    PrepareGameTreeRebuildFromCurrentState(AGame, AGameTree);
-    RecordGameTreeMainlineFromInput(AGame, AGameTree, LMoves, LAnnotations);
-    RecordGameTreeLiveAnalysis(AGameTree);
-    RecordGameTreeVariations(AGameTree);
+    ExecuteGameTreeRebuildFromInput(AGame, AGameTree, LMoves,
+      LAnnotations);
   finally
     LAnnotations.Free;
     LMoves.Free;
@@ -5847,10 +5812,8 @@ begin
   try
     AGameTree.CopyMainlineMovesTo(LMoves);
 
-    PrepareGameTreeRebuildFromCurrentState(AGame, AGameTree);
-    RecordGameTreeMainlineFromInput(AGame, AGameTree, LMoves, LAnnotations);
-    RecordGameTreeLiveAnalysis(AGameTree);
-    RecordGameTreeVariations(AGameTree);
+    ExecuteGameTreeRebuildFromInput(AGame, AGameTree, LMoves,
+      LAnnotations);
   finally
     LAnnotations.Free;
     LMoves.Free;

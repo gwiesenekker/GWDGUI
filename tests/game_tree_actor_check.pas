@@ -6,8 +6,8 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  SysUtils,
-  uGameTree, uGameTreeActor;
+  Classes, SysUtils,
+  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameOrchestrator;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -371,11 +371,86 @@ begin
   end;
 end;
 
+procedure CheckRebuildFromInputsCommand;
+var
+  Actor: TGameTreeActor;
+  Annotations: TStringList;
+  Command: TGameTreeCommand;
+  Moves: TStringList;
+  NodeId: Int64;
+  NullTimeControl: TTimeControl;
+  VariationIndex: Integer;
+begin
+  Actor := TGameTreeActor.Create;
+  Moves := TStringList.Create;
+  Annotations := TStringList.Create;
+  try
+    FillChar(NullTimeControl, SizeOf(NullTimeControl), 0);
+    Actor.GameTree.BeginRebuild('rebuild', 'Event', 'White', 'Black', '*',
+      'W:W31-50:B1-20');
+    Actor.GameTree.RecordMainlineMove(1, '32-28');
+    VariationIndex := Actor.GameTree.StoreVariationLine(2, 1, '18-23', '');
+    Check(VariationIndex = 0, 'setup variation should be stored');
+
+    Moves.Add('32-28');
+    Moves.Add('18-23');
+    Annotations.Add('{old}');
+    Command := Actor.CreateRebuildFromInputsCommand(
+      GameTreeHeaderInput('rebuild', 'Event', 'White', 'Black', '*',
+        'W:W31-50:B1-20', False, NullTimeControl),
+      GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
+      GameTreePvInput(True, 2, '0.10', '37-32'),
+      GameTreePvInput(False, 0, '', ''),
+      nil);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'rebuild command should be accepted');
+      Check(Actor.GameTree.MainlineCount = 2,
+        'rebuild command should record mainline count');
+      Check(Actor.GameTree.MainlineNode[2].MoveText = '18-23',
+        'rebuild command should record second move');
+      Check(Actor.GameTree.MainlineNode[2].EnginePV = '37-32',
+        'rebuild command should record engine PV');
+      Check(Actor.GameTree.VariationLineCount = 1,
+        'rebuild command should preserve stored variation line');
+      Check(Actor.GameTree.FindVariationNode(0, 1) <> nil,
+        'rebuild command should rebuild variation nodes');
+      NodeId := Actor.GameTree.MainlineNode[1].NodeId;
+    finally
+      Command.Free;
+    end;
+
+    Moves[1] := '20-24';
+    Command := Actor.CreateRebuildFromInputsCommand(
+      GameTreeHeaderInput('rebuild', 'Event', 'White', 'Black', '*',
+        'W:W31-50:B1-20', False, NullTimeControl),
+      GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
+      GameTreePvInput(False, 0, '', ''),
+      GameTreePvInput(False, 0, '', ''),
+      nil);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'second rebuild command should be accepted');
+      Check(Actor.GameTree.MainlineNode[1].NodeId = NodeId,
+        'unchanged rebuilt node id should stay stable');
+      Check(Actor.GameTree.MainlineNode[2].MoveText = '20-24',
+        'changed rebuilt move should be applied');
+    finally
+      Command.Free;
+    end;
+  finally
+    Annotations.Free;
+    Moves.Free;
+    Actor.Free;
+  end;
+end;
+
 begin
   CheckActorCommands;
   CheckSearchLifecycle;
   CheckAnnotatorPvCommand;
   CheckStoreSearchMoveVariationCommand;
   CheckStoreMoveVariationCommand;
+  CheckRebuildFromInputsCommand;
   Writeln('OK');
 end.

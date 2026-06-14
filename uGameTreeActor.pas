@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Contnrs, SysUtils,
-  uGameTree, uThreadMessageQueue;
+  uGameTree, uGameTreeBuilder, uThreadMessageQueue;
 
 type
   TGameTreeMoveSource = (
@@ -27,7 +27,8 @@ type
     gtcRecordAnnotatorPV,
     gtcStoreSearchMoveVariation,
     gtcStoreMoveVariation,
-    gtcClearStoredVariations
+    gtcClearStoredVariations,
+    gtcRebuildFromInputs
   );
 
   TGameTreeSearchState = (
@@ -56,6 +57,11 @@ type
     MoveText: string;
     AnnotationText: string;
     MoveSource: TGameTreeMoveSource;
+    HeaderInput: TGameTreeHeaderInput;
+    MainlineInput: TGameTreeMainlineInput;
+    EnginePvInput: TGameTreePvInput;
+    AnnotatorPvInput: TGameTreePvInput;
+    BeforeVariationMove: TGameTreeVariationPlyCallback;
     PlyNumber: Integer;
     DisplayAfterPly: Integer;
     BasePly: Integer;
@@ -66,6 +72,7 @@ type
     PvText: string;
     VariationIndex: Integer;
     constructor Create(AKind: TGameTreeActorCommandKind); reintroduce;
+    destructor Destroy; override;
   end;
 
   TGameTreeActor = class
@@ -81,6 +88,7 @@ type
     function NextCommandId: Int64;
     function NextSearchId: Int64;
     procedure Reject(ACommand: TGameTreeCommand; const AErrorText: string);
+    procedure RebuildStoredVariations(ACommand: TGameTreeCommand);
     function StoreMoveVariationFromNode(ACommand: TGameTreeCommand;
       ANode: TGameTreePlyNode; const AMoveText: string): Boolean;
   public
@@ -102,6 +110,11 @@ type
     function CreateStoreMoveVariationCommand(ANodeId: Int64;
       const AMoveText: string; ASource: TGameTreeMoveSource): TGameTreeCommand;
     function CreateClearStoredVariationsCommand: TGameTreeCommand;
+    function CreateRebuildFromInputsCommand(
+      const AHeader: TGameTreeHeaderInput;
+      const AMainline: TGameTreeMainlineInput;
+      const AEnginePV, AAnnotatorPV: TGameTreePvInput;
+      ABeforeVariationMove: TGameTreeVariationPlyCallback): TGameTreeCommand;
     function CreateStartSearchCommand(ANodeId: Int64;
       out ASearchId: Int64): TGameTreeCommand;
     function CreateStoreVariationLineCommand(ADisplayAfterPly, ABasePly: Integer;
@@ -137,16 +150,26 @@ const
     'game-tree-record-annotator-pv',
     'game-tree-store-search-move-variation',
     'game-tree-store-move-variation',
-    'game-tree-clear-stored-variations'
+    'game-tree-clear-stored-variations',
+    'game-tree-rebuild-from-inputs'
   );
 begin
   inherited Create(CommandNames[AKind]);
   CommandKind := AKind;
   MoveSource := gmsUnknown;
+  MainlineInput.Moves := TStringList.Create;
+  MainlineInput.Annotations := TStringList.Create;
   PlyNumber := -1;
   DisplayAfterPly := -1;
   BasePly := -1;
   VariationIndex := -1;
+end;
+
+destructor TGameTreeCommand.Destroy;
+begin
+  MainlineInput.Annotations.Free;
+  MainlineInput.Moves.Free;
+  inherited Destroy;
 end;
 
 constructor TGameTreeActor.Create(AGameTree: TGameTree;
@@ -276,6 +299,32 @@ begin
   Result.GameTreeId := FGameTree.GameTreeId;
 end;
 
+function TGameTreeActor.CreateRebuildFromInputsCommand(
+  const AHeader: TGameTreeHeaderInput;
+  const AMainline: TGameTreeMainlineInput;
+  const AEnginePV, AAnnotatorPV: TGameTreePvInput;
+  ABeforeVariationMove: TGameTreeVariationPlyCallback): TGameTreeCommand;
+begin
+  Result := TGameTreeCommand.Create(gtcRebuildFromInputs);
+  Result.CommandId := NextCommandId;
+  Result.GameTreeId := FGameTree.GameTreeId;
+  Result.HeaderInput := AHeader;
+  Result.MainlineInput.RecordClock := AMainline.RecordClock;
+  Result.MainlineInput.WhiteRemainingSeconds :=
+    AMainline.WhiteRemainingSeconds;
+  Result.MainlineInput.BlackRemainingSeconds :=
+    AMainline.BlackRemainingSeconds;
+  Result.MainlineInput.WhiteUsedSeconds := AMainline.WhiteUsedSeconds;
+  Result.MainlineInput.BlackUsedSeconds := AMainline.BlackUsedSeconds;
+  if AMainline.Moves <> nil then
+    Result.MainlineInput.Moves.Assign(AMainline.Moves);
+  if AMainline.Annotations <> nil then
+    Result.MainlineInput.Annotations.Assign(AMainline.Annotations);
+  Result.EnginePvInput := AEnginePV;
+  Result.AnnotatorPvInput := AAnnotatorPV;
+  Result.BeforeVariationMove := ABeforeVariationMove;
+end;
+
 function TGameTreeActor.CreateStartSearchCommand(ANodeId: Int64;
   out ASearchId: Int64): TGameTreeCommand;
 begin
@@ -322,6 +371,37 @@ begin
     Exit;
   ACommand.Accepted := False;
   ACommand.ErrorText := AErrorText;
+end;
+
+procedure TGameTreeActor.RebuildStoredVariations(ACommand: TGameTreeCommand);
+var
+  I: Integer;
+  VariationLine: TGameTreeVariationLine;
+  VariationMoves: TStringList;
+begin
+  if ACommand = nil then
+    Exit;
+
+  VariationMoves := TStringList.Create;
+  try
+    for I := 0 to FGameTree.VariationLineCount - 1 do
+    begin
+      VariationLine := FGameTree.VariationLine[I];
+      if VariationLine = nil then
+        Continue;
+
+      VariationMoves.Clear;
+      TextToMoveList(VariationLine.MovesText, VariationMoves);
+      if VariationMoves.Count = 0 then
+        Continue;
+
+      RecordGameTreeVariationLine(FGameTree,
+        GameTreeVariationLineInput(VariationLine, I, VariationMoves,
+          ACommand.BeforeVariationMove));
+    end;
+  finally
+    VariationMoves.Free;
+  end;
 end;
 
 function TGameTreeActor.StoreMoveVariationFromNode(
@@ -601,6 +681,16 @@ begin
     gtcClearStoredVariations:
       begin
         FGameTree.ClearStoredVariations;
+        ACommand.Accepted := True;
+        Inc(FRevision);
+      end;
+    gtcRebuildFromInputs:
+      begin
+        BeginGameTreeRebuild(FGameTree, ACommand.HeaderInput);
+        RecordGameTreeMainline(FGameTree, ACommand.MainlineInput);
+        RecordGameTreeAnalysis(FGameTree, ACommand.EnginePvInput,
+          ACommand.AnnotatorPvInput);
+        RebuildStoredVariations(ACommand);
         ACommand.Accepted := True;
         Inc(FRevision);
       end;
