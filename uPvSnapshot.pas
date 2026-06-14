@@ -5,7 +5,7 @@ unit uPvSnapshot;
 interface
 
 uses
-  SysUtils, uDraughtsBoard;
+  SysUtils, uDraughtsBoard, uGameTreeSearchRef;
 
 type
   TPvSnapshot = class
@@ -25,6 +25,7 @@ type
     destructor Destroy; override;
 
     procedure AssignFrom(ASource: TPvSnapshot);
+    function SearchRef: TGameTreeSearchRef;
     procedure SetData(ABaseBoard: TDraughtsBoard; ABasePly: Integer;
       const APv, AScore, ADepth: string; const ATimeText: string = '';
       AGameTreeId: Int64 = 0; ASearchId: Int64 = 0; ANodeId: Int64 = 0;
@@ -64,6 +65,11 @@ begin
   SetData(ASource.BaseBoard, ASource.BasePly, ASource.PrincipalVariation,
     ASource.Score, ASource.Depth, ASource.TimeText, ASource.GameTreeId,
     ASource.SearchId, ASource.NodeId, ASource.GameTreeOnly);
+end;
+
+function TPvSnapshot.SearchRef: TGameTreeSearchRef;
+begin
+  Result := GameTreeSearchRef(FGameTreeId, FSearchId, FNodeId);
 end;
 
 procedure TPvSnapshot.SetData(ABaseBoard: TDraughtsBoard; ABasePly: Integer;

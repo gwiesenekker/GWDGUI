@@ -579,16 +579,6 @@ var
 
 implementation
 
-function GameTreeSearchRefFromSnapshot(
-  ASnapshot: TPvSnapshot): TGameTreeSearchRef;
-begin
-  if ASnapshot = nil then
-    Result := EmptyGameTreeSearchRef
-  else
-    Result := GameTreeSearchRef(ASnapshot.GameTreeId, ASnapshot.SearchId,
-      ASnapshot.NodeId);
-end;
-
 function RunningGameLifecycleToString(ALifecycle: TRunningGameLifecycle): string;
 begin
   case ALifecycle of
@@ -2133,7 +2123,10 @@ begin
   AActor := nil;
   AGameTree := nil;
   ANode := nil;
-  LSearch := GameTreeSearchRefFromSnapshot(ASnapshot);
+  if ASnapshot = nil then
+    LSearch := EmptyGameTreeSearchRef
+  else
+    LSearch := ASnapshot.SearchRef;
   if not IsValidGameTreeSearchRef(LSearch) then
     Exit;
 
@@ -3313,7 +3306,7 @@ begin
 
   Actor := nil;
   LNode := nil;
-  LSearch := GameTreeSearchRefFromSnapshot(ASnapshot);
+  LSearch := ASnapshot.SearchRef;
   LHasSearch := IsValidGameTreeSearchRef(LSearch);
   if LHasSearch then
   begin
