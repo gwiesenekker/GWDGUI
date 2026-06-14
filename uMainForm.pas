@@ -4343,8 +4343,8 @@ begin
     end;
 
     if SnapshotMovesMatchCurrentTree and
-      (Trim(AGame.Snapshot.MoveAnnotationsText) = '') and
-      (Trim(GameTreeScoreAnnotationsText(LGameTree)) <> '') then
+      (Trim(GameTreeScoreAnnotationsText(LGameTree)) =
+        Trim(LAnnotations.Text)) then
     begin
       Actor := ActorForGameTree(LGameTree);
       if Actor <> nil then
