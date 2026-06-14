@@ -350,6 +350,7 @@ type
       out AErrorText: string): Boolean;
     function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
       out ASearchId, ANodeId: Int64; out AErrorText: string): Boolean;
+    function AnalyzerSearchMatches(AGameTreeId, ASearchId: Int64): Boolean;
     function AcceptSearchMove(AActor: TGameTreeActor; ASearchId,
       ANodeId: Int64; const AMoveText: string; out AErrorText: string): Boolean;
     function CancelGameTreeSearch(AActor: TGameTreeActor;
@@ -1899,6 +1900,14 @@ begin
   end;
 end;
 
+function TMainForm.AnalyzerSearchMatches(AGameTreeId,
+  ASearchId: Int64): Boolean;
+begin
+  Result := (ASearchId > 0) and
+    (FAnalyzerSearch.SearchId = ASearchId) and
+    (FAnalyzerSearch.GameTreeId = AGameTreeId);
+end;
+
 function TMainForm.AcceptSearchMove(AActor: TGameTreeActor; ASearchId,
   ANodeId: Int64; const AMoveText: string; out AErrorText: string): Boolean;
 var
@@ -2461,7 +2470,7 @@ begin
       FAnalyzerMemo.Lines.Add('Autoplay move was not recorded; reason=' +
         LErrorText);
     ReleaseGameTreeSearch(Actor, ASearchId);
-    if FAnalyzerSearch.SearchId = ASearchId then
+    if AnalyzerSearchMatches(AGameTreeId, ASearchId) then
       ClearAnalyzerSearchTracking;
   end
   else
