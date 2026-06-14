@@ -71,17 +71,13 @@ type
 
   TAnalyzerMoveGuiMessage = class(TThreadMessage)
   private
-    FGameTreeId: Int64;
     FMoveText: string;
-    FNodeId: Int64;
-    FSearchId: Int64;
+    FSearch: TGameTreeSearchRef;
   public
     constructor Create(AGameTreeId, ASearchId, ANodeId: Int64;
       const AMoveText: string); reintroduce;
-    property GameTreeId: Int64 read FGameTreeId;
     property MoveText: string read FMoveText;
-    property NodeId: Int64 read FNodeId;
-    property SearchId: Int64 read FSearchId;
+    property Search: TGameTreeSearchRef read FSearch;
   end;
 
   TAnalyzerFinishedGuiMessage = class(TThreadMessage)
@@ -474,7 +470,7 @@ type
     procedure GamesListBoxClick(Sender: TObject);
     procedure GuiEventTimerTick(Sender: TObject);
     procedure HandleAnalyzerLog(const AMessage: string);
-    procedure HandleAnalyzerMove(AGameTreeId, ASearchId, ANodeId: Int64;
+    procedure HandleAnalyzerMove(const ASearch: TGameTreeSearchRef;
       const AMoveText: string);
     procedure HandleMctsLog(const AMessage: string);
     procedure HintSourceClick(Sender: TObject);
@@ -680,9 +676,7 @@ constructor TAnalyzerMoveGuiMessage.Create(AGameTreeId, ASearchId,
   ANodeId: Int64; const AMoveText: string);
 begin
   inherited Create('analyzer-move');
-  FGameTreeId := AGameTreeId;
-  FSearchId := ASearchId;
-  FNodeId := ANodeId;
+  FSearch := GameTreeSearchRef(AGameTreeId, ASearchId, ANodeId);
   FMoveText := Trim(AMoveText);
 end;
 
@@ -2500,17 +2494,15 @@ begin
   ScrollMemoToLastTextLine(FAnalyzerMemo);
 end;
 
-procedure TMainForm.HandleAnalyzerMove(AGameTreeId, ASearchId, ANodeId: Int64;
+procedure TMainForm.HandleAnalyzerMove(const ASearch: TGameTreeSearchRef;
   const AMoveText: string);
 var
   Actor: TGameTreeActor;
   LAccepted: Boolean;
   LErrorText: string;
   LRejectedReason: string;
-  LSearch: TGameTreeSearchRef;
 begin
-  LSearch := GameTreeSearchRef(AGameTreeId, ASearchId, ANodeId);
-  Actor := ActorForGameTreeId(AGameTreeId);
+  Actor := ActorForGameTreeId(ASearch.GameTreeId);
   if Actor = nil then
   begin
     if FAnalyzerMemo <> nil then
@@ -2518,25 +2510,25 @@ begin
     Exit;
   end;
 
-  LAccepted := AcceptSearchMove(Actor, LSearch, AMoveText, LErrorText);
+  LAccepted := AcceptSearchMove(Actor, ASearch, AMoveText, LErrorText);
 
   if LAccepted then
   begin
     if FAnalyzerMemo <> nil then
       FAnalyzerMemo.Lines.Add('Annotator move accepted; move=' +
         Trim(AMoveText));
-    if (not StoreSearchMoveVariation(Actor, LSearch, gmsAutoplay,
+    if (not StoreSearchMoveVariation(Actor, ASearch, gmsAutoplay,
       LErrorText)) and (FAnalyzerMemo <> nil) then
       FAnalyzerMemo.Lines.Add('Autoplay move was not recorded; reason=' +
         LErrorText);
-    ReleaseGameTreeSearch(Actor, LSearch);
-    if AnalyzerSearchMatches(LSearch) then
+    ReleaseGameTreeSearch(Actor, ASearch);
+    if AnalyzerSearchMatches(ASearch) then
       ClearAnalyzerSearchTracking;
   end
   else
   begin
     LRejectedReason := LErrorText;
-    ReleaseRejectedSearchIfFinished(Actor, LSearch);
+    ReleaseRejectedSearchIfFinished(Actor, ASearch);
     if FAnalyzerMemo <> nil then
       FAnalyzerMemo.Lines.Add('Annotator move rejected; reason=' +
         LRejectedReason);
@@ -5617,9 +5609,7 @@ begin
         if EventObject is TAnalyzerLogGuiMessage then
           HandleAnalyzerLog(TAnalyzerLogGuiMessage(EventObject).Message)
         else if EventObject is TAnalyzerMoveGuiMessage then
-          HandleAnalyzerMove(TAnalyzerMoveGuiMessage(EventObject).GameTreeId,
-            TAnalyzerMoveGuiMessage(EventObject).SearchId,
-            TAnalyzerMoveGuiMessage(EventObject).NodeId,
+          HandleAnalyzerMove(TAnalyzerMoveGuiMessage(EventObject).Search,
             TAnalyzerMoveGuiMessage(EventObject).MoveText)
         else if EventObject is TMctsLogGuiMessage then
           HandleMctsLog(TMctsLogGuiMessage(EventObject).Message)
