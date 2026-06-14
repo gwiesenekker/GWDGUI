@@ -267,6 +267,7 @@ type
     FPrincipalVariationTimeText: string;
     FPvBaseBoard: TDraughtsBoard;
     FPvBasePly: Integer;
+    FTreePvBaseBoard: TDraughtsBoard;
     FPvInfoLabel: TLabel;
     FPvBrowser: TPvBrowser;
     FPvMemo: TMemo;
@@ -449,6 +450,8 @@ type
       ABlackUsedSeconds: Double): Boolean;
     function EnginePvForTree(AGameTree: TGameTree; APly: Integer;
       out APV, AScore, ADepth, ATimeText: string): Boolean;
+    function TryBuildTreeBoardAtPly(AGameTree: TGameTree; APly: Integer;
+      ABoard: TDraughtsBoard): Boolean;
     function VisibleMainPvForTree(AGameTree: TGameTree;
       out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV,
       AScore, ADepth, ATimeText: string): Boolean;
@@ -909,6 +912,7 @@ begin
   FAnalyzerPopoutBoard := TDraughtsBoard.Create;
   FAnalyzerPvBaseBoard := TDraughtsBoard.Create;
   FPvBaseBoard := TDraughtsBoard.Create;
+  FTreePvBaseBoard := TDraughtsBoard.Create;
   FStartingFEN := FBoard.StartingFEN;
   FGameState := gosWaiting;
   FGameResult := '*';
@@ -1608,6 +1612,7 @@ begin
   FAnalyzerMiniBoard.Free;
   FPopoutBoard.Free;
   FMiniBoard.Free;
+  FTreePvBaseBoard.Free;
   FPvBaseBoard.Free;
   FBoard.Free;
   inherited Destroy;
@@ -3996,6 +4001,31 @@ begin
   Result := APV <> '';
 end;
 
+function TMainForm.TryBuildTreeBoardAtPly(AGameTree: TGameTree;
+  APly: Integer; ABoard: TDraughtsBoard): Boolean;
+var
+  I: Integer;
+  LNode: TGameTreePlyNode;
+begin
+  Result := False;
+  if (AGameTree = nil) or (ABoard = nil) or (APly < 0) then
+    Exit;
+
+  try
+    ABoard.LoadFromFEN(StartingFenForTree(AGameTree));
+    for I := 1 to APly do
+    begin
+      LNode := AGameTree.MainlineNode[I];
+      if LNode = nil then
+        Exit;
+      ABoard.PlayMove(LNode.MoveText, True, True);
+    end;
+    Result := True;
+  except
+    Result := False;
+  end;
+end;
+
 function TMainForm.VisibleMainPvForTree(AGameTree: TGameTree;
   out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV, AScore,
   ADepth, ATimeText: string): Boolean;
@@ -4035,8 +4065,11 @@ begin
         ADepth := LTreeDepth;
       if LTreeTimeText <> '' then
         ATimeText := LTreeTimeText;
-      ABaseBoard := LGame.Snapshot.PvBaseBoard;
       ABasePly := LGame.Snapshot.PvBasePly;
+      if TryBuildTreeBoardAtPly(AGameTree, ABasePly, FTreePvBaseBoard) then
+        ABaseBoard := FTreePvBaseBoard
+      else
+        ABaseBoard := LGame.Snapshot.PvBaseBoard;
     end;
   end
   else if AGameTree = FGameTree then
@@ -4060,8 +4093,11 @@ begin
         ADepth := LTreeDepth;
       if LTreeTimeText <> '' then
         ATimeText := LTreeTimeText;
-      ABaseBoard := FPvBaseBoard;
       ABasePly := FPvBasePly;
+      if TryBuildTreeBoardAtPly(AGameTree, ABasePly, FTreePvBaseBoard) then
+        ABaseBoard := FTreePvBaseBoard
+      else
+        ABaseBoard := FPvBaseBoard;
     end;
   end;
 
