@@ -395,6 +395,7 @@ type
       const AEventName: string): string;
     function CanExploreVariation: Boolean;
     function CanAcceptHumanBoardMove: Boolean;
+    function CanStartAutoplayForGame(AGame: TRunningGame): Boolean;
     function CanStartAutoplay: Boolean;
     function CanRecordCurrentAnnotatorPV: Boolean;
     function CanRecordCurrentVariationAnnotatorPV(AVariationIndex,
@@ -1680,6 +1681,12 @@ begin
     (LGame.Snapshot.State = gosRunning) and LGame.IsHumanToMove;
 end;
 
+function TMainForm.CanStartAutoplayForGame(AGame: TRunningGame): Boolean;
+begin
+  Result := (AGame = nil) or
+    (not (AGame.Snapshot.State in [gosWaiting, gosRunning]));
+end;
+
 function TMainForm.CanStartAutoplay: Boolean;
 var
   LGame: TRunningGame;
@@ -1689,10 +1696,7 @@ begin
     Exit;
 
   LGame := SelectedDisplayedGame;
-  if LGame <> nil then
-    Result := not (LGame.Snapshot.State in [gosWaiting, gosRunning])
-  else
-    Result := True;
+  Result := CanStartAutoplayForGame(LGame);
 end;
 
 function TMainForm.CanExploreVariation: Boolean;
