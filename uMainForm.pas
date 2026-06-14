@@ -336,6 +336,8 @@ type
       AVariationPvIndex, AVariationPvPly: Integer;
       const AVariationPvScore, AVariationPvText: string;
       out AErrorText: string): Boolean;
+    function SetGameTreeHeader(AActor: TGameTreeActor;
+      const AHeader: TGameTreeHeaderInput; out AErrorText: string): Boolean;
     function ExecuteGameTreeCommand(AActor: TGameTreeActor;
       ACommand: TGameTreeCommand; out AErrorText: string): Boolean;
     function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
@@ -1801,6 +1803,27 @@ begin
   Command := AActor.CreateRebuildFromInputsCommand(AHeader, AMainline,
     AEnginePV, AAnnotatorPV, AVariationPvIndex, AVariationPvPly,
     AVariationPvScore, AVariationPvText);
+  try
+    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
+  finally
+    Command.Free;
+  end;
+end;
+
+function TMainForm.SetGameTreeHeader(AActor: TGameTreeActor;
+  const AHeader: TGameTreeHeaderInput; out AErrorText: string): Boolean;
+var
+  Command: TGameTreeCommand;
+begin
+  Result := False;
+  AErrorText := '';
+  if AActor = nil then
+  begin
+    AErrorText := 'invalid game-tree header target';
+    Exit;
+  end;
+
+  Command := AActor.CreateSetHeaderCommand(AHeader);
   try
     Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
   finally
@@ -4675,22 +4698,16 @@ var
     AResolvedBlackName, AResolvedResultText, AResolvedStartingFEN: string);
   var
     Actor: TGameTreeActor;
-    Command: TGameTreeCommand;
     LErrorText: string;
   begin
     Actor := ActorForGameTree(AGameTree);
     if Actor = nil then
       Exit;
 
-    Command := Actor.CreateSetHeaderCommand(
+    SetGameTreeHeader(Actor,
       GameTreeHeaderInput('', AResolvedEventName, AResolvedWhiteName,
         AResolvedBlackName, AResolvedResultText, AResolvedStartingFEN,
-        False, DefaultTimeControl));
-    try
-      ExecuteGameTreeCommand(Actor, Command, LErrorText);
-    finally
-      Command.Free;
-    end;
+        False, DefaultTimeControl), LErrorText);
   end;
 begin
   if AGameTree = nil then
