@@ -395,6 +395,9 @@ type
       AGameTree: TGameTree): TGameTreeHeaderInput;
     function RunningGameTreeHeaderInput(AGame: TRunningGame;
       const AEventName: string): TGameTreeHeaderInput;
+    function RunningSnapshotMainlineInput(AGame: TRunningGame;
+      AMoves, AAnnotations: TStrings; ARecordClock: Boolean
+      ): TGameTreeMainlineInput;
     function RunningGameTreePvInput(AGame: TRunningGame;
       ARecordPV: Boolean): TGameTreePvInput;
     procedure UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
@@ -4312,6 +4315,19 @@ begin
     AGame.FSetup.TimeControl);
 end;
 
+function TMainForm.RunningSnapshotMainlineInput(AGame: TRunningGame;
+  AMoves, AAnnotations: TStrings; ARecordClock: Boolean): TGameTreeMainlineInput;
+begin
+  if (AGame = nil) or (not ARecordClock) then
+    Result := GameTreeMainlineInput(AMoves, AAnnotations, False, 0, 0, 0, 0)
+  else
+    Result := GameTreeMainlineInput(AMoves, AAnnotations, True,
+      AGame.Snapshot.WhiteRemainingSeconds,
+      AGame.Snapshot.BlackRemainingSeconds,
+      AGame.Snapshot.WhiteUsedSeconds,
+      AGame.Snapshot.BlackUsedSeconds);
+end;
+
 function TMainForm.RunningGameTreePvInput(AGame: TRunningGame;
   ARecordPV: Boolean): TGameTreePvInput;
 begin
@@ -4429,11 +4445,7 @@ var
       Command := Actor.CreateAppendMainlineSnapshotMoveCommand(
         RunningGameTreeHeaderInput(AGame, AEventName),
         LMoves[I], LineOrEmpty(LAnnotations, I),
-        GameTreeMainlineInput(nil, nil, IsLastMove,
-          AGame.Snapshot.WhiteRemainingSeconds,
-          AGame.Snapshot.BlackRemainingSeconds,
-          AGame.Snapshot.WhiteUsedSeconds,
-          AGame.Snapshot.BlackUsedSeconds),
+        RunningSnapshotMainlineInput(AGame, nil, nil, IsLastMove),
         RunningGameTreePvInput(AGame, IsLastMove),
         gmsEngineMatch);
       try
@@ -4517,11 +4529,7 @@ begin
       begin
         Command := Actor.CreateSetHeaderCommand(
           RunningGameTreeHeaderInput(AGame, AEventName),
-          GameTreeMainlineInput(nil, nil, True,
-            AGame.Snapshot.WhiteRemainingSeconds,
-            AGame.Snapshot.BlackRemainingSeconds,
-            AGame.Snapshot.WhiteUsedSeconds,
-            AGame.Snapshot.BlackUsedSeconds));
+          RunningSnapshotMainlineInput(AGame, nil, nil, True));
         try
           ExecuteGameTreeCommand(Actor, Command, LErrorText);
         finally
@@ -4537,11 +4545,7 @@ begin
       Exit;
     if RebuildGameTreeFromInputs(Actor,
       RunningGameTreeHeaderInput(AGame, AEventName),
-      GameTreeMainlineInput(LMoves, LAnnotations, True,
-        AGame.Snapshot.WhiteRemainingSeconds,
-        AGame.Snapshot.BlackRemainingSeconds,
-        AGame.Snapshot.WhiteUsedSeconds,
-        AGame.Snapshot.BlackUsedSeconds),
+      RunningSnapshotMainlineInput(AGame, LMoves, LAnnotations, True),
       RunningGameTreePvInput(AGame, True),
       GameTreePvInput(False, 0, '', ''), -1, 0, '', '', '', '', LErrorText) then
       AGame.FLastSnapshotTreeSyncSignature := LSyncSignature;
