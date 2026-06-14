@@ -75,6 +75,8 @@ type
     VariationIndex: Integer;
     constructor Create(AKind: TGameTreeActorCommandKind); reintroduce;
     destructor Destroy; override;
+    function SearchRef: TGameTreeSearchRef;
+    procedure SetSearchRef(const ASearch: TGameTreeSearchRef);
   end;
 
   TGameTreeActor = class
@@ -151,16 +153,6 @@ begin
   Result := GameTreeSearchRef(GameTreeId, SearchId, NodeId);
 end;
 
-procedure SetCommandSearch(ACommand: TGameTreeCommand;
-  const ASearch: TGameTreeSearchRef);
-begin
-  if ACommand = nil then
-    Exit;
-  ACommand.GameTreeId := ASearch.GameTreeId;
-  ACommand.SearchId := ASearch.SearchId;
-  ACommand.NodeId := ASearch.NodeId;
-end;
-
 constructor TGameTreeCommand.Create(AKind: TGameTreeActorCommandKind);
 const
   CommandNames: array[TGameTreeActorCommandKind] of string = (
@@ -195,6 +187,18 @@ begin
   MainlineInput.Annotations.Free;
   MainlineInput.Moves.Free;
   inherited Destroy;
+end;
+
+function TGameTreeCommand.SearchRef: TGameTreeSearchRef;
+begin
+  Result := GameTreeSearchRef(GameTreeId, SearchId, NodeId);
+end;
+
+procedure TGameTreeCommand.SetSearchRef(const ASearch: TGameTreeSearchRef);
+begin
+  GameTreeId := ASearch.GameTreeId;
+  SearchId := ASearch.SearchId;
+  NodeId := ASearch.NodeId;
 end;
 
 constructor TGameTreeActor.Create(AGameTree: TGameTree;
@@ -303,7 +307,7 @@ begin
   Result.MoveText := Trim(AMoveText);
   Search := FindSearch(ASearchId);
   if Search <> nil then
-    SetCommandSearch(Result, Search.SearchRef)
+    Result.SetSearchRef(Search.SearchRef)
   else
     Result.GameTreeId := FGameTree.GameTreeId;
 end;
@@ -655,7 +659,7 @@ begin
           Exit;
         end;
         Search.State := gssCancelled;
-        SetCommandSearch(ACommand, Search.SearchRef);
+        ACommand.SetSearchRef(Search.SearchRef);
         ACommand.Accepted := True;
         Inc(FRevision);
       end;
@@ -681,7 +685,7 @@ begin
         end;
         Search.State := gssDone;
         Search.ResultMove := Trim(ACommand.MoveText);
-        SetCommandSearch(ACommand, Search.SearchRef);
+        ACommand.SetSearchRef(Search.SearchRef);
         ACommand.Accepted := True;
         Inc(FRevision);
       end;
@@ -698,7 +702,7 @@ begin
           Reject(ACommand, 'active search cannot be released');
           Exit;
         end;
-        SetCommandSearch(ACommand, Search.SearchRef);
+        ACommand.SetSearchRef(Search.SearchRef);
         if not RemoveSearch(ACommand.SearchId) then
         begin
           Reject(ACommand, 'search was not released');
