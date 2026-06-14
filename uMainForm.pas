@@ -216,6 +216,7 @@ type
     FGameTreeForm: TForm;
     FGameTreeView: TTreeView;
     FDisplayedMovesSignature: string;
+    FDisplayedSnapshotSignature: string;
     FHighlightedGameMovePly: Integer;
     FHideMoveAnnotations: Boolean;
     FHideMoveAnnotationsMenuItem: TMenuItem;
@@ -3216,6 +3217,7 @@ begin
   FGameResult := '*';
   FStartingFEN := FBoard.StartingFEN;
   FDisplayedMovesSignature := '';
+  FDisplayedSnapshotSignature := '';
   ClearStoredTreeVariations(FGameTree);
   FStandaloneWhitePlayerName := 'White';
   FStandaloneBlackPlayerName := 'Black';
@@ -3401,6 +3403,7 @@ begin
     FGameResult := '*';
     FStartingFEN := AGame.StartingFEN;
     FDisplayedMovesSignature := AGame.MovesText;
+    FDisplayedSnapshotSignature := '';
     LoadTreeVariationsFromLegacyText(FGameTree, AGame.MoveVariationsText,
       AGame.MoveVariationAnnotationsText);
     FStandaloneWhitePlayerName := PlayerNameOrFallback(AGame.WhiteName, 'White');
@@ -4508,9 +4511,33 @@ end;
 
 procedure TMainForm.ApplyGameToDisplay(AGame: TRunningGame);
 var
-  I: Integer;
   LLogSourceChanged: Boolean;
   LMoveCount: Integer;
+  LSnapshotSignature: string;
+
+  function SecondsSignature(AValue: Double): string;
+  begin
+    Result := FormatFloat('0.000', AValue);
+  end;
+
+  procedure UpdateDisplayedGameLog;
+  var
+    J: Integer;
+  begin
+    LLogSourceChanged := (FGameLogSourceGameId <> AGame.Id) or
+      (FGameLogSourceLineCount <> AGame.Snapshot.LogLines.Count) or
+      (FGameLogSourceShowStdout <> AGame.ShowStdout);
+    if LLogSourceChanged then
+    begin
+      FGameLog.Clear;
+      for J := 0 to AGame.Snapshot.LogLines.Count - 1 do
+        if GameLogLineVisible(AGame.Snapshot.LogLines[J], AGame) then
+          FGameLog.Add(AGame.Snapshot.LogLines[J]);
+      FGameLogSourceGameId := AGame.Id;
+      FGameLogSourceLineCount := AGame.Snapshot.LogLines.Count;
+      FGameLogSourceShowStdout := AGame.ShowStdout;
+    end;
+  end;
 begin
   if AGame = nil then
   begin
@@ -4522,6 +4549,7 @@ begin
     FPrincipalVariationDepth := '';
     FPrincipalVariationTimeText := '';
     FDisplayedMovesSignature := '';
+    FDisplayedSnapshotSignature := '';
     ClearStoredTreeVariations(FGameTree);
     FStandaloneWhitePlayerName := 'White';
     FStandaloneBlackPlayerName := 'Black';
@@ -4546,8 +4574,37 @@ begin
     ClearHumanMoveSelection;
     FViewedGameId := AGame.Id;
     FGameBrowsePly := -1;
+    FDisplayedSnapshotSignature := '';
     ClearStoredTreeVariations(AGame.GameTree);
   end;
+
+  LSnapshotSignature :=
+    IntToStr(AGame.Id) + #10 +
+    AGame.Snapshot.WhitePlayerName + #10 +
+    AGame.Snapshot.BlackPlayerName + #10 +
+    AGame.Snapshot.StartingFEN + #10 +
+    AGame.Snapshot.MovesPlayedText + #10 +
+    AGame.Snapshot.MoveAnnotationsText + #10 +
+    IntToStr(Ord(AGame.Snapshot.State)) + #10 +
+    AGame.Snapshot.GameResult + #10 +
+    IntToStr(Ord(AGame.Snapshot.CurrentSide)) + #10 +
+    AGame.Snapshot.PrincipalVariation + #10 +
+    AGame.Snapshot.PvScore + #10 +
+    AGame.Snapshot.PvSnapshot.Depth + #10 +
+    AGame.Snapshot.PvSnapshot.TimeText + #10 +
+    IntToStr(AGame.Snapshot.PvBasePly) + #10 +
+    SecondsSignature(AGame.Snapshot.WhiteRemainingSeconds) + #10 +
+    SecondsSignature(AGame.Snapshot.BlackRemainingSeconds) + #10 +
+    SecondsSignature(AGame.Snapshot.WhiteUsedSeconds) + #10 +
+    SecondsSignature(AGame.Snapshot.BlackUsedSeconds);
+  UpdateDisplayedGameLog;
+  if FDisplayedSnapshotSignature = LSnapshotSignature then
+  begin
+    UpdateGameLogMemo;
+    UpdateAutoplayControls;
+    Exit;
+  end;
+  FDisplayedSnapshotSignature := LSnapshotSignature;
 
   if FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText then
   begin
@@ -4575,19 +4632,6 @@ begin
   FBlackRemainingSeconds := AGame.Snapshot.BlackRemainingSeconds;
   FWhiteUsedSeconds := AGame.Snapshot.WhiteUsedSeconds;
   FBlackUsedSeconds := AGame.Snapshot.BlackUsedSeconds;
-  LLogSourceChanged := (FGameLogSourceGameId <> AGame.Id) or
-    (FGameLogSourceLineCount <> AGame.Snapshot.LogLines.Count) or
-    (FGameLogSourceShowStdout <> AGame.ShowStdout);
-  if LLogSourceChanged then
-  begin
-    FGameLog.Clear;
-    for I := 0 to AGame.Snapshot.LogLines.Count - 1 do
-      if GameLogLineVisible(AGame.Snapshot.LogLines[I], AGame) then
-        FGameLog.Add(AGame.Snapshot.LogLines[I]);
-    FGameLogSourceGameId := AGame.Id;
-    FGameLogSourceLineCount := AGame.Snapshot.LogLines.Count;
-    FGameLogSourceShowStdout := AGame.ShowStdout;
-  end;
   FGameActive := True;
   if not RunningGameTreeExtendsSnapshot(AGame) then
     UpdateGameTreeFromMoveText(AGame, AGame.GameTree,
@@ -5559,6 +5603,7 @@ begin
   FPvBaseBoard.AssignFrom(FBoard);
   FPvBasePly := 0;
   FGameActive := True;
+  FDisplayedSnapshotSignature := '';
   FBoardControl.Board := FBoard;
   UpdateMiniBoardFromBoard(FBoard);
   FGameLogMemo.Clear;
