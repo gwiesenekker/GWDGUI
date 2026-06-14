@@ -6347,6 +6347,7 @@ procedure TMainForm.UpdateGameLogMemo;
 var
   I: Integer;
   LCanAppend: Boolean;
+  LChanged: Boolean;
   LGame: TRunningGame;
   LGameId: Integer;
   LShowStdout: Boolean;
@@ -6371,6 +6372,10 @@ begin
     (FGameLogMemoLineCount >= 0) and
     (FGameLogMemoLineCount <= FGameLog.Count) and
     (FGameLogMemo.Lines.Count = FGameLogMemoLineCount);
+  LChanged := (not LCanAppend) or (FGameLogMemoLineCount < FGameLog.Count);
+
+  if not LChanged then
+    Exit;
 
   FGameLogMemo.Lines.BeginUpdate;
   try
