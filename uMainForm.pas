@@ -26,6 +26,11 @@ type
   end;
   TMoveVariationHitArray = array of TMoveVariationHit;
 
+  TGameTreeSearchRef = record
+    GameTreeId: Int64;
+    SearchId: Int64;
+  end;
+
   TRunnerSnapshotGuiMessage = class(TThreadMessage)
   private
     FGameId: Integer;
@@ -178,8 +183,7 @@ type
     FAnalyzerPvBrowser: TPvBrowser;
     FAnalyzerPvMemo: TMemo;
     FAnalyzerRunner: TAnalyzerRunnerThread;
-    FAnalyzerSearchGameTreeId: Int64;
-    FAnalyzerSearchId: Int64;
+    FAnalyzerSearch: TGameTreeSearchRef;
     FAutorandomButton: TButton;
     FAutoplayButton: TButton;
     FAutoplaySecondsEdit: TEdit;
@@ -2125,14 +2129,14 @@ begin
     Exit;
   end;
 
-  FAnalyzerSearchGameTreeId := AGameTree.GameTreeId;
-  FAnalyzerSearchId := ASearchId;
+  FAnalyzerSearch.GameTreeId := AGameTree.GameTreeId;
+  FAnalyzerSearch.SearchId := ASearchId;
 end;
 
 procedure TMainForm.ClearAnalyzerSearchTracking;
 begin
-  FAnalyzerSearchId := 0;
-  FAnalyzerSearchGameTreeId := 0;
+  FAnalyzerSearch.SearchId := 0;
+  FAnalyzerSearch.GameTreeId := 0;
 end;
 
 procedure TMainForm.SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
@@ -2457,7 +2461,7 @@ begin
       FAnalyzerMemo.Lines.Add('Autoplay move was not recorded; reason=' +
         LErrorText);
     ReleaseGameTreeSearch(Actor, ASearchId);
-    if FAnalyzerSearchId = ASearchId then
+    if FAnalyzerSearch.SearchId = ASearchId then
       ClearAnalyzerSearchTracking;
   end
   else
@@ -2881,12 +2885,12 @@ procedure TMainForm.CancelAnalyzerSearch;
 var
   Actor: TGameTreeActor;
 begin
-  if FAnalyzerSearchId <= 0 then
+  if FAnalyzerSearch.SearchId <= 0 then
     Exit;
 
-  Actor := ActorForGameTreeId(FAnalyzerSearchGameTreeId);
-  if CancelGameTreeSearch(Actor, FAnalyzerSearchId) then
-    ReleaseGameTreeSearch(Actor, FAnalyzerSearchId);
+  Actor := ActorForGameTreeId(FAnalyzerSearch.GameTreeId);
+  if CancelGameTreeSearch(Actor, FAnalyzerSearch.SearchId) then
+    ReleaseGameTreeSearch(Actor, FAnalyzerSearch.SearchId);
 
   ClearAnalyzerSearchTracking;
 end;
