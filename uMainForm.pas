@@ -5596,12 +5596,17 @@ end;
 
 procedure TMainForm.ScoreHistoryPopoutClick(Sender: TObject);
 begin
+  if FScoreHistoryControl = nil then
+    Exit;
   if FScoreHistoryForm = nil then
   begin
     FScoreHistoryForm := TScoreHistoryForm.Create(Self);
     FScoreHistoryForm.OnClose := @ScoreHistoryFormClose;
   end;
-  UpdateScoreHistory(ActiveGameTree);
+  FScoreHistoryForm.UpdateScores(FScoreHistoryControl.AnnotationsText,
+    FScoreHistoryControl.PlyCount, FScoreHistoryControl.CurrentPly,
+    FScoreHistoryControl.MaxScore, FScoreHistoryControl.Scale,
+    FScoreHistoryControl.StartingSide);
   ShowFormCenteredOnOwner(FScoreHistoryForm, Self);
 end;
 
