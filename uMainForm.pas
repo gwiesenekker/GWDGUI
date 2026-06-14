@@ -3463,7 +3463,6 @@ begin
   LGameTree := AGameTree;
   if LGameTree = nil then
     Exit;
-  UpdateGameTreeFromState(GameForTreeRefresh(LGameTree), LGameTree);
   VariationLine := TreeVariationLineByIndex(AVariationIndex, LGameTree);
   if VariationLine = nil then
     Exit;
@@ -5105,7 +5104,6 @@ begin
 
   FGameTreeBrowseMode := False;
   LGameTree := ActiveGameTree;
-  UpdateGameTreeFromState(GameForTreeRefresh(LGameTree), LGameTree);
   UpdateGameTreeView(LGameTree);
   Key := 0;
 end;
@@ -5164,7 +5162,6 @@ begin
 
   FGameTreeBrowseMode := False;
   LGameTree := ActiveGameTree;
-  UpdateGameTreeFromState(GameForTreeRefresh(LGameTree), LGameTree);
   UpdateGameTreeView(LGameTree);
   FGameTreeForm.Show;
   FGameTreeForm.BringToFront;
