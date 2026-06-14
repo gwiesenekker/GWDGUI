@@ -1208,7 +1208,8 @@ begin
     Node := GetMainlineNode(APlyNumber);
   if Node = nil then
     Exit;
-  StoreValue(FEngineScoresByPly, APlyNumber, AScore);
+  if Trim(AScore) <> '' then
+    StoreValue(FEngineScoresByPly, APlyNumber, AScore);
   StoreValue(FEnginePvsByPly, APlyNumber, APV);
   ApplyStoredAnalysis(Node, APlyNumber);
 end;

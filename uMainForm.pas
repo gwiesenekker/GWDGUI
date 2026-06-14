@@ -4196,7 +4196,7 @@ var
           AGame.Snapshot.BlackUsedSeconds),
         GameTreePvInput(IsLastMove and
           (Trim(AGame.Snapshot.PrincipalVariation) <> ''),
-          AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
+          AGame.Snapshot.PvBasePly, '',
           AGame.Snapshot.PrincipalVariation),
         gmsEngineMatch);
       try
@@ -4250,7 +4250,7 @@ begin
         AGame.Snapshot.WhiteUsedSeconds,
         AGame.Snapshot.BlackUsedSeconds),
       GameTreePvInput(Trim(AGame.Snapshot.PrincipalVariation) <> '',
-        AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
+        AGame.Snapshot.PvBasePly, '',
         AGame.Snapshot.PrincipalVariation),
       GameTreePvInput(False, 0, '', ''), -1, 0, '', '', LErrorText) then
       AGame.FLastSnapshotTreeSyncSignature := LSyncSignature;
