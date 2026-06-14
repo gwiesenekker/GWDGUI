@@ -6057,7 +6057,8 @@ var
 begin
   LGame := SelectedGame;
   LGameTree := ActiveGameTree;
-  UpdateGameTreeFromState(LGame, LGameTree);
+  if (LGame = nil) or (LGameTree <> LGame.GameTree) then
+    UpdateGameTreeFromState(LGame, LGameTree);
 
   if LGameTree <> nil then
   begin
