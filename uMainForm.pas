@@ -331,6 +331,8 @@ type
       out ASearchId, ANodeId: Int64; out AErrorText: string): Boolean;
     function AcceptSearchMove(AActor: TGameTreeActor; ASearchId,
       ANodeId: Int64; const AMoveText: string; out AErrorText: string): Boolean;
+    function CancelGameTreeSearch(AActor: TGameTreeActor;
+      ASearchId: Int64): Boolean;
     function ReleaseGameTreeSearch(AActor: TGameTreeActor;
       ASearchId: Int64): Boolean;
     function ReleaseRejectedSearchIfFinished(AActor: TGameTreeActor;
@@ -1814,6 +1816,24 @@ begin
   end;
 end;
 
+function TMainForm.CancelGameTreeSearch(AActor: TGameTreeActor;
+  ASearchId: Int64): Boolean;
+var
+  Command: TGameTreeCommand;
+  LErrorText: string;
+begin
+  Result := False;
+  if (AActor = nil) or (ASearchId <= 0) then
+    Exit;
+
+  Command := AActor.CreateCancelSearchCommand(ASearchId);
+  try
+    Result := ExecuteGameTreeCommand(AActor, Command, LErrorText);
+  finally
+    Command.Free;
+  end;
+end;
+
 function TMainForm.ReleaseGameTreeSearch(AActor: TGameTreeActor;
   ASearchId: Int64): Boolean;
 var
@@ -2679,24 +2699,13 @@ end;
 procedure TMainForm.CancelAnalyzerSearch;
 var
   Actor: TGameTreeActor;
-  Command: TGameTreeCommand;
-  LErrorText: string;
 begin
   if FAnalyzerSearchId <= 0 then
     Exit;
 
   Actor := ActorForGameTreeId(FAnalyzerSearchGameTreeId);
-  if Actor <> nil then
-  begin
-    Command := Actor.CreateCancelSearchCommand(FAnalyzerSearchId);
-    try
-      ExecuteGameTreeCommand(Actor, Command, LErrorText);
-      if Command.Accepted then
-        ReleaseGameTreeSearch(Actor, FAnalyzerSearchId);
-    finally
-      Command.Free;
-    end;
-  end;
+  if CancelGameTreeSearch(Actor, FAnalyzerSearchId) then
+    ReleaseGameTreeSearch(Actor, FAnalyzerSearchId);
 
   ClearAnalyzerSearchTracking;
 end;
