@@ -3,7 +3,8 @@ program game_tree_pdn_filter_check;
 {$mode objfpc}{$H+}
 
 uses
-  Classes, SysUtils, uGameTree, uGameTreeBuilder, uGameTreePdn;
+  Classes, SysUtils, uGameOrchestrator, uGameTree, uGameTreeBuilder,
+  uGameTreePdn;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -143,6 +144,73 @@ begin
       'same variation move should preserve node id');
   finally
     VariationMoves.Free;
+    GameTree.Free;
+  end;
+end;
+
+function ScoreAnnotationLineForNode(ANode: TGameTreePlyNode): string;
+begin
+  Result := '';
+  if ANode = nil then
+    Exit;
+  if Trim(ANode.EngineScore) <> '' then
+    Result := 'E: ' + Trim(ANode.EngineScore);
+  if Trim(ANode.AnnotatorScore) <> '' then
+  begin
+    if Result <> '' then
+      Result += '; ';
+    Result += 'A: ' + Trim(ANode.AnnotatorScore);
+  end;
+end;
+
+procedure CopyMainlineScoreAnnotations(ASource: TGameTree;
+  AAnnotations: TStrings);
+var
+  I: Integer;
+begin
+  AAnnotations.Clear;
+  for I := 1 to ASource.MainlineCount do
+    AAnnotations.Add(ScoreAnnotationLineForNode(ASource.MainlineNode[I]));
+end;
+
+procedure CheckRebuildPreservesCopiedScoreAnnotations;
+var
+  Annotations: TStringList;
+  GameTree: TGameTree;
+  Moves: TStringList;
+  Text: string;
+begin
+  GameTree := TGameTree.Create;
+  Moves := TStringList.Create;
+  Annotations := TStringList.Create;
+  try
+    BeginGameTreeRebuild(GameTree,
+      GameTreeHeaderInput('preserve-scores', 'Event', 'White', 'Black', '*',
+        'W:W31-50:B1-20', False, DefaultTimeControl));
+    TextToMoveList('32-28 16-21', Moves);
+    Annotations.Add('E: 0.12; A: 0.34');
+    Annotations.Add('A: -0.10');
+    RecordGameTreeMainline(GameTree,
+      GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0));
+
+    Moves.Clear;
+    Annotations.Clear;
+    GameTree.CopyMainlineMovesTo(Moves);
+    CopyMainlineScoreAnnotations(GameTree, Annotations);
+    BeginGameTreeRebuild(GameTree,
+      GameTreeHeaderInput('preserve-scores-2', 'Event', 'White', 'Black', '*',
+        'W:W31-50:B1-20', False, DefaultTimeControl));
+    RecordGameTreeMainline(GameTree,
+      GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0));
+
+    Text := GameTreeScoreAnnotationsText(GameTree);
+    CheckContains(Text, 'E: 0.12; A: 0.34',
+      'copied score annotations should preserve first ply');
+    CheckContains(Text, 'A: -0.10',
+      'copied score annotations should preserve second ply');
+  finally
+    Annotations.Free;
+    Moves.Free;
     GameTree.Free;
   end;
 end;
@@ -303,6 +371,7 @@ end;
 begin
   CheckGameTreeIds;
   CheckStableRebuildNodeIds;
+  CheckRebuildPreservesCopiedScoreAnnotations;
   CheckPdnDisplayFilters;
   CheckSamePlyVariationsDoNotOverwrite;
   Writeln('OK');
