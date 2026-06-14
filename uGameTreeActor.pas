@@ -964,14 +964,17 @@ begin
           Exit;
         end;
         if not FGameTree.RecordAnnotatorPVForNodeId(ACommand.NodeId,
-          ACommand.ScoreText, ACommand.PvText) then
+          ACommand.ScoreText, ACommand.PvText, Changed) then
         begin
           Reject(ACommand, 'annotator PV was not recorded');
           Exit;
         end;
         ACommand.Accepted := True;
-        InvalidateRebuildSignature := True;
-        Inc(FRevision);
+        if Changed then
+        begin
+          InvalidateRebuildSignature := True;
+          Inc(FRevision);
+        end;
       end;
     gtcStoreSearchMoveVariation:
       begin

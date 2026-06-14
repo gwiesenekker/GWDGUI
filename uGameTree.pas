@@ -163,7 +163,9 @@ type
       AVariationIndex, AVariationPlyNumber: Integer; const AScore,
       APV: string);
     function RecordAnnotatorPVForNodeId(ANodeId: Int64; const AScore,
-      APV: string): Boolean;
+      APV: string): Boolean; overload;
+    function RecordAnnotatorPVForNodeId(ANodeId: Int64; const AScore,
+      APV: string; out AChanged: Boolean): Boolean; overload;
     function ParseVariationKey(const AVariationKey: string;
       out ABasePlyNumber, ADisplayAfterPly, AVariationIndex,
       AVariationPlyNumber: Integer): Boolean;
@@ -678,28 +680,43 @@ end;
 function TGameTree.RecordAnnotatorPVForNodeId(ANodeId: Int64;
   const AScore, APV: string): Boolean;
 var
+  Changed: Boolean;
+begin
+  Result := RecordAnnotatorPVForNodeId(ANodeId, AScore, APV, Changed);
+end;
+
+function TGameTree.RecordAnnotatorPVForNodeId(ANodeId: Int64;
+  const AScore, APV: string; out AChanged: Boolean): Boolean;
+var
   LBasePlyNumber: Integer;
   LDisplayAfterPly: Integer;
   LNode: TGameTreePlyNode;
+  LScore: string;
+  LPV: string;
   LVariationIndex: Integer;
   LVariationPlyNumber: Integer;
 begin
   Result := False;
-  if Trim(APV) = '' then
+  AChanged := False;
+  LScore := Trim(AScore);
+  LPV := Trim(APV);
+  if LPV = '' then
     Exit;
   LNode := FindNodeById(ANodeId);
   if LNode = nil then
     Exit;
 
+  AChanged := (Trim(LNode.AnnotatorScore) <> LScore) or
+    (Trim(LNode.AnnotatorPV) <> LPV);
   if Trim(LNode.VariationKey) = '' then
-    RecordAnnotatorPV(LNode.PlyNumber, AScore, APV)
+    RecordAnnotatorPV(LNode.PlyNumber, LScore, LPV)
   else
   begin
     if not ParseVariationKey(LNode.VariationKey, LBasePlyNumber,
       LDisplayAfterPly, LVariationIndex, LVariationPlyNumber) then
       Exit;
     RecordVariationAnnotatorPV(LBasePlyNumber, LDisplayAfterPly,
-      LVariationIndex, LVariationPlyNumber, AScore, APV);
+      LVariationIndex, LVariationPlyNumber, LScore, LPV);
   end;
   Result := True;
 end;

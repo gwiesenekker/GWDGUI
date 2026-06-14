@@ -485,6 +485,7 @@ var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
   Node: TGameTreePlyNode;
+  RevisionAfterPV: Int64;
 begin
   Actor := TGameTreeActor.Create;
   try
@@ -502,6 +503,19 @@ begin
         'annotator PV command should record score on target node');
       Check(Node.AnnotatorPV = '16-21 37-32',
         'annotator PV command should record PV on target node');
+      RevisionAfterPV := Actor.Revision;
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateRecordAnnotatorPVCommand(Node.NodeId, '0.12',
+      '16-21 37-32');
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'duplicate annotator PV command should be accepted');
+      Check(Actor.Revision = RevisionAfterPV,
+        'duplicate annotator PV command should not increment revision');
     finally
       Command.Free;
     end;
