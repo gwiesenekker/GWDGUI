@@ -146,7 +146,9 @@ type
     function PostCommand(ACommand: TGameTreeCommand): Boolean;
     function ProcessCommands: Integer;
     function SearchResult(ASearchId: Int64; out ANodeId: Int64;
-      out AMoveText: string): Boolean;
+      out AMoveText: string): Boolean; overload;
+    function SearchResult(const ASearch: TGameTreeSearchRef;
+      out ANodeId: Int64; out AMoveText: string): Boolean; overload;
     function SearchState(ASearchId: Int64;
       out AState: TGameTreeSearchState): Boolean; overload;
     function SearchState(const ASearch: TGameTreeSearchRef;
@@ -907,6 +909,23 @@ begin
   AMoveText := '';
   Search := FindSearch(ASearchId);
   Result := (Search <> nil) and (Search.State = gssDone);
+  if Result then
+  begin
+    ANodeId := Search.NodeId;
+    AMoveText := Search.ResultMove;
+  end;
+end;
+
+function TGameTreeActor.SearchResult(const ASearch: TGameTreeSearchRef;
+  out ANodeId: Int64; out AMoveText: string): Boolean;
+var
+  Search: TGameTreeSearchRecord;
+begin
+  ANodeId := 0;
+  AMoveText := '';
+  Search := FindSearch(ASearch.SearchId);
+  Result := (Search <> nil) and SameGameTreeSearchRef(Search.SearchRef,
+    ASearch) and (Search.State = gssDone);
   if Result then
   begin
     ANodeId := Search.NodeId;

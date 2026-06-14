@@ -198,6 +198,7 @@ begin
         Actor.ExecuteCommand(StartCommand);
         Check(StartCommand.Accepted,
           'second start-search command should be accepted');
+        Search := StartCommand.SearchRef;
       finally
         StartCommand.Free;
       end;
@@ -211,10 +212,15 @@ begin
         Check(State = gssDone, 'search should be done');
         Check(Actor.SearchResult(SearchId, ResultNodeId, ResultMove),
           'done search result should be available');
+        Check(Actor.SearchResult(Search, ResultNodeId, ResultMove),
+          'done search result should accept matching search ref');
         Check(ResultNodeId = MoveCommand.CreatedNodeId,
           'done search result should keep target node id');
         Check(ResultMove = '18-23',
           'done search result should keep engine move text');
+        Search.NodeId := Search.NodeId + 1;
+        Check(not Actor.SearchResult(Search, ResultNodeId, ResultMove),
+          'done search result should reject mismatched search ref');
       finally
         DoneCommand.Free;
       end;
