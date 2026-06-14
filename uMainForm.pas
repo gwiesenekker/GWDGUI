@@ -326,9 +326,11 @@ type
       APlyNumber: Integer; const AMove: string;
       ASource: TGameTreeMoveSource): TGameTreePlyNode;
     function ExecuteGameTreeAppendMainlineMove(AGameTree: TGameTree;
-      const AMove: string; ASource: TGameTreeMoveSource): TGameTreePlyNode;
+      const AMove: string; ASource: TGameTreeMoveSource;
+      ARefreshScoreHistory: Boolean = False): TGameTreePlyNode;
     procedure ApplyGameTreeCommandResult(AGameTree: TGameTree;
-      ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean);
+      ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
+      ARefreshScoreHistory: Boolean = False);
     function ExecuteGameTreeRebuildFromInput(AGame: TRunningGame;
       AGameTree: TGameTree; AMoves, AAnnotations: TStrings): Boolean;
     function CurrentGameTreeHeaderInput(AGame: TRunningGame): TGameTreeHeaderInput;
@@ -1717,7 +1719,8 @@ begin
 end;
 
 function TMainForm.ExecuteGameTreeAppendMainlineMove(AGameTree: TGameTree;
-  const AMove: string; ASource: TGameTreeMoveSource): TGameTreePlyNode;
+  const AMove: string; ASource: TGameTreeMoveSource;
+  ARefreshScoreHistory: Boolean): TGameTreePlyNode;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
@@ -1734,6 +1737,8 @@ begin
     if not Command.Accepted then
       Exit;
     CreatedNodeId := Command.CreatedNodeId;
+    ApplyGameTreeCommandResult(AGameTree, Command, False,
+      ARefreshScoreHistory);
   finally
     Command.Free;
   end;
@@ -1742,7 +1747,8 @@ begin
 end;
 
 procedure TMainForm.ApplyGameTreeCommandResult(AGameTree: TGameTree;
-  ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean);
+  ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
+  ARefreshScoreHistory: Boolean);
 begin
   if (AGameTree = nil) or (ACommand = nil) or (not ACommand.Accepted) then
     Exit;
@@ -1759,7 +1765,7 @@ begin
   end;
 
   RebuildGameMoveLabels(False, AGameTree);
-  UpdateScoreHistory(False, AGameTree);
+  UpdateScoreHistory(ARefreshScoreHistory, AGameTree);
   RefreshVisibleGameTreeView(False, AGameTree);
 end;
 
@@ -1855,18 +1861,15 @@ begin
     if LGameTree = nil then
       Exit;
     if ExecuteGameTreeAppendMainlineMove(LGameTree, LMove,
-      ASource) = nil then
+      ASource, True) = nil then
       Exit;
     ClearVariationExploration;
     FGameBrowsePly := -1;
     FGameResult := '*';
     UpdateBoardFromBrowseState(LGameTree);
     UpdateBrowseInfo;
-    RebuildGameMoveLabels(False, LGameTree);
     UpdateBoardInfo;
     UpdateLegalMoves;
-    UpdateScoreHistory(True, LGameTree);
-    RefreshVisibleGameTreeView(False, LGameTree);
     Exit;
   end;
 
@@ -3033,13 +3036,11 @@ begin
           LPvCommand.ErrorText);
       Exit;
     end;
+    Result := LGameTree;
+    ApplyGameTreeCommandResult(LGameTree, LPvCommand, False);
   finally
     LPvCommand.Free;
   end;
-
-  Result := LGameTree;
-  RebuildGameMoveLabels(False, LGameTree);
-  UpdateScoreHistory(False, LGameTree);
 end;
 
 procedure TMainForm.LoadPdnGameToDisplay(AGame: TPdnGame);
