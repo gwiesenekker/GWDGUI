@@ -113,6 +113,17 @@ begin
       Command.Free;
     end;
 
+    Command := Actor.CreateClearStoredVariationsCommand;
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'empty clear-variations command should be accepted');
+      Check(Actor.Revision = 5,
+        'empty clear-variations command should not increment revision');
+    finally
+      Command.Free;
+    end;
+
     Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23',
       'annotator=0.22', gmsAutorandom);
     try

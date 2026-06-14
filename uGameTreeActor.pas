@@ -1016,6 +1016,11 @@ begin
       end;
     gtcClearStoredVariations:
       begin
+        if FGameTree.VariationLineCount = 0 then
+        begin
+          ACommand.Accepted := True;
+          Exit;
+        end;
         FGameTree.ClearStoredVariations;
         ACommand.Accepted := True;
         InvalidateRebuildSignature := True;
