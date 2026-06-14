@@ -190,6 +190,9 @@ type
     FEnginesDialog: TEnginesDialog;
     FGameActive: Boolean;
     FGameLog: TStringList;
+    FGameLogSourceGameId: Integer;
+    FGameLogSourceLineCount: Integer;
+    FGameLogSourceShowStdout: Boolean;
     FGameLogMemoGameId: Integer;
     FGameLogMemoLineCount: Integer;
     FGameLogMemoShowStdout: Boolean;
@@ -906,6 +909,9 @@ begin
   FGameTreeBrowseMode := False;
   FVariationIndex := -1;
   FVariationBrowsePly := 0;
+  FGameLogSourceGameId := -1;
+  FGameLogSourceLineCount := -1;
+  FGameLogSourceShowStdout := False;
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
   FHighlightedGameMovePly := -1;
@@ -3228,6 +3234,9 @@ begin
   if FGamesListBox <> nil then
     FGamesListBox.ItemIndex := -1;
   FGameLog.Clear;
+  FGameLogSourceGameId := -1;
+  FGameLogSourceLineCount := -1;
+  FGameLogSourceShowStdout := False;
   UpdateMiniBoardFromBoard(FBoard);
   UpdateBoardInfo;
 end;
@@ -3413,6 +3422,9 @@ begin
     if FGamesListBox <> nil then
       FGamesListBox.ItemIndex := -1;
     FGameLog.Clear;
+    FGameLogSourceGameId := -1;
+    FGameLogSourceLineCount := -1;
+    FGameLogSourceShowStdout := False;
     UpdateBoardFromBrowseState(FGameTree);
     UpdateMiniBoardFromBoard(FBoard);
     UpdateBoardInfo;
@@ -4464,6 +4476,7 @@ end;
 procedure TMainForm.ApplyGameToDisplay(AGame: TRunningGame);
 var
   I: Integer;
+  LLogSourceChanged: Boolean;
   LMoveCount: Integer;
 begin
   if AGame = nil then
@@ -4483,6 +4496,9 @@ begin
     FGameBrowsePly := -1;
     FViewedGameId := -1;
     FGameLog.Clear;
+    FGameLogSourceGameId := -1;
+    FGameLogSourceLineCount := -1;
+    FGameLogSourceShowStdout := False;
     FBoard.SetBeginPosition;
     FStartingFEN := FBoard.StartingFEN;
     FPvBaseBoard.AssignFrom(FBoard);
@@ -4526,10 +4542,19 @@ begin
   FBlackRemainingSeconds := AGame.Snapshot.BlackRemainingSeconds;
   FWhiteUsedSeconds := AGame.Snapshot.WhiteUsedSeconds;
   FBlackUsedSeconds := AGame.Snapshot.BlackUsedSeconds;
-  FGameLog.Clear;
-  for I := 0 to AGame.Snapshot.LogLines.Count - 1 do
-    if GameLogLineVisible(AGame.Snapshot.LogLines[I], AGame) then
-      FGameLog.Add(AGame.Snapshot.LogLines[I]);
+  LLogSourceChanged := (FGameLogSourceGameId <> AGame.Id) or
+    (FGameLogSourceLineCount <> AGame.Snapshot.LogLines.Count) or
+    (FGameLogSourceShowStdout <> AGame.ShowStdout);
+  if LLogSourceChanged then
+  begin
+    FGameLog.Clear;
+    for I := 0 to AGame.Snapshot.LogLines.Count - 1 do
+      if GameLogLineVisible(AGame.Snapshot.LogLines[I], AGame) then
+        FGameLog.Add(AGame.Snapshot.LogLines[I]);
+    FGameLogSourceGameId := AGame.Id;
+    FGameLogSourceLineCount := AGame.Snapshot.LogLines.Count;
+    FGameLogSourceShowStdout := AGame.ShowStdout;
+  end;
   FGameActive := True;
   if not RunningGameTreeExtendsSnapshot(AGame) then
     UpdateGameTreeFromMoveText(AGame, AGame.GameTree,
