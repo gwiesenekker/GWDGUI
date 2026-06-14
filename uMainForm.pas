@@ -3029,7 +3029,7 @@ begin
   if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
     LDisplayedMoveCount) then
     Exit;
-  LTotalMoveCount := CurrentMoveCount;
+  LTotalMoveCount := LGameTree.MainlineCount;
   LGameState := StateForTree(LGameTree);
 
   Signature := DisplayedPositionSignature(LStartingFEN, LDisplayedMovesText,
@@ -3076,7 +3076,7 @@ begin
   if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
     LDisplayedMoveCount) then
     Exit;
-  LTotalMoveCount := CurrentMoveCount;
+  LTotalMoveCount := LGameTree.MainlineCount;
   LGameState := StateForTree(LGameTree);
 
   Signature := DisplayedPositionSignature(LStartingFEN, LDisplayedMovesText,
