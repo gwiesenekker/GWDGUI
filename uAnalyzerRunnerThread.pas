@@ -40,6 +40,7 @@ type
     FPvNodeId: Int64;
     FPvSearchId: Int64;
     FPvLock: TCriticalSection;
+    procedure ApplyPvContext(ACommand: TObject; AGameTreeOnly: Boolean);
     procedure DrainCommands;
     function DisplayName: string;
     procedure HandleCommand(ACommand: TObject);
@@ -208,6 +209,29 @@ begin
     Snapshot.Free;
 end;
 
+procedure TAnalyzerRunnerThread.ApplyPvContext(ACommand: TObject;
+  AGameTreeOnly: Boolean);
+var
+  Command: TAnalyzerCommand;
+begin
+  if not (ACommand is TAnalyzerCommand) then
+    Exit;
+  Command := TAnalyzerCommand(ACommand);
+
+  FPvLock.Acquire;
+  try
+    FPvBaseBoard.AssignFrom(Command.BaseBoard);
+    FPvBasePly := Command.BasePly;
+    FPvGameTreeId := Command.GameTreeId;
+    FPvSearchId := Command.SearchId;
+    FPvNodeId := Command.NodeId;
+    FPvGameTreeOnly := AGameTreeOnly;
+    FLastPublishedPv := '';
+  finally
+    FPvLock.Release;
+  end;
+end;
+
 procedure TAnalyzerRunnerThread.HandleCommand(ACommand: TObject);
 var
   Command: TAnalyzerCommand;
@@ -220,18 +244,7 @@ begin
   case Command.CommandKind of
     accAnalyze:
       begin
-        FPvLock.Acquire;
-        try
-          FPvBaseBoard.AssignFrom(Command.BaseBoard);
-          FPvBasePly := Command.BasePly;
-          FPvGameTreeId := Command.GameTreeId;
-          FPvSearchId := Command.SearchId;
-          FPvNodeId := Command.NodeId;
-          FPvGameTreeOnly := False;
-          FLastPublishedPv := '';
-        finally
-          FPvLock.Release;
-        end;
+        ApplyPvContext(Command, False);
         if FEngine = nil then
           Exit;
         if Command.Terminal then
@@ -258,18 +271,7 @@ begin
       end;
     accThinkOnce:
       begin
-        FPvLock.Acquire;
-        try
-          FPvBaseBoard.AssignFrom(Command.BaseBoard);
-          FPvBasePly := Command.BasePly;
-          FPvGameTreeId := Command.GameTreeId;
-          FPvSearchId := Command.SearchId;
-          FPvNodeId := Command.NodeId;
-          FPvGameTreeOnly := True;
-          FLastPublishedPv := '';
-        finally
-          FPvLock.Release;
-        end;
+        ApplyPvContext(Command, True);
         if FEngine = nil then
           Exit;
         Moves := TStringList.Create;
