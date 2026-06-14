@@ -1929,12 +1929,6 @@ begin
 
   Command := AActor.CreateSearchDoneCommand(ASearch, AMoveText);
   try
-    if not SameGameTreeSearchRef(Command.SearchRef, ASearch) then
-    begin
-      AErrorText := 'search reference mismatch';
-      Exit;
-    end;
-
     Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
   finally
     Command.Free;
