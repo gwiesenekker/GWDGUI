@@ -120,6 +120,7 @@ type
     FLifecycle: TRunningGameLifecycle;
     FShowStdout: Boolean;
     FSnapshot: TGameRunnerSnapshot;
+    FLastSnapshotTreePvSignature: string;
     FLastSnapshotTreeSyncSignature: string;
     FStopReason: string;
     FSetup: TGameSetup;
@@ -4238,6 +4239,7 @@ var
   procedure TryRecordSnapshotPV;
   var
     LNode: TGameTreePlyNode;
+    LPvSignature: string;
   begin
     if Trim(AGame.Snapshot.PrincipalVariation) = '' then
       Exit;
@@ -4250,8 +4252,13 @@ var
     Actor := ActorForGameTree(LGameTree);
     if Actor = nil then
       Exit;
-    RecordEnginePvInGameTree(Actor, LGameTree, LNode.NodeId, '',
-      AGame.Snapshot.PrincipalVariation, LErrorText);
+    LPvSignature := IntToStr(LGameTree.GameTreeId) + #10 +
+      IntToStr(LNode.NodeId) + #10 + AGame.Snapshot.PrincipalVariation;
+    if AGame.FLastSnapshotTreePvSignature = LPvSignature then
+      Exit;
+    if RecordEnginePvInGameTree(Actor, LGameTree, LNode.NodeId, '',
+      AGame.Snapshot.PrincipalVariation, LErrorText) then
+      AGame.FLastSnapshotTreePvSignature := LPvSignature;
   end;
 begin
   if (AGame = nil) or (AGame.GameTree = nil) then
