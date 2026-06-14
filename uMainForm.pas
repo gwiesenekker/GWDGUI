@@ -4269,7 +4269,8 @@ begin
     Exit;
   end;
 
-  Result := GameTreePvInput(Trim(FPrincipalVariation) <> '', FPvBasePly,
+  Result := GameTreePvInput((AGameTree = FGameTree) and
+    (Trim(FPrincipalVariation) <> ''), FPvBasePly,
     FPrincipalVariationScore, FPrincipalVariation);
 end;
 
