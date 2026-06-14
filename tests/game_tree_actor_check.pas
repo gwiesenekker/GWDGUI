@@ -42,6 +42,18 @@ begin
       Command.Free;
     end;
 
+    Command := Actor.CreateAppendMainlineMoveCommand('30-25', gmsHuman);
+    try
+      Command.GameTreeId := Command.GameTreeId + 1;
+      Actor.ExecuteCommand(Command);
+      Check(not Command.Accepted,
+        'wrong game-tree command should be rejected');
+      Check(Actor.Revision = 1,
+        'wrong game-tree command should not increment revision');
+    finally
+      Command.Free;
+    end;
+
     Command := Actor.CreateAppendMainlineMoveCommand('31-27', gmsHuman);
     try
       Actor.ExecuteCommand(Command);
