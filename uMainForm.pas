@@ -331,6 +331,8 @@ type
       out ASearchId, ANodeId: Int64; out AErrorText: string): Boolean;
     function ReleaseGameTreeSearch(AActor: TGameTreeActor;
       ASearchId: Int64): Boolean;
+    function TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
+      out AActor: TGameTreeActor; out AGameTree: TGameTree): Boolean;
     procedure TrackAnalyzerSearch(AGameTree: TGameTree; ASearchId: Int64);
     procedure ClearAnalyzerSearchTracking;
     procedure SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
@@ -1796,6 +1798,36 @@ begin
   end;
 end;
 
+function TMainForm.TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
+  out AActor: TGameTreeActor; out AGameTree: TGameTree): Boolean;
+var
+  LSearchState: TGameTreeSearchState;
+begin
+  Result := False;
+  AActor := nil;
+  AGameTree := nil;
+  if (ASnapshot = nil) or (ASnapshot.SearchId <= 0) then
+    Exit;
+
+  AActor := ActorForGameTreeId(ASnapshot.GameTreeId);
+  if AActor = nil then
+    Exit;
+  if (not AActor.SearchState(ASnapshot.SearchId, LSearchState)) or
+    (LSearchState <> gssActive) then
+  begin
+    AActor := nil;
+    Exit;
+  end;
+  if AActor.GameTree.FindNodeById(ASnapshot.NodeId) = nil then
+  begin
+    AActor := nil;
+    Exit;
+  end;
+
+  AGameTree := AActor.GameTree;
+  Result := AGameTree <> nil;
+end;
+
 procedure TMainForm.TrackAnalyzerSearch(AGameTree: TGameTree;
   ASearchId: Int64);
 begin
@@ -3024,7 +3056,6 @@ var
   LNode: TGameTreePlyNode;
   LNodeId: Int64;
   LPvCommand: TGameTreeCommand;
-  LSearchState: TGameTreeSearchState;
 begin
   Result := nil;
   if ASnapshot = nil then
@@ -3037,15 +3068,8 @@ begin
   Actor := nil;
   if ASnapshot.SearchId > 0 then
   begin
-    Actor := ActorForGameTreeId(ASnapshot.GameTreeId);
-    if Actor = nil then
+    if not TryResolveActiveSearchSnapshot(ASnapshot, Actor, LGameTree) then
       Exit;
-    if (not Actor.SearchState(ASnapshot.SearchId, LSearchState)) or
-      (LSearchState <> gssActive) then
-      Exit;
-    if Actor.GameTree.FindNodeById(ASnapshot.NodeId) = nil then
-      Exit;
-    LGameTree := Actor.GameTree;
   end
   else
   begin
@@ -3064,7 +3088,7 @@ begin
   else
     UpdateGameTreeFromState(nil, LGameTree);
   if (ASnapshot.SearchId > 0) and
-    (Actor.GameTree.FindNodeById(ASnapshot.NodeId) = nil) then
+    (not TryResolveActiveSearchSnapshot(ASnapshot, Actor, LGameTree)) then
     Exit;
 
   if Actor = nil then
