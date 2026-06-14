@@ -340,6 +340,9 @@ type
     function StoreSearchMoveVariation(AActor: TGameTreeActor;
       ASearchId: Int64; ASource: TGameTreeMoveSource;
       out AErrorText: string): Boolean;
+    function StoreMoveVariation(AActor: TGameTreeActor; AGameTree: TGameTree;
+      ANodeId: Int64; const AMove: string; ASource: TGameTreeMoveSource;
+      out AErrorText: string): Boolean;
     function RecordAnnotatorPvInGameTree(AActor: TGameTreeActor;
       AGameTree: TGameTree; ANodeId: Int64; const AScore,
       APrincipalVariation: string; out AErrorText: string): Boolean;
@@ -1895,6 +1898,31 @@ begin
   end;
 end;
 
+function TMainForm.StoreMoveVariation(AActor: TGameTreeActor;
+  AGameTree: TGameTree; ANodeId: Int64; const AMove: string;
+  ASource: TGameTreeMoveSource; out AErrorText: string): Boolean;
+var
+  Command: TGameTreeCommand;
+begin
+  Result := False;
+  AErrorText := '';
+  if (AActor = nil) or (AGameTree = nil) or (ANodeId <= 0) or
+    (Trim(AMove) = '') then
+  begin
+    AErrorText := 'invalid move variation target';
+    Exit;
+  end;
+
+  Command := AActor.CreateStoreMoveVariationCommand(ANodeId, AMove, ASource);
+  try
+    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
+    if Result then
+      ApplyGameTreeCommandResult(AGameTree, Command, True);
+  finally
+    Command.Free;
+  end;
+end;
+
 function TMainForm.RecordAnnotatorPvInGameTree(AActor: TGameTreeActor;
   AGameTree: TGameTree; ANodeId: Int64; const AScore,
   APrincipalVariation: string; out AErrorText: string): Boolean;
@@ -2140,7 +2168,6 @@ procedure TMainForm.AddVariationMove(const AMove: string;
   ASource: TGameTreeMoveSource);
 var
   Actor: TGameTreeActor;
-  Command: TGameTreeCommand;
   LErrorText: string;
   LGameTree: TGameTree;
   LMove: string;
@@ -2159,15 +2186,8 @@ begin
   if (LNode = nil) or (Actor = nil) then
     Exit;
 
-  Command := Actor.CreateStoreMoveVariationCommand(LNode.NodeId, LMove,
-    ASource);
-  try
-    if not ExecuteGameTreeCommand(Actor, Command, LErrorText) then
-      Exit;
-    ApplyGameTreeCommandResult(LGameTree, Command, True);
-  finally
-    Command.Free;
-  end;
+  StoreMoveVariation(Actor, LGameTree, LNode.NodeId, LMove, ASource,
+    LErrorText);
 end;
 
 procedure TMainForm.SelectHumanMoveSource(ASourceSquare: Integer);
