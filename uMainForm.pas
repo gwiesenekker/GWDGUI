@@ -217,6 +217,7 @@ type
     FGameTreeView: TTreeView;
     FDisplayedMovesSignature: string;
     FDisplayedSnapshotSignature: string;
+    FDisplayedGameTreeRevision: Int64;
     FHighlightedGameMovePly: Integer;
     FHideMoveAnnotations: Boolean;
     FHideMoveAnnotationsMenuItem: TMenuItem;
@@ -912,6 +913,7 @@ begin
   FGameLogSourceShowStdout := False;
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
+  FDisplayedGameTreeRevision := -1;
   FHighlightedGameMovePly := -1;
   FHideMoveAnnotations := False;
   FMoveShowEnginePVMove := False;
@@ -2173,6 +2175,8 @@ end;
 
 procedure TMainForm.ApplyGameTreeCommandResult(AGameTree: TGameTree;
   ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean);
+var
+  Actor: TGameTreeActor;
 begin
   if (AGameTree = nil) or (ACommand = nil) or (not ACommand.Accepted) then
     Exit;
@@ -2191,6 +2195,14 @@ begin
   RebuildGameMoveLabels(False, AGameTree);
   UpdateScoreHistory(AGameTree);
   RefreshVisibleGameTreeView(False, AGameTree);
+  if AGameTree = ActiveGameTree then
+  begin
+    Actor := ActorForGameTree(AGameTree);
+    if Actor <> nil then
+      FDisplayedGameTreeRevision := Actor.Revision
+    else
+      FDisplayedGameTreeRevision := -1;
+  end;
 end;
 
 function TMainForm.ExecuteGameTreeRebuildFromInput(AGame: TRunningGame;
@@ -3208,6 +3220,7 @@ begin
   FStartingFEN := FBoard.StartingFEN;
   FDisplayedMovesSignature := '';
   FDisplayedSnapshotSignature := '';
+  FDisplayedGameTreeRevision := -1;
   ClearStoredTreeVariations(FGameTree);
   FStandaloneWhitePlayerName := 'White';
   FStandaloneBlackPlayerName := 'Black';
@@ -3394,6 +3407,7 @@ begin
     FStartingFEN := AGame.StartingFEN;
     FDisplayedMovesSignature := AGame.MovesText;
     FDisplayedSnapshotSignature := '';
+    FDisplayedGameTreeRevision := -1;
     LoadTreeVariationsFromLegacyText(FGameTree, AGame.MoveVariationsText,
       AGame.MoveVariationAnnotationsText);
     FStandaloneWhitePlayerName := PlayerNameOrFallback(AGame.WhiteName, 'White');
@@ -4501,9 +4515,11 @@ end;
 
 procedure TMainForm.ApplyGameToDisplay(AGame: TRunningGame);
 var
+  LActor: TGameTreeActor;
   LLogSourceChanged: Boolean;
   LMoveCount: Integer;
   LSnapshotSignature: string;
+  LTreeRevision: Int64;
 
   function SecondsSignature(AValue: Double): string;
   begin
@@ -4540,6 +4556,7 @@ begin
     FPrincipalVariationTimeText := '';
     FDisplayedMovesSignature := '';
     FDisplayedSnapshotSignature := '';
+    FDisplayedGameTreeRevision := -1;
     ClearStoredTreeVariations(FGameTree);
     FStandaloneWhitePlayerName := 'White';
     FStandaloneBlackPlayerName := 'Black';
@@ -4565,6 +4582,7 @@ begin
     FViewedGameId := AGame.Id;
     FGameBrowsePly := -1;
     FDisplayedSnapshotSignature := '';
+    FDisplayedGameTreeRevision := -1;
     ClearStoredTreeVariations(AGame.GameTree);
   end;
 
@@ -4630,9 +4648,17 @@ begin
   if FGameBrowsePly > LMoveCount then
     FGameBrowsePly := -1;
   UpdateBoardFromBrowseState(AGame.GameTree);
-  RebuildGameMoveLabels(False, AGame.GameTree);
-  UpdateScoreHistory(AGame.GameTree);
-  RefreshVisibleGameTreeView(False, AGame.GameTree);
+  LTreeRevision := -1;
+  LActor := ActorForGameTree(AGame.GameTree);
+  if LActor <> nil then
+    LTreeRevision := LActor.Revision;
+  if FDisplayedGameTreeRevision <> LTreeRevision then
+  begin
+    RebuildGameMoveLabels(False, AGame.GameTree);
+    UpdateScoreHistory(AGame.GameTree);
+    RefreshVisibleGameTreeView(False, AGame.GameTree);
+    FDisplayedGameTreeRevision := LTreeRevision;
+  end;
   UpdateBoardInfo;
 end;
 
@@ -5581,6 +5607,7 @@ begin
   FBoard.LoadFromFEN(ASetup.StartingFEN);
   FStartingFEN := ASetup.StartingFEN;
   FDisplayedMovesSignature := '';
+  FDisplayedGameTreeRevision := -1;
   ClearStoredTreeVariations(Result.GameTree);
   FGameBrowsePly := -1;
   FWhiteRemainingSeconds := ASetup.TimeControl.MinutesPerPeriod * 60;
@@ -5597,6 +5624,7 @@ begin
   FPvBasePly := 0;
   FGameActive := True;
   FDisplayedSnapshotSignature := '';
+  FDisplayedGameTreeRevision := -1;
   FBoardControl.Board := FBoard;
   UpdateMiniBoardFromBoard(FBoard);
   FGameLogMemo.Clear;
