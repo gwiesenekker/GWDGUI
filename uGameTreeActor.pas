@@ -88,7 +88,9 @@ type
     FOwnsGameTree: Boolean;
     FRevision: Int64;
     FSearches: TObjectList;
-    function FindSearch(ASearchId: Int64): TGameTreeSearchRecord;
+    function FindSearch(ASearchId: Int64): TGameTreeSearchRecord; overload;
+    function FindSearch(const ASearch: TGameTreeSearchRef
+      ): TGameTreeSearchRecord; overload;
     function NextCommandId: Int64;
     function NextSearchId: Int64;
     function RemoveSearch(ASearchId: Int64): Boolean;
@@ -490,6 +492,15 @@ begin
     if (Search <> nil) and (Search.SearchId = ASearchId) then
       Exit(Search);
   end;
+end;
+
+function TGameTreeActor.FindSearch(
+  const ASearch: TGameTreeSearchRef): TGameTreeSearchRecord;
+begin
+  Result := FindSearch(ASearch.SearchId);
+  if (Result <> nil) and
+    (not SameGameTreeSearchRef(Result.SearchRef, ASearch)) then
+    Result := nil;
 end;
 
 procedure TGameTreeActor.Reject(ACommand: TGameTreeCommand;
@@ -923,9 +934,8 @@ function TGameTreeActor.SearchState(const ASearch: TGameTreeSearchRef;
 var
   Search: TGameTreeSearchRecord;
 begin
-  Search := FindSearch(ASearch.SearchId);
-  Result := (Search <> nil) and SameGameTreeSearchRef(Search.SearchRef,
-    ASearch);
+  Search := FindSearch(ASearch);
+  Result := Search <> nil;
   if Result then
     AState := Search.State;
 end;
@@ -953,9 +963,8 @@ var
 begin
   ANodeId := 0;
   AMoveText := '';
-  Search := FindSearch(ASearch.SearchId);
-  Result := (Search <> nil) and SameGameTreeSearchRef(Search.SearchRef,
-    ASearch) and (Search.State = gssDone);
+  Search := FindSearch(ASearch);
+  Result := (Search <> nil) and (Search.State = gssDone);
   if Result then
   begin
     ANodeId := Search.NodeId;
