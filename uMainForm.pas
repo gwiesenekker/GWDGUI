@@ -325,6 +325,10 @@ type
     function ExecuteGameTreeAppendMainlineMove(AGameTree: TGameTree;
       const AMove: string; ASource: TGameTreeMoveSource;
       ARefreshScoreHistory: Boolean = False): TGameTreePlyNode;
+    function AppendGameTreeMainlineMove(AActor: TGameTreeActor;
+      AGameTree: TGameTree; const AMove: string; ASource: TGameTreeMoveSource;
+      ARefreshScoreHistory: Boolean; out ACreatedNodeId: Int64;
+      out AErrorText: string): Boolean;
     function ExecuteGameTreeCommand(AActor: TGameTreeActor;
       ACommand: TGameTreeCommand; out AErrorText: string): Boolean;
     function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
@@ -1722,12 +1726,40 @@ begin
   Result := AGameTree.VariationLine[AIndex];
 end;
 
+function TMainForm.AppendGameTreeMainlineMove(AActor: TGameTreeActor;
+  AGameTree: TGameTree; const AMove: string; ASource: TGameTreeMoveSource;
+  ARefreshScoreHistory: Boolean; out ACreatedNodeId: Int64;
+  out AErrorText: string): Boolean;
+var
+  Command: TGameTreeCommand;
+begin
+  Result := False;
+  ACreatedNodeId := 0;
+  AErrorText := '';
+  if (AActor = nil) or (AGameTree = nil) or (Trim(AMove) = '') then
+  begin
+    AErrorText := 'invalid mainline move target';
+    Exit;
+  end;
+
+  Command := AActor.CreateAppendMainlineMoveCommand(AMove, ASource);
+  try
+    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
+    if not Result then
+      Exit;
+    ACreatedNodeId := Command.CreatedNodeId;
+    ApplyGameTreeCommandResult(AGameTree, Command, False,
+      ARefreshScoreHistory);
+  finally
+    Command.Free;
+  end;
+end;
+
 function TMainForm.ExecuteGameTreeAppendMainlineMove(AGameTree: TGameTree;
   const AMove: string; ASource: TGameTreeMoveSource;
   ARefreshScoreHistory: Boolean): TGameTreePlyNode;
 var
   Actor: TGameTreeActor;
-  Command: TGameTreeCommand;
   CreatedNodeId: Int64;
   LErrorText: string;
 begin
@@ -1736,16 +1768,9 @@ begin
   if Actor = nil then
     Exit;
 
-  Command := Actor.CreateAppendMainlineMoveCommand(AMove, ASource);
-  try
-    if not ExecuteGameTreeCommand(Actor, Command, LErrorText) then
-      Exit;
-    CreatedNodeId := Command.CreatedNodeId;
-    ApplyGameTreeCommandResult(AGameTree, Command, False,
-      ARefreshScoreHistory);
-  finally
-    Command.Free;
-  end;
+  if not AppendGameTreeMainlineMove(Actor, AGameTree, AMove, ASource,
+    ARefreshScoreHistory, CreatedNodeId, LErrorText) then
+    Exit;
 
   Result := AGameTree.FindNodeById(CreatedNodeId);
 end;
