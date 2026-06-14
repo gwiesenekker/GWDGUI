@@ -6243,6 +6243,7 @@ procedure TMainForm.UpdateScoreHistory(AGameTree: TGameTree);
 var
   LAnnotationsText: string;
   LGameTree: TGameTree;
+  LMoveCount: Integer;
   LPly: Integer;
   LStartingFEN: string;
 begin
@@ -6254,18 +6255,19 @@ begin
     Exit;
   LAnnotationsText := GameTreeScoreAnnotationsText(LGameTree);
   LStartingFEN := StartingFenForTree(LGameTree);
+  LMoveCount := LGameTree.MainlineCount;
 
   LPly := FGameBrowsePly;
   if LPly < 0 then
-    LPly := CurrentMoveCount;
+    LPly := LMoveCount;
   FScoreHistoryControl.MaxScore := FPreferences.EvaluationMaxScore;
   FScoreHistoryControl.Scale := FPreferences.EvaluationScale;
   FScoreHistoryControl.StartingSide := FenSideToMove(LStartingFEN);
-  FScoreHistoryControl.PlyCount := CurrentMoveCount;
+  FScoreHistoryControl.PlyCount := LMoveCount;
   FScoreHistoryControl.AnnotationsText := LAnnotationsText;
   FScoreHistoryControl.CurrentPly := LPly;
   if FScoreHistoryForm <> nil then
-    FScoreHistoryForm.UpdateScores(LAnnotationsText, CurrentMoveCount, LPly,
+    FScoreHistoryForm.UpdateScores(LAnnotationsText, LMoveCount, LPly,
       FPreferences.EvaluationMaxScore, FPreferences.EvaluationScale,
       FenSideToMove(LStartingFEN));
 end;
