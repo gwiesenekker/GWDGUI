@@ -4503,6 +4503,7 @@ procedure TMainForm.ApplyGameToDisplay(AGame: TRunningGame);
 var
   LLogSourceChanged: Boolean;
   LMoveCount: Integer;
+  LPositionChanged: Boolean;
   LSnapshotSignature: string;
   LTreeExtendsSnapshot: Boolean;
   LTreeMatchesSnapshot: Boolean;
@@ -4602,13 +4603,47 @@ begin
   end;
   FDisplayedSnapshotSignature := LSnapshotSignature;
 
+  LPositionChanged := (FStartingFEN <> AGame.Snapshot.StartingFEN) or
+    (FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText) or
+    (FGameState <> AGame.Snapshot.State) or
+    (FGameResult <> AGame.Snapshot.GameResult);
   if FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText then
   begin
     ClearHumanMoveSelection;
     ClearVariationExploration;
   end;
-  UpdateMiniBoardFromBoard(AGame.Snapshot.Board);
   FStartingFEN := AGame.Snapshot.StartingFEN;
+  FGameState := AGame.Snapshot.State;
+  FGameResult := AGame.Snapshot.GameResult;
+  FPrincipalVariation := AGame.Snapshot.PrincipalVariation;
+  FPrincipalVariationScore := AGame.Snapshot.PvScore;
+  FPrincipalVariationDepth := AGame.Snapshot.PvSnapshot.Depth;
+  FPrincipalVariationTimeText := AGame.Snapshot.PvSnapshot.TimeText;
+  FPvBaseBoard.AssignFrom(AGame.Snapshot.PvBaseBoard);
+  FPvBasePly := AGame.Snapshot.PvBasePly;
+  FWhiteRemainingSeconds := AGame.Snapshot.WhiteRemainingSeconds;
+  FBlackRemainingSeconds := AGame.Snapshot.BlackRemainingSeconds;
+  FWhiteUsedSeconds := AGame.Snapshot.WhiteUsedSeconds;
+  FBlackUsedSeconds := AGame.Snapshot.BlackUsedSeconds;
+  FGameActive := True;
+  if not LPositionChanged then
+  begin
+    UpdateClockLabels(WhiteNameForTree(AGame.GameTree),
+      BlackNameForTree(AGame.GameTree));
+    UpdateGameLogMemo;
+    UpdateBoardHighlights(AGame.GameTree);
+    if FPvBrowser <> nil then
+      FPvBrowser.SetData(FPvBaseBoard, FPvBasePly,
+        StartingFenForTree(AGame.GameTree), FPrincipalVariation,
+        FPrincipalVariationScore, FPrincipalVariationDepth,
+        FPrincipalVariationTimeText);
+    if FBoardControl <> nil then
+      FBoardControl.Invalidate;
+    UpdateAutoplayControls;
+    Exit;
+  end;
+
+  UpdateMiniBoardFromBoard(AGame.Snapshot.Board);
   LTreeExtendsSnapshot := RunningGameTreeExtendsSnapshot(AGame);
   LTreeMatchesSnapshot :=
     (Trim(GameTreeMainlineMovesText(AGame.GameTree)) =
@@ -4623,19 +4658,6 @@ begin
     if not LTreeMatchesSnapshot then
       ClearStoredTreeVariations(AGame.GameTree);
   end;
-  FGameState := AGame.Snapshot.State;
-  FGameResult := AGame.Snapshot.GameResult;
-  FPrincipalVariation := AGame.Snapshot.PrincipalVariation;
-  FPrincipalVariationScore := AGame.Snapshot.PvScore;
-  FPrincipalVariationDepth := AGame.Snapshot.PvSnapshot.Depth;
-  FPrincipalVariationTimeText := AGame.Snapshot.PvSnapshot.TimeText;
-  FPvBaseBoard.AssignFrom(AGame.Snapshot.PvBaseBoard);
-  FPvBasePly := AGame.Snapshot.PvBasePly;
-  FWhiteRemainingSeconds := AGame.Snapshot.WhiteRemainingSeconds;
-  FBlackRemainingSeconds := AGame.Snapshot.BlackRemainingSeconds;
-  FWhiteUsedSeconds := AGame.Snapshot.WhiteUsedSeconds;
-  FBlackUsedSeconds := AGame.Snapshot.BlackUsedSeconds;
-  FGameActive := True;
   if (not LTreeExtendsSnapshot) and (not LTreeMatchesSnapshot) then
     UpdateGameTreeFromMoveText(AGame, AGame.GameTree,
       AGame.Snapshot.MovesPlayedText, AGame.Snapshot.MoveAnnotationsText);
