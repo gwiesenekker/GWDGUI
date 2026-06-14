@@ -347,8 +347,6 @@ type
     function CurrentGameTreeEnginePvInput(
       AGameTree: TGameTree): TGameTreePvInput;
     function CurrentGameTreeAnnotatorPvInput: TGameTreePvInput;
-    function CurrentGameTreeVariationPvInput(AVariation: TGameTreeVariationLine;
-      AVariationIndex, AVariationPly: Integer): TGameTreeVariationPvInput;
     procedure ClearHumanMoveSelection;
     procedure ClearStoredTreeVariations(AGameTree: TGameTree);
     procedure ClearVariationExploration;
@@ -459,9 +457,6 @@ type
     procedure SelectHumanMoveSource(ASourceSquare: Integer);
     procedure RebuildGameMoveLabels(ARefreshTree: Boolean;
       AGameTree: TGameTree);
-    procedure RecordGameTreeVariationLiveAnalysis(AGameTree: TGameTree;
-      AVariation: TGameTreeVariationLine; AVariationIndex,
-      AVariationPly: Integer);
     procedure UpdateGameMoveHighlight;
     function SelectedGame: TRunningGame;
     function SelectedDisplayedGame: TRunningGame;
@@ -1773,11 +1768,28 @@ function TMainForm.ExecuteGameTreeRebuildFromInput(AGame: TRunningGame;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
+  LVariationPvIndex: Integer;
+  LVariationPvPly: Integer;
+  LVariationPvScore: string;
+  LVariationPvText: string;
 begin
   Result := False;
   Actor := ActorForGameTree(AGameTree);
   if Actor = nil then
     Exit;
+
+  LVariationPvIndex := -1;
+  LVariationPvPly := 0;
+  LVariationPvScore := '';
+  LVariationPvText := '';
+  if CanRecordCurrentVariationAnnotatorPV(FVariationIndex,
+    FVariationBrowsePly) then
+  begin
+    LVariationPvIndex := FVariationIndex;
+    LVariationPvPly := FVariationBrowsePly;
+    LVariationPvScore := FAnalyzerPvBrowser.Score;
+    LVariationPvText := FAnalyzerPvBrowser.PrincipalVariation;
+  end;
 
   Command := Actor.CreateRebuildFromInputsCommand(
     CurrentGameTreeHeaderInput(AGame),
@@ -1787,7 +1799,8 @@ begin
       FBlackUsedSeconds),
     CurrentGameTreeEnginePvInput(AGameTree),
     CurrentGameTreeAnnotatorPvInput,
-    @RecordGameTreeVariationLiveAnalysis);
+    LVariationPvIndex, LVariationPvPly, LVariationPvScore,
+    LVariationPvText);
   try
     Actor.ExecuteCommand(Command);
     Result := Command.Accepted;
@@ -3797,8 +3810,7 @@ begin
       GameTreePvInput(Trim(AGame.Snapshot.PrincipalVariation) <> '',
         AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
         AGame.Snapshot.PrincipalVariation),
-      GameTreePvInput(False, 0, '', ''),
-      @RecordGameTreeVariationLiveAnalysis);
+      GameTreePvInput(False, 0, '', ''));
     try
       Actor.ExecuteCommand(Command);
     finally
@@ -3898,30 +3910,6 @@ begin
 
   Result := GameTreePvInput(LRecordAnnotatorPV, FAnalyzerPvBasePly,
     LAnnotatorScore, LAnnotatorPV);
-end;
-
-function TMainForm.CurrentGameTreeVariationPvInput(
-  AVariation: TGameTreeVariationLine; AVariationIndex,
-  AVariationPly: Integer): TGameTreeVariationPvInput;
-begin
-  Result := GameTreeVariationPvInput(AVariation, AVariationIndex,
-    AVariationPly, FAnalyzerPvBrowser.Score,
-    FAnalyzerPvBrowser.PrincipalVariation);
-end;
-
-procedure TMainForm.RecordGameTreeVariationLiveAnalysis(AGameTree: TGameTree;
-  AVariation: TGameTreeVariationLine; AVariationIndex,
-  AVariationPly: Integer);
-begin
-  if (AGameTree = nil) or (AVariation = nil) then
-    Exit;
-  if not CanRecordCurrentVariationAnnotatorPV(AVariationIndex,
-    AVariationPly) then
-    Exit;
-
-  uGameTreeBuilder.RecordGameTreeVariationAnnotatorPV(AGameTree,
-    CurrentGameTreeVariationPvInput(AVariation, AVariationIndex,
-      AVariationPly));
 end;
 
 procedure TMainForm.UpdateGameMoveHighlight;

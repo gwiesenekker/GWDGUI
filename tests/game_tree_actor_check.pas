@@ -401,7 +401,7 @@ begin
       GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
       GameTreePvInput(True, 2, '0.10', '37-32'),
       GameTreePvInput(False, 0, '', ''),
-      nil);
+      0, 1, '0.20', '20-24');
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'rebuild command should be accepted');
@@ -415,6 +415,8 @@ begin
         'rebuild command should preserve stored variation line');
       Check(Actor.GameTree.FindVariationNode(0, 1) <> nil,
         'rebuild command should rebuild variation nodes');
+      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPV = '20-24',
+        'rebuild command should record variation annotator PV');
       NodeId := Actor.GameTree.MainlineNode[1].NodeId;
     finally
       Command.Free;
@@ -426,8 +428,7 @@ begin
         'W:W31-50:B1-20', False, NullTimeControl),
       GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
       GameTreePvInput(False, 0, '', ''),
-      GameTreePvInput(False, 0, '', ''),
-      nil);
+      GameTreePvInput(False, 0, '', ''));
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'second rebuild command should be accepted');

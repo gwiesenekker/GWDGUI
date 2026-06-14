@@ -61,7 +61,6 @@ type
     MainlineInput: TGameTreeMainlineInput;
     EnginePvInput: TGameTreePvInput;
     AnnotatorPvInput: TGameTreePvInput;
-    BeforeVariationMove: TGameTreeVariationPlyCallback;
     PlyNumber: Integer;
     DisplayAfterPly: Integer;
     BasePly: Integer;
@@ -114,7 +113,9 @@ type
       const AHeader: TGameTreeHeaderInput;
       const AMainline: TGameTreeMainlineInput;
       const AEnginePV, AAnnotatorPV: TGameTreePvInput;
-      ABeforeVariationMove: TGameTreeVariationPlyCallback): TGameTreeCommand;
+      AVariationPvIndex: Integer = -1; AVariationPvPly: Integer = 0;
+      const AVariationPvScore: string = '';
+      const AVariationPvText: string = ''): TGameTreeCommand;
     function CreateStartSearchCommand(ANodeId: Int64;
       out ASearchId: Int64): TGameTreeCommand;
     function CreateStoreVariationLineCommand(ADisplayAfterPly, ABasePly: Integer;
@@ -303,7 +304,9 @@ function TGameTreeActor.CreateRebuildFromInputsCommand(
   const AHeader: TGameTreeHeaderInput;
   const AMainline: TGameTreeMainlineInput;
   const AEnginePV, AAnnotatorPV: TGameTreePvInput;
-  ABeforeVariationMove: TGameTreeVariationPlyCallback): TGameTreeCommand;
+  AVariationPvIndex: Integer; AVariationPvPly: Integer;
+  const AVariationPvScore: string; const AVariationPvText: string
+  ): TGameTreeCommand;
 begin
   Result := TGameTreeCommand.Create(gtcRebuildFromInputs);
   Result.CommandId := NextCommandId;
@@ -322,7 +325,10 @@ begin
     Result.MainlineInput.Annotations.Assign(AMainline.Annotations);
   Result.EnginePvInput := AEnginePV;
   Result.AnnotatorPvInput := AAnnotatorPV;
-  Result.BeforeVariationMove := ABeforeVariationMove;
+  Result.VariationIndex := AVariationPvIndex;
+  Result.PlyNumber := AVariationPvPly;
+  Result.ScoreText := Trim(AVariationPvScore);
+  Result.PvText := Trim(AVariationPvText);
 end;
 
 function TGameTreeActor.CreateStartSearchCommand(ANodeId: Int64;
@@ -397,7 +403,7 @@ begin
 
       RecordGameTreeVariationLine(FGameTree,
         GameTreeVariationLineInput(VariationLine, I, VariationMoves,
-          ACommand.BeforeVariationMove));
+          nil));
     end;
   finally
     VariationMoves.Free;
@@ -691,6 +697,14 @@ begin
         RecordGameTreeAnalysis(FGameTree, ACommand.EnginePvInput,
           ACommand.AnnotatorPvInput);
         RebuildStoredVariations(ACommand);
+        if (ACommand.VariationIndex >= 0) and
+          (ACommand.PlyNumber > 0) and (Trim(ACommand.PvText) <> '') and
+          (ACommand.VariationIndex < FGameTree.VariationLineCount) then
+          RecordGameTreeVariationAnnotatorPV(FGameTree,
+            GameTreeVariationPvInput(
+              FGameTree.VariationLine[ACommand.VariationIndex],
+              ACommand.VariationIndex, ACommand.PlyNumber,
+              ACommand.ScoreText, ACommand.PvText));
         ACommand.Accepted := True;
         Inc(FRevision);
       end;
