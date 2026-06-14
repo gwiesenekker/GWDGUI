@@ -362,6 +362,19 @@ begin
     StoreCommand := Actor.CreateStoreSearchMoveVariationCommand(Search,
       gmsAutoplay);
     try
+      StoreCommand.NodeId := StoreCommand.NodeId + 1;
+      Actor.ExecuteCommand(StoreCommand);
+      Check(not StoreCommand.Accepted,
+        'store search variation with mismatched ref should be rejected');
+      Check(Actor.GameTree.VariationLineCount = 0,
+        'mismatched store should not add a variation');
+    finally
+      StoreCommand.Free;
+    end;
+
+    StoreCommand := Actor.CreateStoreSearchMoveVariationCommand(Search,
+      gmsAutoplay);
+    try
       Actor.ExecuteCommand(StoreCommand);
       Check(StoreCommand.Accepted,
         'root search result should store as variation');
