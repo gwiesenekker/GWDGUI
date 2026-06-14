@@ -374,7 +374,8 @@ type
       AAnnotationText: string; ASource: TGameTreeMoveSource;
       out AErrorText: string): Boolean;
     function TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
-      out AActor: TGameTreeActor; out AGameTree: TGameTree): Boolean;
+      out AActor: TGameTreeActor; out AGameTree: TGameTree;
+      out ANode: TGameTreePlyNode): Boolean;
     procedure TrackAnalyzerSearch(AGameTree: TGameTree; ASearchId: Int64);
     procedure ClearAnalyzerSearchTracking;
     procedure SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
@@ -2100,13 +2101,15 @@ begin
 end;
 
 function TMainForm.TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
-  out AActor: TGameTreeActor; out AGameTree: TGameTree): Boolean;
+  out AActor: TGameTreeActor; out AGameTree: TGameTree;
+  out ANode: TGameTreePlyNode): Boolean;
 var
   LSearchState: TGameTreeSearchState;
 begin
   Result := False;
   AActor := nil;
   AGameTree := nil;
+  ANode := nil;
   if (ASnapshot = nil) or (ASnapshot.SearchId <= 0) then
     Exit;
 
@@ -2119,9 +2122,11 @@ begin
     AActor := nil;
     Exit;
   end;
-  if AActor.GameTree.FindNodeById(ASnapshot.NodeId) = nil then
+  ANode := AActor.GameTree.FindNodeById(ASnapshot.NodeId);
+  if ANode = nil then
   begin
     AActor := nil;
+    AGameTree := nil;
     Exit;
   end;
 
@@ -3315,9 +3320,11 @@ begin
     Exit;
 
   Actor := nil;
+  LNode := nil;
   if ASnapshot.SearchId > 0 then
   begin
-    if not TryResolveActiveSearchSnapshot(ASnapshot, Actor, LGameTree) then
+    if not TryResolveActiveSearchSnapshot(ASnapshot, Actor, LGameTree,
+      LNode) then
       Exit;
   end
   else
@@ -3337,7 +3344,8 @@ begin
   else
     UpdateGameTreeFromState(nil, LGameTree);
   if (ASnapshot.SearchId > 0) and
-    (not TryResolveActiveSearchSnapshot(ASnapshot, Actor, LGameTree)) then
+    (not TryResolveActiveSearchSnapshot(ASnapshot, Actor, LGameTree,
+      LNode)) then
     Exit;
 
   if Actor = nil then
@@ -3345,13 +3353,18 @@ begin
   if Actor = nil then
     Exit;
 
-  LNodeId := ASnapshot.NodeId;
-  if LNodeId <= 0 then
+  if LNode <> nil then
+    LNodeId := LNode.NodeId
+  else
   begin
-    if ASnapshot.BasePly <= 0 then
-      LNode := LGameTree.Root
-    else
-      LNode := LGameTree.MainlineNode[ASnapshot.BasePly];
+    LNodeId := ASnapshot.NodeId;
+    if LNodeId <= 0 then
+    begin
+      if ASnapshot.BasePly <= 0 then
+        LNode := LGameTree.Root
+      else
+        LNode := LGameTree.MainlineNode[ASnapshot.BasePly];
+    end;
     if LNode <> nil then
       LNodeId := LNode.NodeId;
   end;
