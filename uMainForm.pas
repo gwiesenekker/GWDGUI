@@ -395,6 +395,7 @@ type
       const AEventName: string): string;
     function CanExploreVariation: Boolean;
     function CanAcceptHumanBoardMove: Boolean;
+    function HasLegalDisplayedMove: Boolean;
     function CanStartAutoplayForGame(AGame: TRunningGame): Boolean;
     function CanStartAutoplay: Boolean;
     function CanRecordCurrentAnnotatorPV: Boolean;
@@ -1681,6 +1682,11 @@ begin
     (LGame.Snapshot.State = gosRunning) and LGame.IsHumanToMove;
 end;
 
+function TMainForm.HasLegalDisplayedMove: Boolean;
+begin
+  Result := (ActiveBoard <> nil) and (ActiveBoard.LegalMoves.Count > 0);
+end;
+
 function TMainForm.CanStartAutoplayForGame(AGame: TRunningGame): Boolean;
 begin
   Result := (AGame = nil) or
@@ -1692,7 +1698,7 @@ var
   LGame: TRunningGame;
 begin
   Result := False;
-  if (ActiveBoard = nil) or (ActiveBoard.LegalMoves.Count = 0) then
+  if not HasLegalDisplayedMove then
     Exit;
 
   LGame := SelectedDisplayedGame;
@@ -2736,8 +2742,7 @@ begin
       FAutoplaySecondsEdit.Text := FloatToStr(FAutoplayThinkSeconds);
   end;
   if FAutorandomButton <> nil then
-    FAutorandomButton.Enabled := (ActiveBoard <> nil) and
-      (ActiveBoard.LegalMoves.Count > 0);
+    FAutorandomButton.Enabled := HasLegalDisplayedMove;
 end;
 
 procedure TMainForm.AutoplayClick(Sender: TObject);
@@ -2775,7 +2780,7 @@ begin
     Exit;
   end;
 
-  if (ActiveBoard = nil) or (ActiveBoard.LegalMoves.Count = 0) then
+  if not HasLegalDisplayedMove then
   begin
     ShowGuiOkDialog(Self, 'Autoplay',
       'The displayed position has no legal moves.');
