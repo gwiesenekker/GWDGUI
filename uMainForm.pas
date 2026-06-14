@@ -4559,22 +4559,19 @@ end;
 function TMainForm.CurrentGameTreeEnginePvInput(
   AGameTree: TGameTree): TGameTreePvInput;
 var
-  LGame: TRunningGame;
+  LPvBaseBoard: TDraughtsBoard;
+  LPvBasePly: Integer;
+  LPvDepth: string;
+  LPvScore: string;
+  LPvText: string;
+  LPvTimeText: string;
 begin
-  LGame := GameForTreeRefresh(AGameTree);
-  if LGame <> nil then
-  begin
-    Result := GameTreePvInput(Trim(LGame.Snapshot.PrincipalVariation) <> '',
-      LGame.Snapshot.PvBasePly, LGame.Snapshot.PvScore,
-      LGame.Snapshot.PrincipalVariation, LGame.Snapshot.PvSnapshot.Depth,
-      LGame.Snapshot.PvSnapshot.TimeText);
-    Exit;
-  end;
-
-  Result := GameTreePvInput((AGameTree = FGameTree) and
-    (Trim(FPrincipalVariation) <> ''), FPvBasePly,
-    FPrincipalVariationScore, FPrincipalVariation, FPrincipalVariationDepth,
-    FPrincipalVariationTimeText);
+  if VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
+    LPvScore, LPvDepth, LPvTimeText) then
+    Result := GameTreePvInput(True, LPvBasePly, LPvScore, LPvText,
+      LPvDepth, LPvTimeText)
+  else
+    Result := GameTreePvInput(False, 0, '', '');
 end;
 
 function TMainForm.CurrentGameTreeAnnotatorPvInput(
