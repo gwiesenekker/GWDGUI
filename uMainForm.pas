@@ -215,6 +215,7 @@ type
     FGameTreeBrowseMode: Boolean;
     FGameTreeForm: TForm;
     FGameTreeView: TTreeView;
+    FDisplayedAnnotationsSignature: string;
     FDisplayedMovesSignature: string;
     FDisplayedSnapshotSignature: string;
     FDisplayedGameTreeId: Int64;
@@ -918,6 +919,7 @@ begin
   FGameLogSourceShowStdout := False;
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
+  FDisplayedAnnotationsSignature := '';
   FDisplayedGameTreeId := 0;
   FDisplayedGameTreeRevision := -1;
   FHighlightedGameMovePly := -1;
@@ -3213,6 +3215,7 @@ begin
   FGameState := gosWaiting;
   FGameResult := '*';
   FStartingFEN := FBoard.StartingFEN;
+  FDisplayedAnnotationsSignature := '';
   FDisplayedMovesSignature := '';
   FDisplayedSnapshotSignature := '';
   FDisplayedGameTreeId := 0;
@@ -3401,6 +3404,7 @@ begin
     if Trim(FGameResult) = '' then
     FGameResult := '*';
     FStartingFEN := AGame.StartingFEN;
+    FDisplayedAnnotationsSignature := AGame.MoveAnnotationsText;
     FDisplayedMovesSignature := AGame.MovesText;
     FDisplayedSnapshotSignature := '';
     FDisplayedGameTreeId := 0;
@@ -4541,6 +4545,7 @@ begin
     FPrincipalVariationScore := '';
     FPrincipalVariationDepth := '';
     FPrincipalVariationTimeText := '';
+    FDisplayedAnnotationsSignature := '';
     FDisplayedMovesSignature := '';
     FDisplayedSnapshotSignature := '';
     FDisplayedGameTreeId := 0;
@@ -4569,6 +4574,7 @@ begin
     ClearHumanMoveSelection;
     FViewedGameId := AGame.Id;
     FGameBrowsePly := -1;
+    FDisplayedAnnotationsSignature := '';
     FDisplayedSnapshotSignature := '';
     FDisplayedGameTreeId := 0;
     FDisplayedGameTreeRevision := -1;
@@ -4604,6 +4610,8 @@ begin
   FDisplayedSnapshotSignature := LSnapshotSignature;
 
   LPositionChanged := (FStartingFEN <> AGame.Snapshot.StartingFEN) or
+    (FDisplayedAnnotationsSignature <>
+      AGame.Snapshot.MoveAnnotationsText) or
     (FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText) or
     (FGameState <> AGame.Snapshot.State) or
     (FGameResult <> AGame.Snapshot.GameResult);
@@ -4651,9 +4659,14 @@ begin
     (Trim(GameTreeScoreAnnotationsText(AGame.GameTree)) =
       Trim(AGame.Snapshot.MoveAnnotationsText));
   if LTreeExtendsSnapshot then
+  begin
+    FDisplayedAnnotationsSignature := GameTreeScoreAnnotationsText(
+      AGame.GameTree);
     FDisplayedMovesSignature := GameTreeMainlineMovesText(AGame.GameTree)
+  end
   else
   begin
+    FDisplayedAnnotationsSignature := AGame.Snapshot.MoveAnnotationsText;
     FDisplayedMovesSignature := AGame.Snapshot.MovesPlayedText;
     if not LTreeMatchesSnapshot then
       ClearStoredTreeVariations(AGame.GameTree);
@@ -5613,6 +5626,7 @@ begin
   ClearHumanMoveSelection;
   FBoard.LoadFromFEN(ASetup.StartingFEN);
   FStartingFEN := ASetup.StartingFEN;
+  FDisplayedAnnotationsSignature := '';
   FDisplayedMovesSignature := '';
   FDisplayedGameTreeId := 0;
   FDisplayedGameTreeRevision := -1;
@@ -5631,6 +5645,7 @@ begin
   FPvBaseBoard.AssignFrom(FBoard);
   FPvBasePly := 0;
   FGameActive := True;
+  FDisplayedAnnotationsSignature := '';
   FDisplayedSnapshotSignature := '';
   FDisplayedGameTreeId := 0;
   FDisplayedGameTreeRevision := -1;
