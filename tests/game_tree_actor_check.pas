@@ -552,6 +552,42 @@ begin
       Command.Free;
     end;
 
+    Actor.GameTree.RecordMainlineAnnotation(Node.PlyNumber,
+      AnnotationWithScore('', 'engine', '0.37'));
+    Command := Actor.CreateRecordEnginePVCommand(Node.NodeId, '',
+      '18-23 39-33');
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'engine PV command should be accepted');
+      Check(Node.EngineScore = '0.37',
+        'engine PV command with empty score should preserve move score');
+      Check(Node.EnginePV = '18-23 39-33',
+        'engine PV command should record PV on target node');
+      RevisionAfterPV := Actor.Revision;
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateRecordEnginePVCommand(Node.NodeId, '',
+      '18-23 39-33');
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'duplicate engine PV command should be accepted');
+      Check(Actor.Revision = RevisionAfterPV,
+        'duplicate engine PV command should not increment revision');
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateRecordEnginePVCommand(999999, '', '18-23');
+    try
+      Actor.ExecuteCommand(Command);
+      Check(not Command.Accepted,
+        'engine PV command should reject missing target node');
+    finally
+      Command.Free;
+    end;
+
     Command := Actor.CreateRecordAnnotatorPVCommand(999999, '0.20',
       '18-23');
     try

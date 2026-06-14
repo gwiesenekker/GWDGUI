@@ -26,6 +26,7 @@ type
     gtcCancelSearch,
     gtcSearchDone,
     gtcReleaseSearch,
+    gtcRecordEnginePV,
     gtcRecordAnnotatorPV,
     gtcStoreSearchMoveVariation,
     gtcStoreMoveVariation,
@@ -131,6 +132,8 @@ type
       const AMoveText: string): TGameTreeCommand; overload;
     function CreateSearchDoneCommand(const ASearch: TGameTreeSearchRef;
       const AMoveText: string): TGameTreeCommand; overload;
+    function CreateRecordEnginePVCommand(ANodeId: Int64; const AScore,
+      APV: string): TGameTreeCommand;
     function CreateRecordAnnotatorPVCommand(ANodeId: Int64; const AScore,
       APV: string): TGameTreeCommand;
     function CreateStoreSearchMoveVariationCommand(ASearchId: Int64;
@@ -195,6 +198,7 @@ const
     'game-tree-cancel-search',
     'game-tree-search-done',
     'game-tree-release-search',
+    'game-tree-record-engine-pv',
     'game-tree-record-annotator-pv',
     'game-tree-store-search-move-variation',
     'game-tree-store-move-variation',
@@ -402,6 +406,17 @@ function TGameTreeActor.CreateRecordAnnotatorPVCommand(ANodeId: Int64;
   const AScore, APV: string): TGameTreeCommand;
 begin
   Result := TGameTreeCommand.Create(gtcRecordAnnotatorPV);
+  Result.CommandId := NextCommandId;
+  Result.GameTreeId := FGameTree.GameTreeId;
+  Result.NodeId := ANodeId;
+  Result.ScoreText := Trim(AScore);
+  Result.PvText := Trim(APV);
+end;
+
+function TGameTreeActor.CreateRecordEnginePVCommand(ANodeId: Int64;
+  const AScore, APV: string): TGameTreeCommand;
+begin
+  Result := TGameTreeCommand.Create(gtcRecordEnginePV);
   Result.CommandId := NextCommandId;
   Result.GameTreeId := FGameTree.GameTreeId;
   Result.NodeId := ANodeId;
@@ -1021,6 +1036,26 @@ begin
         end;
         ACommand.Accepted := True;
         Inc(FRevision);
+      end;
+    gtcRecordEnginePV:
+      begin
+        if FGameTree.FindNodeById(ACommand.NodeId) = nil then
+        begin
+          Reject(ACommand, 'engine PV target node does not exist');
+          Exit;
+        end;
+        if not FGameTree.RecordEnginePVForNodeId(ACommand.NodeId,
+          ACommand.ScoreText, ACommand.PvText, Changed) then
+        begin
+          Reject(ACommand, 'engine PV was not recorded');
+          Exit;
+        end;
+        ACommand.Accepted := True;
+        if Changed then
+        begin
+          InvalidateRebuildSignature := True;
+          Inc(FRevision);
+        end;
       end;
     gtcRecordAnnotatorPV:
       begin

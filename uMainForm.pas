@@ -362,6 +362,9 @@ type
     function StoreMoveVariation(AActor: TGameTreeActor; AGameTree: TGameTree;
       ANodeId: Int64; const AMove: string; ASource: TGameTreeMoveSource;
       out AErrorText: string): Boolean;
+    function RecordEnginePvInGameTree(AActor: TGameTreeActor;
+      AGameTree: TGameTree; ANodeId: Int64; const AScore,
+      APrincipalVariation: string; out AErrorText: string): Boolean;
     function RecordAnnotatorPvInGameTree(AActor: TGameTreeActor;
       AGameTree: TGameTree; ANodeId: Int64; const AScore,
       APrincipalVariation: string; out AErrorText: string): Boolean;
@@ -2052,6 +2055,30 @@ begin
   end;
 
   Command := AActor.CreateRecordAnnotatorPVCommand(ANodeId, AScore,
+    APrincipalVariation);
+  try
+    Result := ExecuteAndApplyGameTreeCommand(AActor, AGameTree, Command,
+      False, AErrorText);
+  finally
+    Command.Free;
+  end;
+end;
+
+function TMainForm.RecordEnginePvInGameTree(AActor: TGameTreeActor;
+  AGameTree: TGameTree; ANodeId: Int64; const AScore,
+  APrincipalVariation: string; out AErrorText: string): Boolean;
+var
+  Command: TGameTreeCommand;
+begin
+  Result := False;
+  AErrorText := '';
+  if (AActor = nil) or (AGameTree = nil) or (ANodeId <= 0) then
+  begin
+    AErrorText := 'invalid engine PV target';
+    Exit;
+  end;
+
+  Command := AActor.CreateRecordEnginePVCommand(ANodeId, AScore,
     APrincipalVariation);
   try
     Result := ExecuteAndApplyGameTreeCommand(AActor, AGameTree, Command,
@@ -4208,6 +4235,25 @@ var
     end;
     Result := True;
   end;
+
+  procedure TryRecordSnapshotPV;
+  var
+    LNode: TGameTreePlyNode;
+  begin
+    if Trim(AGame.Snapshot.PrincipalVariation) = '' then
+      Exit;
+    if AGame.Snapshot.PvBasePly <= 0 then
+      LNode := LGameTree.Root
+    else
+      LNode := LGameTree.MainlineNode[AGame.Snapshot.PvBasePly];
+    if LNode = nil then
+      Exit;
+    Actor := ActorForGameTree(LGameTree);
+    if Actor = nil then
+      Exit;
+    RecordEnginePvInGameTree(Actor, LGameTree, LNode.NodeId, '',
+      AGame.Snapshot.PrincipalVariation, LErrorText);
+  end;
 begin
   if (AGame = nil) or (AGame.GameTree = nil) then
     Exit;
@@ -4215,6 +4261,7 @@ begin
     Exit;
 
   LGameTree := AGame.GameTree;
+  TryRecordSnapshotPV;
   LSyncSignature :=
     AEventName + #10 +
     AGame.Snapshot.WhitePlayerName + #10 +
