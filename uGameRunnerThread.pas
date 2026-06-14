@@ -78,6 +78,7 @@ type
     FOnSnapshot: TGameRunnerSnapshotEvent;
     FOrchestrator: TGameOrchestrator;
     FPaused: Boolean;
+    FLastLogSnapshotTick: QWord;
     FLastPrincipalVariation: string;
     FPvBaseBoard: TDraughtsBoard;
     FPvBasePly: Integer;
@@ -121,6 +122,9 @@ type
   end;
 
 implementation
+
+const
+  RunnerLogSnapshotIntervalMs = 500;
 
 type
   TGameRunnerCommandKind = (
@@ -630,11 +634,19 @@ begin
 end;
 
 procedure TGameRunnerThread.RuntimeLog(Sender: TObject; const AMessage: string);
+var
+  LNowTick: QWord;
 begin
   if (not FShowStdout) and (Pos('stdout;', LowerCase(AMessage)) > 0) then
     Exit;
   AddGameLog(AMessage);
-  PublishSnapshot;
+  LNowTick := GetTickCount64;
+  if (FLastLogSnapshotTick = 0) or
+    (LNowTick - FLastLogSnapshotTick >= RunnerLogSnapshotIntervalMs) then
+  begin
+    FLastLogSnapshotTick := LNowTick;
+    PublishSnapshot;
+  end;
 end;
 
 procedure TGameRunnerThread.Execute;

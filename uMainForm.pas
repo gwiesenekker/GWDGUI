@@ -5552,21 +5552,95 @@ begin
 end;
 
 procedure TMainForm.GuiEventTimerTick(Sender: TObject);
+type
+  TPendingRunnerSnapshot = record
+    GameId: Integer;
+    Message: TRunnerSnapshotGuiMessage;
+  end;
 var
   EventObject: TObject;
   LGame: TRunningGame;
   LGameTree: TGameTree;
+  PendingSnapshots: array of TPendingRunnerSnapshot;
   RemoveAfterFinish: Boolean;
   SnapshotMessage: TRunnerSnapshotGuiMessage;
+
+  procedure ApplyRunnerSnapshot(AMessage: TRunnerSnapshotGuiMessage);
+  begin
+    if AMessage = nil then
+      Exit;
+
+    LGame := FindGameById(AMessage.GameId);
+    if LGame = nil then
+      Exit;
+
+    LGame.Snapshot.AssignFrom(AMessage.Snapshot);
+    UpdateRunningGameTreeFromSnapshot(LGame);
+    if LGame.FLifecycle = rglStarting then
+      LGame.FLifecycle := rglRunning;
+    if (LGame.FLifecycle in [rglStopRequested, rglRemoveRequested]) and
+      (LGame.Snapshot.State in [gosWaiting, gosRunning, gosError]) then
+      LGame.Snapshot.MarkStopped(LGame.StopReason);
+    if not FClosing then
+    begin
+      UpdateGameListItem(LGame);
+      if SelectedGame = LGame then
+        ApplyGameToDisplay(LGame);
+    end;
+  end;
+
+  procedure FlushPendingRunnerSnapshots;
+  var
+    I: Integer;
+  begin
+    for I := 0 to High(PendingSnapshots) do
+    begin
+      try
+        ApplyRunnerSnapshot(PendingSnapshots[I].Message);
+      finally
+        PendingSnapshots[I].Message.Free;
+        PendingSnapshots[I].Message := nil;
+      end;
+    end;
+    SetLength(PendingSnapshots, 0);
+  end;
+
+  procedure QueueRunnerSnapshot(AMessage: TRunnerSnapshotGuiMessage);
+  var
+    I: Integer;
+  begin
+    if AMessage = nil then
+      Exit;
+    for I := 0 to High(PendingSnapshots) do
+      if PendingSnapshots[I].GameId = AMessage.GameId then
+      begin
+        PendingSnapshots[I].Message.Free;
+        PendingSnapshots[I].Message := AMessage;
+        Exit;
+      end;
+    I := Length(PendingSnapshots);
+    SetLength(PendingSnapshots, I + 1);
+    PendingSnapshots[I].GameId := AMessage.GameId;
+    PendingSnapshots[I].Message := AMessage;
+  end;
 begin
   if FGuiEventQueue = nil then
     Exit;
 
-  while FGuiEventQueue.TryPop(EventObject) do
-  begin
-    try
-      if not (EventObject is TRunnerSnapshotGuiMessage) then
-      begin
+  try
+    while FGuiEventQueue.TryPop(EventObject) do
+    begin
+      try
+        if EventObject is TRunnerSnapshotGuiMessage then
+        begin
+          SnapshotMessage := TRunnerSnapshotGuiMessage(EventObject);
+          QueueRunnerSnapshot(SnapshotMessage);
+          EventObject := nil;
+          Continue;
+        end;
+
+        FlushPendingRunnerSnapshots;
+
         if EventObject is TAnalyzerLogGuiMessage then
           HandleAnalyzerLog(TAnalyzerLogGuiMessage(EventObject).Message)
         else if EventObject is TAnalyzerMoveGuiMessage then
@@ -5630,30 +5704,13 @@ begin
             end;
           end;
         end;
-        Continue;
+      finally
+        EventObject.Free;
       end;
-
-      SnapshotMessage := TRunnerSnapshotGuiMessage(EventObject);
-      LGame := FindGameById(SnapshotMessage.GameId);
-      if LGame = nil then
-        Continue;
-
-      LGame.Snapshot.AssignFrom(SnapshotMessage.Snapshot);
-      UpdateRunningGameTreeFromSnapshot(LGame);
-      if LGame.FLifecycle = rglStarting then
-        LGame.FLifecycle := rglRunning;
-      if (LGame.FLifecycle in [rglStopRequested, rglRemoveRequested]) and
-        (LGame.Snapshot.State in [gosWaiting, gosRunning, gosError]) then
-        LGame.Snapshot.MarkStopped(LGame.StopReason);
-      if not FClosing then
-      begin
-        UpdateGameListItem(LGame);
-        if SelectedGame = LGame then
-        ApplyGameToDisplay(LGame);
-      end;
-    finally
-      EventObject.Free;
     end;
+    FlushPendingRunnerSnapshots;
+  finally
+    FlushPendingRunnerSnapshots;
   end;
 end;
 
