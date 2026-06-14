@@ -1881,7 +1881,6 @@ var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
   Node: TGameTreePlyNode;
-  LSearchId: Int64;
 begin
   ASearch := EmptyGameTreeSearchRef;
   AErrorText := '';
@@ -1895,13 +1894,11 @@ begin
     Exit;
   end;
 
-  LSearchId := 0;
-  Command := Actor.CreateStartSearchCommand(Node.NodeId, LSearchId);
+  Command := Actor.CreateStartSearchCommand(Node.NodeId, ASearch);
   try
     Result := ExecuteGameTreeCommand(Actor, Command, AErrorText);
-    if Result then
-      ASearch := GameTreeSearchRef(AGameTree.GameTreeId, LSearchId,
-        Node.NodeId);
+    if not Result then
+      ASearch := EmptyGameTreeSearchRef;
   finally
     Command.Free;
   end;

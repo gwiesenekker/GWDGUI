@@ -135,7 +135,9 @@ type
     function CreateSetHeaderCommand(const AHeader: TGameTreeHeaderInput
       ): TGameTreeCommand;
     function CreateStartSearchCommand(ANodeId: Int64;
-      out ASearchId: Int64): TGameTreeCommand;
+      out ASearchId: Int64): TGameTreeCommand; overload;
+    function CreateStartSearchCommand(ANodeId: Int64;
+      out ASearch: TGameTreeSearchRef): TGameTreeCommand; overload;
     function CreateStoreVariationLineCommand(ADisplayAfterPly, ABasePly: Integer;
       const AMovesText, AAnnotationText: string;
       ASource: TGameTreeMoveSource): TGameTreeCommand;
@@ -439,6 +441,15 @@ begin
   Result.GameTreeId := FGameTree.GameTreeId;
   Result.NodeId := ANodeId;
   Result.SearchId := ASearchId;
+end;
+
+function TGameTreeActor.CreateStartSearchCommand(ANodeId: Int64;
+  out ASearch: TGameTreeSearchRef): TGameTreeCommand;
+var
+  SearchId: Int64;
+begin
+  Result := CreateStartSearchCommand(ANodeId, SearchId);
+  ASearch := Result.SearchRef;
 end;
 
 function TGameTreeActor.CreateStoreVariationLineCommand(ADisplayAfterPly,
