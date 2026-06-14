@@ -6285,7 +6285,7 @@ var
 begin
   LGame := SelectedGame;
   LGameTree := ActiveGameTree;
-  if (LGame = nil) or (LGameTree <> LGame.GameTree) then
+  if (LGame <> nil) and (LGameTree <> LGame.GameTree) then
     UpdateGameTreeFromState(LGame, LGameTree);
 
   if LGameTree <> nil then
