@@ -351,8 +351,7 @@ type
       out AErrorText: string): Boolean;
     function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
       out ASearch: TGameTreeSearchRef; out AErrorText: string): Boolean;
-    function AnalyzerSearchMatches(AGameTreeId, ASearchId,
-      ANodeId: Int64): Boolean;
+    function AnalyzerSearchMatches(const ASearch: TGameTreeSearchRef): Boolean;
     function AcceptSearchMove(AActor: TGameTreeActor;
       const ASearch: TGameTreeSearchRef; const AMoveText: string;
       out AErrorText: string): Boolean;
@@ -1944,14 +1943,13 @@ begin
   end;
 end;
 
-function TMainForm.AnalyzerSearchMatches(AGameTreeId, ASearchId,
-  ANodeId: Int64): Boolean;
+function TMainForm.AnalyzerSearchMatches(
+  const ASearch: TGameTreeSearchRef): Boolean;
 begin
-  Result := (ASearchId > 0) and
-    (ANodeId > 0) and
-    (FAnalyzerSearch.SearchId = ASearchId) and
-    (FAnalyzerSearch.GameTreeId = AGameTreeId) and
-    (FAnalyzerSearch.NodeId = ANodeId);
+  Result := IsValidGameTreeSearchRef(ASearch) and
+    (FAnalyzerSearch.SearchId = ASearch.SearchId) and
+    (FAnalyzerSearch.GameTreeId = ASearch.GameTreeId) and
+    (FAnalyzerSearch.NodeId = ASearch.NodeId);
 end;
 
 function TMainForm.AcceptSearchMove(AActor: TGameTreeActor;
@@ -2521,7 +2519,7 @@ begin
       FAnalyzerMemo.Lines.Add('Autoplay move was not recorded; reason=' +
         LErrorText);
     ReleaseGameTreeSearch(Actor, LSearch);
-    if AnalyzerSearchMatches(AGameTreeId, ASearchId, ANodeId) then
+    if AnalyzerSearchMatches(LSearch) then
       ClearAnalyzerSearchTracking;
   end
   else
