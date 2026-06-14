@@ -220,6 +220,20 @@ begin
 
       DoneCommand := Actor.CreateSearchDoneCommand(Search, '18-23');
       try
+        DoneCommand.NodeId := DoneCommand.NodeId + 1;
+        Actor.ExecuteCommand(DoneCommand);
+        Check(not DoneCommand.Accepted,
+          'done with mismatched search ref should be rejected');
+        Check(Actor.SearchState(Search, State),
+          'mismatched done should leave search available');
+        Check(State = gssActive,
+          'mismatched done should leave search active');
+      finally
+        DoneCommand.Free;
+      end;
+
+      DoneCommand := Actor.CreateSearchDoneCommand(Search, '18-23');
+      try
         Actor.ExecuteCommand(DoneCommand);
         Check(DoneCommand.Accepted,
           'done for active search should be accepted');

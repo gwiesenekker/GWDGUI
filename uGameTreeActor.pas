@@ -357,6 +357,7 @@ function TGameTreeActor.CreateSearchDoneCommand(
   const ASearch: TGameTreeSearchRef; const AMoveText: string): TGameTreeCommand;
 begin
   Result := CreateSearchDoneCommand(ASearch.SearchId, AMoveText);
+  Result.SetSearchRef(ASearch);
 end;
 
 function TGameTreeActor.CreateRecordAnnotatorPVCommand(ANodeId: Int64;
