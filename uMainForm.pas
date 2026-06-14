@@ -2081,8 +2081,7 @@ begin
   Command := AActor.CreateRecordEnginePVCommand(ANodeId, AScore,
     APrincipalVariation);
   try
-    Result := ExecuteAndApplyGameTreeCommand(AActor, AGameTree, Command,
-      False, AErrorText);
+    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
   finally
     Command.Free;
   end;
