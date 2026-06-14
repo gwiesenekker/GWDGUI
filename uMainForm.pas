@@ -380,7 +380,8 @@ type
       ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean);
     function ExecuteGameTreeRebuildFromInput(AGame: TRunningGame;
       AGameTree: TGameTree; AMoves, AAnnotations: TStrings): Boolean;
-    function CurrentGameTreeHeaderInput(AGame: TRunningGame): TGameTreeHeaderInput;
+    function CurrentGameTreeHeaderInput(AGame: TRunningGame;
+      AGameTree: TGameTree): TGameTreeHeaderInput;
     function RunningGameTreeHeaderInput(AGame: TRunningGame;
       const AEventName: string): TGameTreeHeaderInput;
     procedure UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
@@ -397,7 +398,8 @@ type
       AVariationPly: Integer): Boolean;
     function CurrentGameTreeEnginePvInput(
       AGameTree: TGameTree): TGameTreePvInput;
-    function CurrentGameTreeAnnotatorPvInput: TGameTreePvInput;
+    function CurrentGameTreeAnnotatorPvInput(
+      AGameTree: TGameTree): TGameTreePvInput;
     procedure ClearHumanMoveSelection;
     procedure ClearStoredTreeVariations(AGameTree: TGameTree);
     procedure ClearVariationExploration;
@@ -2214,8 +2216,9 @@ begin
   LVariationPvPly := 0;
   LVariationPvScore := '';
   LVariationPvText := '';
-  if CanRecordCurrentVariationAnnotatorPV(FVariationIndex,
-    FVariationBrowsePly) then
+  if (AGameTree = ActiveGameTree) and
+    CanRecordCurrentVariationAnnotatorPV(FVariationIndex,
+      FVariationBrowsePly) then
   begin
     LVariationPvIndex := FVariationIndex;
     LVariationPvPly := FVariationBrowsePly;
@@ -2224,13 +2227,13 @@ begin
   end;
 
   Result := RebuildGameTreeFromInputs(Actor,
-    CurrentGameTreeHeaderInput(AGame),
+    CurrentGameTreeHeaderInput(AGame, AGameTree),
     GameTreeMainlineInput(AMoves, AAnnotations,
       (AGame <> nil) and (AGame = SelectedDisplayedGame),
       FWhiteRemainingSeconds, FBlackRemainingSeconds, FWhiteUsedSeconds,
       FBlackUsedSeconds),
     CurrentGameTreeEnginePvInput(AGameTree),
-    CurrentGameTreeAnnotatorPvInput,
+    CurrentGameTreeAnnotatorPvInput(AGameTree),
     LVariationPvIndex, LVariationPvPly, LVariationPvScore,
     LVariationPvText, LErrorText);
 end;
@@ -4044,8 +4047,8 @@ begin
   UpdateGameMoveHighlight;
 end;
 
-function TMainForm.CurrentGameTreeHeaderInput(
-  AGame: TRunningGame): TGameTreeHeaderInput;
+function TMainForm.CurrentGameTreeHeaderInput(AGame: TRunningGame;
+  AGameTree: TGameTree): TGameTreeHeaderInput;
 var
   LBlackName: string;
   LMovesText: string;
@@ -4064,18 +4067,18 @@ begin
   end
   else
   begin
-    LWhiteName := WhiteNameForTree(FGameTree);
-    LBlackName := BlackNameForTree(FGameTree);
+    LWhiteName := WhiteNameForTree(AGameTree);
+    LBlackName := BlackNameForTree(AGameTree);
   end;
 
   if AGame <> nil then
     LTreeSignature := 'running:' + IntToStr(AGame.Id)
   else
   begin
-    LStartingFEN := StartingFenForTree(FGameTree);
-    LMovesText := GameTreeMainlineMovesText(FGameTree);
+    LStartingFEN := StartingFenForTree(AGameTree);
+    LMovesText := GameTreeMainlineMovesText(AGameTree);
     LTreeSignature := 'standalone:' + LStartingFEN + '|' +
-      EventNameForTree(FGameTree) + '|' + LWhiteName +
+      EventNameForTree(AGameTree) + '|' + LWhiteName +
       '|' + LBlackName + '|moves=' + LMovesText;
   end;
 
@@ -4087,16 +4090,16 @@ begin
 
   if AGame <> nil then
     Result := GameTreeHeaderInput(LTreeSignature,
-      EventNameForTree(FGameTree), LWhiteName, LBlackName,
+      EventNameForTree(AGameTree), LWhiteName, LBlackName,
       PlayerNameOrFallback(AGame.Snapshot.GameResult, '*'),
       PlayerNameOrFallback(AGame.Snapshot.StartingFEN, AGame.FSetup.StartingFEN),
       LRecordTimeControl, LTimeControl)
   else
   begin
-    LStartingFEN := StartingFenForTree(FGameTree);
+    LStartingFEN := StartingFenForTree(AGameTree);
     Result := GameTreeHeaderInput(LTreeSignature,
-      EventNameForTree(FGameTree), LWhiteName, LBlackName,
-      ResultForTree(FGameTree), LStartingFEN,
+      EventNameForTree(AGameTree), LWhiteName, LBlackName,
+      ResultForTree(AGameTree), LStartingFEN,
       LRecordTimeControl, LTimeControl);
   end;
 end;
@@ -4272,13 +4275,15 @@ begin
     FPrincipalVariationScore, FPrincipalVariation);
 end;
 
-function TMainForm.CurrentGameTreeAnnotatorPvInput: TGameTreePvInput;
+function TMainForm.CurrentGameTreeAnnotatorPvInput(
+  AGameTree: TGameTree): TGameTreePvInput;
 var
   LRecordAnnotatorPV: Boolean;
   LAnnotatorPV: string;
   LAnnotatorScore: string;
 begin
-  LRecordAnnotatorPV := CanRecordCurrentAnnotatorPV;
+  LRecordAnnotatorPV := (AGameTree = ActiveGameTree) and
+    CanRecordCurrentAnnotatorPV;
   LAnnotatorPV := '';
   LAnnotatorScore := '';
   if LRecordAnnotatorPV then
