@@ -22,6 +22,7 @@ type
     FGameResult: string;
     FLastError: string;
     FLogLines: TStringList;
+    FLogRevision: QWord;
     FMoveAnnotationsText: string;
     FMovesPlayedText: string;
     FPlyCount: Integer;
@@ -50,6 +51,7 @@ type
     property GameResult: string read FGameResult;
     property LastError: string read FLastError;
     property LogLines: TStringList read FLogLines;
+    property LogRevision: QWord read FLogRevision;
     property MoveAnnotationsText: string read FMoveAnnotationsText;
     property MovesPlayedText: string read FMovesPlayedText;
     property PlyCount: Integer read FPlyCount;
@@ -79,6 +81,7 @@ type
     FOrchestrator: TGameOrchestrator;
     FPaused: Boolean;
     FLastLogSnapshotTick: QWord;
+    FLogRevision: QWord;
     FLastPrincipalVariation: string;
     FPvBaseBoard: TDraughtsBoard;
     FPvBasePly: Integer;
@@ -219,7 +222,12 @@ begin
   FCurrentSide := ASource.FCurrentSide;
   FGameResult := ASource.FGameResult;
   FLastError := ASource.FLastError;
-  FLogLines.Assign(ASource.FLogLines);
+  if (FLogRevision <> ASource.FLogRevision) or
+    (FLogLines.Count <> ASource.FLogLines.Count) then
+  begin
+    FLogLines.Assign(ASource.FLogLines);
+    FLogRevision := ASource.FLogRevision;
+  end;
   FMoveAnnotationsText := ASource.FMoveAnnotationsText;
   FMovesPlayedText := ASource.FMovesPlayedText;
   FPlyCount := ASource.FPlyCount;
@@ -237,8 +245,11 @@ begin
   FGameResult := '*';
   FLastError := AReason;
   if Trim(AReason) <> '' then
+  begin
     FLogLines.Add(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
       ' [gui] stopped; reason=' + Trim(AReason));
+    Inc(FLogRevision);
+  end;
 end;
 
 constructor TGameRunnerThread.Create(const ASetup: TGameSetup; AGameId: Integer;
@@ -371,6 +382,7 @@ begin
   FLogLock.Acquire;
   try
     FGameLog.Add(AMessage);
+    Inc(FLogRevision);
   finally
     FLogLock.Release;
   end;
@@ -383,6 +395,8 @@ begin
   FLogLock.Acquire;
   try
     FGameLog.AddStrings(ALines);
+    if ALines.Count > 0 then
+      Inc(FLogRevision);
   finally
     FLogLock.Release;
   end;
@@ -548,6 +562,7 @@ begin
     FLogLock.Acquire;
     try
       Result.FLogLines.Assign(FGameLog);
+      Result.FLogRevision := FLogRevision;
     finally
       FLogLock.Release;
     end;
@@ -562,6 +577,7 @@ begin
   FLogLock.Acquire;
   try
     Result.FLogLines.Assign(FGameLog);
+    Result.FLogRevision := FLogRevision;
   finally
     FLogLock.Release;
   end;
