@@ -4758,6 +4758,12 @@ var
   LTreeScore: string;
   LEffectivePV: string;
   LEffectivePvScore: string;
+  LPvBaseBoard: TDraughtsBoard;
+  LPvBasePly: Integer;
+  LPvDepth: string;
+  LPvScore: string;
+  LPvText: string;
+  LPvTimeText: string;
 
   function SecondsSignature(AValue: Double): string;
   begin
@@ -4851,6 +4857,18 @@ begin
   if FDisplayedSnapshotSignature = LSnapshotSignature then
   begin
     UpdateGameLogMemo;
+    RefreshDisplayedGameTreeViews(AGame.GameTree, False);
+    if AGame.GameTree = ActiveGameTree then
+    begin
+      VisibleMainPvForTree(AGame.GameTree, LPvBaseBoard, LPvBasePly,
+        LPvText, LPvScore, LPvDepth, LPvTimeText);
+      if FPvBrowser <> nil then
+        FPvBrowser.SetData(LPvBaseBoard, LPvBasePly,
+          StartingFenForTree(AGame.GameTree), LPvText, LPvScore, LPvDepth,
+          LPvTimeText);
+      if FBoardControl <> nil then
+        FBoardControl.Invalidate;
+    end;
     UpdateAutoplayControls;
     Exit;
   end;
