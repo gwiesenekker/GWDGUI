@@ -911,7 +911,7 @@ var
       GameTreeHeaderInput('rebuild', 'Event', 'White', 'Black', '*',
         'W:W31-50:B1-20', False, NullTimeControl),
       GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
-      GameTreePvInput(True, 2, '0.10', '37-32'),
+      GameTreePvInput(True, 2, '0.10', '37-32', '12', '1.20'),
       GameTreePvInput(False, 0, '', ''),
       0, 1, '0.20', '20-24', '7', '0.33');
     try
@@ -942,7 +942,7 @@ begin
       GameTreeHeaderInput('rebuild', 'Event', 'White', 'Black', '*',
         'W:W31-50:B1-20', False, NullTimeControl),
       GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
-      GameTreePvInput(True, 2, '0.10', '37-32'),
+      GameTreePvInput(True, 2, '0.10', '37-32', '12', '1.20'),
       GameTreePvInput(False, 0, '', ''),
       0, 1, '0.20', '20-24', '7', '0.33');
     try
@@ -954,6 +954,10 @@ begin
         'rebuild command should record second move');
       Check(Actor.GameTree.MainlineNode[2].EnginePV = '37-32',
         'rebuild command should record engine PV');
+      Check(Actor.GameTree.MainlineNode[2].EnginePVDepth = '12',
+        'rebuild command should record engine PV depth');
+      Check(Actor.GameTree.MainlineNode[2].EnginePVTimeText = '1.20',
+        'rebuild command should record engine PV time');
       Check(Actor.GameTree.VariationLineCount = 1,
         'rebuild command should preserve stored variation line');
       Check(Actor.GameTree.FindVariationNode(0, 1) <> nil,
@@ -974,7 +978,7 @@ begin
       GameTreeHeaderInput('rebuild', 'Event', 'White', 'Black', '*',
         'W:W31-50:B1-20', False, NullTimeControl),
       GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
-      GameTreePvInput(True, 2, '0.10', '37-32'),
+      GameTreePvInput(True, 2, '0.10', '37-32', '12', '1.20'),
       GameTreePvInput(False, 0, '', ''),
       0, 1, '0.20', '20-24', '7', '0.33');
     try
