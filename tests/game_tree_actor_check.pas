@@ -120,6 +120,10 @@ procedure CheckQueuedActorCommands;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
+  ResultMove: string;
+  ResultNodeId: Int64;
+  Search: TGameTreeSearchRef;
+  State: TGameTreeSearchState;
 begin
   Actor := TGameTreeActor.Create;
   try
@@ -148,6 +152,41 @@ begin
       'wrong game-tree queued command should not mutate game tree');
     Check(Actor.Revision = 1,
       'wrong game-tree queued command should not increment revision');
+
+    Command := Actor.CreateStartSearchCommand(
+      Actor.GameTree.MainlineNode[1].NodeId, Search);
+    Check(Actor.PostCommand(Command), 'queued start-search should post');
+    Command := nil;
+    Check(Actor.ProcessCommands = 1,
+      'queued start-search should process');
+    Check(Actor.SearchState(Search, State),
+      'queued start-search should create search');
+    Check(State = gssActive,
+      'queued start-search should create active search');
+
+    Command := Actor.CreateSearchDoneCommand(Search, '18-23');
+    Command.NodeId := Command.NodeId + 1;
+    Check(Actor.PostCommand(Command),
+      'mismatched queued search-done should post');
+    Command := nil;
+    Check(Actor.ProcessCommands = 1,
+      'mismatched queued search-done should process');
+    Check(Actor.SearchState(Search, State),
+      'mismatched queued search-done should leave search available');
+    Check(State = gssActive,
+      'mismatched queued search-done should leave search active');
+
+    Command := Actor.CreateSearchDoneCommand(Search, '18-23');
+    Check(Actor.PostCommand(Command), 'queued search-done should post');
+    Command := nil;
+    Check(Actor.ProcessCommands = 1,
+      'queued search-done should process');
+    Check(Actor.SearchResult(Search, ResultNodeId, ResultMove),
+      'queued search-done should store result');
+    Check(ResultNodeId = Actor.GameTree.MainlineNode[1].NodeId,
+      'queued search-done should keep searched node id');
+    Check(ResultMove = '18-23',
+      'queued search-done should keep move text');
   finally
     Actor.Free;
   end;
