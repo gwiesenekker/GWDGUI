@@ -4221,6 +4221,32 @@ var
     Result := True;
   end;
 
+  procedure PreserveExistingSnapshotAnnotations;
+  var
+    I: Integer;
+    LLimit: Integer;
+  begin
+    LExistingAnnotations := TStringList.Create;
+    try
+      LExistingAnnotations.Text := GameTreeScoreAnnotationsText(LGameTree);
+      LLimit := LGameTree.MainlineCount;
+      if LMoves.Count < LLimit then
+        LLimit := LMoves.Count;
+      for I := 0 to LLimit - 1 do
+        if (Trim(LineOrEmpty(LAnnotations, I)) = '') and
+          (Trim(LineOrEmpty(LExistingAnnotations, I)) <> '') and
+          SameText(NormalizeMoveNotation(LGameTree.MainlineNode[I + 1].MoveText),
+            NormalizeMoveNotation(LMoves[I])) then
+        begin
+          while LAnnotations.Count <= I do
+            LAnnotations.Add('');
+          LAnnotations[I] := LExistingAnnotations[I];
+        end;
+    finally
+      LExistingAnnotations.Free;
+    end;
+  end;
+
   function TryAppendSnapshotMoves: Boolean;
   var
     I: Integer;
@@ -4308,6 +4334,7 @@ begin
   try
     TextToMoveList(AGame.Snapshot.MovesPlayedText, LMoves);
     LAnnotations.Text := AGame.Snapshot.MoveAnnotationsText;
+    PreserveExistingSnapshotAnnotations;
 
     if TryAppendSnapshotMoves then
     begin
