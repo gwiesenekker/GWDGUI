@@ -99,6 +99,7 @@ type
       AEngine: TExternalEngineDefinition): string;
     procedure AddGameLog(const AMessage: string);
     procedure AddGameLogLines(ALines: TStrings);
+    procedure TrimGameLogLocked;
     procedure DrainCommands;
     procedure DetachRuntimeLogHandlers;
     procedure HandleCommand(ACommand: TObject);
@@ -128,6 +129,7 @@ implementation
 
 const
   RunnerLogSnapshotIntervalMs = 500;
+  RunnerMaxLogLines = 2000;
 
 type
   TGameRunnerCommandKind = (
@@ -382,6 +384,7 @@ begin
   FLogLock.Acquire;
   try
     FGameLog.Add(AMessage);
+    TrimGameLogLocked;
     Inc(FLogRevision);
   finally
     FLogLock.Release;
@@ -396,10 +399,19 @@ begin
   try
     FGameLog.AddStrings(ALines);
     if ALines.Count > 0 then
+    begin
+      TrimGameLogLocked;
       Inc(FLogRevision);
+    end;
   finally
     FLogLock.Release;
   end;
+end;
+
+procedure TGameRunnerThread.TrimGameLogLocked;
+begin
+  while FGameLog.Count > RunnerMaxLogLines do
+    FGameLog.Delete(0);
 end;
 
 procedure TGameRunnerThread.PostCommand(ACommand: TObject);
