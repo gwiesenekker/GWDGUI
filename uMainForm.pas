@@ -217,6 +217,7 @@ type
     FGameTreeView: TTreeView;
     FDisplayedMovesSignature: string;
     FDisplayedSnapshotSignature: string;
+    FDisplayedGameTreeId: Int64;
     FDisplayedGameTreeRevision: Int64;
     FHighlightedGameMovePly: Integer;
     FHideMoveAnnotations: Boolean;
@@ -917,6 +918,7 @@ begin
   FGameLogSourceShowStdout := False;
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
+  FDisplayedGameTreeId := 0;
   FDisplayedGameTreeRevision := -1;
   FHighlightedGameMovePly := -1;
   FHideMoveAnnotations := False;
@@ -3213,6 +3215,7 @@ begin
   FStartingFEN := FBoard.StartingFEN;
   FDisplayedMovesSignature := '';
   FDisplayedSnapshotSignature := '';
+  FDisplayedGameTreeId := 0;
   FDisplayedGameTreeRevision := -1;
   ClearStoredTreeVariations(FGameTree);
   FStandaloneWhitePlayerName := 'White';
@@ -3400,6 +3403,7 @@ begin
     FStartingFEN := AGame.StartingFEN;
     FDisplayedMovesSignature := AGame.MovesText;
     FDisplayedSnapshotSignature := '';
+    FDisplayedGameTreeId := 0;
     FDisplayedGameTreeRevision := -1;
     LoadTreeVariationsFromLegacyText(FGameTree, AGame.MoveVariationsText,
       AGame.MoveVariationAnnotationsText);
@@ -4548,6 +4552,7 @@ begin
     FPrincipalVariationTimeText := '';
     FDisplayedMovesSignature := '';
     FDisplayedSnapshotSignature := '';
+    FDisplayedGameTreeId := 0;
     FDisplayedGameTreeRevision := -1;
     ClearStoredTreeVariations(FGameTree);
     FStandaloneWhitePlayerName := 'White';
@@ -4574,6 +4579,7 @@ begin
     FViewedGameId := AGame.Id;
     FGameBrowsePly := -1;
     FDisplayedSnapshotSignature := '';
+    FDisplayedGameTreeId := 0;
     FDisplayedGameTreeRevision := -1;
     ClearStoredTreeVariations(AGame.GameTree);
   end;
@@ -5589,6 +5595,7 @@ begin
   FBoard.LoadFromFEN(ASetup.StartingFEN);
   FStartingFEN := ASetup.StartingFEN;
   FDisplayedMovesSignature := '';
+  FDisplayedGameTreeId := 0;
   FDisplayedGameTreeRevision := -1;
   ClearStoredTreeVariations(Result.GameTree);
   FGameBrowsePly := -1;
@@ -5606,6 +5613,7 @@ begin
   FPvBasePly := 0;
   FGameActive := True;
   FDisplayedSnapshotSignature := '';
+  FDisplayedGameTreeId := 0;
   FDisplayedGameTreeRevision := -1;
   FBoardControl.Board := FBoard;
   UpdateMiniBoardFromBoard(FBoard);
@@ -6451,6 +6459,7 @@ procedure TMainForm.RefreshDisplayedGameTreeViews(AGameTree: TGameTree;
   AForce: Boolean);
 var
   Actor: TGameTreeActor;
+  LGameTreeId: Int64;
   LRevision: Int64;
 begin
   if AGameTree = nil then
@@ -6458,17 +6467,20 @@ begin
   if AGameTree <> ActiveGameTree then
     Exit;
 
+  LGameTreeId := AGameTree.GameTreeId;
   LRevision := -1;
   Actor := ActorForGameTree(AGameTree);
   if Actor <> nil then
     LRevision := Actor.Revision;
 
-  if (not AForce) and (FDisplayedGameTreeRevision = LRevision) then
+  if (not AForce) and (FDisplayedGameTreeId = LGameTreeId) and
+    (FDisplayedGameTreeRevision = LRevision) then
     Exit;
 
   RebuildGameMoveLabels(False, AGameTree);
   UpdateScoreHistory(AGameTree);
   RefreshVisibleGameTreeView(False, AGameTree);
+  FDisplayedGameTreeId := LGameTreeId;
   FDisplayedGameTreeRevision := LRevision;
 end;
 
