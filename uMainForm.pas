@@ -4021,12 +4021,15 @@ begin
     FVariationHits[I].VariationPly := LRenderResult.VariationPlies[I];
   end;
 
-  FGameMoveMemo.Lines.BeginUpdate;
-  try
-    FGameMoveMemo.Text := LText;
-    FHighlightedGameMovePly := -2;
-  finally
-    FGameMoveMemo.Lines.EndUpdate;
+  if FGameMoveMemo.Text <> LText then
+  begin
+    FGameMoveMemo.Lines.BeginUpdate;
+    try
+      FGameMoveMemo.Text := LText;
+      FHighlightedGameMovePly := -2;
+    finally
+      FGameMoveMemo.Lines.EndUpdate;
+    end;
   end;
   UpdateGameMoveHighlight;
 end;
