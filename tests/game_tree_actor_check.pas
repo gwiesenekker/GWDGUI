@@ -113,6 +113,7 @@ var
   ReleaseCommand: TGameTreeCommand;
   ResultMove: string;
   ResultNodeId: Int64;
+  BadSearch: TGameTreeSearchRef;
   Search: TGameTreeSearchRef;
   SearchId: Int64;
   StartCommand: TGameTreeCommand;
@@ -128,24 +129,24 @@ begin
       Check(MoveCommand.Accepted, 'setup move command should be accepted');
 
       StartCommand := Actor.CreateStartSearchCommand(MoveCommand.CreatedNodeId,
-        SearchId);
+        Search);
       try
         Actor.ExecuteCommand(StartCommand);
         Check(StartCommand.Accepted, 'start-search command should be accepted');
+        SearchId := Search.SearchId;
         Check(Actor.SearchState(SearchId, State), 'search state should exist');
         Check(State = gssActive, 'search should be active');
-        Search := GameTreeSearchRef(Actor.GameTree.GameTreeId, SearchId,
-          MoveCommand.CreatedNodeId);
         Check(Actor.SearchState(Search, State),
           'search state should accept matching search ref');
-        Search.NodeId := Search.NodeId + 1;
-        Check(not Actor.SearchState(Search, State),
+        BadSearch := Search;
+        BadSearch.NodeId := BadSearch.NodeId + 1;
+        Check(not Actor.SearchState(BadSearch, State),
           'search state should reject mismatched search ref');
       finally
         StartCommand.Free;
       end;
 
-      ReleaseCommand := Actor.CreateReleaseSearchCommand(SearchId);
+      ReleaseCommand := Actor.CreateReleaseSearchCommand(Search);
       try
         Actor.ExecuteCommand(ReleaseCommand);
         Check(not ReleaseCommand.Accepted,
@@ -158,7 +159,7 @@ begin
         ReleaseCommand.Free;
       end;
 
-      CancelCommand := Actor.CreateCancelSearchCommand(SearchId);
+      CancelCommand := Actor.CreateCancelSearchCommand(Search);
       try
         Actor.ExecuteCommand(CancelCommand);
         Check(CancelCommand.Accepted,
@@ -169,7 +170,7 @@ begin
         CancelCommand.Free;
       end;
 
-      DoneCommand := Actor.CreateSearchDoneCommand(SearchId, '18-23');
+      DoneCommand := Actor.CreateSearchDoneCommand(Search, '18-23');
       try
         Actor.ExecuteCommand(DoneCommand);
         Check(not DoneCommand.Accepted,
@@ -181,7 +182,7 @@ begin
         DoneCommand.Free;
       end;
 
-      ReleaseCommand := Actor.CreateReleaseSearchCommand(SearchId);
+      ReleaseCommand := Actor.CreateReleaseSearchCommand(Search);
       try
         Actor.ExecuteCommand(ReleaseCommand);
         Check(ReleaseCommand.Accepted,
@@ -193,17 +194,17 @@ begin
       end;
 
       StartCommand := Actor.CreateStartSearchCommand(MoveCommand.CreatedNodeId,
-        SearchId);
+        Search);
       try
         Actor.ExecuteCommand(StartCommand);
         Check(StartCommand.Accepted,
           'second start-search command should be accepted');
-        Search := StartCommand.SearchRef;
+        SearchId := Search.SearchId;
       finally
         StartCommand.Free;
       end;
 
-      DoneCommand := Actor.CreateSearchDoneCommand(SearchId, '18-23');
+      DoneCommand := Actor.CreateSearchDoneCommand(Search, '18-23');
       try
         Actor.ExecuteCommand(DoneCommand);
         Check(DoneCommand.Accepted,
@@ -218,14 +219,15 @@ begin
           'done search result should keep target node id');
         Check(ResultMove = '18-23',
           'done search result should keep engine move text');
-        Search.NodeId := Search.NodeId + 1;
-        Check(not Actor.SearchResult(Search, ResultNodeId, ResultMove),
+        BadSearch := Search;
+        BadSearch.NodeId := BadSearch.NodeId + 1;
+        Check(not Actor.SearchResult(BadSearch, ResultNodeId, ResultMove),
           'done search result should reject mismatched search ref');
       finally
         DoneCommand.Free;
       end;
 
-      DoneCommand := Actor.CreateSearchDoneCommand(SearchId, '20-24');
+      DoneCommand := Actor.CreateSearchDoneCommand(Search, '20-24');
       try
         Actor.ExecuteCommand(DoneCommand);
         Check(not DoneCommand.Accepted,
@@ -238,7 +240,7 @@ begin
         DoneCommand.Free;
       end;
 
-      ReleaseCommand := Actor.CreateReleaseSearchCommand(SearchId);
+      ReleaseCommand := Actor.CreateReleaseSearchCommand(Search);
       try
         Actor.ExecuteCommand(ReleaseCommand);
         Check(ReleaseCommand.Accepted,
