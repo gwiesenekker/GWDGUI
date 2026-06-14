@@ -333,6 +333,7 @@ type
     procedure ClearAnalyzerSearchTracking;
     procedure SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
     procedure InvalidateAnalyzerPositionSignature;
+    procedure InvalidateMctsPositionSignature;
     procedure ApplyGameTreeCommandResult(AGameTree: TGameTree;
       ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
       ARefreshScoreHistory: Boolean = False);
@@ -1806,6 +1807,11 @@ begin
   FAnalyzerLastPositionSignature := '';
 end;
 
+procedure TMainForm.InvalidateMctsPositionSignature;
+begin
+  FMctsLastPositionSignature := '';
+end;
+
 procedure TMainForm.ApplyGameTreeCommandResult(AGameTree: TGameTree;
   ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
   ARefreshScoreHistory: Boolean);
@@ -2696,7 +2702,7 @@ begin
     FMctsMemo.Clear;
     ClearMctsStatsGrid;
     FMctsEngineKey := EngineKey;
-    FMctsLastPositionSignature := '';
+    InvalidateMctsPositionSignature;
     FMctsRunner := TAnalyzerRunnerThread.Create(Engine, @MctsLog, nil,
       @MctsFinished, armMcts);
     FMctsRunner.Start;
@@ -2715,7 +2721,7 @@ begin
     FMctsRunner.PostShutdown;
   end;
   FMctsEngineKey := '';
-  FMctsLastPositionSignature := '';
+  InvalidateMctsPositionSignature;
   ClearMctsStatsGrid;
 end;
 
@@ -5336,7 +5342,7 @@ begin
           if FMctsRunner = TMctsFinishedGuiMessage(EventObject).Runner then
             FreeAndNil(FMctsRunner);
           FMctsEngineKey := '';
-          FMctsLastPositionSignature := '';
+          InvalidateMctsPositionSignature;
         end
         else if EventObject is TRunnerFinishedGuiMessage then
         begin
