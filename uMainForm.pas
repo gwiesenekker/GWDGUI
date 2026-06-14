@@ -340,6 +340,9 @@ type
     function StoreSearchMoveVariation(AActor: TGameTreeActor;
       ASearchId: Int64; ASource: TGameTreeMoveSource;
       out AErrorText: string): Boolean;
+    function RecordAnnotatorPvInGameTree(AActor: TGameTreeActor;
+      AGameTree: TGameTree; ANodeId: Int64; const AScore,
+      APrincipalVariation: string; out AErrorText: string): Boolean;
     function TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
       out AActor: TGameTreeActor; out AGameTree: TGameTree): Boolean;
     procedure TrackAnalyzerSearch(AGameTree: TGameTree; ASearchId: Int64);
@@ -1891,6 +1894,31 @@ begin
   end;
 end;
 
+function TMainForm.RecordAnnotatorPvInGameTree(AActor: TGameTreeActor;
+  AGameTree: TGameTree; ANodeId: Int64; const AScore,
+  APrincipalVariation: string; out AErrorText: string): Boolean;
+var
+  Command: TGameTreeCommand;
+begin
+  Result := False;
+  AErrorText := '';
+  if (AActor = nil) or (AGameTree = nil) or (ANodeId <= 0) then
+  begin
+    AErrorText := 'invalid annotator PV target';
+    Exit;
+  end;
+
+  Command := AActor.CreateRecordAnnotatorPVCommand(ANodeId, AScore,
+    APrincipalVariation);
+  try
+    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
+    if Result then
+      ApplyGameTreeCommandResult(AGameTree, Command, False);
+  finally
+    Command.Free;
+  end;
+end;
+
 function TMainForm.TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
   out AActor: TGameTreeActor; out AGameTree: TGameTree): Boolean;
 var
@@ -3111,7 +3139,6 @@ var
   LGameTree: TGameTree;
   LNode: TGameTreePlyNode;
   LNodeId: Int64;
-  LPvCommand: TGameTreeCommand;
 begin
   Result := nil;
   if ASnapshot = nil then
@@ -3165,21 +3192,15 @@ begin
   if LNodeId <= 0 then
     Exit;
 
-  LPvCommand := Actor.CreateRecordAnnotatorPVCommand(LNodeId,
-    ASnapshot.Score, ASnapshot.PrincipalVariation);
-  try
-    if not ExecuteGameTreeCommand(Actor, LPvCommand, LErrorText) then
-    begin
-      if FAnalyzerMemo <> nil then
-        FAnalyzerMemo.Lines.Add('Annotator PV rejected; reason=' +
-          LErrorText);
-      Exit;
-    end;
-    Result := LGameTree;
-    ApplyGameTreeCommandResult(LGameTree, LPvCommand, False);
-  finally
-    LPvCommand.Free;
+  if not RecordAnnotatorPvInGameTree(Actor, LGameTree, LNodeId,
+    ASnapshot.Score, ASnapshot.PrincipalVariation, LErrorText) then
+  begin
+    if FAnalyzerMemo <> nil then
+      FAnalyzerMemo.Lines.Add('Annotator PV rejected; reason=' +
+        LErrorText);
+    Exit;
   end;
+  Result := LGameTree;
 end;
 
 procedure TMainForm.LoadPdnGameToDisplay(AGame: TPdnGame);
