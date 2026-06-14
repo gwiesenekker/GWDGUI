@@ -4597,15 +4597,25 @@ end;
 function TMainForm.CurrentGameTreeEnginePvInput(
   AGameTree: TGameTree): TGameTreePvInput;
 var
-  LPvBaseBoard: TDraughtsBoard;
   LPvBasePly: Integer;
   LPvDepth: string;
+  LPvGame: TRunningGame;
   LPvScore: string;
   LPvText: string;
   LPvTimeText: string;
 begin
-  if VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
-    LPvScore, LPvDepth, LPvTimeText) then
+  LPvBasePly := 0;
+  if AGameTree = ActiveGameTree then
+    LPvBasePly := FPvBasePly
+  else
+  begin
+    LPvGame := GameForTreeRefresh(AGameTree);
+    if LPvGame <> nil then
+      LPvBasePly := LPvGame.Snapshot.PvBasePly;
+  end;
+
+  if EnginePvForTree(AGameTree, LPvBasePly, LPvText, LPvScore, LPvDepth,
+    LPvTimeText) then
     Result := GameTreePvInput(True, LPvBasePly, LPvScore, LPvText,
       LPvDepth, LPvTimeText)
   else
