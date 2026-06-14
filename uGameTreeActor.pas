@@ -779,6 +779,7 @@ end;
 
 procedure TGameTreeActor.ExecuteCommand(ACommand: TGameTreeCommand);
 var
+  Changed: Boolean;
   InvalidateRebuildSignature: Boolean;
   Node: TGameTreePlyNode;
   RebuildSignature: string;
@@ -835,15 +836,18 @@ begin
       begin
         ACommand.VariationIndex := FGameTree.StoreVariationLine(
           ACommand.DisplayAfterPly, ACommand.BasePly, ACommand.MoveText,
-          ACommand.AnnotationText);
+          ACommand.AnnotationText, Changed);
         if ACommand.VariationIndex < 0 then
         begin
           Reject(ACommand, 'variation line was not stored');
           Exit;
         end;
         ACommand.Accepted := True;
-        InvalidateRebuildSignature := True;
-        Inc(FRevision);
+        if Changed then
+        begin
+          InvalidateRebuildSignature := True;
+          Inc(FRevision);
+        end;
       end;
     gtcStartSearch:
       begin

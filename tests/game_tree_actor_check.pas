@@ -98,6 +98,8 @@ begin
         'empty variation update should be accepted');
       Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
         'empty variation update should not clear annotation text');
+      Check(Actor.Revision = 3,
+        'unchanged variation update should not increment revision');
     finally
       Command.Free;
     end;
@@ -108,7 +110,7 @@ begin
       Check(Command.Accepted, 'clear-variations command should be accepted');
       Check(Actor.GameTree.VariationLineCount = 0,
         'clear-variations command should remove stored variations');
-      Check(Actor.Revision = 5, 'clear mutation should increment revision');
+      Check(Actor.Revision = 4, 'clear mutation should increment revision');
     finally
       Command.Free;
     end;
@@ -118,7 +120,7 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'empty clear-variations command should be accepted');
-      Check(Actor.Revision = 5,
+      Check(Actor.Revision = 4,
         'empty clear-variations command should not increment revision');
     finally
       Command.Free;

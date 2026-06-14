@@ -179,7 +179,10 @@ type
     function FindStoredVariationByDisplayAfterPly(
       ADisplayAfterPly: Integer): Integer;
     function StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
-      const AMovesText, AAnnotationText: string): Integer;
+      const AMovesText, AAnnotationText: string): Integer; overload;
+    function StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
+      const AMovesText, AAnnotationText: string;
+      out AChanged: Boolean): Integer; overload;
     property Root: TGameTreePlyNode read FRoot;
     property GameTreeId: Int64 read FGameTreeId;
     property MainlineNode[APlyNumber: Integer]: TGameTreePlyNode
@@ -796,27 +799,50 @@ end;
 function TGameTree.StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
   const AMovesText, AAnnotationText: string): Integer;
 var
+  Changed: Boolean;
+begin
+  Result := StoreVariationLine(ADisplayAfterPly, ABasePly, AMovesText,
+    AAnnotationText, Changed);
+end;
+
+function TGameTree.StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
+  const AMovesText, AAnnotationText: string;
+  out AChanged: Boolean): Integer;
+var
+  NewAnnotationText: string;
+  NewMovesText: string;
   VariationEntry: TGameTreeVariationLine;
 begin
   Result := -1;
+  AChanged := False;
   if (ADisplayAfterPly < 0) or (ABasePly < 0) then
     Exit;
 
+  NewMovesText := Trim(AMovesText);
   Result := FindStoredVariation(ADisplayAfterPly, ABasePly, AMovesText);
   if Result < 0 then
   begin
     VariationEntry := TGameTreeVariationLine.Create;
     Result := FVariationLines.Add(VariationEntry);
+    AChanged := True;
   end
   else
     VariationEntry := TGameTreeVariationLine(FVariationLines[Result]);
 
+  NewAnnotationText := Trim(VariationEntry.AnnotationText);
+  if (Trim(AAnnotationText) <> '') or (NewAnnotationText = '') then
+    NewAnnotationText := Trim(AAnnotationText);
+
+  if (VariationEntry.DisplayAfterPly <> ADisplayAfterPly) or
+    (VariationEntry.BasePly <> ABasePly) or
+    (Trim(VariationEntry.MovesText) <> NewMovesText) or
+    (Trim(VariationEntry.AnnotationText) <> NewAnnotationText) then
+    AChanged := True;
+
   VariationEntry.DisplayAfterPly := ADisplayAfterPly;
   VariationEntry.BasePly := ABasePly;
-  VariationEntry.MovesText := Trim(AMovesText);
-  if (Trim(AAnnotationText) <> '') or
-    (Trim(VariationEntry.AnnotationText) = '') then
-    VariationEntry.AnnotationText := Trim(AAnnotationText);
+  VariationEntry.MovesText := NewMovesText;
+  VariationEntry.AnnotationText := NewAnnotationText;
 end;
 
 function TGameTree.GetStoredValue(AList: TStringList; APlyNumber: Integer): string;
