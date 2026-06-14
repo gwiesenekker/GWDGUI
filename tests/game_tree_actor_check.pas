@@ -255,6 +255,20 @@ begin
         DoneCommand.Free;
       end;
 
+      ReleaseCommand := Actor.CreateReleaseSearchCommand(Search);
+      try
+        ReleaseCommand.NodeId := ReleaseCommand.NodeId + 1;
+        Actor.ExecuteCommand(ReleaseCommand);
+        Check(not ReleaseCommand.Accepted,
+          'release with mismatched search ref should be rejected');
+        Check(Actor.SearchState(Search, State),
+          'mismatched release should leave search available');
+        Check(State = gssDone,
+          'mismatched release should leave done search state');
+      finally
+        ReleaseCommand.Free;
+      end;
+
       DoneCommand := Actor.CreateSearchDoneCommand(Search, '20-24');
       try
         Actor.ExecuteCommand(DoneCommand);
