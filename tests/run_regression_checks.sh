@@ -10,6 +10,7 @@ CHECKS=(
   game_tree_actor_check.pas
 )
 
+rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
 run_check() {
@@ -20,7 +21,7 @@ run_check() {
   binary_name="$(basename "$source_file" .pas)"
   compile_log="$OUT_DIR/$binary_name.compile.log"
   echo "==> $binary_name"
-  if ! fpc -Fu"$ROOT_DIR" -FE"$OUT_DIR" "$ROOT_DIR/tests/$source_file" \
+  if ! fpc -B -Fu"$ROOT_DIR" -FU"$OUT_DIR" -FE"$OUT_DIR" "$ROOT_DIR/tests/$source_file" \
     >"$compile_log" 2>&1; then
     cat "$compile_log"
     exit 1

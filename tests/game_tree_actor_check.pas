@@ -74,8 +74,8 @@ begin
       Command.Free;
     end;
 
-    Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23', '',
-      gmsAutorandom);
+    Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23',
+      'annotator=0.22', gmsAutorandom);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'store-variation command should be accepted');
@@ -83,7 +83,21 @@ begin
         'first variation should get variation index 0');
       Check(Actor.GameTree.VariationLineCount = 1,
         'variation should be stored on game tree');
+      Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
+        'variation should store annotation text on game tree');
       Check(Actor.Revision = 3, 'third mutation should increment revision');
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23', '',
+      gmsAutorandom);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'empty variation update should be accepted');
+      Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
+        'empty variation update should not clear annotation text');
     finally
       Command.Free;
     end;
@@ -94,19 +108,21 @@ begin
       Check(Command.Accepted, 'clear-variations command should be accepted');
       Check(Actor.GameTree.VariationLineCount = 0,
         'clear-variations command should remove stored variations');
-      Check(Actor.Revision = 4, 'clear mutation should increment revision');
+      Check(Actor.Revision = 5, 'clear mutation should increment revision');
     finally
       Command.Free;
     end;
 
-    Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23', '',
-      gmsAutorandom);
+    Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23',
+      'annotator=0.22', gmsAutorandom);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'setup variation before rebuild should be accepted');
       Check(Actor.GameTree.VariationLineCount = 1,
         'setup variation should be stored before rebuild');
+      Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
+        'setup variation should store annotation text before rebuild');
     finally
       Command.Free;
     end;
@@ -130,6 +146,10 @@ begin
         'rebuild should recreate stored variation node');
       Check(VariationNode.MoveText = '18-23',
         'recreated variation node should contain stored move');
+      Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
+        'rebuild should preserve stored variation annotation text');
+      Check(VariationNode.AnnotatorScore = '0.22',
+        'recreated variation node should preserve stored annotation');
     finally
       Command.Free;
     end;

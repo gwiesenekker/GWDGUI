@@ -690,10 +690,24 @@ end;
 procedure TGameTree.RecordVariationAnnotation(ABasePlyNumber,
   ADisplayAfterPly, AVariationIndex, AVariationPlyNumber: Integer;
   const AAnnotationText: string);
+var
+  LAnnotatorScore: string;
+  LEngineScore: string;
+  LNode: TGameTreePlyNode;
+  LVariationKey: string;
 begin
-  ApplyAnnotationText(FindVariationNodeByKey(BuildVariationKey(ABasePlyNumber,
-    ADisplayAfterPly, AVariationIndex, AVariationPlyNumber)),
-    AAnnotationText);
+  LVariationKey := BuildVariationKey(ABasePlyNumber, ADisplayAfterPly,
+    AVariationIndex, AVariationPlyNumber);
+  LEngineScore := ExtractAnnotationValue(AAnnotationText, 'engine');
+  LAnnotatorScore := ExtractAnnotationValue(AAnnotationText, 'annotator');
+  if LEngineScore <> '' then
+    StoreKeyValue(FVariationEngineScoresByKey, LVariationKey, LEngineScore);
+  if LAnnotatorScore <> '' then
+    StoreKeyValue(FVariationAnnotatorScoresByKey, LVariationKey,
+      LAnnotatorScore);
+  LNode := FindVariationNodeByKey(LVariationKey);
+  ApplyAnnotationText(LNode, AAnnotationText);
+  ApplyStoredVariationAnalysis(LNode, LVariationKey);
 end;
 
 procedure TGameTree.ClearStoredVariations;
@@ -800,7 +814,9 @@ begin
   VariationEntry.DisplayAfterPly := ADisplayAfterPly;
   VariationEntry.BasePly := ABasePly;
   VariationEntry.MovesText := Trim(AMovesText);
-  VariationEntry.AnnotationText := Trim(AAnnotationText);
+  if (Trim(AAnnotationText) <> '') or
+    (Trim(VariationEntry.AnnotationText) = '') then
+    VariationEntry.AnnotationText := Trim(AAnnotationText);
 end;
 
 function TGameTree.GetStoredValue(AList: TStringList; APlyNumber: Integer): string;
