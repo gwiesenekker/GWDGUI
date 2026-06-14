@@ -12,8 +12,8 @@ uses
   uEngineParamsJson, uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
   uGuiDialogs, uDatabaseForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameTreeView, uPositionSetupForm, uPreferences,
-  uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm;
+  uGameTreePdn, uGameTreeSearchRef, uGameTreeView, uPositionSetupForm,
+  uPreferences, uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm;
 
 type
   TIntArray = array of Integer;
@@ -25,12 +25,6 @@ type
     VariationPly: Integer;
   end;
   TMoveVariationHitArray = array of TMoveVariationHit;
-
-  TGameTreeSearchRef = record
-    GameTreeId: Int64;
-    NodeId: Int64;
-    SearchId: Int64;
-  end;
 
   TRunnerSnapshotGuiMessage = class(TThreadMessage)
   private
@@ -585,21 +579,6 @@ var
 
 implementation
 
-function EmptyGameTreeSearchRef: TGameTreeSearchRef;
-begin
-  Result.GameTreeId := 0;
-  Result.NodeId := 0;
-  Result.SearchId := 0;
-end;
-
-function GameTreeSearchRef(AGameTreeId, ASearchId,
-  ANodeId: Int64): TGameTreeSearchRef;
-begin
-  Result.GameTreeId := AGameTreeId;
-  Result.NodeId := ANodeId;
-  Result.SearchId := ASearchId;
-end;
-
 function GameTreeSearchRefFromSnapshot(
   ASnapshot: TPvSnapshot): TGameTreeSearchRef;
 begin
@@ -608,12 +587,6 @@ begin
   else
     Result := GameTreeSearchRef(ASnapshot.GameTreeId, ASnapshot.SearchId,
       ASnapshot.NodeId);
-end;
-
-function IsValidGameTreeSearchRef(const ASearch: TGameTreeSearchRef): Boolean;
-begin
-  Result := (ASearch.GameTreeId > 0) and (ASearch.NodeId > 0) and
-    (ASearch.SearchId > 0);
 end;
 
 function RunningGameLifecycleToString(ALifecycle: TRunningGameLifecycle): string;
