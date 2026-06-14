@@ -92,6 +92,8 @@ type
     function NextCommandId: Int64;
     function NextSearchId: Int64;
     function RemoveSearch(ASearchId: Int64): Boolean;
+    function SearchCommandMatches(ACommand: TGameTreeCommand;
+      ASearch: TGameTreeSearchRecord): Boolean;
     procedure Reject(ACommand: TGameTreeCommand; const AErrorText: string);
     procedure RebuildStoredVariations(ACommand: TGameTreeCommand);
     function StoreMoveVariationFromNode(ACommand: TGameTreeCommand;
@@ -270,6 +272,14 @@ begin
       Exit(True);
     end;
   end;
+end;
+
+function TGameTreeActor.SearchCommandMatches(ACommand: TGameTreeCommand;
+  ASearch: TGameTreeSearchRecord): Boolean;
+begin
+  Result := (ACommand <> nil) and (ASearch <> nil);
+  if Result and (ACommand.NodeId > 0) then
+    Result := SameGameTreeSearchRef(ACommand.SearchRef, ASearch.SearchRef);
 end;
 
 function TGameTreeActor.CreateAddMainlineMoveCommand(APlyNumber: Integer;
@@ -705,6 +715,11 @@ begin
           Reject(ACommand, 'search id not found');
           Exit;
         end;
+        if not SearchCommandMatches(ACommand, Search) then
+        begin
+          Reject(ACommand, 'search reference mismatch');
+          Exit;
+        end;
         if Search.State <> gssActive then
         begin
           Reject(ACommand, 'search is not active');
@@ -721,6 +736,11 @@ begin
         if Search = nil then
         begin
           Reject(ACommand, 'search id not found');
+          Exit;
+        end;
+        if not SearchCommandMatches(ACommand, Search) then
+        begin
+          Reject(ACommand, 'search reference mismatch');
           Exit;
         end;
         if Search.State <> gssActive then
@@ -747,6 +767,11 @@ begin
         if Search = nil then
         begin
           Reject(ACommand, 'search id not found');
+          Exit;
+        end;
+        if not SearchCommandMatches(ACommand, Search) then
+        begin
+          Reject(ACommand, 'search reference mismatch');
           Exit;
         end;
         if Search.State = gssActive then
@@ -785,6 +810,11 @@ begin
         if Search = nil then
         begin
           Reject(ACommand, 'search id not found');
+          Exit;
+        end;
+        if not SearchCommandMatches(ACommand, Search) then
+        begin
+          Reject(ACommand, 'search reference mismatch');
           Exit;
         end;
         if Search.State <> gssDone then

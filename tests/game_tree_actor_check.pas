@@ -146,6 +146,20 @@ begin
         StartCommand.Free;
       end;
 
+      CancelCommand := Actor.CreateCancelSearchCommand(Search);
+      try
+        CancelCommand.NodeId := CancelCommand.NodeId + 1;
+        Actor.ExecuteCommand(CancelCommand);
+        Check(not CancelCommand.Accepted,
+          'cancel with mismatched search ref should be rejected');
+        Check(Actor.SearchState(Search, State),
+          'mismatched cancel should leave search available');
+        Check(State = gssActive,
+          'mismatched cancel should leave search active');
+      finally
+        CancelCommand.Free;
+      end;
+
       ReleaseCommand := Actor.CreateReleaseSearchCommand(Search);
       try
         Actor.ExecuteCommand(ReleaseCommand);
