@@ -422,6 +422,8 @@ type
     function GameForTree(AGameTree: TGameTree): TRunningGame;
     function ActorForGameTree(AGameTree: TGameTree): TGameTreeActor;
     function ActorForGameTreeId(AGameTreeId: Int64): TGameTreeActor;
+    function ActorForSearchRef(
+      const ASearch: TGameTreeSearchRef): TGameTreeActor;
     function GameForTreeRefresh(AGameTree: TGameTree): TRunningGame;
     function BlackNameForTree(AGameTree: TGameTree): string;
     function EventNameForTree(AGameTree: TGameTree): string;
@@ -2121,7 +2123,7 @@ begin
   if not IsValidGameTreeSearchRef(LSearch) then
     Exit;
 
-  AActor := ActorForGameTreeId(LSearch.GameTreeId);
+  AActor := ActorForSearchRef(LSearch);
   if AActor = nil then
     Exit;
   if (not AActor.SearchState(LSearch, LSearchState)) or
@@ -2458,7 +2460,7 @@ var
   LErrorText: string;
   LRejectedReason: string;
 begin
-  Actor := ActorForGameTreeId(ASearch.GameTreeId);
+  Actor := ActorForSearchRef(ASearch);
   if Actor = nil then
   begin
     if FAnalyzerMemo <> nil then
@@ -2899,7 +2901,7 @@ begin
   if not IsValidGameTreeSearchRef(FAnalyzerSearch) then
     Exit;
 
-  Actor := ActorForGameTreeId(FAnalyzerSearch.GameTreeId);
+  Actor := ActorForSearchRef(FAnalyzerSearch);
   if CancelGameTreeSearch(Actor, FAnalyzerSearch) then
     ReleaseGameTreeSearch(Actor, FAnalyzerSearch);
 
@@ -3806,6 +3808,15 @@ begin
       (LGame.GameTree.GameTreeId = AGameTreeId) then
       Exit(LGame.GameTreeActor);
   end;
+end;
+
+function TMainForm.ActorForSearchRef(
+  const ASearch: TGameTreeSearchRef): TGameTreeActor;
+begin
+  Result := nil;
+  if not IsValidGameTreeSearchRef(ASearch) then
+    Exit;
+  Result := ActorForGameTreeId(ASearch.GameTreeId);
 end;
 
 function TMainForm.GameForTreeRefresh(AGameTree: TGameTree): TRunningGame;
