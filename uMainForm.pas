@@ -331,6 +331,7 @@ type
       out ASearchId, ANodeId: Int64; out AErrorText: string): Boolean;
     procedure TrackAnalyzerSearch(AGameTree: TGameTree; ASearchId: Int64);
     procedure ClearAnalyzerSearchTracking;
+    procedure SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
     procedure ApplyGameTreeCommandResult(AGameTree: TGameTree;
       ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
       ARefreshScoreHistory: Boolean = False);
@@ -1792,6 +1793,13 @@ begin
   FAnalyzerSearchGameTreeId := 0;
 end;
 
+procedure TMainForm.SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
+begin
+  if ABoard <> nil then
+    FAnalyzerPvBaseBoard.AssignFrom(ABoard);
+  FAnalyzerPvBasePly := APly;
+end;
+
 procedure TMainForm.ApplyGameTreeCommandResult(AGameTree: TGameTree;
   ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
   ARefreshScoreHistory: Boolean);
@@ -2484,8 +2492,7 @@ begin
 
   TrackAnalyzerSearch(LGameTree, LSearchId);
   FAnalyzerLastPositionSignature := '';
-  FAnalyzerPvBaseBoard.AssignFrom(ActiveBoard);
-  FAnalyzerPvBasePly := LDisplayedMoveCount;
+  SetAnalyzerPvBase(ActiveBoard, LDisplayedMoveCount);
 
   if FAnalyzerMemo <> nil then
     FAnalyzerMemo.Lines.Add(Format('Autoplay thinking; time=%.3g seconds',
@@ -2752,8 +2759,7 @@ begin
   FAnalyzerLastPositionSignature := Signature;
   CancelAnalyzerSearch;
 
-  FAnalyzerPvBaseBoard.AssignFrom(ActiveBoard);
-  FAnalyzerPvBasePly := LDisplayedMoveCount;
+  SetAnalyzerPvBase(ActiveBoard, LDisplayedMoveCount);
   LTerminal := (ActiveBoard.LegalMoves.Count = 0) or
     ((LGameState = gosGameOver) and
       ((FGameBrowsePly < 0) or (LDisplayedMoveCount >= LTotalMoveCount)));
@@ -5289,10 +5295,9 @@ begin
           HandleMctsLog(TMctsLogGuiMessage(EventObject).Message)
         else if EventObject is TAnalyzerSnapshotGuiMessage then
         begin
-          FAnalyzerPvBaseBoard.AssignFrom(
-            TAnalyzerSnapshotGuiMessage(EventObject).Snapshot.BaseBoard);
-          FAnalyzerPvBasePly :=
-            TAnalyzerSnapshotGuiMessage(EventObject).Snapshot.BasePly;
+          SetAnalyzerPvBase(
+            TAnalyzerSnapshotGuiMessage(EventObject).Snapshot.BaseBoard,
+            TAnalyzerSnapshotGuiMessage(EventObject).Snapshot.BasePly);
           LGameTree := RecordAnalyzerSnapshotInGameTree(
             TAnalyzerSnapshotGuiMessage(EventObject).Snapshot);
           if LGameTree = nil then
