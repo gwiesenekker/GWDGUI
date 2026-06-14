@@ -7,7 +7,8 @@ uses
   cthreads,
   {$ENDIF}
   Classes, SysUtils,
-  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameOrchestrator;
+  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreeSearchRef,
+  uGameOrchestrator;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -112,6 +113,7 @@ var
   ReleaseCommand: TGameTreeCommand;
   ResultMove: string;
   ResultNodeId: Int64;
+  Search: TGameTreeSearchRef;
   SearchId: Int64;
   StartCommand: TGameTreeCommand;
   State: TGameTreeSearchState;
@@ -132,6 +134,13 @@ begin
         Check(StartCommand.Accepted, 'start-search command should be accepted');
         Check(Actor.SearchState(SearchId, State), 'search state should exist');
         Check(State = gssActive, 'search should be active');
+        Search := GameTreeSearchRef(Actor.GameTree.GameTreeId, SearchId,
+          MoveCommand.CreatedNodeId);
+        Check(Actor.SearchState(Search, State),
+          'search state should accept matching search ref');
+        Search.NodeId := Search.NodeId + 1;
+        Check(not Actor.SearchState(Search, State),
+          'search state should reject mismatched search ref');
       finally
         StartCommand.Free;
       end;
