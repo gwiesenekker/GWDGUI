@@ -5657,16 +5657,20 @@ begin
 end;
 
 procedure TMainForm.GuiEventTimerTick(Sender: TObject);
+const
+  MaxGuiEventsPerTimerTick = 100;
 type
   TPendingRunnerSnapshot = record
     GameId: Integer;
     Message: TRunnerSnapshotGuiMessage;
   end;
 var
+  DrainAllEvents: Boolean;
   EventObject: TObject;
   LGame: TRunningGame;
   LGameTree: TGameTree;
   PendingSnapshots: array of TPendingRunnerSnapshot;
+  ProcessedEvents: Integer;
   RemoveAfterFinish: Boolean;
   SnapshotMessage: TRunnerSnapshotGuiMessage;
 
@@ -5732,9 +5736,12 @@ begin
   if FGuiEventQueue = nil then
     Exit;
 
+  DrainAllEvents := Sender = nil;
+  ProcessedEvents := 0;
   try
     while FGuiEventQueue.TryPop(EventObject) do
     begin
+      Inc(ProcessedEvents);
       try
         if EventObject is TRunnerSnapshotGuiMessage then
         begin
@@ -5812,6 +5819,9 @@ begin
       finally
         EventObject.Free;
       end;
+      if (not DrainAllEvents) and
+        (ProcessedEvents >= MaxGuiEventsPerTimerTick) then
+        Break;
     end;
     FlushPendingRunnerSnapshots;
   finally
