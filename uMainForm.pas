@@ -328,6 +328,8 @@ type
     function ExecuteGameTreeAppendMainlineMove(AGameTree: TGameTree;
       const AMove: string; ASource: TGameTreeMoveSource;
       ARefreshScoreHistory: Boolean = False): TGameTreePlyNode;
+    function ExecuteGameTreeCommand(AActor: TGameTreeActor;
+      ACommand: TGameTreeCommand; out AErrorText: string): Boolean;
     procedure ApplyGameTreeCommandResult(AGameTree: TGameTree;
       ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
       ARefreshScoreHistory: Boolean = False);
@@ -1699,6 +1701,7 @@ var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
   CreatedNodeId: Int64;
+  LErrorText: string;
 begin
   Result := nil;
   Actor := ActorForGameTree(AGameTree);
@@ -1707,8 +1710,7 @@ begin
 
   Command := Actor.CreateAddMainlineMoveCommand(APlyNumber, AMove, ASource);
   try
-    Actor.ExecuteCommand(Command);
-    if not Command.Accepted then
+    if not ExecuteGameTreeCommand(Actor, Command, LErrorText) then
       Exit;
     CreatedNodeId := Command.CreatedNodeId;
   finally
@@ -1725,6 +1727,7 @@ var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
   CreatedNodeId: Int64;
+  LErrorText: string;
 begin
   Result := nil;
   Actor := ActorForGameTree(AGameTree);
@@ -1733,8 +1736,7 @@ begin
 
   Command := Actor.CreateAppendMainlineMoveCommand(AMove, ASource);
   try
-    Actor.ExecuteCommand(Command);
-    if not Command.Accepted then
+    if not ExecuteGameTreeCommand(Actor, Command, LErrorText) then
       Exit;
     CreatedNodeId := Command.CreatedNodeId;
     ApplyGameTreeCommandResult(AGameTree, Command, False,
@@ -1744,6 +1746,23 @@ begin
   end;
 
   Result := AGameTree.FindNodeById(CreatedNodeId);
+end;
+
+function TMainForm.ExecuteGameTreeCommand(AActor: TGameTreeActor;
+  ACommand: TGameTreeCommand; out AErrorText: string): Boolean;
+begin
+  AErrorText := '';
+  Result := False;
+  if (AActor = nil) or (ACommand = nil) then
+  begin
+    AErrorText := 'game tree command is unavailable';
+    Exit;
+  end;
+
+  AActor.ExecuteCommand(ACommand);
+  Result := ACommand.Accepted;
+  if not Result then
+    AErrorText := ACommand.ErrorText;
 end;
 
 procedure TMainForm.ApplyGameTreeCommandResult(AGameTree: TGameTree;
@@ -1774,6 +1793,7 @@ function TMainForm.ExecuteGameTreeRebuildFromInput(AGame: TRunningGame;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
+  LErrorText: string;
   LVariationPvIndex: Integer;
   LVariationPvPly: Integer;
   LVariationPvScore: string;
@@ -1808,8 +1828,7 @@ begin
     LVariationPvIndex, LVariationPvPly, LVariationPvScore,
     LVariationPvText);
   try
-    Actor.ExecuteCommand(Command);
-    Result := Command.Accepted;
+    Result := ExecuteGameTreeCommand(Actor, Command, LErrorText);
   finally
     Command.Free;
   end;
@@ -1883,6 +1902,7 @@ procedure TMainForm.AddVariationMove(const AMove: string;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
+  LErrorText: string;
   LGameTree: TGameTree;
   LMove: string;
   LNode: TGameTreePlyNode;
@@ -1903,8 +1923,7 @@ begin
   Command := Actor.CreateStoreMoveVariationCommand(LNode.NodeId, LMove,
     ASource);
   try
-    Actor.ExecuteCommand(Command);
-    if not Command.Accepted then
+    if not ExecuteGameTreeCommand(Actor, Command, LErrorText) then
       Exit;
     ApplyGameTreeCommandResult(LGameTree, Command, True);
   finally
@@ -2063,9 +2082,7 @@ begin
       Exit;
     end;
 
-    Actor.ExecuteCommand(Command);
-    LAccepted := Command.Accepted;
-    LErrorText := Command.ErrorText;
+    LAccepted := ExecuteGameTreeCommand(Actor, Command, LErrorText);
   finally
     Command.Free;
   end;
@@ -2079,12 +2096,12 @@ begin
     LStoreCommand := Actor.CreateStoreSearchMoveVariationCommand(ASearchId,
       gmsAutoplay);
     try
-      Actor.ExecuteCommand(LStoreCommand);
-      if LStoreCommand.Accepted then
+      LAccepted := ExecuteGameTreeCommand(Actor, LStoreCommand, LErrorText);
+      if LAccepted then
         ApplyGameTreeCommandResult(LGameTree, LStoreCommand, True)
       else if FAnalyzerMemo <> nil then
         FAnalyzerMemo.Lines.Add('Autoplay move was not recorded; reason=' +
-          LStoreCommand.ErrorText);
+          LErrorText);
     finally
       LStoreCommand.Free;
     end;
@@ -2352,6 +2369,7 @@ var
   LDisplayedMoveCount: Integer;
   LDisplayedMoves: TStringList;
   LDisplayedMovesText: string;
+  LErrorText: string;
   LGameTree: TGameTree;
   LNode: TGameTreePlyNode;
   LSearchCommand: TGameTreeCommand;
@@ -2421,12 +2439,11 @@ begin
   CancelAnalyzerSearch;
   LSearchCommand := Actor.CreateStartSearchCommand(LNode.NodeId, LSearchId);
   try
-    Actor.ExecuteCommand(LSearchCommand);
-    if not LSearchCommand.Accepted then
+    if not ExecuteGameTreeCommand(Actor, LSearchCommand, LErrorText) then
     begin
       if FAnalyzerMemo <> nil then
         FAnalyzerMemo.Lines.Add('Autoplay rejected; reason=' +
-          LSearchCommand.ErrorText);
+          LErrorText);
       UpdateAutoplayControls;
       Exit;
     end;
@@ -2661,6 +2678,7 @@ var
   LDisplayedMoveCount: Integer;
   LDisplayedMoves: TStringList;
   LDisplayedMovesText: string;
+  LErrorText: string;
   LGameState: TGameOrchestratorState;
   LStartingFEN: string;
   LTotalMoveCount: Integer;
@@ -2713,8 +2731,8 @@ begin
       LSearchCommand := LSearchActor.CreateStartSearchCommand(LNode.NodeId,
         LSearchId);
       try
-        LSearchActor.ExecuteCommand(LSearchCommand);
-        if LSearchCommand.Accepted then
+        if ExecuteGameTreeCommand(LSearchActor, LSearchCommand,
+          LErrorText) then
         begin
           LSearchGameTreeId := LGameTree.GameTreeId;
           LSearchNodeId := LNode.NodeId;
@@ -2959,6 +2977,7 @@ function TMainForm.RecordAnalyzerSnapshotInGameTree(
   ASnapshot: TPvSnapshot): TGameTree;
 var
   Actor: TGameTreeActor;
+  LErrorText: string;
   LGame: TRunningGame;
   LGameTree: TGameTree;
   LNode: TGameTreePlyNode;
@@ -3028,12 +3047,11 @@ begin
   LPvCommand := Actor.CreateRecordAnnotatorPVCommand(LNodeId,
     ASnapshot.Score, ASnapshot.PrincipalVariation);
   try
-    Actor.ExecuteCommand(LPvCommand);
-    if not LPvCommand.Accepted then
+    if not ExecuteGameTreeCommand(Actor, LPvCommand, LErrorText) then
     begin
       if FAnalyzerMemo <> nil then
         FAnalyzerMemo.Lines.Add('Annotator PV rejected; reason=' +
-          LPvCommand.ErrorText);
+          LErrorText);
       Exit;
     end;
     Result := LGameTree;
@@ -3298,6 +3316,7 @@ procedure TMainForm.ClearStoredTreeVariations(AGameTree: TGameTree);
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
+  LErrorText: string;
 begin
   SetLength(FVariationHits, 0);
   Actor := ActorForGameTree(AGameTree);
@@ -3305,7 +3324,7 @@ begin
   begin
     Command := Actor.CreateClearStoredVariationsCommand;
     try
-      Actor.ExecuteCommand(Command);
+      ExecuteGameTreeCommand(Actor, Command, LErrorText);
     finally
       Command.Free;
     end;
@@ -3365,6 +3384,7 @@ function TMainForm.StoreTreeVariation(ADisplayAfterPly, ABasePly: Integer;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
+  LErrorText: string;
   LExisting: TGameTreeVariationLine;
 begin
   Result := False;
@@ -3388,8 +3408,7 @@ begin
   Command := Actor.CreateStoreVariationLineCommand(ADisplayAfterPly,
     ABasePly, AMovesText, AAnnotationText, gmsUnknown);
   try
-    Actor.ExecuteCommand(Command);
-    Result := Command.Accepted;
+    Result := ExecuteGameTreeCommand(Actor, Command, LErrorText);
   finally
     Command.Free;
   end;
@@ -3782,6 +3801,7 @@ procedure TMainForm.UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
+  LErrorText: string;
   LAnnotations: TStringList;
   LGameTree: TGameTree;
   LMoves: TStringList;
@@ -3813,7 +3833,7 @@ begin
         AGame.Snapshot.PrincipalVariation),
       GameTreePvInput(False, 0, '', ''));
     try
-      Actor.ExecuteCommand(Command);
+      ExecuteGameTreeCommand(Actor, Command, LErrorText);
     finally
       Command.Free;
     end;
@@ -4417,6 +4437,7 @@ var
   var
     Actor: TGameTreeActor;
     Command: TGameTreeCommand;
+    LErrorText: string;
   begin
     Actor := ActorForGameTree(AGameTree);
     if Actor = nil then
@@ -4427,7 +4448,7 @@ var
         AResolvedBlackName, AResolvedResultText, AResolvedStartingFEN,
         False, DefaultTimeControl));
     try
-      Actor.ExecuteCommand(Command);
+      ExecuteGameTreeCommand(Actor, Command, LErrorText);
     finally
       Command.Free;
     end;
