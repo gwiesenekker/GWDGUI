@@ -3335,8 +3335,10 @@ var
   LErrorText: string;
   LGame: TRunningGame;
   LGameTree: TGameTree;
+  LHasSearch: Boolean;
   LNode: TGameTreePlyNode;
   LNodeId: Int64;
+  LSearch: TGameTreeSearchRef;
 begin
   Result := nil;
   if ASnapshot = nil then
@@ -3348,7 +3350,9 @@ begin
 
   Actor := nil;
   LNode := nil;
-  if ASnapshot.SearchId > 0 then
+  LSearch := GameTreeSearchRefFromSnapshot(ASnapshot);
+  LHasSearch := IsValidGameTreeSearchRef(LSearch);
+  if LHasSearch then
   begin
     if not TryResolveActiveSearchSnapshot(ASnapshot, Actor, LGameTree,
       LNode) then
@@ -3370,7 +3374,7 @@ begin
     UpdateRunningGameTreeFromSnapshot(LGame)
   else
     UpdateGameTreeFromState(nil, LGameTree);
-  if (ASnapshot.SearchId > 0) and
+  if LHasSearch and
     (not TryResolveActiveSearchSnapshot(ASnapshot, Actor, LGameTree,
       LNode)) then
     Exit;
