@@ -347,6 +347,10 @@ type
       AGameTree: TGameTree; ANodeId: Int64; const AScore,
       APrincipalVariation: string; out AErrorText: string): Boolean;
     function ClearGameTreeStoredVariations(AActor: TGameTreeActor): Boolean;
+    function StoreGameTreeVariationLine(AActor: TGameTreeActor;
+      ADisplayAfterPly, ABasePly: Integer; const AMovesText,
+      AAnnotationText: string; ASource: TGameTreeMoveSource;
+      out AErrorText: string): Boolean;
     function TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
       out AActor: TGameTreeActor; out AGameTree: TGameTree): Boolean;
     procedure TrackAnalyzerSearch(AGameTree: TGameTree; ASearchId: Int64);
@@ -1966,6 +1970,30 @@ begin
   end;
 end;
 
+function TMainForm.StoreGameTreeVariationLine(AActor: TGameTreeActor;
+  ADisplayAfterPly, ABasePly: Integer; const AMovesText,
+  AAnnotationText: string; ASource: TGameTreeMoveSource;
+  out AErrorText: string): Boolean;
+var
+  Command: TGameTreeCommand;
+begin
+  Result := False;
+  AErrorText := '';
+  if (AActor = nil) or (ADisplayAfterPly < 0) or (ABasePly < 0) then
+  begin
+    AErrorText := 'invalid variation line target';
+    Exit;
+  end;
+
+  Command := AActor.CreateStoreVariationLineCommand(ADisplayAfterPly,
+    ABasePly, AMovesText, AAnnotationText, ASource);
+  try
+    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
+  finally
+    Command.Free;
+  end;
+end;
+
 function TMainForm.TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
   out AActor: TGameTreeActor; out AGameTree: TGameTree): Boolean;
 var
@@ -3554,7 +3582,6 @@ function TMainForm.StoreTreeVariation(ADisplayAfterPly, ABasePly: Integer;
   const AMovesText, AAnnotationText: string; AGameTree: TGameTree): Boolean;
 var
   Actor: TGameTreeActor;
-  Command: TGameTreeCommand;
   LErrorText: string;
   LExisting: TGameTreeVariationLine;
 begin
@@ -3576,13 +3603,8 @@ begin
   if Actor = nil then
     Exit;
 
-  Command := Actor.CreateStoreVariationLineCommand(ADisplayAfterPly,
-    ABasePly, AMovesText, AAnnotationText, gmsUnknown);
-  try
-    Result := ExecuteGameTreeCommand(Actor, Command, LErrorText);
-  finally
-    Command.Free;
-  end;
+  Result := StoreGameTreeVariationLine(Actor, ADisplayAfterPly, ABasePly,
+    AMovesText, AAnnotationText, gmsUnknown, LErrorText);
 end;
 
 function TMainForm.EngineSupportsMcts(AEngine: TExternalEngineDefinition): Boolean;
