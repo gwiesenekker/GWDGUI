@@ -449,10 +449,8 @@ type
     function GameLogLineVisible(const ALine: string; AGame: TRunningGame): Boolean;
     function GameTitleEngineName(AEngine: TExternalEngineDefinition): string;
     procedure PrepareGameTreeForPdn(AGame: TRunningGame;
-      AGameTree: TGameTree; const AEventName: string;
-      ARefreshTree: Boolean);
-    function CurrentGameTreePdnText(const AEventName: string;
-      ARefreshTree: Boolean = False): string;
+      AGameTree: TGameTree; const AEventName: string);
+    function CurrentGameTreePdnText(const AEventName: string): string;
     function PlayerSetupDisplayName(AKind: TPlayerKind;
       AEngine: TExternalEngineDefinition): string;
     function FindHumanMoveToTarget(ATargetSquare: Integer; out AMove: string): Boolean;
@@ -518,8 +516,7 @@ type
     procedure RestartMctsAnnotator(AGameTree: TGameTree);
     procedure ReplaySelectedGame(Sender: TObject);
     procedure SelectHumanMoveSource(ASourceSquare: Integer);
-    procedure RebuildGameMoveLabels(ARefreshTree: Boolean;
-      AGameTree: TGameTree);
+    procedure RebuildGameMoveLabels(AGameTree: TGameTree);
     procedure UpdateGameMoveHighlight;
     function SelectedGame: TRunningGame;
     function SelectedDisplayedGame: TRunningGame;
@@ -564,8 +561,7 @@ type
       AGameTree: TGameTree; const AMovesText, AAnnotationsText: string);
     procedure UpdateGameTreeFromState(AGame: TRunningGame;
       AGameTree: TGameTree);
-    procedure RefreshVisibleGameTreeView(ARefreshTree: Boolean;
-      AGameTree: TGameTree);
+    procedure RefreshVisibleGameTreeView(AGameTree: TGameTree);
     procedure RefreshDisplayedGameTreeViews(AGameTree: TGameTree;
       AForce: Boolean);
     procedure UpdateGameTreeView(AGameTree: TGameTree);
@@ -3999,10 +3995,8 @@ begin
   Result := FGuiEventQueue.TryPost(AEvent);
 end;
 
-procedure TMainForm.RebuildGameMoveLabels(ARefreshTree: Boolean;
-  AGameTree: TGameTree);
+procedure TMainForm.RebuildGameMoveLabels(AGameTree: TGameTree);
 var
-  LGame: TRunningGame;
   LGameTree: TGameTree;
   I: Integer;
   LOptions: TGameTreePdnRenderOptions;
@@ -4016,11 +4010,6 @@ begin
   LGameTree := AGameTree;
   if LGameTree = nil then
     Exit;
-  if ARefreshTree then
-  begin
-    LGame := GameForTreeRefresh(LGameTree);
-    UpdateGameTreeFromState(LGame, LGameTree);
-  end;
   RenderGameTreeMovesToPdn(LGameTree, LOptions, LRenderResult);
   LText := LRenderResult.Text;
   SetLength(FGameMoveStarts, Length(LRenderResult.MoveStarts));
@@ -4299,7 +4288,7 @@ begin
     Exit;
   if Length(FGameMoveStarts) <> Length(FGameMoveLengths) then
   begin
-    RebuildGameMoveLabels(False, ActiveGameTree);
+    RebuildGameMoveLabels(ActiveGameTree);
     Exit;
   end;
 
@@ -4886,7 +4875,7 @@ begin
 end;
 
 procedure TMainForm.PrepareGameTreeForPdn(AGame: TRunningGame;
-  AGameTree: TGameTree; const AEventName: string; ARefreshTree: Boolean);
+  AGameTree: TGameTree; const AEventName: string);
 var
   LBlackName: string;
   LEventName: string;
@@ -4912,9 +4901,6 @@ var
 begin
   if AGameTree = nil then
     Exit;
-
-  if ARefreshTree then
-    UpdateGameTreeFromState(AGame, AGameTree);
 
   if AGame <> nil then
   begin
@@ -4943,8 +4929,7 @@ begin
     StartingFenForTree(AGameTree));
 end;
 
-function TMainForm.CurrentGameTreePdnText(const AEventName: string;
-  ARefreshTree: Boolean): string;
+function TMainForm.CurrentGameTreePdnText(const AEventName: string): string;
 var
   LGame: TRunningGame;
   LGameTree: TGameTree;
@@ -4956,7 +4941,7 @@ begin
     Exit;
 
   LGame := GameForTreeRefresh(LGameTree);
-  PrepareGameTreeForPdn(LGame, LGameTree, AEventName, ARefreshTree);
+  PrepareGameTreeForPdn(LGame, LGameTree, AEventName);
   LOptions := DefaultGameTreePdnRenderOptions;
   Result := GameTreeToPdnTextEx(LGameTree, LOptions);
 end;
@@ -5029,7 +5014,7 @@ begin
   FHideMoveAnnotations := not FHideMoveAnnotations;
   if FHideMoveAnnotationsMenuItem <> nil then
     FHideMoveAnnotationsMenuItem.Checked := FHideMoveAnnotations;
-  RebuildGameMoveLabels(False, ActiveGameTree);
+  RebuildGameMoveLabels(ActiveGameTree);
 end;
 
 procedure TMainForm.GameMovePopupPopup(Sender: TObject);
@@ -5077,7 +5062,7 @@ begin
       FMoveShowAnnotatorFullPV := LItem.Checked;
   end;
   UpdateGameMovePopupState;
-  RebuildGameMoveLabels(False, LGameTree);
+  RebuildGameMoveLabels(LGameTree);
 end;
 
 procedure TMainForm.GameTreeFormClose(Sender: TObject;
@@ -5118,7 +5103,7 @@ begin
   if LGameTree = nil then
     Exit;
   LGame := GameForTreeRefresh(LGameTree);
-  PrepareGameTreeForPdn(LGame, LGameTree, '', False);
+  PrepareGameTreeForPdn(LGame, LGameTree, '');
   LOptions := CurrentFilteredGameTreePdnOptions;
   Clipboard.AsText := GameTreeToPdnTextEx(LGameTree, LOptions);
 end;
@@ -5750,7 +5735,7 @@ var
       (FAnalyzerPvBrowser <> nil) then
       FAnalyzerPvBrowser.SetSnapshot(AMessage.Snapshot,
         StartingFenForTree(LGameTree));
-    RefreshVisibleGameTreeView(False, LGameTree);
+    RefreshVisibleGameTreeView(LGameTree);
     if (not AMessage.Snapshot.GameTreeOnly) and
       (FPvHintSource = phsAnalyzer) then
     begin
@@ -6465,10 +6450,8 @@ begin
   end;
 end;
 
-procedure TMainForm.RefreshVisibleGameTreeView(ARefreshTree: Boolean;
-  AGameTree: TGameTree);
+procedure TMainForm.RefreshVisibleGameTreeView(AGameTree: TGameTree);
 var
-  LGame: TRunningGame;
   LGameTree: TGameTree;
 begin
   if (FGameTreeForm = nil) or (not FGameTreeForm.Visible) or
@@ -6478,11 +6461,6 @@ begin
   LGameTree := AGameTree;
   if LGameTree = nil then
     Exit;
-  if ARefreshTree then
-  begin
-    LGame := GameForTreeRefresh(LGameTree);
-    UpdateGameTreeFromState(LGame, LGameTree);
-  end;
   UpdateGameTreeView(LGameTree);
 end;
 
@@ -6508,9 +6486,9 @@ begin
     (FDisplayedGameTreeRevision = LRevision) then
     Exit;
 
-  RebuildGameMoveLabels(False, AGameTree);
+  RebuildGameMoveLabels(AGameTree);
   UpdateScoreHistory(AGameTree);
-  RefreshVisibleGameTreeView(False, AGameTree);
+  RefreshVisibleGameTreeView(AGameTree);
   FDisplayedGameTreeId := LGameTreeId;
   FDisplayedGameTreeRevision := LRevision;
 end;
