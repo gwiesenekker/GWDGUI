@@ -892,10 +892,8 @@ var
   Search: TGameTreeSearchRecord;
 begin
   Search := FindSearch(ASearch.SearchId);
-  Result := (Search <> nil) and
-    (Search.GameTreeId = ASearch.GameTreeId) and
-    (Search.SearchId = ASearch.SearchId) and
-    (Search.NodeId = ASearch.NodeId);
+  Result := (Search <> nil) and SameGameTreeSearchRef(Search.SearchRef,
+    ASearch);
   if Result then
     AState := Search.State;
 end;

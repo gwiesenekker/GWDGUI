@@ -1908,9 +1908,7 @@ function TMainForm.AnalyzerSearchMatches(
   const ASearch: TGameTreeSearchRef): Boolean;
 begin
   Result := IsValidGameTreeSearchRef(ASearch) and
-    (FAnalyzerSearch.SearchId = ASearch.SearchId) and
-    (FAnalyzerSearch.GameTreeId = ASearch.GameTreeId) and
-    (FAnalyzerSearch.NodeId = ASearch.NodeId);
+    SameGameTreeSearchRef(FAnalyzerSearch, ASearch);
 end;
 
 function TMainForm.AcceptSearchMove(AActor: TGameTreeActor;
@@ -1929,9 +1927,7 @@ begin
 
   Command := AActor.CreateSearchDoneCommand(ASearch, AMoveText);
   try
-    if (Command.GameTreeId <> ASearch.GameTreeId) or
-      (Command.SearchId <> ASearch.SearchId) or
-      (Command.NodeId <> ASearch.NodeId) then
+    if not SameGameTreeSearchRef(Command.SearchRef, ASearch) then
     begin
       AErrorText := 'search reference mismatch';
       Exit;
