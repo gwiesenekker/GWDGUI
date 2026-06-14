@@ -50,13 +50,6 @@ type
       out AScore: Double): Boolean;
     function TryVisibleScoreInLines(ALines: TStrings;
       out AScore: Double): Boolean;
-    function TryAnnotationScoreTextForPly(APly: Integer; const AName: string;
-      out AScoreText: string): Boolean;
-    function TryAnnotationScoreForPly(APly: Integer; const AName: string;
-      out AScore: Double): Boolean;
-    function TryScoreForPly(APly: Integer; out AScore: Double): Boolean;
-    function TryVisibleAnnotatorScore(out AScore: Double): Boolean;
-    function TryVisibleScore(out AScore: Double): Boolean;
   protected
     procedure CMMouseLeave(var Message: TLMessage); message CM_MOUSELEAVE;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -750,72 +743,6 @@ begin
   for I := Ply downto 1 do
     if TryScoreInLines(ALines, I, AScore) then
       Exit(True);
-end;
-
-function TScoreHistoryControl.TryAnnotationScoreTextForPly(APly: Integer;
-  const AName: string; out AScoreText: string): Boolean;
-var
-  Lines: TStringList;
-begin
-  Result := False;
-  AScoreText := '';
-  if APly <= 0 then
-    Exit;
-
-  Lines := TStringList.Create;
-  try
-    Lines.Text := FAnnotationsText;
-    Result := TryAnnotationScoreTextInLines(Lines, APly, AName, AScoreText);
-  finally
-    Lines.Free;
-  end;
-end;
-
-function TScoreHistoryControl.TryAnnotationScoreForPly(APly: Integer;
-  const AName: string; out AScore: Double): Boolean;
-var
-  ScoreText: string;
-begin
-  Result := False;
-  AScore := 0.0;
-  if TryAnnotationScoreTextForPly(APly, AName, ScoreText) then
-    Result := TryExtractScoreFromAnnotation('score=' + ScoreText, AScore);
-end;
-
-function TScoreHistoryControl.TryScoreForPly(APly: Integer;
-  out AScore: Double): Boolean;
-begin
-  Result := TryAnnotationScoreForPly(APly, 'engine', AScore);
-end;
-
-function TScoreHistoryControl.TryVisibleAnnotatorScore(out AScore: Double): Boolean;
-var
-  Lines: TStringList;
-begin
-  Result := False;
-  AScore := 0.0;
-  Lines := TStringList.Create;
-  try
-    Lines.Text := FAnnotationsText;
-    Result := TryVisibleAnnotatorScoreInLines(Lines, AScore);
-  finally
-    Lines.Free;
-  end;
-end;
-
-function TScoreHistoryControl.TryVisibleScore(out AScore: Double): Boolean;
-var
-  Lines: TStringList;
-begin
-  Result := False;
-  AScore := 0.0;
-  Lines := TStringList.Create;
-  try
-    Lines.Text := FAnnotationsText;
-    Result := TryVisibleScoreInLines(Lines, AScore);
-  finally
-    Lines.Free;
-  end;
 end;
 
 end.
