@@ -353,16 +353,17 @@ type
       out ASearch: TGameTreeSearchRef; out AErrorText: string): Boolean;
     function AnalyzerSearchMatches(AGameTreeId, ASearchId,
       ANodeId: Int64): Boolean;
-    function AcceptSearchMove(AActor: TGameTreeActor; ASearchId,
-      ANodeId: Int64; const AMoveText: string; out AErrorText: string): Boolean;
+    function AcceptSearchMove(AActor: TGameTreeActor;
+      const ASearch: TGameTreeSearchRef; const AMoveText: string;
+      out AErrorText: string): Boolean;
     function CancelGameTreeSearch(AActor: TGameTreeActor;
-      ASearchId: Int64): Boolean;
+      const ASearch: TGameTreeSearchRef): Boolean;
     function ReleaseGameTreeSearch(AActor: TGameTreeActor;
-      ASearchId: Int64): Boolean;
+      const ASearch: TGameTreeSearchRef): Boolean;
     function ReleaseRejectedSearchIfFinished(AActor: TGameTreeActor;
-      ASearchId: Int64): Boolean;
+      const ASearch: TGameTreeSearchRef): Boolean;
     function StoreSearchMoveVariation(AActor: TGameTreeActor;
-      ASearchId: Int64; ASource: TGameTreeMoveSource;
+      const ASearch: TGameTreeSearchRef; ASource: TGameTreeMoveSource;
       out AErrorText: string): Boolean;
     function StoreMoveVariation(AActor: TGameTreeActor; AGameTree: TGameTree;
       ANodeId: Int64; const AMove: string; ASource: TGameTreeMoveSource;
@@ -594,6 +595,20 @@ begin
   Result.GameTreeId := 0;
   Result.NodeId := 0;
   Result.SearchId := 0;
+end;
+
+function GameTreeSearchRef(AGameTreeId, ASearchId,
+  ANodeId: Int64): TGameTreeSearchRef;
+begin
+  Result.GameTreeId := AGameTreeId;
+  Result.NodeId := ANodeId;
+  Result.SearchId := ASearchId;
+end;
+
+function IsValidGameTreeSearchRef(const ASearch: TGameTreeSearchRef): Boolean;
+begin
+  Result := (ASearch.GameTreeId > 0) and (ASearch.NodeId > 0) and
+    (ASearch.SearchId > 0);
 end;
 
 function RunningGameLifecycleToString(ALifecycle: TRunningGameLifecycle): string;
@@ -1939,22 +1954,23 @@ begin
     (FAnalyzerSearch.NodeId = ANodeId);
 end;
 
-function TMainForm.AcceptSearchMove(AActor: TGameTreeActor; ASearchId,
-  ANodeId: Int64; const AMoveText: string; out AErrorText: string): Boolean;
+function TMainForm.AcceptSearchMove(AActor: TGameTreeActor;
+  const ASearch: TGameTreeSearchRef; const AMoveText: string;
+  out AErrorText: string): Boolean;
 var
   Command: TGameTreeCommand;
 begin
   Result := False;
   AErrorText := '';
-  if (AActor = nil) or (ASearchId <= 0) then
+  if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
   begin
     AErrorText := 'invalid search';
     Exit;
   end;
 
-  Command := AActor.CreateSearchDoneCommand(ASearchId, AMoveText);
+  Command := AActor.CreateSearchDoneCommand(ASearch.SearchId, AMoveText);
   try
-    if (ANodeId > 0) and (Command.NodeId <> ANodeId) then
+    if Command.NodeId <> ASearch.NodeId then
     begin
       AErrorText := 'search node mismatch';
       Exit;
@@ -1967,16 +1983,16 @@ begin
 end;
 
 function TMainForm.CancelGameTreeSearch(AActor: TGameTreeActor;
-  ASearchId: Int64): Boolean;
+  const ASearch: TGameTreeSearchRef): Boolean;
 var
   Command: TGameTreeCommand;
   LErrorText: string;
 begin
   Result := False;
-  if (AActor = nil) or (ASearchId <= 0) then
+  if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
     Exit;
 
-  Command := AActor.CreateCancelSearchCommand(ASearchId);
+  Command := AActor.CreateCancelSearchCommand(ASearch.SearchId);
   try
     Result := ExecuteGameTreeCommand(AActor, Command, LErrorText);
   finally
@@ -1985,16 +2001,16 @@ begin
 end;
 
 function TMainForm.ReleaseGameTreeSearch(AActor: TGameTreeActor;
-  ASearchId: Int64): Boolean;
+  const ASearch: TGameTreeSearchRef): Boolean;
 var
   Command: TGameTreeCommand;
   LErrorText: string;
 begin
   Result := False;
-  if (AActor = nil) or (ASearchId <= 0) then
+  if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
     Exit;
 
-  Command := AActor.CreateReleaseSearchCommand(ASearchId);
+  Command := AActor.CreateReleaseSearchCommand(ASearch.SearchId);
   try
     Result := ExecuteGameTreeCommand(AActor, Command, LErrorText);
   finally
@@ -2003,20 +2019,20 @@ begin
 end;
 
 function TMainForm.ReleaseRejectedSearchIfFinished(AActor: TGameTreeActor;
-  ASearchId: Int64): Boolean;
+  const ASearch: TGameTreeSearchRef): Boolean;
 var
   LSearchState: TGameTreeSearchState;
 begin
   Result := False;
-  if (AActor = nil) or (ASearchId <= 0) then
+  if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
     Exit;
-  if AActor.SearchState(ASearchId, LSearchState) and
+  if AActor.SearchState(ASearch.SearchId, LSearchState) and
     (LSearchState in [gssCancelled, gssFailed]) then
-    Result := ReleaseGameTreeSearch(AActor, ASearchId);
+    Result := ReleaseGameTreeSearch(AActor, ASearch);
 end;
 
 function TMainForm.StoreSearchMoveVariation(AActor: TGameTreeActor;
-  ASearchId: Int64; ASource: TGameTreeMoveSource;
+  const ASearch: TGameTreeSearchRef; ASource: TGameTreeMoveSource;
   out AErrorText: string): Boolean;
 var
   Command: TGameTreeCommand;
@@ -2024,14 +2040,15 @@ var
 begin
   Result := False;
   AErrorText := '';
-  if (AActor = nil) or (ASearchId <= 0) then
+  if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
   begin
     AErrorText := 'invalid search';
     Exit;
   end;
 
   LGameTree := AActor.GameTree;
-  Command := AActor.CreateStoreSearchMoveVariationCommand(ASearchId, ASource);
+  Command := AActor.CreateStoreSearchMoveVariationCommand(ASearch.SearchId,
+    ASource);
   try
     Result := ExecuteAndApplyGameTreeCommand(AActor, LGameTree, Command,
       True, False, AErrorText);
@@ -2481,7 +2498,9 @@ var
   LAccepted: Boolean;
   LErrorText: string;
   LRejectedReason: string;
+  LSearch: TGameTreeSearchRef;
 begin
+  LSearch := GameTreeSearchRef(AGameTreeId, ASearchId, ANodeId);
   Actor := ActorForGameTreeId(AGameTreeId);
   if Actor = nil then
   begin
@@ -2490,26 +2509,25 @@ begin
     Exit;
   end;
 
-  LAccepted := AcceptSearchMove(Actor, ASearchId, ANodeId, AMoveText,
-    LErrorText);
+  LAccepted := AcceptSearchMove(Actor, LSearch, AMoveText, LErrorText);
 
   if LAccepted then
   begin
     if FAnalyzerMemo <> nil then
       FAnalyzerMemo.Lines.Add('Annotator move accepted; move=' +
         Trim(AMoveText));
-    if (not StoreSearchMoveVariation(Actor, ASearchId, gmsAutoplay,
+    if (not StoreSearchMoveVariation(Actor, LSearch, gmsAutoplay,
       LErrorText)) and (FAnalyzerMemo <> nil) then
       FAnalyzerMemo.Lines.Add('Autoplay move was not recorded; reason=' +
         LErrorText);
-    ReleaseGameTreeSearch(Actor, ASearchId);
+    ReleaseGameTreeSearch(Actor, LSearch);
     if AnalyzerSearchMatches(AGameTreeId, ASearchId, ANodeId) then
       ClearAnalyzerSearchTracking;
   end
   else
   begin
     LRejectedReason := LErrorText;
-    ReleaseRejectedSearchIfFinished(Actor, ASearchId);
+    ReleaseRejectedSearchIfFinished(Actor, LSearch);
     if FAnalyzerMemo <> nil then
       FAnalyzerMemo.Lines.Add('Annotator move rejected; reason=' +
         LRejectedReason);
@@ -2925,8 +2943,8 @@ begin
     Exit;
 
   Actor := ActorForGameTreeId(FAnalyzerSearch.GameTreeId);
-  if CancelGameTreeSearch(Actor, FAnalyzerSearch.SearchId) then
-    ReleaseGameTreeSearch(Actor, FAnalyzerSearch.SearchId);
+  if CancelGameTreeSearch(Actor, FAnalyzerSearch) then
+    ReleaseGameTreeSearch(Actor, FAnalyzerSearch);
 
   ClearAnalyzerSearchTracking;
 end;
