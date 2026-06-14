@@ -331,6 +331,9 @@ type
       out ASearchId, ANodeId: Int64; out AErrorText: string): Boolean;
     function ReleaseGameTreeSearch(AActor: TGameTreeActor;
       ASearchId: Int64): Boolean;
+    function StoreSearchMoveVariation(AActor: TGameTreeActor;
+      ASearchId: Int64; ASource: TGameTreeMoveSource;
+      out AErrorText: string): Boolean;
     function TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
       out AActor: TGameTreeActor; out AGameTree: TGameTree): Boolean;
     procedure TrackAnalyzerSearch(AGameTree: TGameTree; ASearchId: Int64);
@@ -1798,6 +1801,32 @@ begin
   end;
 end;
 
+function TMainForm.StoreSearchMoveVariation(AActor: TGameTreeActor;
+  ASearchId: Int64; ASource: TGameTreeMoveSource;
+  out AErrorText: string): Boolean;
+var
+  Command: TGameTreeCommand;
+  LGameTree: TGameTree;
+begin
+  Result := False;
+  AErrorText := '';
+  if (AActor = nil) or (ASearchId <= 0) then
+  begin
+    AErrorText := 'invalid search';
+    Exit;
+  end;
+
+  LGameTree := AActor.GameTree;
+  Command := AActor.CreateStoreSearchMoveVariationCommand(ASearchId, ASource);
+  try
+    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
+    if Result then
+      ApplyGameTreeCommandResult(LGameTree, Command, True);
+  finally
+    Command.Free;
+  end;
+end;
+
 function TMainForm.TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
   out AActor: TGameTreeActor; out AGameTree: TGameTree): Boolean;
 var
@@ -2161,10 +2190,8 @@ var
   Command: TGameTreeCommand;
   LAccepted: Boolean;
   LErrorText: string;
-  LGameTree: TGameTree;
   LRejectedReason: string;
   LSearchState: TGameTreeSearchState;
-  LStoreCommand: TGameTreeCommand;
 begin
   Actor := ActorForGameTreeId(AGameTreeId);
   if Actor = nil then
@@ -2193,19 +2220,10 @@ begin
     if FAnalyzerMemo <> nil then
       FAnalyzerMemo.Lines.Add('Annotator move accepted; move=' +
         Trim(AMoveText));
-    LGameTree := Actor.GameTree;
-    LStoreCommand := Actor.CreateStoreSearchMoveVariationCommand(ASearchId,
-      gmsAutoplay);
-    try
-      LAccepted := ExecuteGameTreeCommand(Actor, LStoreCommand, LErrorText);
-      if LAccepted then
-        ApplyGameTreeCommandResult(LGameTree, LStoreCommand, True)
-      else if FAnalyzerMemo <> nil then
-        FAnalyzerMemo.Lines.Add('Autoplay move was not recorded; reason=' +
-          LErrorText);
-    finally
-      LStoreCommand.Free;
-    end;
+    if (not StoreSearchMoveVariation(Actor, ASearchId, gmsAutoplay,
+      LErrorText)) and (FAnalyzerMemo <> nil) then
+      FAnalyzerMemo.Lines.Add('Autoplay move was not recorded; reason=' +
+        LErrorText);
     ReleaseGameTreeSearch(Actor, ASearchId);
     if FAnalyzerSearchId = ASearchId then
       ClearAnalyzerSearchTracking;
