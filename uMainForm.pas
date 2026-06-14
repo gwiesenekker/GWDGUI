@@ -6372,21 +6372,21 @@ var
 begin
   if AGameTree = nil then
     Exit;
+  if AGameTree <> ActiveGameTree then
+    Exit;
 
   LRevision := -1;
   Actor := ActorForGameTree(AGameTree);
   if Actor <> nil then
     LRevision := Actor.Revision;
 
-  if (not AForce) and (AGameTree = ActiveGameTree) and
-    (FDisplayedGameTreeRevision = LRevision) then
+  if (not AForce) and (FDisplayedGameTreeRevision = LRevision) then
     Exit;
 
   RebuildGameMoveLabels(False, AGameTree);
   UpdateScoreHistory(AGameTree);
   RefreshVisibleGameTreeView(False, AGameTree);
-  if AGameTree = ActiveGameTree then
-    FDisplayedGameTreeRevision := LRevision;
+  FDisplayedGameTreeRevision := LRevision;
 end;
 
 procedure TMainForm.UpdateGameTreeView(AGameTree: TGameTree);
