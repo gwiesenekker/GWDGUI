@@ -146,7 +146,9 @@ type
     function SearchResult(ASearchId: Int64; out ANodeId: Int64;
       out AMoveText: string): Boolean;
     function SearchState(ASearchId: Int64;
-      out AState: TGameTreeSearchState): Boolean;
+      out AState: TGameTreeSearchState): Boolean; overload;
+    function SearchState(const ASearch: TGameTreeSearchRef;
+      out AState: TGameTreeSearchState): Boolean; overload;
 
     property GameTree: TGameTree read FGameTree;
     property Revision: Int64 read FRevision;
@@ -869,6 +871,20 @@ var
 begin
   Search := FindSearch(ASearchId);
   Result := Search <> nil;
+  if Result then
+    AState := Search.State;
+end;
+
+function TGameTreeActor.SearchState(const ASearch: TGameTreeSearchRef;
+  out AState: TGameTreeSearchState): Boolean;
+var
+  Search: TGameTreeSearchRecord;
+begin
+  Search := FindSearch(ASearch.SearchId);
+  Result := (Search <> nil) and
+    (Search.GameTreeId = ASearch.GameTreeId) and
+    (Search.SearchId = ASearch.SearchId) and
+    (Search.NodeId = ASearch.NodeId);
   if Result then
     AState := Search.State;
 end;

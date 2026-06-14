@@ -1990,7 +1990,7 @@ begin
   Result := False;
   if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
     Exit;
-  if AActor.SearchState(ASearch.SearchId, LSearchState) and
+  if AActor.SearchState(ASearch, LSearchState) and
     (LSearchState in [gssCancelled, gssFailed]) then
     Result := ReleaseGameTreeSearch(AActor, ASearch);
 end;
@@ -2131,7 +2131,7 @@ begin
   AActor := ActorForGameTreeId(LSearch.GameTreeId);
   if AActor = nil then
     Exit;
-  if (not AActor.SearchState(LSearch.SearchId, LSearchState)) or
+  if (not AActor.SearchState(LSearch, LSearchState)) or
     (LSearchState <> gssActive) then
   begin
     AActor := nil;
