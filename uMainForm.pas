@@ -457,6 +457,8 @@ type
     function VisibleMainPvForTree(AGameTree: TGameTree;
       out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV,
       AScore, ADepth, ATimeText: string): Boolean;
+    procedure ClearDisplayedPvCache(ABaseBoard: TDraughtsBoard;
+      ABasePly: Integer);
     function FormatClock(ASeconds: Double): string;
     function CurrentFilteredGameTreePdnOptions: TGameTreePdnRenderOptions;
     function GameLogLineVisible(const ALine: string; AGame: TRunningGame): Boolean;
@@ -3274,13 +3276,8 @@ begin
   FStandaloneWhitePlayerName := 'White';
   FStandaloneBlackPlayerName := 'Black';
   FStandaloneEventName := '?';
-  FPrincipalVariation := '';
-  FPrincipalVariationScore := '';
-  FPrincipalVariationDepth := '';
-  FPrincipalVariationTimeText := '';
   FGameBrowsePly := -1;
-  FPvBaseBoard.AssignFrom(FBoard);
-  FPvBasePly := 0;
+  ClearDisplayedPvCache(FBoard, 0);
   FWhiteRemainingSeconds := 0;
   FBlackRemainingSeconds := 0;
   FWhiteUsedSeconds := 0;
@@ -3463,15 +3460,10 @@ begin
     FStandaloneWhitePlayerName := PlayerNameOrFallback(AGame.WhiteName, 'White');
     FStandaloneBlackPlayerName := PlayerNameOrFallback(AGame.BlackName, 'Black');
     FStandaloneEventName := PlayerNameOrFallback(AGame.EventName, '?');
-    FPrincipalVariation := '';
-    FPrincipalVariationScore := '';
-    FPrincipalVariationDepth := '';
-    FPrincipalVariationTimeText := '';
     FGameBrowsePly := 0;
     UpdateGameTreeFromMoveText(nil, FGameTree, AGame.MovesText,
       AGame.MoveAnnotationsText);
-    FPvBaseBoard.AssignFrom(FBoard);
-    FPvBasePly := CurrentMoveCount;
+    ClearDisplayedPvCache(FBoard, CurrentMoveCount);
     FWhiteRemainingSeconds := 0;
     FBlackRemainingSeconds := 0;
     FWhiteUsedSeconds := 0;
@@ -4114,6 +4106,18 @@ begin
   end;
 
   Result := Trim(APV) <> '';
+end;
+
+procedure TMainForm.ClearDisplayedPvCache(ABaseBoard: TDraughtsBoard;
+  ABasePly: Integer);
+begin
+  FPrincipalVariation := '';
+  FPrincipalVariationScore := '';
+  FPrincipalVariationDepth := '';
+  FPrincipalVariationTimeText := '';
+  if ABaseBoard <> nil then
+    FPvBaseBoard.AssignFrom(ABaseBoard);
+  FPvBasePly := ABasePly;
 end;
 
 function TMainForm.PlayerNameOrFallback(const AName, AFallback: string): string;
@@ -4871,10 +4875,6 @@ begin
     ClearHumanMoveSelection;
     FGameActive := False;
     FGameResult := '*';
-    FPrincipalVariation := '';
-    FPrincipalVariationScore := '';
-    FPrincipalVariationDepth := '';
-    FPrincipalVariationTimeText := '';
     FDisplayedAnnotationsSignature := '';
     FDisplayedMovesSignature := '';
     FDisplayedSnapshotSignature := '';
@@ -4892,8 +4892,7 @@ begin
     FGameLogSourceShowStdout := False;
     FBoard.SetBeginPosition;
     FStartingFEN := FBoard.StartingFEN;
-    FPvBaseBoard.AssignFrom(FBoard);
-    FPvBasePly := 0;
+    ClearDisplayedPvCache(FBoard, 0);
     UpdateMiniBoardFromBoard(FBoard);
     UpdateBoardInfo;
     Exit;
@@ -6020,12 +6019,7 @@ begin
   FBlackUsedSeconds := 0;
   FGameState := gosRunning;
   FGameResult := '*';
-  FPrincipalVariation := '';
-  FPrincipalVariationScore := '';
-  FPrincipalVariationDepth := '';
-  FPrincipalVariationTimeText := '';
-  FPvBaseBoard.AssignFrom(FBoard);
-  FPvBasePly := 0;
+  ClearDisplayedPvCache(FBoard, 0);
   FGameActive := True;
   FDisplayedAnnotationsSignature := '';
   FDisplayedSnapshotSignature := '';
