@@ -7,7 +7,7 @@ uses
   cthreads,
   {$ENDIF}
   Classes, SysUtils,
-  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreeSearchRef,
+  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreeSearchRef, uPdn,
   uGameOrchestrator;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
@@ -75,6 +75,38 @@ begin
       Command.Free;
     end;
 
+    Command := Actor.CreateAppendMainlineSnapshotMoveCommand(
+      GameTreeHeaderInput('snapshot', 'Match', 'Engine A', 'Engine B', '*',
+        'W:W31-50:B1-20', True, DefaultTimeControl),
+      '18-23', AnnotationWithScore('', 'engine', '0.37'),
+      GameTreeMainlineInput(nil, nil, True, 299.0, 298.0, 1.0, 2.0),
+      GameTreePvInput(True, 3, '0.41', '38-33'), gmsEngineMatch);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'append snapshot move command should be accepted');
+      Check(Command.PlyNumber = 3,
+        'append snapshot move should report appended ply');
+      Node := Actor.GameTree.MainlineNode[3];
+      Check(Node <> nil, 'snapshot appended node should exist');
+      Check(Node.MoveText = '18-23',
+        'snapshot appended node should contain move');
+      Check(Node.EngineScore = '0.41',
+        'snapshot appended node should record current engine score');
+      Check(Node.HasClockInfo,
+        'snapshot appended node should record clock state');
+      Check(Abs(Node.WhiteRemainingSeconds - 299.0) < 0.001,
+        'snapshot appended node should record white clock');
+      Check(Actor.GameTree.EventName = 'Match',
+        'snapshot append should update header');
+      Check(Actor.GameTree.WhiteName = 'Engine A',
+        'snapshot append should update white name');
+      Check(Actor.GameTree.MainlineNode[3].EnginePV = '38-33',
+        'snapshot append should record engine PV');
+    finally
+      Command.Free;
+    end;
+
     Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23',
       'annotator=0.22', gmsAutorandom);
     try
@@ -86,7 +118,7 @@ begin
         'variation should be stored on game tree');
       Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
         'variation should store annotation text on game tree');
-      Check(Actor.Revision = 3, 'third mutation should increment revision');
+      Check(Actor.Revision = 4, 'fourth mutation should increment revision');
     finally
       Command.Free;
     end;
@@ -99,7 +131,7 @@ begin
         'empty variation update should be accepted');
       Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
         'empty variation update should not clear annotation text');
-      Check(Actor.Revision = 3,
+      Check(Actor.Revision = 4,
         'unchanged variation update should not increment revision');
     finally
       Command.Free;
@@ -111,7 +143,7 @@ begin
       Check(Command.Accepted, 'clear-variations command should be accepted');
       Check(Actor.GameTree.VariationLineCount = 0,
         'clear-variations command should remove stored variations');
-      Check(Actor.Revision = 4, 'clear mutation should increment revision');
+      Check(Actor.Revision = 5, 'clear mutation should increment revision');
     finally
       Command.Free;
     end;
@@ -121,7 +153,7 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'empty clear-variations command should be accepted');
-      Check(Actor.Revision = 4,
+      Check(Actor.Revision = 5,
         'empty clear-variations command should not increment revision');
     finally
       Command.Free;

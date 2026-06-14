@@ -20,6 +20,7 @@ type
   TGameTreeActorCommandKind = (
     gtcAddMainlineMove,
     gtcAppendMainlineMove,
+    gtcAppendMainlineSnapshotMove,
     gtcStoreVariationLine,
     gtcStartSearch,
     gtcCancelSearch,
@@ -115,6 +116,11 @@ type
       const AMoveText: string; ASource: TGameTreeMoveSource): TGameTreeCommand;
     function CreateAppendMainlineMoveCommand(const AMoveText: string;
       ASource: TGameTreeMoveSource): TGameTreeCommand;
+    function CreateAppendMainlineSnapshotMoveCommand(
+      const AHeader: TGameTreeHeaderInput; const AMoveText,
+      AAnnotationText: string; const AMainline: TGameTreeMainlineInput;
+      const AEnginePV: TGameTreePvInput;
+      ASource: TGameTreeMoveSource): TGameTreeCommand;
     function CreateCancelSearchCommand(ASearchId: Int64): TGameTreeCommand; overload;
     function CreateCancelSearchCommand(
       const ASearch: TGameTreeSearchRef): TGameTreeCommand; overload;
@@ -183,6 +189,7 @@ const
   CommandNames: array[TGameTreeActorCommandKind] of string = (
     'game-tree-add-mainline-move',
     'game-tree-append-mainline-move',
+    'game-tree-append-mainline-snapshot-move',
     'game-tree-store-variation-line',
     'game-tree-start-search',
     'game-tree-cancel-search',
@@ -310,6 +317,29 @@ begin
   Result.CommandId := NextCommandId;
   Result.GameTreeId := FGameTree.GameTreeId;
   Result.MoveText := Trim(AMoveText);
+  Result.MoveSource := ASource;
+end;
+
+function TGameTreeActor.CreateAppendMainlineSnapshotMoveCommand(
+  const AHeader: TGameTreeHeaderInput; const AMoveText,
+  AAnnotationText: string; const AMainline: TGameTreeMainlineInput;
+  const AEnginePV: TGameTreePvInput; ASource: TGameTreeMoveSource
+  ): TGameTreeCommand;
+begin
+  Result := TGameTreeCommand.Create(gtcAppendMainlineSnapshotMove);
+  Result.CommandId := NextCommandId;
+  Result.GameTreeId := FGameTree.GameTreeId;
+  Result.HeaderInput := AHeader;
+  Result.MoveText := Trim(AMoveText);
+  Result.AnnotationText := AAnnotationText;
+  Result.MainlineInput.RecordClock := AMainline.RecordClock;
+  Result.MainlineInput.WhiteRemainingSeconds :=
+    AMainline.WhiteRemainingSeconds;
+  Result.MainlineInput.BlackRemainingSeconds :=
+    AMainline.BlackRemainingSeconds;
+  Result.MainlineInput.WhiteUsedSeconds := AMainline.WhiteUsedSeconds;
+  Result.MainlineInput.BlackUsedSeconds := AMainline.BlackUsedSeconds;
+  Result.EnginePvInput := AEnginePV;
   Result.MoveSource := ASource;
 end;
 
@@ -830,6 +860,40 @@ begin
         ACommand.NodeId := Node.NodeId;
         ACommand.PlyNumber := Node.PlyNumber;
         ACommand.MoveText := Node.MoveText;
+        ACommand.Accepted := True;
+        InvalidateRebuildSignature := True;
+        Inc(FRevision);
+      end;
+    gtcAppendMainlineSnapshotMove:
+      begin
+        FGameTree.SetHeader(ACommand.HeaderInput.EventName,
+          ACommand.HeaderInput.WhiteName, ACommand.HeaderInput.BlackName,
+          ACommand.HeaderInput.ResultText, ACommand.HeaderInput.StartingFEN,
+          Changed);
+        if ACommand.HeaderInput.RecordTimeControl then
+          FGameTree.RecordTimeControl(ACommand.HeaderInput.TimeControl);
+        Node := FGameTree.RecordMainlineMove(FGameTree.MainlineCount + 1,
+          ACommand.MoveText);
+        if Node = nil then
+        begin
+          Reject(ACommand, 'snapshot mainline move was not appended');
+          Exit;
+        end;
+        ACommand.CreatedNodeId := Node.NodeId;
+        ACommand.NodeId := Node.NodeId;
+        ACommand.PlyNumber := Node.PlyNumber;
+        ACommand.MoveText := Node.MoveText;
+        if Trim(ACommand.AnnotationText) <> '' then
+          FGameTree.RecordMainlineAnnotation(Node.PlyNumber,
+            ACommand.AnnotationText);
+        if ACommand.MainlineInput.RecordClock then
+          FGameTree.RecordClockState(Node.PlyNumber,
+            ACommand.MainlineInput.WhiteRemainingSeconds,
+            ACommand.MainlineInput.BlackRemainingSeconds,
+            ACommand.MainlineInput.WhiteUsedSeconds,
+            ACommand.MainlineInput.BlackUsedSeconds);
+        RecordGameTreeAnalysis(FGameTree, ACommand.EnginePvInput,
+          GameTreePvInput(False, 0, '', ''));
         ACommand.Accepted := True;
         InvalidateRebuildSignature := True;
         Inc(FRevision);

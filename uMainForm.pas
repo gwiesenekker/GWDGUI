@@ -4131,11 +4131,76 @@ procedure TMainForm.UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
   const AEventName: string);
 var
   Actor: TGameTreeActor;
+  Command: TGameTreeCommand;
   LErrorText: string;
   LAnnotations: TStringList;
+  LExistingAnnotations: TStringList;
   LGameTree: TGameTree;
   LMoves: TStringList;
   LSyncSignature: string;
+
+  function LineOrEmpty(AStrings: TStrings; AIndex: Integer): string;
+  begin
+    Result := '';
+    if (AStrings <> nil) and (AIndex >= 0) and (AIndex < AStrings.Count) then
+      Result := AStrings[AIndex];
+  end;
+
+  function SnapshotExtendsCurrentTree: Boolean;
+  var
+    I: Integer;
+  begin
+    Result := False;
+    if LGameTree.MainlineCount + 1 <> LMoves.Count then
+      Exit;
+    for I := 1 to LGameTree.MainlineCount do
+      if not SameText(NormalizeMoveNotation(LGameTree.MainlineNode[I].MoveText),
+        NormalizeMoveNotation(LMoves[I - 1])) then
+        Exit;
+
+    LExistingAnnotations := TStringList.Create;
+    try
+      LExistingAnnotations.Text := GameTreeScoreAnnotationsText(LGameTree);
+      for I := 0 to LGameTree.MainlineCount - 1 do
+        if Trim(LineOrEmpty(LExistingAnnotations, I)) <>
+          Trim(LineOrEmpty(LAnnotations, I)) then
+          Exit;
+    finally
+      LExistingAnnotations.Free;
+    end;
+    Result := True;
+  end;
+
+  function TryAppendSnapshotMove: Boolean;
+  var
+    AppendIndex: Integer;
+  begin
+    Result := False;
+    if not SnapshotExtendsCurrentTree then
+      Exit;
+    Actor := ActorForGameTree(LGameTree);
+    if Actor = nil then
+      Exit;
+
+    AppendIndex := LMoves.Count - 1;
+    Command := Actor.CreateAppendMainlineSnapshotMoveCommand(
+      RunningGameTreeHeaderInput(AGame, AEventName),
+      LMoves[AppendIndex], LineOrEmpty(LAnnotations, AppendIndex),
+      GameTreeMainlineInput(nil, nil, True,
+        AGame.Snapshot.WhiteRemainingSeconds,
+        AGame.Snapshot.BlackRemainingSeconds,
+        AGame.Snapshot.WhiteUsedSeconds,
+        AGame.Snapshot.BlackUsedSeconds),
+      GameTreePvInput(Trim(AGame.Snapshot.PrincipalVariation) <> '',
+        AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
+        AGame.Snapshot.PrincipalVariation),
+      gmsEngineMatch);
+    try
+      Result := ExecuteGameTreeCommand(Actor, Command, LErrorText);
+    finally
+      Command.Free;
+    end;
+  end;
 begin
   if (AGame = nil) or (AGame.GameTree = nil) then
     Exit;
@@ -4160,6 +4225,12 @@ begin
   try
     TextToMoveList(AGame.Snapshot.MovesPlayedText, LMoves);
     LAnnotations.Text := AGame.Snapshot.MoveAnnotationsText;
+
+    if TryAppendSnapshotMove then
+    begin
+      AGame.FLastSnapshotTreeSyncSignature := LSyncSignature;
+      Exit;
+    end;
 
     Actor := ActorForGameTree(LGameTree);
     if Actor = nil then
