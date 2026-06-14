@@ -6,8 +6,8 @@ interface
 
 uses
   Classes, SyncObjs, SysUtils,
-  uDraughtsBoard, uEngineBase, uEngineRegistry, uHubEngine, uPvSnapshot,
-  uThreadMessageQueue;
+  uDraughtsBoard, uEngineBase, uEngineRegistry, uGameTreeSearchRef,
+  uHubEngine, uPvSnapshot, uThreadMessageQueue;
 
 type
   TAnalyzerRunMode = (
@@ -29,7 +29,7 @@ type
     FLastPollTick: QWord;
     FLastPublishedPv: string;
     FPvGameTreeOnly: Boolean;
-    FPvGameTreeId: Int64;
+    FPvSearch: TGameTreeSearchRef;
     FOnFinished: TAnalyzerRunnerFinishedEvent;
     FOnLog: TAnalyzerRunnerLogEvent;
     FOnMove: TAnalyzerRunnerMoveEvent;
@@ -37,8 +37,6 @@ type
     FRunMode: TAnalyzerRunMode;
     FPvBaseBoard: TDraughtsBoard;
     FPvBasePly: Integer;
-    FPvNodeId: Int64;
-    FPvSearchId: Int64;
     FPvLock: TCriticalSection;
     procedure ApplyPvContext(ACommand: TObject; AGameTreeOnly: Boolean);
     procedure DrainCommands;
@@ -86,10 +84,8 @@ type
     FBaseBoard: TDraughtsBoard;
     FBasePly: Integer;
     FCommandKind: TAnalyzerCommandKind;
-    FGameTreeId: Int64;
     FMovesText: string;
-    FNodeId: Int64;
-    FSearchId: Int64;
+    FSearch: TGameTreeSearchRef;
     FStartingFEN: string;
     FTerminal: Boolean;
     FThinkSeconds: Double;
@@ -99,10 +95,8 @@ type
     property BaseBoard: TDraughtsBoard read FBaseBoard;
     property BasePly: Integer read FBasePly write FBasePly;
     property CommandKind: TAnalyzerCommandKind read FCommandKind;
-    property GameTreeId: Int64 read FGameTreeId write FGameTreeId;
     property MovesText: string read FMovesText write FMovesText;
-    property NodeId: Int64 read FNodeId write FNodeId;
-    property SearchId: Int64 read FSearchId write FSearchId;
+    property Search: TGameTreeSearchRef read FSearch write FSearch;
     property StartingFEN: string read FStartingFEN write FStartingFEN;
     property Terminal: Boolean read FTerminal write FTerminal;
     property ThinkSeconds: Double read FThinkSeconds write FThinkSeconds;
@@ -198,7 +192,8 @@ begin
   try
     Snapshot.SetData(FPvBaseBoard, FPvBasePly, FEngine.PrincipalVariation,
       FEngine.LastScore, FEngine.LastDepth, FEngine.LastTimeText,
-      FPvGameTreeId, FPvSearchId, FPvNodeId, FPvGameTreeOnly);
+      FPvSearch.GameTreeId, FPvSearch.SearchId, FPvSearch.NodeId,
+      FPvGameTreeOnly);
     FLastPublishedPv := FEngine.PrincipalVariation;
   finally
     FPvLock.Release;
@@ -222,9 +217,7 @@ begin
   try
     FPvBaseBoard.AssignFrom(Command.BaseBoard);
     FPvBasePly := Command.BasePly;
-    FPvGameTreeId := Command.GameTreeId;
-    FPvSearchId := Command.SearchId;
-    FPvNodeId := Command.NodeId;
+    FPvSearch := Command.Search;
     FPvGameTreeOnly := AGameTreeOnly;
     FLastPublishedPv := '';
   finally
@@ -286,8 +279,8 @@ begin
           Moves.Free;
         end;
         if (MoveText <> '') and Assigned(FOnMove) then
-          FOnMove(Self, Command.GameTreeId, Command.SearchId,
-            Command.NodeId, MoveText);
+          FOnMove(Self, Command.Search.GameTreeId, Command.Search.SearchId,
+            Command.Search.NodeId, MoveText);
       end;
     accStopSearch:
       begin
@@ -393,9 +386,7 @@ begin
   Command.MovesText := AMovesText;
   Command.BasePly := ABasePly;
   Command.Terminal := ATerminal;
-  Command.GameTreeId := AGameTreeId;
-  Command.SearchId := ASearchId;
-  Command.NodeId := ANodeId;
+  Command.Search := GameTreeSearchRef(AGameTreeId, ASearchId, ANodeId);
   if ABaseBoard <> nil then
     Command.BaseBoard.AssignFrom(ABaseBoard);
   PostCommand(Command);
@@ -412,9 +403,7 @@ begin
   Command.MovesText := AMovesText;
   Command.BasePly := ABasePly;
   Command.ThinkSeconds := AThinkSeconds;
-  Command.GameTreeId := AGameTreeId;
-  Command.SearchId := ASearchId;
-  Command.NodeId := ANodeId;
+  Command.Search := GameTreeSearchRef(AGameTreeId, ASearchId, ANodeId);
   if ABaseBoard <> nil then
     Command.BaseBoard.AssignFrom(ABaseBoard);
   PostCommand(Command);
