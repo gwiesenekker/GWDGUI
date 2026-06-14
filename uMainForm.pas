@@ -4623,6 +4623,7 @@ var
   LLogSourceChanged: Boolean;
   LMoveCount: Integer;
   LPositionChanged: Boolean;
+  LPvChanged: Boolean;
   LSnapshotSignature: string;
   LTreeExtendsSnapshot: Boolean;
   LTreeMatchesSnapshot: Boolean;
@@ -4730,6 +4731,12 @@ begin
     (FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText) or
     (FGameState <> AGame.Snapshot.State) or
     (FGameResult <> AGame.Snapshot.GameResult);
+  LPvChanged := (FPrincipalVariation <> AGame.Snapshot.PrincipalVariation) or
+    (FPrincipalVariationScore <> AGame.Snapshot.PvScore) or
+    (FPrincipalVariationDepth <> AGame.Snapshot.PvSnapshot.Depth) or
+    (FPrincipalVariationTimeText <> AGame.Snapshot.PvSnapshot.TimeText) or
+    (FPvBasePly <> AGame.Snapshot.PvBasePly) or
+    (FPvBaseBoard.PositionKey <> AGame.Snapshot.PvBaseBoard.PositionKey);
   if FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText then
   begin
     ClearHumanMoveSelection;
@@ -4754,14 +4761,17 @@ begin
     UpdateClockLabels(WhiteNameForTree(AGame.GameTree),
       BlackNameForTree(AGame.GameTree));
     UpdateGameLogMemo;
-    UpdateBoardHighlights(AGame.GameTree);
-    if FPvBrowser <> nil then
-      FPvBrowser.SetData(FPvBaseBoard, FPvBasePly,
-        StartingFenForTree(AGame.GameTree), FPrincipalVariation,
-        FPrincipalVariationScore, FPrincipalVariationDepth,
-        FPrincipalVariationTimeText);
-    if FBoardControl <> nil then
-      FBoardControl.Invalidate;
+    if LPvChanged then
+    begin
+      UpdateBoardHighlights(AGame.GameTree);
+      if FPvBrowser <> nil then
+        FPvBrowser.SetData(FPvBaseBoard, FPvBasePly,
+          StartingFenForTree(AGame.GameTree), FPrincipalVariation,
+          FPrincipalVariationScore, FPrincipalVariationDepth,
+          FPrincipalVariationTimeText);
+      if FBoardControl <> nil then
+        FBoardControl.Invalidate;
+    end;
     UpdateAutoplayControls;
     Exit;
   end;
