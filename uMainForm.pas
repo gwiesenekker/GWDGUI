@@ -5038,10 +5038,13 @@ begin
     begin
       UpdateBoardHighlights(AGame.GameTree);
       if FPvBrowser <> nil then
-        FPvBrowser.SetData(FPvBaseBoard, FPvBasePly,
-          StartingFenForTree(AGame.GameTree), FPrincipalVariation,
-          FPrincipalVariationScore, FPrincipalVariationDepth,
-          FPrincipalVariationTimeText);
+      begin
+        VisibleMainPvForTree(AGame.GameTree, LPvBaseBoard, LPvBasePly,
+          LPvText, LPvScore, LPvDepth, LPvTimeText);
+        FPvBrowser.SetData(LPvBaseBoard, LPvBasePly,
+          StartingFenForTree(AGame.GameTree), LPvText, LPvScore, LPvDepth,
+          LPvTimeText);
+      end;
       if FBoardControl <> nil then
         FBoardControl.Invalidate;
     end;
