@@ -562,6 +562,8 @@ type
       AGameTree: TGameTree);
     procedure RefreshVisibleGameTreeView(ARefreshTree: Boolean;
       AGameTree: TGameTree);
+    procedure RefreshDisplayedGameTreeViews(AGameTree: TGameTree;
+      AForce: Boolean);
     procedure UpdateGameTreeView(AGameTree: TGameTree);
     procedure UpdateMiniBoardFromBoard(ABoard: TDraughtsBoard);
     procedure UpdateMctsStatsFromLog(const AMessage: string);
@@ -2175,8 +2177,6 @@ end;
 
 procedure TMainForm.ApplyGameTreeCommandResult(AGameTree: TGameTree;
   ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean);
-var
-  Actor: TGameTreeActor;
 begin
   if (AGameTree = nil) or (ACommand = nil) or (not ACommand.Accepted) then
     Exit;
@@ -2192,17 +2192,7 @@ begin
     UpdateBrowseInfo;
   end;
 
-  RebuildGameMoveLabels(False, AGameTree);
-  UpdateScoreHistory(AGameTree);
-  RefreshVisibleGameTreeView(False, AGameTree);
-  if AGameTree = ActiveGameTree then
-  begin
-    Actor := ActorForGameTree(AGameTree);
-    if Actor <> nil then
-      FDisplayedGameTreeRevision := Actor.Revision
-    else
-      FDisplayedGameTreeRevision := -1;
-  end;
+  RefreshDisplayedGameTreeViews(AGameTree, True);
 end;
 
 function TMainForm.ExecuteGameTreeRebuildFromInput(AGame: TRunningGame;
@@ -4515,11 +4505,9 @@ end;
 
 procedure TMainForm.ApplyGameToDisplay(AGame: TRunningGame);
 var
-  LActor: TGameTreeActor;
   LLogSourceChanged: Boolean;
   LMoveCount: Integer;
   LSnapshotSignature: string;
-  LTreeRevision: Int64;
 
   function SecondsSignature(AValue: Double): string;
   begin
@@ -4648,17 +4636,7 @@ begin
   if FGameBrowsePly > LMoveCount then
     FGameBrowsePly := -1;
   UpdateBoardFromBrowseState(AGame.GameTree);
-  LTreeRevision := -1;
-  LActor := ActorForGameTree(AGame.GameTree);
-  if LActor <> nil then
-    LTreeRevision := LActor.Revision;
-  if FDisplayedGameTreeRevision <> LTreeRevision then
-  begin
-    RebuildGameMoveLabels(False, AGame.GameTree);
-    UpdateScoreHistory(AGame.GameTree);
-    RefreshVisibleGameTreeView(False, AGame.GameTree);
-    FDisplayedGameTreeRevision := LTreeRevision;
-  end;
+  RefreshDisplayedGameTreeViews(AGame.GameTree, False);
   UpdateBoardInfo;
 end;
 
@@ -6224,9 +6202,7 @@ begin
     FFenEdit.Text := LFenText;
 
   UpdateBoardHighlights(LGameTree);
-  RebuildGameMoveLabels(False, LGameTree);
-  UpdateScoreHistory(LGameTree);
-  RefreshVisibleGameTreeView(False, LGameTree);
+  RefreshDisplayedGameTreeViews(LGameTree, False);
 
   UpdateLegalMoves;
   RestartAnalyzer(LGameTree);
@@ -6386,6 +6362,31 @@ begin
     UpdateGameTreeFromState(LGame, LGameTree);
   end;
   UpdateGameTreeView(LGameTree);
+end;
+
+procedure TMainForm.RefreshDisplayedGameTreeViews(AGameTree: TGameTree;
+  AForce: Boolean);
+var
+  Actor: TGameTreeActor;
+  LRevision: Int64;
+begin
+  if AGameTree = nil then
+    Exit;
+
+  LRevision := -1;
+  Actor := ActorForGameTree(AGameTree);
+  if Actor <> nil then
+    LRevision := Actor.Revision;
+
+  if (not AForce) and (AGameTree = ActiveGameTree) and
+    (FDisplayedGameTreeRevision = LRevision) then
+    Exit;
+
+  RebuildGameMoveLabels(False, AGameTree);
+  UpdateScoreHistory(AGameTree);
+  RefreshVisibleGameTreeView(False, AGameTree);
+  if AGameTree = ActiveGameTree then
+    FDisplayedGameTreeRevision := LRevision;
 end;
 
 procedure TMainForm.UpdateGameTreeView(AGameTree: TGameTree);
