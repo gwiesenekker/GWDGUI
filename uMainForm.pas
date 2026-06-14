@@ -4272,7 +4272,7 @@ var
           AGame.Snapshot.BlackUsedSeconds),
         GameTreePvInput(IsLastMove and
           (Trim(AGame.Snapshot.PrincipalVariation) <> ''),
-          AGame.Snapshot.PvBasePly, '',
+          AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
           AGame.Snapshot.PrincipalVariation),
         gmsEngineMatch);
       try
@@ -4302,11 +4302,13 @@ var
     if Actor = nil then
       Exit;
     LPvSignature := IntToStr(LGameTree.GameTreeId) + #10 +
-      IntToStr(LNode.NodeId) + #10 + AGame.Snapshot.PrincipalVariation;
+      IntToStr(LNode.NodeId) + #10 + AGame.Snapshot.PvScore + #10 +
+      AGame.Snapshot.PrincipalVariation;
     if AGame.FLastSnapshotTreePvSignature = LPvSignature then
       Exit;
-    if RecordEnginePvInGameTree(Actor, LGameTree, LNode.NodeId, '',
-      AGame.Snapshot.PrincipalVariation, LErrorText) then
+    if RecordEnginePvInGameTree(Actor, LGameTree, LNode.NodeId,
+      AGame.Snapshot.PvScore, AGame.Snapshot.PrincipalVariation,
+      LErrorText) then
       AGame.FLastSnapshotTreePvSignature := LPvSignature;
   end;
 begin
@@ -4377,7 +4379,7 @@ begin
         AGame.Snapshot.WhiteUsedSeconds,
         AGame.Snapshot.BlackUsedSeconds),
       GameTreePvInput(Trim(AGame.Snapshot.PrincipalVariation) <> '',
-        AGame.Snapshot.PvBasePly, '',
+        AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
         AGame.Snapshot.PrincipalVariation),
       GameTreePvInput(False, 0, '', ''), -1, 0, '', '', LErrorText) then
       AGame.FLastSnapshotTreeSyncSignature := LSyncSignature;

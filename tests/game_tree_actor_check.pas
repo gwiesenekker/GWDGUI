@@ -83,7 +83,7 @@ begin
         'W:W31-50:B1-20', True, DefaultTimeControl),
       '18-23', AnnotationWithScore('', 'engine', '0.37'),
       GameTreeMainlineInput(nil, nil, True, 299.0, 298.0, 1.0, 2.0),
-      GameTreePvInput(True, 3, '', '38-33'), gmsEngineMatch);
+      GameTreePvInput(True, 3, '0.37', '38-33'), gmsEngineMatch);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
@@ -96,6 +96,10 @@ begin
         'snapshot appended node should contain move');
       Check(Node.EngineScore = '0.37',
         'snapshot appended node should keep move annotation score');
+      Check(Actor.GameTree.MainlineNode[3].EnginePV = '38-33',
+        'snapshot appended node should record engine PV');
+      Check(Actor.GameTree.MainlineNode[3].EngineScore = '0.37',
+        'snapshot appended node should record engine PV score');
       Check(Node.HasClockInfo,
         'snapshot appended node should record clock state');
       Check(Abs(Node.WhiteRemainingSeconds - 299.0) < 0.001,
