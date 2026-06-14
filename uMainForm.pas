@@ -322,9 +322,6 @@ type
     procedure BoardPopupPopup(Sender: TObject);
     procedure AddVariationMove(const AMove: string;
       ASource: TGameTreeMoveSource = gmsHuman);
-    function ExecuteGameTreeAddMainlineMove(AGameTree: TGameTree;
-      APlyNumber: Integer; const AMove: string;
-      ASource: TGameTreeMoveSource): TGameTreePlyNode;
     function ExecuteGameTreeAppendMainlineMove(AGameTree: TGameTree;
       const AMove: string; ASource: TGameTreeMoveSource;
       ARefreshScoreHistory: Boolean = False): TGameTreePlyNode;
@@ -1692,32 +1689,6 @@ begin
     (AIndex >= AGameTree.VariationLineCount) then
     Exit;
   Result := AGameTree.VariationLine[AIndex];
-end;
-
-function TMainForm.ExecuteGameTreeAddMainlineMove(AGameTree: TGameTree;
-  APlyNumber: Integer; const AMove: string;
-  ASource: TGameTreeMoveSource): TGameTreePlyNode;
-var
-  Actor: TGameTreeActor;
-  Command: TGameTreeCommand;
-  CreatedNodeId: Int64;
-  LErrorText: string;
-begin
-  Result := nil;
-  Actor := ActorForGameTree(AGameTree);
-  if Actor = nil then
-    Exit;
-
-  Command := Actor.CreateAddMainlineMoveCommand(APlyNumber, AMove, ASource);
-  try
-    if not ExecuteGameTreeCommand(Actor, Command, LErrorText) then
-      Exit;
-    CreatedNodeId := Command.CreatedNodeId;
-  finally
-    Command.Free;
-  end;
-
-  Result := AGameTree.FindNodeById(CreatedNodeId);
 end;
 
 function TMainForm.ExecuteGameTreeAppendMainlineMove(AGameTree: TGameTree;
