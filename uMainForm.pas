@@ -329,6 +329,13 @@ type
       AGameTree: TGameTree; const AMove: string; ASource: TGameTreeMoveSource;
       ARefreshScoreHistory: Boolean; out ACreatedNodeId: Int64;
       out AErrorText: string): Boolean;
+    function RebuildGameTreeFromInputs(AActor: TGameTreeActor;
+      const AHeader: TGameTreeHeaderInput;
+      const AMainline: TGameTreeMainlineInput;
+      const AEnginePV, AAnnotatorPV: TGameTreePvInput;
+      AVariationPvIndex, AVariationPvPly: Integer;
+      const AVariationPvScore, AVariationPvText: string;
+      out AErrorText: string): Boolean;
     function ExecuteGameTreeCommand(AActor: TGameTreeActor;
       ACommand: TGameTreeCommand; out AErrorText: string): Boolean;
     function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
@@ -1775,6 +1782,32 @@ begin
   Result := AGameTree.FindNodeById(CreatedNodeId);
 end;
 
+function TMainForm.RebuildGameTreeFromInputs(AActor: TGameTreeActor;
+  const AHeader: TGameTreeHeaderInput; const AMainline: TGameTreeMainlineInput;
+  const AEnginePV, AAnnotatorPV: TGameTreePvInput; AVariationPvIndex,
+  AVariationPvPly: Integer; const AVariationPvScore,
+  AVariationPvText: string; out AErrorText: string): Boolean;
+var
+  Command: TGameTreeCommand;
+begin
+  Result := False;
+  AErrorText := '';
+  if AActor = nil then
+  begin
+    AErrorText := 'invalid game-tree rebuild target';
+    Exit;
+  end;
+
+  Command := AActor.CreateRebuildFromInputsCommand(AHeader, AMainline,
+    AEnginePV, AAnnotatorPV, AVariationPvIndex, AVariationPvPly,
+    AVariationPvScore, AVariationPvText);
+  try
+    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
+  finally
+    Command.Free;
+  end;
+end;
+
 function TMainForm.ExecuteGameTreeCommand(AActor: TGameTreeActor;
   ACommand: TGameTreeCommand; out AErrorText: string): Boolean;
 begin
@@ -2112,7 +2145,6 @@ function TMainForm.ExecuteGameTreeRebuildFromInput(AGame: TRunningGame;
   AGameTree: TGameTree; AMoves, AAnnotations: TStrings): Boolean;
 var
   Actor: TGameTreeActor;
-  Command: TGameTreeCommand;
   LErrorText: string;
   LVariationPvIndex: Integer;
   LVariationPvPly: Integer;
@@ -2137,7 +2169,7 @@ begin
     LVariationPvText := FAnalyzerPvBrowser.PrincipalVariation;
   end;
 
-  Command := Actor.CreateRebuildFromInputsCommand(
+  Result := RebuildGameTreeFromInputs(Actor,
     CurrentGameTreeHeaderInput(AGame),
     GameTreeMainlineInput(AMoves, AAnnotations,
       (AGame <> nil) and (AGame = SelectedDisplayedGame),
@@ -2146,12 +2178,7 @@ begin
     CurrentGameTreeEnginePvInput(AGameTree),
     CurrentGameTreeAnnotatorPvInput,
     LVariationPvIndex, LVariationPvPly, LVariationPvScore,
-    LVariationPvText);
-  try
-    Result := ExecuteGameTreeCommand(Actor, Command, LErrorText);
-  finally
-    Command.Free;
-  end;
+    LVariationPvText, LErrorText);
 end;
 
 function TMainForm.FindHumanMoveToTarget(ATargetSquare: Integer;
@@ -4018,7 +4045,6 @@ procedure TMainForm.UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
   const AEventName: string);
 var
   Actor: TGameTreeActor;
-  Command: TGameTreeCommand;
   LErrorText: string;
   LAnnotations: TStringList;
   LGameTree: TGameTree;
@@ -4039,7 +4065,7 @@ begin
     Actor := ActorForGameTree(LGameTree);
     if Actor = nil then
       Exit;
-    Command := Actor.CreateRebuildFromInputsCommand(
+    RebuildGameTreeFromInputs(Actor,
       RunningGameTreeHeaderInput(AGame, AEventName),
       GameTreeMainlineInput(LMoves, LAnnotations, True,
         AGame.Snapshot.WhiteRemainingSeconds,
@@ -4049,12 +4075,7 @@ begin
       GameTreePvInput(Trim(AGame.Snapshot.PrincipalVariation) <> '',
         AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
         AGame.Snapshot.PrincipalVariation),
-      GameTreePvInput(False, 0, '', ''));
-    try
-      ExecuteGameTreeCommand(Actor, Command, LErrorText);
-    finally
-      Command.Free;
-    end;
+      GameTreePvInput(False, 0, '', ''), -1, 0, '', '', LErrorText);
   finally
     LAnnotations.Free;
     LMoves.Free;
