@@ -16,8 +16,8 @@ type
   );
 
   TAnalyzerRunnerLogEvent = procedure(Sender: TObject; const AMessage: string) of object;
-  TAnalyzerRunnerMoveEvent = procedure(Sender: TObject; AGameTreeId,
-    ASearchId, ANodeId: Int64; const AMoveText: string) of object;
+  TAnalyzerRunnerMoveEvent = procedure(Sender: TObject;
+    const ASearch: TGameTreeSearchRef; const AMoveText: string) of object;
   TAnalyzerRunnerSnapshotEvent = procedure(Sender: TObject; ASnapshot: TPvSnapshot) of object;
   TAnalyzerRunnerFinishedEvent = procedure(Sender: TObject) of object;
 
@@ -58,10 +58,10 @@ type
 
     procedure PostAnalyze(const AStartingFEN, AMovesText: string;
       ABaseBoard: TDraughtsBoard; ABasePly: Integer; ATerminal: Boolean;
-      AGameTreeId: Int64 = 0; ASearchId: Int64 = 0; ANodeId: Int64 = 0);
+      const ASearch: TGameTreeSearchRef);
     procedure PostThinkOnce(const AStartingFEN, AMovesText: string;
       ABaseBoard: TDraughtsBoard; ABasePly: Integer; AThinkSeconds: Double;
-      AGameTreeId, ASearchId, ANodeId: Int64);
+      const ASearch: TGameTreeSearchRef);
     procedure PostStopSearch;
     procedure PostShutdown;
   end;
@@ -279,8 +279,7 @@ begin
           Moves.Free;
         end;
         if (MoveText <> '') and Assigned(FOnMove) then
-          FOnMove(Self, Command.Search.GameTreeId, Command.Search.SearchId,
-            Command.Search.NodeId, MoveText);
+          FOnMove(Self, Command.Search, MoveText);
       end;
     accStopSearch:
       begin
@@ -377,7 +376,7 @@ end;
 
 procedure TAnalyzerRunnerThread.PostAnalyze(const AStartingFEN, AMovesText: string;
   ABaseBoard: TDraughtsBoard; ABasePly: Integer; ATerminal: Boolean;
-  AGameTreeId: Int64; ASearchId: Int64; ANodeId: Int64);
+  const ASearch: TGameTreeSearchRef);
 var
   Command: TAnalyzerCommand;
 begin
@@ -386,7 +385,7 @@ begin
   Command.MovesText := AMovesText;
   Command.BasePly := ABasePly;
   Command.Terminal := ATerminal;
-  Command.Search := GameTreeSearchRef(AGameTreeId, ASearchId, ANodeId);
+  Command.Search := ASearch;
   if ABaseBoard <> nil then
     Command.BaseBoard.AssignFrom(ABaseBoard);
   PostCommand(Command);
@@ -394,7 +393,7 @@ end;
 
 procedure TAnalyzerRunnerThread.PostThinkOnce(const AStartingFEN,
   AMovesText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer;
-  AThinkSeconds: Double; AGameTreeId, ASearchId, ANodeId: Int64);
+  AThinkSeconds: Double; const ASearch: TGameTreeSearchRef);
 var
   Command: TAnalyzerCommand;
 begin
@@ -403,7 +402,7 @@ begin
   Command.MovesText := AMovesText;
   Command.BasePly := ABasePly;
   Command.ThinkSeconds := AThinkSeconds;
-  Command.Search := GameTreeSearchRef(AGameTreeId, ASearchId, ANodeId);
+  Command.Search := ASearch;
   if ABaseBoard <> nil then
     Command.BaseBoard.AssignFrom(ABaseBoard);
   PostCommand(Command);

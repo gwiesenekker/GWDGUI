@@ -300,8 +300,8 @@ type
       var CloseAction: TCloseAction);
     procedure AnalyzerMiniBoardPopoutClick(Sender: TObject);
     procedure AnalyzerPopoutBoardCopyFenClick(Sender: TObject);
-    procedure AnalyzerMove(Sender: TObject; AGameTreeId, ASearchId,
-      ANodeId: Int64; const AMoveText: string);
+    procedure AnalyzerMove(Sender: TObject;
+      const ASearch: TGameTreeSearchRef; const AMoveText: string);
     procedure AnalyzerPvBoardChanged(Sender: TObject);
     procedure AnalyzerPopupPopup(Sender: TObject);
     procedure AnalyzerSnapshot(Sender: TObject; ASnapshot: TPvSnapshot);
@@ -2442,11 +2442,11 @@ begin
   PostGuiEvent(TAnalyzerSnapshotGuiMessage.Create(ASnapshot));
 end;
 
-procedure TMainForm.AnalyzerMove(Sender: TObject; AGameTreeId, ASearchId,
-  ANodeId: Int64; const AMoveText: string);
+procedure TMainForm.AnalyzerMove(Sender: TObject;
+  const ASearch: TGameTreeSearchRef; const AMoveText: string);
 begin
-  PostGuiEvent(TAnalyzerMoveGuiMessage.Create(AGameTreeId, ASearchId,
-    ANodeId, AMoveText));
+  PostGuiEvent(TAnalyzerMoveGuiMessage.Create(ASearch.GameTreeId,
+    ASearch.SearchId, ASearch.NodeId, AMoveText));
 end;
 
 procedure TMainForm.MctsLog(Sender: TObject; const AMessage: string);
@@ -2830,7 +2830,7 @@ begin
       [FAutoplayThinkSeconds]));
   FAnalyzerRunner.PostThinkOnce(LStartingFEN, LDisplayedMovesText,
     FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, FAutoplayThinkSeconds,
-    LSearch.GameTreeId, LSearch.SearchId, LSearch.NodeId);
+    LSearch);
   UpdateAutoplayControls;
 end;
 
@@ -3073,7 +3073,7 @@ begin
   end;
   FAnalyzerRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText,
     FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, LTerminal,
-    LSearch.GameTreeId, LSearch.SearchId, LSearch.NodeId);
+    LSearch);
 end;
 
 procedure TMainForm.RestartMctsAnnotator(AGameTree: TGameTree);
@@ -3110,7 +3110,7 @@ begin
   LTerminal := DisplayedPositionIsTerminal(LDisplayedMoveCount,
     LTotalMoveCount, LGameState);
   FMctsRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText, ActiveBoard,
-    LDisplayedMoveCount, LTerminal);
+    LDisplayedMoveCount, LTerminal, EmptyGameTreeSearchRef);
 end;
 
 function TMainForm.LiveGameCount: Integer;
