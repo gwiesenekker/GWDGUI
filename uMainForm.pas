@@ -4630,6 +4630,9 @@ begin
   if FGameBrowsePly > LMoveCount then
     FGameBrowsePly := -1;
   UpdateBoardFromBrowseState(AGame.GameTree);
+  RebuildGameMoveLabels(False, AGame.GameTree);
+  UpdateScoreHistory(AGame.GameTree);
+  RefreshVisibleGameTreeView(False, AGame.GameTree);
   UpdateBoardInfo;
 end;
 
