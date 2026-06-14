@@ -327,6 +327,8 @@ type
       ARefreshScoreHistory: Boolean = False): TGameTreePlyNode;
     function ExecuteGameTreeCommand(AActor: TGameTreeActor;
       ACommand: TGameTreeCommand; out AErrorText: string): Boolean;
+    function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
+      out ASearchId, ANodeId: Int64; out AErrorText: string): Boolean;
     procedure ApplyGameTreeCommandResult(AGameTree: TGameTree;
       ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
       ARefreshScoreHistory: Boolean = False);
@@ -1736,6 +1738,39 @@ begin
     AErrorText := ACommand.ErrorText;
 end;
 
+function TMainForm.TryStartGameTreeSearchForDisplayedNode(
+  AGameTree: TGameTree; out ASearchId, ANodeId: Int64;
+  out AErrorText: string): Boolean;
+var
+  Actor: TGameTreeActor;
+  Command: TGameTreeCommand;
+  Node: TGameTreePlyNode;
+begin
+  ASearchId := 0;
+  ANodeId := 0;
+  AErrorText := '';
+  Result := False;
+
+  Actor := ActorForGameTree(AGameTree);
+  Node := CurrentDisplayedGameTreeNode(AGameTree);
+  if (Actor = nil) or (Node = nil) then
+  begin
+    AErrorText := 'no game-tree node';
+    Exit;
+  end;
+
+  Command := Actor.CreateStartSearchCommand(Node.NodeId, ASearchId);
+  try
+    Result := ExecuteGameTreeCommand(Actor, Command, AErrorText);
+    if Result then
+      ANodeId := Node.NodeId
+    else
+      ASearchId := 0;
+  finally
+    Command.Free;
+  end;
+end;
+
 procedure TMainForm.ApplyGameTreeCommandResult(AGameTree: TGameTree;
   ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
   ARefreshScoreHistory: Boolean);
@@ -2360,15 +2395,13 @@ end;
 
 procedure TMainForm.AutoplayClick(Sender: TObject);
 var
-  Actor: TGameTreeActor;
   LDisplayedMoveCount: Integer;
   LDisplayedMoves: TStringList;
   LDisplayedMovesText: string;
   LErrorText: string;
   LGameTree: TGameTree;
-  LNode: TGameTreePlyNode;
-  LSearchCommand: TGameTreeCommand;
   LSearchId: Int64;
+  LSearchNodeId: Int64;
   LStartingFEN: string;
 begin
   if not ReadAutoplaySecondsFromToolbar then
@@ -2410,16 +2443,6 @@ begin
     Exit;
   end;
 
-  Actor := ActorForGameTree(LGameTree);
-  LNode := CurrentDisplayedGameTreeNode(LGameTree);
-  if (Actor = nil) or (LNode = nil) then
-  begin
-    if FAnalyzerMemo <> nil then
-      FAnalyzerMemo.Lines.Add('Autoplay rejected; no game-tree node');
-    UpdateAutoplayControls;
-    Exit;
-  end;
-
   LStartingFEN := StartingFenForTree(LGameTree);
   LDisplayedMovesText := DisplayedMovesText(LGameTree);
   LDisplayedMoves := TStringList.Create;
@@ -2432,18 +2455,13 @@ begin
   end;
 
   CancelAnalyzerSearch;
-  LSearchCommand := Actor.CreateStartSearchCommand(LNode.NodeId, LSearchId);
-  try
-    if not ExecuteGameTreeCommand(Actor, LSearchCommand, LErrorText) then
-    begin
-      if FAnalyzerMemo <> nil then
-        FAnalyzerMemo.Lines.Add('Autoplay rejected; reason=' +
-          LErrorText);
-      UpdateAutoplayControls;
-      Exit;
-    end;
-  finally
-    LSearchCommand.Free;
+  if not TryStartGameTreeSearchForDisplayedNode(LGameTree, LSearchId,
+    LSearchNodeId, LErrorText) then
+  begin
+    if FAnalyzerMemo <> nil then
+      FAnalyzerMemo.Lines.Add('Autoplay rejected; reason=' + LErrorText);
+    UpdateAutoplayControls;
+    Exit;
   end;
 
   FAnalyzerSearchGameTreeId := LGameTree.GameTreeId;
@@ -2457,7 +2475,7 @@ begin
       [FAutoplayThinkSeconds]));
   FAnalyzerRunner.PostThinkOnce(LStartingFEN, LDisplayedMovesText,
     FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, FAutoplayThinkSeconds,
-    LGameTree.GameTreeId, LSearchId, LNode.NodeId);
+    LGameTree.GameTreeId, LSearchId, LSearchNodeId);
   UpdateAutoplayControls;
 end;
 
@@ -2674,9 +2692,6 @@ end;
 procedure TMainForm.RestartAnalyzer(AGameTree: TGameTree);
 var
   LGameTree: TGameTree;
-  LNode: TGameTreePlyNode;
-  LSearchActor: TGameTreeActor;
-  LSearchCommand: TGameTreeCommand;
   LSearchGameTreeId: Int64;
   LSearchId: Int64;
   LSearchNodeId: Int64;
@@ -2729,24 +2744,12 @@ begin
     FAnalyzerPvBrowser.Clear;
   if not LTerminal then
   begin
-    LSearchActor := ActorForGameTree(LGameTree);
-    LNode := CurrentDisplayedGameTreeNode(LGameTree);
-    if (LSearchActor <> nil) and (LNode <> nil) then
+    if TryStartGameTreeSearchForDisplayedNode(LGameTree, LSearchId,
+      LSearchNodeId, LErrorText) then
     begin
-      LSearchCommand := LSearchActor.CreateStartSearchCommand(LNode.NodeId,
-        LSearchId);
-      try
-        if ExecuteGameTreeCommand(LSearchActor, LSearchCommand,
-          LErrorText) then
-        begin
-          LSearchGameTreeId := LGameTree.GameTreeId;
-          LSearchNodeId := LNode.NodeId;
-          FAnalyzerSearchGameTreeId := LSearchGameTreeId;
-          FAnalyzerSearchId := LSearchId;
-        end;
-      finally
-        LSearchCommand.Free;
-      end;
+      LSearchGameTreeId := LGameTree.GameTreeId;
+      FAnalyzerSearchGameTreeId := LSearchGameTreeId;
+      FAnalyzerSearchId := LSearchId;
     end;
   end;
   FAnalyzerRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText,
