@@ -116,6 +116,43 @@ begin
   end;
 end;
 
+procedure CheckQueuedActorCommands;
+var
+  Actor: TGameTreeActor;
+  Command: TGameTreeCommand;
+begin
+  Actor := TGameTreeActor.Create;
+  try
+    Actor.GameTree.BeginRebuild('queue', 'Event', 'White', 'Black', '*',
+      'W:W31-50:B1-20');
+
+    Command := Actor.CreateAppendMainlineMoveCommand('32-28', gmsHuman);
+    Check(Actor.PostCommand(Command), 'queued append command should post');
+    Command := nil;
+    Check(Actor.ProcessCommands = 1, 'one queued command should process');
+    Check(Actor.GameTree.MainlineCount = 1,
+      'queued append command should mutate game tree');
+    Check(Actor.GameTree.MainlineNode[1].MoveText = '32-28',
+      'queued append command should record move');
+    Check(Actor.Revision = 1,
+      'accepted queued command should increment revision');
+
+    Command := Actor.CreateAppendMainlineMoveCommand('31-27', gmsHuman);
+    Command.GameTreeId := Command.GameTreeId + 1;
+    Check(Actor.PostCommand(Command),
+      'wrong game-tree queued command should post');
+    Command := nil;
+    Check(Actor.ProcessCommands = 1,
+      'wrong game-tree queued command should process');
+    Check(Actor.GameTree.MainlineCount = 1,
+      'wrong game-tree queued command should not mutate game tree');
+    Check(Actor.Revision = 1,
+      'wrong game-tree queued command should not increment revision');
+  finally
+    Actor.Free;
+  end;
+end;
+
 procedure CheckSearchLifecycle;
 var
   Actor: TGameTreeActor;
@@ -586,6 +623,7 @@ end;
 
 begin
   CheckActorCommands;
+  CheckQueuedActorCommands;
   CheckSearchLifecycle;
   CheckAnnotatorPvCommand;
   CheckStoreSearchMoveVariationCommand;
