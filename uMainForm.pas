@@ -3344,7 +3344,7 @@ begin
     LNodeId := LNode.NodeId
   else
   begin
-    LNodeId := ASnapshot.NodeId;
+    LNodeId := LSearch.NodeId;
     if LNodeId <= 0 then
     begin
       if ASnapshot.BasePly <= 0 then
