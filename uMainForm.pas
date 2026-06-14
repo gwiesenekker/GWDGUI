@@ -419,6 +419,8 @@ type
     function CurrentVariationMoveCount(AGameTree: TGameTree): Integer;
     function GameTreeMainlineMovesText(AGameTree: TGameTree): string;
     function DisplayedMovesText(AGameTree: TGameTree): string;
+    function DisplayedMoveContext(AGameTree: TGameTree;
+      out AMovesText: string; out AMoveCount: Integer): Boolean;
     function HasDisplayedGameToSave: Boolean;
     function EngineSupportsMcts(AEngine: TExternalEngineDefinition): Boolean;
     function GameForTree(AGameTree: TGameTree): TRunningGame;
@@ -2748,7 +2750,6 @@ end;
 procedure TMainForm.AutoplayClick(Sender: TObject);
 var
   LDisplayedMoveCount: Integer;
-  LDisplayedMoves: TStringList;
   LDisplayedMovesText: string;
   LErrorText: string;
   LGameTree: TGameTree;
@@ -2796,14 +2797,11 @@ begin
   end;
 
   LStartingFEN := StartingFenForTree(LGameTree);
-  LDisplayedMovesText := DisplayedMovesText(LGameTree);
-  LDisplayedMoves := TStringList.Create;
-  try
-    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(LDisplayedMovesText)),
-      LDisplayedMoves);
-    LDisplayedMoveCount := LDisplayedMoves.Count;
-  finally
-    LDisplayedMoves.Free;
+  if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
+    LDisplayedMoveCount) then
+  begin
+    UpdateAutoplayControls;
+    Exit;
   end;
 
   CancelAnalyzerSearch;
@@ -3027,7 +3025,6 @@ var
   LSearchId: Int64;
   LSearchNodeId: Int64;
   LDisplayedMoveCount: Integer;
-  LDisplayedMoves: TStringList;
   LDisplayedMovesText: string;
   LErrorText: string;
   LGameState: TGameOrchestratorState;
@@ -3047,15 +3044,9 @@ begin
   LSearchNodeId := 0;
 
   LStartingFEN := StartingFenForTree(LGameTree);
-  LDisplayedMovesText := DisplayedMovesText(LGameTree);
-  LDisplayedMoves := TStringList.Create;
-  try
-    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(LDisplayedMovesText)),
-      LDisplayedMoves);
-    LDisplayedMoveCount := LDisplayedMoves.Count;
-  finally
-    LDisplayedMoves.Free;
-  end;
+  if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
+    LDisplayedMoveCount) then
+    Exit;
   LTotalMoveCount := CurrentMoveCount;
   LGameState := StateForTree(LGameTree);
 
@@ -3090,7 +3081,6 @@ procedure TMainForm.RestartMctsAnnotator(AGameTree: TGameTree);
 var
   LGameTree: TGameTree;
   LDisplayedMoveCount: Integer;
-  LDisplayedMoves: TStringList;
   LDisplayedMovesText: string;
   LGameState: TGameOrchestratorState;
   LStartingFEN: string;
@@ -3105,15 +3095,9 @@ begin
   if LGameTree = nil then
     Exit;
   LStartingFEN := StartingFenForTree(LGameTree);
-  LDisplayedMovesText := DisplayedMovesText(LGameTree);
-  LDisplayedMoves := TStringList.Create;
-  try
-    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(LDisplayedMovesText)),
-      LDisplayedMoves);
-    LDisplayedMoveCount := LDisplayedMoves.Count;
-  finally
-    LDisplayedMoves.Free;
-  end;
+  if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
+    LDisplayedMoveCount) then
+    Exit;
   LTotalMoveCount := CurrentMoveCount;
   LGameState := StateForTree(LGameTree);
 
@@ -3630,6 +3614,28 @@ begin
     end;
   finally
     LVariationMoves.Free;
+    LMoves.Free;
+  end;
+end;
+
+function TMainForm.DisplayedMoveContext(AGameTree: TGameTree;
+  out AMovesText: string; out AMoveCount: Integer): Boolean;
+var
+  LMoves: TStringList;
+begin
+  AMovesText := '';
+  AMoveCount := 0;
+  Result := AGameTree <> nil;
+  if not Result then
+    Exit;
+
+  AMovesText := DisplayedMovesText(AGameTree);
+  LMoves := TStringList.Create;
+  try
+    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(AMovesText)),
+      LMoves);
+    AMoveCount := LMoves.Count;
+  finally
     LMoves.Free;
   end;
 end;
