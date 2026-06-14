@@ -329,6 +329,8 @@ type
       ACommand: TGameTreeCommand; out AErrorText: string): Boolean;
     function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
       out ASearchId, ANodeId: Int64; out AErrorText: string): Boolean;
+    function ReleaseGameTreeSearch(AActor: TGameTreeActor;
+      ASearchId: Int64): Boolean;
     procedure TrackAnalyzerSearch(AGameTree: TGameTree; ASearchId: Int64);
     procedure ClearAnalyzerSearchTracking;
     procedure SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
@@ -1776,6 +1778,24 @@ begin
   end;
 end;
 
+function TMainForm.ReleaseGameTreeSearch(AActor: TGameTreeActor;
+  ASearchId: Int64): Boolean;
+var
+  Command: TGameTreeCommand;
+  LErrorText: string;
+begin
+  Result := False;
+  if (AActor = nil) or (ASearchId <= 0) then
+    Exit;
+
+  Command := AActor.CreateReleaseSearchCommand(ASearchId);
+  try
+    Result := ExecuteGameTreeCommand(AActor, Command, LErrorText);
+  finally
+    Command.Free;
+  end;
+end;
+
 procedure TMainForm.TrackAnalyzerSearch(AGameTree: TGameTree;
   ASearchId: Int64);
 begin
@@ -2111,7 +2131,6 @@ var
   LErrorText: string;
   LGameTree: TGameTree;
   LRejectedReason: string;
-  LReleaseCommand: TGameTreeCommand;
   LSearchState: TGameTreeSearchState;
   LStoreCommand: TGameTreeCommand;
 begin
@@ -2155,12 +2174,7 @@ begin
     finally
       LStoreCommand.Free;
     end;
-    LReleaseCommand := Actor.CreateReleaseSearchCommand(ASearchId);
-    try
-      ExecuteGameTreeCommand(Actor, LReleaseCommand, LErrorText);
-    finally
-      LReleaseCommand.Free;
-    end;
+    ReleaseGameTreeSearch(Actor, ASearchId);
     if FAnalyzerSearchId = ASearchId then
       ClearAnalyzerSearchTracking;
   end
@@ -2169,14 +2183,7 @@ begin
     LRejectedReason := LErrorText;
     if Actor.SearchState(ASearchId, LSearchState) and
       (LSearchState in [gssCancelled, gssFailed]) then
-    begin
-      LReleaseCommand := Actor.CreateReleaseSearchCommand(ASearchId);
-      try
-        ExecuteGameTreeCommand(Actor, LReleaseCommand, LErrorText);
-      finally
-        LReleaseCommand.Free;
-      end;
-    end;
+      ReleaseGameTreeSearch(Actor, ASearchId);
     if FAnalyzerMemo <> nil then
       FAnalyzerMemo.Lines.Add('Annotator move rejected; reason=' +
         LRejectedReason);
@@ -2595,7 +2602,6 @@ var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
   LErrorText: string;
-  LReleaseCommand: TGameTreeCommand;
 begin
   if FAnalyzerSearchId <= 0 then
     Exit;
@@ -2607,14 +2613,7 @@ begin
     try
       ExecuteGameTreeCommand(Actor, Command, LErrorText);
       if Command.Accepted then
-      begin
-        LReleaseCommand := Actor.CreateReleaseSearchCommand(FAnalyzerSearchId);
-        try
-          ExecuteGameTreeCommand(Actor, LReleaseCommand, LErrorText);
-        finally
-          LReleaseCommand.Free;
-        end;
-      end;
+        ReleaseGameTreeSearch(Actor, FAnalyzerSearchId);
     finally
       Command.Free;
     end;
