@@ -620,7 +620,7 @@ begin
     Check(Node <> nil, 'setup node should exist for PV command');
 
     Command := Actor.CreateRecordAnnotatorPVCommand(Node.NodeId, '0.12',
-      '16-21 37-32');
+      '16-21 37-32', '9', '0.44');
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'annotator PV command should be accepted');
@@ -628,13 +628,17 @@ begin
         'annotator PV command should record score on target node');
       Check(Node.AnnotatorPV = '16-21 37-32',
         'annotator PV command should record PV on target node');
+      Check(Node.AnnotatorPVDepth = '9',
+        'annotator PV command should record depth on target node');
+      Check(Node.AnnotatorPVTimeText = '0.44',
+        'annotator PV command should record time on target node');
       RevisionAfterPV := Actor.Revision;
     finally
       Command.Free;
     end;
 
     Command := Actor.CreateRecordAnnotatorPVCommand(Node.NodeId, '0.12',
-      '16-21 37-32');
+      '16-21 37-32', '9', '0.44');
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,

@@ -371,7 +371,8 @@ type
       out AErrorText: string): Boolean;
     function RecordAnnotatorPvInGameTree(AActor: TGameTreeActor;
       AGameTree: TGameTree; ANodeId: Int64; const AScore,
-      APrincipalVariation: string; out AErrorText: string): Boolean;
+      APrincipalVariation, ADepth, ATimeText: string;
+      out AErrorText: string): Boolean;
     function ClearGameTreeStoredVariations(AActor: TGameTreeActor): Boolean;
     function StoreGameTreeVariationLine(AActor: TGameTreeActor;
       ADisplayAfterPly, ABasePly: Integer; const AMovesText,
@@ -2060,7 +2061,8 @@ end;
 
 function TMainForm.RecordAnnotatorPvInGameTree(AActor: TGameTreeActor;
   AGameTree: TGameTree; ANodeId: Int64; const AScore,
-  APrincipalVariation: string; out AErrorText: string): Boolean;
+  APrincipalVariation, ADepth, ATimeText: string; out AErrorText: string
+  ): Boolean;
 var
   Command: TGameTreeCommand;
 begin
@@ -2073,7 +2075,7 @@ begin
   end;
 
   Command := AActor.CreateRecordAnnotatorPVCommand(ANodeId, AScore,
-    APrincipalVariation);
+    APrincipalVariation, ADepth, ATimeText);
   try
     Result := ExecuteAndApplyGameTreeCommand(AActor, AGameTree, Command,
       False, AErrorText);
@@ -3397,7 +3399,8 @@ begin
     Exit;
 
   if not RecordAnnotatorPvInGameTree(Actor, LGameTree, LNodeId,
-    ASnapshot.Score, ASnapshot.PrincipalVariation, LErrorText) then
+    ASnapshot.Score, ASnapshot.PrincipalVariation, ASnapshot.Depth,
+    ASnapshot.TimeText, LErrorText) then
   begin
     if FAnalyzerMemo <> nil then
       FAnalyzerMemo.Lines.Add('Annotator PV rejected; reason=' +
@@ -4570,20 +4573,26 @@ function TMainForm.CurrentGameTreeAnnotatorPvInput(
 var
   LRecordAnnotatorPV: Boolean;
   LAnnotatorPV: string;
+  LAnnotatorDepth: string;
   LAnnotatorScore: string;
+  LAnnotatorTimeText: string;
 begin
   LRecordAnnotatorPV := (AGameTree = ActiveGameTree) and
     CanRecordCurrentAnnotatorPV;
   LAnnotatorPV := '';
+  LAnnotatorDepth := '';
   LAnnotatorScore := '';
+  LAnnotatorTimeText := '';
   if LRecordAnnotatorPV then
   begin
     LAnnotatorPV := FAnalyzerPvBrowser.PrincipalVariation;
     LAnnotatorScore := FAnalyzerPvBrowser.Score;
+    LAnnotatorDepth := FAnalyzerPvBrowser.Depth;
+    LAnnotatorTimeText := FAnalyzerPvBrowser.TimeText;
   end;
 
   Result := GameTreePvInput(LRecordAnnotatorPV, FAnalyzerPvBasePly,
-    LAnnotatorScore, LAnnotatorPV);
+    LAnnotatorScore, LAnnotatorPV, LAnnotatorDepth, LAnnotatorTimeText);
 end;
 
 procedure TMainForm.UpdateGameMoveHighlight;

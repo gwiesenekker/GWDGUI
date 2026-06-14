@@ -199,7 +199,7 @@ begin
       AEnginePV.PV, AEnginePV.Depth, AEnginePV.TimeText);
   if AAnnotatorPV.RecordPV and (Trim(AAnnotatorPV.PV) <> '') then
     AGameTree.RecordAnnotatorPV(AAnnotatorPV.BasePly, AAnnotatorPV.Score,
-      AAnnotatorPV.PV);
+      AAnnotatorPV.PV, AAnnotatorPV.Depth, AAnnotatorPV.TimeText);
 end;
 
 procedure RecordGameTreeVariationLine(AGameTree: TGameTree;

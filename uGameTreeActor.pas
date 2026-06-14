@@ -138,7 +138,8 @@ type
       APV: string; const ADepth: string = '';
       const ATimeText: string = ''): TGameTreeCommand;
     function CreateRecordAnnotatorPVCommand(ANodeId: Int64; const AScore,
-      APV: string): TGameTreeCommand;
+      APV: string; const ADepth: string = '';
+      const ATimeText: string = ''): TGameTreeCommand;
     function CreateStoreSearchMoveVariationCommand(ASearchId: Int64;
       ASource: TGameTreeMoveSource): TGameTreeCommand; overload;
     function CreateStoreSearchMoveVariationCommand(
@@ -408,7 +409,8 @@ begin
 end;
 
 function TGameTreeActor.CreateRecordAnnotatorPVCommand(ANodeId: Int64;
-  const AScore, APV: string): TGameTreeCommand;
+  const AScore, APV: string; const ADepth: string; const ATimeText: string
+  ): TGameTreeCommand;
 begin
   Result := TGameTreeCommand.Create(gtcRecordAnnotatorPV);
   Result.CommandId := NextCommandId;
@@ -416,6 +418,8 @@ begin
   Result.NodeId := ANodeId;
   Result.ScoreText := Trim(AScore);
   Result.PvText := Trim(APV);
+  Result.PvDepthText := Trim(ADepth);
+  Result.PvTimeText := Trim(ATimeText);
 end;
 
 function TGameTreeActor.CreateRecordEnginePVCommand(ANodeId: Int64;
@@ -1103,7 +1107,8 @@ begin
           Exit;
         end;
         if not FGameTree.RecordAnnotatorPVForNodeId(ACommand.NodeId,
-          ACommand.ScoreText, ACommand.PvText, Changed) then
+          ACommand.ScoreText, ACommand.PvText, ACommand.PvDepthText,
+          ACommand.PvTimeText, Changed) then
         begin
           Reject(ACommand, 'annotator PV was not recorded');
           Exit;
