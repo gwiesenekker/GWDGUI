@@ -340,6 +340,10 @@ type
       const AHeader: TGameTreeHeaderInput; out AErrorText: string): Boolean;
     function ExecuteGameTreeCommand(AActor: TGameTreeActor;
       ACommand: TGameTreeCommand; out AErrorText: string): Boolean;
+    function ExecuteAndApplyGameTreeCommand(AActor: TGameTreeActor;
+      AGameTree: TGameTree; ACommand: TGameTreeCommand;
+      AFollowVariationBrowse, ARefreshScoreHistory: Boolean;
+      out AErrorText: string): Boolean;
     function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
       out ASearchId, ANodeId: Int64; out AErrorText: string): Boolean;
     function AcceptSearchMove(AActor: TGameTreeActor; ASearchId,
@@ -1753,12 +1757,11 @@ begin
 
   Command := AActor.CreateAppendMainlineMoveCommand(AMove, ASource);
   try
-    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
+    Result := ExecuteAndApplyGameTreeCommand(AActor, AGameTree, Command,
+      False, ARefreshScoreHistory, AErrorText);
     if not Result then
       Exit;
     ACreatedNodeId := Command.CreatedNodeId;
-    ApplyGameTreeCommandResult(AGameTree, Command, False,
-      ARefreshScoreHistory);
   finally
     Command.Free;
   end;
@@ -1846,6 +1849,17 @@ begin
   Result := ACommand.Accepted;
   if not Result then
     AErrorText := ACommand.ErrorText;
+end;
+
+function TMainForm.ExecuteAndApplyGameTreeCommand(AActor: TGameTreeActor;
+  AGameTree: TGameTree; ACommand: TGameTreeCommand;
+  AFollowVariationBrowse, ARefreshScoreHistory: Boolean;
+  out AErrorText: string): Boolean;
+begin
+  Result := ExecuteGameTreeCommand(AActor, ACommand, AErrorText);
+  if Result then
+    ApplyGameTreeCommandResult(AGameTree, ACommand, AFollowVariationBrowse,
+      ARefreshScoreHistory);
 end;
 
 function TMainForm.TryStartGameTreeSearchForDisplayedNode(
@@ -1975,9 +1989,8 @@ begin
   LGameTree := AActor.GameTree;
   Command := AActor.CreateStoreSearchMoveVariationCommand(ASearchId, ASource);
   try
-    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
-    if Result then
-      ApplyGameTreeCommandResult(LGameTree, Command, True);
+    Result := ExecuteAndApplyGameTreeCommand(AActor, LGameTree, Command,
+      True, False, AErrorText);
   finally
     Command.Free;
   end;
@@ -2000,9 +2013,8 @@ begin
 
   Command := AActor.CreateStoreMoveVariationCommand(ANodeId, AMove, ASource);
   try
-    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
-    if Result then
-      ApplyGameTreeCommandResult(AGameTree, Command, True);
+    Result := ExecuteAndApplyGameTreeCommand(AActor, AGameTree, Command,
+      True, False, AErrorText);
   finally
     Command.Free;
   end;
@@ -2025,9 +2037,8 @@ begin
   Command := AActor.CreateRecordAnnotatorPVCommand(ANodeId, AScore,
     APrincipalVariation);
   try
-    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
-    if Result then
-      ApplyGameTreeCommandResult(AGameTree, Command, False);
+    Result := ExecuteAndApplyGameTreeCommand(AActor, AGameTree, Command,
+      False, False, AErrorText);
   finally
     Command.Free;
   end;
