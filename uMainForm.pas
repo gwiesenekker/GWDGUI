@@ -68,7 +68,7 @@ type
     FMoveText: string;
     FSearch: TGameTreeSearchRef;
   public
-    constructor Create(AGameTreeId, ASearchId, ANodeId: Int64;
+    constructor Create(const ASearch: TGameTreeSearchRef;
       const AMoveText: string); reintroduce;
     property MoveText: string read FMoveText;
     property Search: TGameTreeSearchRef read FSearch;
@@ -645,11 +645,11 @@ begin
   inherited Destroy;
 end;
 
-constructor TAnalyzerMoveGuiMessage.Create(AGameTreeId, ASearchId,
-  ANodeId: Int64; const AMoveText: string);
+constructor TAnalyzerMoveGuiMessage.Create(const ASearch: TGameTreeSearchRef;
+  const AMoveText: string);
 begin
   inherited Create('analyzer-move');
-  FSearch := GameTreeSearchRef(AGameTreeId, ASearchId, ANodeId);
+  FSearch := ASearch;
   FMoveText := Trim(AMoveText);
 end;
 
@@ -2445,8 +2445,7 @@ end;
 procedure TMainForm.AnalyzerMove(Sender: TObject;
   const ASearch: TGameTreeSearchRef; const AMoveText: string);
 begin
-  PostGuiEvent(TAnalyzerMoveGuiMessage.Create(ASearch.GameTreeId,
-    ASearch.SearchId, ASearch.NodeId, AMoveText));
+  PostGuiEvent(TAnalyzerMoveGuiMessage.Create(ASearch, AMoveText));
 end;
 
 procedure TMainForm.MctsLog(Sender: TObject; const AMessage: string);
