@@ -154,7 +154,8 @@ type
       const AEnginePV, AAnnotatorPV: TGameTreePvInput;
       AVariationPvIndex: Integer = -1; AVariationPvPly: Integer = 0;
       const AVariationPvScore: string = '';
-      const AVariationPvText: string = ''): TGameTreeCommand;
+      const AVariationPvText: string = ''; const AVariationPvDepth: string = '';
+      const AVariationPvTimeText: string = ''): TGameTreeCommand;
     function CreateSetHeaderCommand(const AHeader: TGameTreeHeaderInput
       ): TGameTreeCommand; overload;
     function CreateSetHeaderCommand(const AHeader: TGameTreeHeaderInput;
@@ -604,7 +605,8 @@ function TGameTreeActor.CreateRebuildFromInputsCommand(
   const AMainline: TGameTreeMainlineInput;
   const AEnginePV, AAnnotatorPV: TGameTreePvInput;
   AVariationPvIndex: Integer; AVariationPvPly: Integer;
-  const AVariationPvScore: string; const AVariationPvText: string
+  const AVariationPvScore: string; const AVariationPvText: string;
+  const AVariationPvDepth: string; const AVariationPvTimeText: string
   ): TGameTreeCommand;
 begin
   Result := TGameTreeCommand.Create(gtcRebuildFromInputs);
@@ -629,6 +631,8 @@ begin
   Result.PlyNumber := AVariationPvPly;
   Result.ScoreText := Trim(AVariationPvScore);
   Result.PvText := Trim(AVariationPvText);
+  Result.PvDepthText := Trim(AVariationPvDepth);
+  Result.PvTimeText := Trim(AVariationPvTimeText);
 end;
 
 function TGameTreeActor.CreateSetHeaderCommand(
@@ -1204,7 +1208,8 @@ begin
             GameTreeVariationPvInput(
               FGameTree.VariationLine[ACommand.VariationIndex],
               ACommand.VariationIndex, ACommand.PlyNumber,
-              ACommand.ScoreText, ACommand.PvText));
+              ACommand.ScoreText, ACommand.PvText, ACommand.PvDepthText,
+              ACommand.PvTimeText));
         ACommand.Accepted := True;
         FLastRebuildSignature := RebuildSignature;
         Inc(FRevision);

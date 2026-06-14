@@ -338,7 +338,8 @@ type
       const AMainline: TGameTreeMainlineInput;
       const AEnginePV, AAnnotatorPV: TGameTreePvInput;
       AVariationPvIndex, AVariationPvPly: Integer;
-      const AVariationPvScore, AVariationPvText: string;
+      const AVariationPvScore, AVariationPvText, AVariationPvDepth,
+      AVariationPvTimeText: string;
       out AErrorText: string): Boolean;
     function SetGameTreeHeader(AActor: TGameTreeActor;
       const AHeader: TGameTreeHeaderInput; out AErrorText: string): Boolean;
@@ -1825,7 +1826,8 @@ function TMainForm.RebuildGameTreeFromInputs(AActor: TGameTreeActor;
   const AHeader: TGameTreeHeaderInput; const AMainline: TGameTreeMainlineInput;
   const AEnginePV, AAnnotatorPV: TGameTreePvInput; AVariationPvIndex,
   AVariationPvPly: Integer; const AVariationPvScore,
-  AVariationPvText: string; out AErrorText: string): Boolean;
+  AVariationPvText, AVariationPvDepth, AVariationPvTimeText: string;
+  out AErrorText: string): Boolean;
 var
   Command: TGameTreeCommand;
 begin
@@ -1839,7 +1841,8 @@ begin
 
   Command := AActor.CreateRebuildFromInputsCommand(AHeader, AMainline,
     AEnginePV, AAnnotatorPV, AVariationPvIndex, AVariationPvPly,
-    AVariationPvScore, AVariationPvText);
+    AVariationPvScore, AVariationPvText, AVariationPvDepth,
+    AVariationPvTimeText);
   try
     Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
   finally
@@ -2249,8 +2252,10 @@ var
   LErrorText: string;
   LVariationPvIndex: Integer;
   LVariationPvPly: Integer;
+  LVariationPvDepth: string;
   LVariationPvScore: string;
   LVariationPvText: string;
+  LVariationPvTimeText: string;
 begin
   Result := False;
   Actor := ActorForGameTree(AGameTree);
@@ -2259,16 +2264,20 @@ begin
 
   LVariationPvIndex := -1;
   LVariationPvPly := 0;
+  LVariationPvDepth := '';
   LVariationPvScore := '';
   LVariationPvText := '';
+  LVariationPvTimeText := '';
   if (AGameTree = ActiveGameTree) and
     CanRecordCurrentVariationAnnotatorPV(FVariationIndex,
       FVariationBrowsePly) then
   begin
     LVariationPvIndex := FVariationIndex;
     LVariationPvPly := FVariationBrowsePly;
+    LVariationPvDepth := FAnalyzerPvBrowser.Depth;
     LVariationPvScore := FAnalyzerPvBrowser.Score;
     LVariationPvText := FAnalyzerPvBrowser.PrincipalVariation;
+    LVariationPvTimeText := FAnalyzerPvBrowser.TimeText;
   end;
 
   Result := RebuildGameTreeFromInputs(Actor,
@@ -2280,7 +2289,7 @@ begin
     CurrentGameTreeEnginePvInput(AGameTree),
     CurrentGameTreeAnnotatorPvInput(AGameTree),
     LVariationPvIndex, LVariationPvPly, LVariationPvScore,
-    LVariationPvText, LErrorText);
+    LVariationPvText, LVariationPvDepth, LVariationPvTimeText, LErrorText);
 end;
 
 function TMainForm.FindHumanMoveToTarget(ATargetSquare: Integer;
@@ -4486,7 +4495,7 @@ begin
         AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
         AGame.Snapshot.PrincipalVariation, AGame.Snapshot.PvSnapshot.Depth,
         AGame.Snapshot.PvSnapshot.TimeText),
-      GameTreePvInput(False, 0, '', ''), -1, 0, '', '', LErrorText) then
+      GameTreePvInput(False, 0, '', ''), -1, 0, '', '', '', '', LErrorText) then
       AGame.FLastSnapshotTreeSyncSignature := LSyncSignature;
   finally
     LAnnotations.Free;

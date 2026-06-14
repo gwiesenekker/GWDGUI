@@ -913,7 +913,7 @@ var
       GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
       GameTreePvInput(True, 2, '0.10', '37-32'),
       GameTreePvInput(False, 0, '', ''),
-      0, 1, '0.20', '20-24');
+      0, 1, '0.20', '20-24', '7', '0.33');
     try
       Actor.ExecuteCommand(DuplicateCommand);
       Check(DuplicateCommand.Accepted, AMessage + ' should be accepted');
@@ -944,7 +944,7 @@ begin
       GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
       GameTreePvInput(True, 2, '0.10', '37-32'),
       GameTreePvInput(False, 0, '', ''),
-      0, 1, '0.20', '20-24');
+      0, 1, '0.20', '20-24', '7', '0.33');
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'rebuild command should be accepted');
@@ -960,6 +960,10 @@ begin
         'rebuild command should rebuild variation nodes');
       Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPV = '20-24',
         'rebuild command should record variation annotator PV');
+      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPVDepth = '7',
+        'rebuild command should record variation annotator PV depth');
+      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPVTimeText = '0.33',
+        'rebuild command should record variation annotator PV time');
       NodeId := Actor.GameTree.MainlineNode[1].NodeId;
       RevisionAfterRebuild := Actor.Revision;
     finally
@@ -972,7 +976,7 @@ begin
       GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
       GameTreePvInput(True, 2, '0.10', '37-32'),
       GameTreePvInput(False, 0, '', ''),
-      0, 1, '0.20', '20-24');
+      0, 1, '0.20', '20-24', '7', '0.33');
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'duplicate rebuild command should be accepted');
