@@ -5660,11 +5660,16 @@ procedure TMainForm.GuiEventTimerTick(Sender: TObject);
 const
   MaxGuiEventsPerTimerTick = 100;
 type
+  TPendingAnalyzerSnapshot = record
+    Key: string;
+    Message: TAnalyzerSnapshotGuiMessage;
+  end;
   TPendingRunnerSnapshot = record
     GameId: Integer;
     Message: TRunnerSnapshotGuiMessage;
   end;
 var
+  PendingAnalyzerSnapshots: array of TPendingAnalyzerSnapshot;
   DrainAllEvents: Boolean;
   EventObject: TObject;
   LGame: TRunningGame;
@@ -5673,6 +5678,81 @@ var
   ProcessedEvents: Integer;
   RemoveAfterFinish: Boolean;
   SnapshotMessage: TRunnerSnapshotGuiMessage;
+
+  function AnalyzerSnapshotKey(AMessage: TAnalyzerSnapshotGuiMessage): string;
+  var
+    Search: TGameTreeSearchRef;
+  begin
+    Result := '';
+    if (AMessage = nil) or (AMessage.Snapshot = nil) then
+      Exit;
+    Search := AMessage.Snapshot.SearchRef;
+    if IsValidGameTreeSearchRef(Search) then
+      Result := 'search:' + IntToStr(Search.GameTreeId) + ':' +
+        IntToStr(Search.SearchId) + ':' + IntToStr(Search.NodeId)
+    else
+      Result := 'display';
+  end;
+
+  procedure ApplyAnalyzerSnapshot(AMessage: TAnalyzerSnapshotGuiMessage);
+  begin
+    if (AMessage = nil) or (AMessage.Snapshot = nil) then
+      Exit;
+
+    SetAnalyzerPvBase(AMessage.Snapshot.BaseBoard, AMessage.Snapshot.BasePly);
+    LGameTree := RecordAnalyzerSnapshotInGameTree(AMessage.Snapshot);
+    if LGameTree = nil then
+      Exit;
+    if (not AMessage.Snapshot.GameTreeOnly) and
+      (FAnalyzerPvBrowser <> nil) then
+      FAnalyzerPvBrowser.SetSnapshot(AMessage.Snapshot,
+        StartingFenForTree(LGameTree));
+    RefreshVisibleGameTreeView(False, LGameTree);
+    if (not AMessage.Snapshot.GameTreeOnly) and
+      (FPvHintSource = phsAnalyzer) then
+    begin
+      UpdateBoardHighlights(LGameTree);
+      if FBoardControl <> nil then
+        FBoardControl.Invalidate;
+    end;
+  end;
+
+  procedure FlushPendingAnalyzerSnapshots;
+  var
+    I: Integer;
+  begin
+    for I := 0 to High(PendingAnalyzerSnapshots) do
+    begin
+      try
+        ApplyAnalyzerSnapshot(PendingAnalyzerSnapshots[I].Message);
+      finally
+        PendingAnalyzerSnapshots[I].Message.Free;
+        PendingAnalyzerSnapshots[I].Message := nil;
+      end;
+    end;
+    SetLength(PendingAnalyzerSnapshots, 0);
+  end;
+
+  procedure QueueAnalyzerSnapshot(AMessage: TAnalyzerSnapshotGuiMessage);
+  var
+    I: Integer;
+    Key: string;
+  begin
+    if AMessage = nil then
+      Exit;
+    Key := AnalyzerSnapshotKey(AMessage);
+    for I := 0 to High(PendingAnalyzerSnapshots) do
+      if PendingAnalyzerSnapshots[I].Key = Key then
+      begin
+        PendingAnalyzerSnapshots[I].Message.Free;
+        PendingAnalyzerSnapshots[I].Message := AMessage;
+        Exit;
+      end;
+    I := Length(PendingAnalyzerSnapshots);
+    SetLength(PendingAnalyzerSnapshots, I + 1);
+    PendingAnalyzerSnapshots[I].Key := Key;
+    PendingAnalyzerSnapshots[I].Message := AMessage;
+  end;
 
   procedure ApplyRunnerSnapshot(AMessage: TRunnerSnapshotGuiMessage);
   begin
@@ -5743,6 +5823,13 @@ begin
     begin
       Inc(ProcessedEvents);
       try
+        if EventObject is TAnalyzerSnapshotGuiMessage then
+        begin
+          QueueAnalyzerSnapshot(TAnalyzerSnapshotGuiMessage(EventObject));
+          EventObject := nil;
+          Continue;
+        end;
+
         if EventObject is TRunnerSnapshotGuiMessage then
         begin
           SnapshotMessage := TRunnerSnapshotGuiMessage(EventObject);
@@ -5751,6 +5838,7 @@ begin
           Continue;
         end;
 
+        FlushPendingAnalyzerSnapshots;
         FlushPendingRunnerSnapshots;
 
         if EventObject is TAnalyzerLogGuiMessage then
@@ -5760,29 +5848,6 @@ begin
             TAnalyzerMoveGuiMessage(EventObject).MoveText)
         else if EventObject is TMctsLogGuiMessage then
           HandleMctsLog(TMctsLogGuiMessage(EventObject).Message)
-        else if EventObject is TAnalyzerSnapshotGuiMessage then
-        begin
-          SetAnalyzerPvBase(
-            TAnalyzerSnapshotGuiMessage(EventObject).Snapshot.BaseBoard,
-            TAnalyzerSnapshotGuiMessage(EventObject).Snapshot.BasePly);
-          LGameTree := RecordAnalyzerSnapshotInGameTree(
-            TAnalyzerSnapshotGuiMessage(EventObject).Snapshot);
-          if LGameTree = nil then
-            Continue;
-          if (not TAnalyzerSnapshotGuiMessage(EventObject).Snapshot.GameTreeOnly)
-            and (FAnalyzerPvBrowser <> nil) then
-            FAnalyzerPvBrowser.SetSnapshot(
-              TAnalyzerSnapshotGuiMessage(EventObject).Snapshot,
-              StartingFenForTree(LGameTree));
-          RefreshVisibleGameTreeView(False, LGameTree);
-          if (not TAnalyzerSnapshotGuiMessage(EventObject).Snapshot.GameTreeOnly)
-            and (FPvHintSource = phsAnalyzer) then
-          begin
-            UpdateBoardHighlights(LGameTree);
-            if FBoardControl <> nil then
-              FBoardControl.Invalidate;
-          end;
-        end
         else if EventObject is TAnalyzerFinishedGuiMessage then
         begin
           CancelAnalyzerSearch;
@@ -5823,8 +5888,10 @@ begin
         (ProcessedEvents >= MaxGuiEventsPerTimerTick) then
         Break;
     end;
+    FlushPendingAnalyzerSnapshots;
     FlushPendingRunnerSnapshots;
   finally
+    FlushPendingAnalyzerSnapshots;
     FlushPendingRunnerSnapshots;
   end;
 end;
