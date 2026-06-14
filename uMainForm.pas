@@ -6291,6 +6291,33 @@ procedure TMainForm.UpdateGameTreeFromState(AGame: TRunningGame;
 var
   LAnnotations: TStringList;
   LMoves: TStringList;
+
+  function ScoreAnnotationLineForNode(ANode: TGameTreePlyNode): string;
+  begin
+    Result := '';
+    if ANode = nil then
+      Exit;
+    if Trim(ANode.EngineScore) <> '' then
+      Result := 'E: ' + Trim(ANode.EngineScore);
+    if Trim(ANode.AnnotatorScore) <> '' then
+    begin
+      if Result <> '' then
+        Result += '; ';
+      Result += 'A: ' + Trim(ANode.AnnotatorScore);
+    end;
+  end;
+
+  procedure CopyMainlineScoreAnnotations(ASource: TGameTree;
+    AAnnotations: TStrings);
+  var
+    I: Integer;
+  begin
+    if (ASource = nil) or (AAnnotations = nil) then
+      Exit;
+    AAnnotations.Clear;
+    for I := 1 to ASource.MainlineCount do
+      AAnnotations.Add(ScoreAnnotationLineForNode(ASource.MainlineNode[I]));
+  end;
 begin
   if AGameTree = nil then
     Exit;
@@ -6299,6 +6326,7 @@ begin
   LAnnotations := TStringList.Create;
   try
     AGameTree.CopyMainlineMovesTo(LMoves);
+    CopyMainlineScoreAnnotations(AGameTree, LAnnotations);
 
     ExecuteGameTreeRebuildFromInput(AGame, AGameTree, LMoves,
       LAnnotations);
