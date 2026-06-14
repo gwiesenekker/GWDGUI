@@ -276,9 +276,6 @@ type
     FResultEdit: TEdit;
     FScoreHistoryControl: TScoreHistoryControl;
     FScoreHistoryForm: TScoreHistoryForm;
-    FScoreHistoryCachedAnnotationsText: string;
-    FScoreHistoryCachedGameTreeId: Int64;
-    FScoreHistoryCachedPlyCount: Integer;
     FSearchPositionInDatabase: Boolean;
     FSearchPositionInDatabaseMenuItem: TMenuItem;
     FShowGameTreeMenuItem: TMenuItem;
@@ -4738,9 +4735,6 @@ begin
     FDisplayedSnapshotSignature := '';
     FDisplayedGameTreeId := 0;
     FDisplayedGameTreeRevision := -1;
-    FScoreHistoryCachedAnnotationsText := '';
-    FScoreHistoryCachedGameTreeId := 0;
-    FScoreHistoryCachedPlyCount := 0;
     ClearStoredTreeVariations(FGameTree);
     FStandaloneWhitePlayerName := 'White';
     FStandaloneBlackPlayerName := 'Black';
@@ -6578,7 +6572,6 @@ end;
 procedure TMainForm.UpdateScoreHistory(AGameTree: TGameTree);
 var
   LAnnotationsText: string;
-  LGame: TRunningGame;
   LGameTree: TGameTree;
   LMoveCount: Integer;
   LPly: Integer;
@@ -6593,20 +6586,6 @@ begin
   LAnnotationsText := GameTreeScoreAnnotationsText(LGameTree);
   LStartingFEN := StartingFenForTree(LGameTree);
   LMoveCount := LGameTree.MainlineCount;
-  LGame := GameForTreeRefresh(LGameTree);
-  if (Trim(LAnnotationsText) = '') and (LGame <> nil) and
-    ((LGame.Lifecycle = rglFinished) or
-      (LGame.Snapshot.State in [gosStopped, gosGameOver])) and
-    (FScoreHistoryCachedGameTreeId = LGameTree.GameTreeId) and
-    (Trim(FScoreHistoryCachedAnnotationsText) <> '') and
-    (FScoreHistoryCachedPlyCount <= LMoveCount) then
-    LAnnotationsText := FScoreHistoryCachedAnnotationsText
-  else if Trim(LAnnotationsText) <> '' then
-  begin
-    FScoreHistoryCachedGameTreeId := LGameTree.GameTreeId;
-    FScoreHistoryCachedAnnotationsText := LAnnotationsText;
-    FScoreHistoryCachedPlyCount := LMoveCount;
-  end;
 
   LPly := FGameBrowsePly;
   if LPly < 0 then

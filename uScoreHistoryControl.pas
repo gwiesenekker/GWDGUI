@@ -350,6 +350,7 @@ var
   MappedBarScore: Double;
   ChartRect: TRect;
   Count: Integer;
+  DenseMode: Boolean;
   HasAnnotatorScore: Boolean;
   HasEngineScore: Boolean;
   HasVisibleScore: Boolean;
@@ -363,6 +364,12 @@ var
   EngineY: Integer;
   LeftX: Integer;
   LColor: TColor;
+  PrevAnnotatorHasScore: Boolean;
+  PrevAnnotatorX: Integer;
+  PrevAnnotatorY: Integer;
+  PrevEngineHasScore: Boolean;
+  PrevEngineX: Integer;
+  PrevEngineY: Integer;
   Score: Double;
   SplitY: Integer;
   X: Integer;
@@ -424,6 +431,13 @@ begin
   PlotLeft := ChartRect.Left + 3;
   PlotRight := ChartRect.Right - 3;
   BarWidth := BarPenWidth(PlotRight - PlotLeft + 1, Count);
+  DenseMode := Count * 2 > PlotRight - PlotLeft + 1;
+  PrevEngineHasScore := False;
+  PrevEngineX := 0;
+  PrevEngineY := 0;
+  PrevAnnotatorHasScore := False;
+  PrevAnnotatorX := 0;
+  PrevAnnotatorY := 0;
   for I := 1 to Count do
   begin
     if Count = 1 then
@@ -468,19 +482,47 @@ begin
     else
       Y := ScoreY(0.0, MidY, (ChartRect.Bottom - ChartRect.Top) div 2);
 
-    if HasEngineScore then
-      DrawScoreRect(LeftX, MidY, EngineY, BarWidth, EngineColor)
+    if DenseMode then
+    begin
+      if HasEngineScore then
+      begin
+        Canvas.Pen.Color := EngineColor;
+        if PrevEngineHasScore then
+          Canvas.Line(PrevEngineX, PrevEngineY, X, EngineY)
+        else
+          Canvas.Line(X, MidY, X, EngineY);
+        PrevEngineX := X;
+        PrevEngineY := EngineY;
+        PrevEngineHasScore := True;
+      end;
+      if HasAnnotatorScore then
+      begin
+        Canvas.Pen.Color := LColor;
+        if PrevAnnotatorHasScore then
+          Canvas.Line(PrevAnnotatorX, PrevAnnotatorY, X, Y)
+        else
+          Canvas.Line(X, MidY, X, Y);
+        PrevAnnotatorX := X;
+        PrevAnnotatorY := Y;
+        PrevAnnotatorHasScore := True;
+      end;
+    end
     else
-      DrawMissingScoreRect(LeftX, MidY,
-        (ChartRect.Bottom - ChartRect.Top) div 2, BarWidth,
-        RGBToColor(28, 74, 132));
+    begin
+      if HasEngineScore then
+        DrawScoreRect(LeftX, MidY, EngineY, BarWidth, EngineColor)
+      else
+        DrawMissingScoreRect(LeftX, MidY,
+          (ChartRect.Bottom - ChartRect.Top) div 2, BarWidth,
+          RGBToColor(28, 74, 132));
 
-    if HasAnnotatorScore then
-      DrawScoreRect(LeftX + BarWidth, MidY, Y, BarWidth, LColor)
-    else
-      DrawMissingScoreRect(LeftX + BarWidth, MidY,
-        (ChartRect.Bottom - ChartRect.Top) div 2, BarWidth,
-        RGBToColor(102, 169, 220));
+      if HasAnnotatorScore then
+        DrawScoreRect(LeftX + BarWidth, MidY, Y, BarWidth, LColor)
+      else
+        DrawMissingScoreRect(LeftX + BarWidth, MidY,
+          (ChartRect.Bottom - ChartRect.Top) div 2, BarWidth,
+          RGBToColor(102, 169, 220));
+    end;
   end;
 
   if (FCurrentPly > 0) and (FCurrentPly <= Count) and (Count > 1) then
