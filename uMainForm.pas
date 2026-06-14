@@ -333,6 +333,8 @@ type
       ANodeId: Int64; const AMoveText: string; out AErrorText: string): Boolean;
     function ReleaseGameTreeSearch(AActor: TGameTreeActor;
       ASearchId: Int64): Boolean;
+    function ReleaseRejectedSearchIfFinished(AActor: TGameTreeActor;
+      ASearchId: Int64): Boolean;
     function StoreSearchMoveVariation(AActor: TGameTreeActor;
       ASearchId: Int64; ASource: TGameTreeMoveSource;
       out AErrorText: string): Boolean;
@@ -1830,6 +1832,19 @@ begin
   end;
 end;
 
+function TMainForm.ReleaseRejectedSearchIfFinished(AActor: TGameTreeActor;
+  ASearchId: Int64): Boolean;
+var
+  LSearchState: TGameTreeSearchState;
+begin
+  Result := False;
+  if (AActor = nil) or (ASearchId <= 0) then
+    Exit;
+  if AActor.SearchState(ASearchId, LSearchState) and
+    (LSearchState in [gssCancelled, gssFailed]) then
+    Result := ReleaseGameTreeSearch(AActor, ASearchId);
+end;
+
 function TMainForm.StoreSearchMoveVariation(AActor: TGameTreeActor;
   ASearchId: Int64; ASource: TGameTreeMoveSource;
   out AErrorText: string): Boolean;
@@ -2219,7 +2234,6 @@ var
   LAccepted: Boolean;
   LErrorText: string;
   LRejectedReason: string;
-  LSearchState: TGameTreeSearchState;
 begin
   Actor := ActorForGameTreeId(AGameTreeId);
   if Actor = nil then
@@ -2248,9 +2262,7 @@ begin
   else
   begin
     LRejectedReason := LErrorText;
-    if Actor.SearchState(ASearchId, LSearchState) and
-      (LSearchState in [gssCancelled, gssFailed]) then
-      ReleaseGameTreeSearch(Actor, ASearchId);
+    ReleaseRejectedSearchIfFinished(Actor, ASearchId);
     if FAnalyzerMemo <> nil then
       FAnalyzerMemo.Lines.Add('Annotator move rejected; reason=' +
         LRejectedReason);
