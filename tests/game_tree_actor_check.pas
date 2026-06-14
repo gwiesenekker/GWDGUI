@@ -80,6 +80,24 @@ begin
     finally
       Command.Free;
     end;
+
+    Command := Actor.CreateSetHeaderCommand(
+      GameTreeHeaderInput('', 'New Event', 'Alice', 'Bob', '1-0',
+        'W:W31-50:B1-20', False, DefaultTimeControl));
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'set-header command should be accepted');
+      Check(Actor.GameTree.EventName = 'New Event',
+        'set-header command should update event');
+      Check(Actor.GameTree.WhiteName = 'Alice',
+        'set-header command should update white name');
+      Check(Actor.GameTree.BlackName = 'Bob',
+        'set-header command should update black name');
+      Check(Actor.GameTree.ResultText = '1-0',
+        'set-header command should update result');
+    finally
+      Command.Free;
+    end;
   finally
     Actor.Free;
   end;

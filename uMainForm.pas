@@ -4410,6 +4410,27 @@ var
   LResultText: string;
   LStartingFEN: string;
   LWhiteName: string;
+
+  procedure ApplyHeader(const AResolvedEventName, AResolvedWhiteName,
+    AResolvedBlackName, AResolvedResultText, AResolvedStartingFEN: string);
+  var
+    Actor: TGameTreeActor;
+    Command: TGameTreeCommand;
+  begin
+    Actor := ActorForGameTree(AGameTree);
+    if Actor = nil then
+      Exit;
+
+    Command := Actor.CreateSetHeaderCommand(
+      GameTreeHeaderInput('', AResolvedEventName, AResolvedWhiteName,
+        AResolvedBlackName, AResolvedResultText, AResolvedStartingFEN,
+        False, DefaultTimeControl));
+    try
+      Actor.ExecuteCommand(Command);
+    finally
+      Command.Free;
+    end;
+  end;
 begin
   if AGameTree = nil then
     Exit;
@@ -4428,7 +4449,7 @@ begin
     LResultText := PlayerNameOrFallback(AGame.Snapshot.GameResult, '*');
     LStartingFEN := PlayerNameOrFallback(AGame.Snapshot.StartingFEN,
       AGame.FSetup.StartingFEN);
-    AGameTree.SetHeader(LEventName, LWhiteName, LBlackName, LResultText,
+    ApplyHeader(LEventName, LWhiteName, LBlackName, LResultText,
       LStartingFEN);
     Exit;
   end;
@@ -4440,8 +4461,8 @@ begin
     BlackNameForTree(AGameTree));
   LResultText := ResultForTree(AGameTree);
 
-  AGameTree.SetHeader(LEventName, LWhiteName, LBlackName,
-    LResultText, StartingFenForTree(AGameTree));
+  ApplyHeader(LEventName, LWhiteName, LBlackName, LResultText,
+    StartingFenForTree(AGameTree));
 end;
 
 function TMainForm.CurrentGameTreePdnText(const AEventName: string;

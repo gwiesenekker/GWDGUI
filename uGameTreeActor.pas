@@ -28,7 +28,8 @@ type
     gtcStoreSearchMoveVariation,
     gtcStoreMoveVariation,
     gtcClearStoredVariations,
-    gtcRebuildFromInputs
+    gtcRebuildFromInputs,
+    gtcSetHeader
   );
 
   TGameTreeSearchState = (
@@ -116,6 +117,8 @@ type
       AVariationPvIndex: Integer = -1; AVariationPvPly: Integer = 0;
       const AVariationPvScore: string = '';
       const AVariationPvText: string = ''): TGameTreeCommand;
+    function CreateSetHeaderCommand(const AHeader: TGameTreeHeaderInput
+      ): TGameTreeCommand;
     function CreateStartSearchCommand(ANodeId: Int64;
       out ASearchId: Int64): TGameTreeCommand;
     function CreateStoreVariationLineCommand(ADisplayAfterPly, ABasePly: Integer;
@@ -152,7 +155,8 @@ const
     'game-tree-store-search-move-variation',
     'game-tree-store-move-variation',
     'game-tree-clear-stored-variations',
-    'game-tree-rebuild-from-inputs'
+    'game-tree-rebuild-from-inputs',
+    'game-tree-set-header'
   );
 begin
   inherited Create(CommandNames[AKind]);
@@ -329,6 +333,15 @@ begin
   Result.PlyNumber := AVariationPvPly;
   Result.ScoreText := Trim(AVariationPvScore);
   Result.PvText := Trim(AVariationPvText);
+end;
+
+function TGameTreeActor.CreateSetHeaderCommand(
+  const AHeader: TGameTreeHeaderInput): TGameTreeCommand;
+begin
+  Result := TGameTreeCommand.Create(gtcSetHeader);
+  Result.CommandId := NextCommandId;
+  Result.GameTreeId := FGameTree.GameTreeId;
+  Result.HeaderInput := AHeader;
 end;
 
 function TGameTreeActor.CreateStartSearchCommand(ANodeId: Int64;
@@ -705,6 +718,14 @@ begin
               FGameTree.VariationLine[ACommand.VariationIndex],
               ACommand.VariationIndex, ACommand.PlyNumber,
               ACommand.ScoreText, ACommand.PvText));
+        ACommand.Accepted := True;
+        Inc(FRevision);
+      end;
+    gtcSetHeader:
+      begin
+        FGameTree.SetHeader(ACommand.HeaderInput.EventName,
+          ACommand.HeaderInput.WhiteName, ACommand.HeaderInput.BlackName,
+          ACommand.HeaderInput.ResultText, ACommand.HeaderInput.StartingFEN);
         ACommand.Accepted := True;
         Inc(FRevision);
       end;
