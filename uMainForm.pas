@@ -457,6 +457,8 @@ type
     function VisibleMainPvForTree(AGameTree: TGameTree;
       out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV,
       AScore, ADepth, ATimeText: string): Boolean;
+    procedure SetDisplayedPvCache(const APV, AScore, ADepth,
+      ATimeText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer);
     procedure ClearDisplayedPvCache(ABaseBoard: TDraughtsBoard;
       ABasePly: Integer);
     function FormatClock(ASeconds: Double): string;
@@ -4108,16 +4110,22 @@ begin
   Result := Trim(APV) <> '';
 end;
 
-procedure TMainForm.ClearDisplayedPvCache(ABaseBoard: TDraughtsBoard;
-  ABasePly: Integer);
+procedure TMainForm.SetDisplayedPvCache(const APV, AScore, ADepth,
+  ATimeText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer);
 begin
-  FPrincipalVariation := '';
-  FPrincipalVariationScore := '';
-  FPrincipalVariationDepth := '';
-  FPrincipalVariationTimeText := '';
+  FPrincipalVariation := APV;
+  FPrincipalVariationScore := AScore;
+  FPrincipalVariationDepth := ADepth;
+  FPrincipalVariationTimeText := ATimeText;
   if ABaseBoard <> nil then
     FPvBaseBoard.AssignFrom(ABaseBoard);
   FPvBasePly := ABasePly;
+end;
+
+procedure TMainForm.ClearDisplayedPvCache(ABaseBoard: TDraughtsBoard;
+  ABasePly: Integer);
+begin
+  SetDisplayedPvCache('', '', '', '', ABaseBoard, ABasePly);
 end;
 
 function TMainForm.PlayerNameOrFallback(const AName, AFallback: string): string;
@@ -4998,12 +5006,8 @@ begin
   FStartingFEN := AGame.Snapshot.StartingFEN;
   FGameState := AGame.Snapshot.State;
   FGameResult := AGame.Snapshot.GameResult;
-  FPrincipalVariation := LEffectivePV;
-  FPrincipalVariationScore := LEffectivePvScore;
-  FPrincipalVariationDepth := LEffectivePvDepth;
-  FPrincipalVariationTimeText := LEffectivePvTimeText;
-  FPvBaseBoard.AssignFrom(LPvBaseBoard);
-  FPvBasePly := LEffectivePvBasePly;
+  SetDisplayedPvCache(LEffectivePV, LEffectivePvScore, LEffectivePvDepth,
+    LEffectivePvTimeText, LPvBaseBoard, LEffectivePvBasePly);
   FWhiteRemainingSeconds := AGame.Snapshot.WhiteRemainingSeconds;
   FBlackRemainingSeconds := AGame.Snapshot.BlackRemainingSeconds;
   FWhiteUsedSeconds := AGame.Snapshot.WhiteUsedSeconds;
