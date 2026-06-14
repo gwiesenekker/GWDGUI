@@ -656,7 +656,32 @@ var
   NodeId: Int64;
   NullTimeControl: TTimeControl;
   RevisionAfterRebuild: Int64;
+  Search: TGameTreeSearchRef;
+  SearchCommand: TGameTreeCommand;
   VariationIndex: Integer;
+
+  procedure CheckDuplicateRebuildDoesNotMutate(const AMessage: string);
+  var
+    DuplicateCommand: TGameTreeCommand;
+    RevisionBeforeDuplicate: Int64;
+  begin
+    RevisionBeforeDuplicate := Actor.Revision;
+    DuplicateCommand := Actor.CreateRebuildFromInputsCommand(
+      GameTreeHeaderInput('rebuild', 'Event', 'White', 'Black', '*',
+        'W:W31-50:B1-20', False, NullTimeControl),
+      GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
+      GameTreePvInput(True, 2, '0.10', '37-32'),
+      GameTreePvInput(False, 0, '', ''),
+      0, 1, '0.20', '20-24');
+    try
+      Actor.ExecuteCommand(DuplicateCommand);
+      Check(DuplicateCommand.Accepted, AMessage + ' should be accepted');
+      Check(Actor.Revision = RevisionBeforeDuplicate,
+        AMessage + ' should not increment revision');
+    finally
+      DuplicateCommand.Free;
+    end;
+  end;
 begin
   Actor := TGameTreeActor.Create;
   Moves := TStringList.Create;
@@ -715,6 +740,40 @@ begin
     finally
       Command.Free;
     end;
+
+    SearchCommand := Actor.CreateStartSearchCommand(
+      Actor.GameTree.MainlineNode[1].NodeId, Search);
+    try
+      Actor.ExecuteCommand(SearchCommand);
+      Check(SearchCommand.Accepted,
+        'start-search after rebuild should be accepted');
+    finally
+      SearchCommand.Free;
+    end;
+    CheckDuplicateRebuildDoesNotMutate(
+      'duplicate rebuild after start-search');
+
+    SearchCommand := Actor.CreateSearchDoneCommand(Search, '19-23');
+    try
+      Actor.ExecuteCommand(SearchCommand);
+      Check(SearchCommand.Accepted,
+        'search-done after rebuild should be accepted');
+    finally
+      SearchCommand.Free;
+    end;
+    CheckDuplicateRebuildDoesNotMutate(
+      'duplicate rebuild after search-done');
+
+    SearchCommand := Actor.CreateReleaseSearchCommand(Search);
+    try
+      Actor.ExecuteCommand(SearchCommand);
+      Check(SearchCommand.Accepted,
+        'release-search after rebuild should be accepted');
+    finally
+      SearchCommand.Free;
+    end;
+    CheckDuplicateRebuildDoesNotMutate(
+      'duplicate rebuild after search lifecycle');
 
     Moves[1] := '20-24';
     Command := Actor.CreateRebuildFromInputsCommand(

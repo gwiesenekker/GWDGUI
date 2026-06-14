@@ -779,6 +779,7 @@ end;
 
 procedure TGameTreeActor.ExecuteCommand(ACommand: TGameTreeCommand);
 var
+  InvalidateRebuildSignature: Boolean;
   Node: TGameTreePlyNode;
   RebuildSignature: string;
   Search: TGameTreeSearchRecord;
@@ -793,8 +794,7 @@ begin
     Reject(ACommand, 'wrong game tree id');
     Exit;
   end;
-  if ACommand.CommandKind <> gtcRebuildFromInputs then
-    ClearRebuildSignature;
+  InvalidateRebuildSignature := False;
 
   case ACommand.CommandKind of
     gtcAddMainlineMove:
@@ -811,6 +811,7 @@ begin
         ACommand.PlyNumber := Node.PlyNumber;
         ACommand.MoveText := Node.MoveText;
         ACommand.Accepted := True;
+        InvalidateRebuildSignature := True;
         Inc(FRevision);
       end;
     gtcAppendMainlineMove:
@@ -827,6 +828,7 @@ begin
         ACommand.PlyNumber := Node.PlyNumber;
         ACommand.MoveText := Node.MoveText;
         ACommand.Accepted := True;
+        InvalidateRebuildSignature := True;
         Inc(FRevision);
       end;
     gtcStoreVariationLine:
@@ -840,6 +842,7 @@ begin
           Exit;
         end;
         ACommand.Accepted := True;
+        InvalidateRebuildSignature := True;
         Inc(FRevision);
       end;
     gtcStartSearch:
@@ -963,6 +966,7 @@ begin
           Exit;
         end;
         ACommand.Accepted := True;
+        InvalidateRebuildSignature := True;
         Inc(FRevision);
       end;
     gtcStoreSearchMoveVariation:
@@ -993,6 +997,7 @@ begin
         if not StoreMoveVariationFromNode(ACommand, Node,
           Search.ResultMove) then
           Exit;
+        InvalidateRebuildSignature := True;
         Inc(FRevision);
       end;
     gtcStoreMoveVariation:
@@ -1006,12 +1011,14 @@ begin
         if not StoreMoveVariationFromNode(ACommand, Node,
           ACommand.MoveText) then
           Exit;
+        InvalidateRebuildSignature := True;
         Inc(FRevision);
       end;
     gtcClearStoredVariations:
       begin
         FGameTree.ClearStoredVariations;
         ACommand.Accepted := True;
+        InvalidateRebuildSignature := True;
         Inc(FRevision);
       end;
     gtcRebuildFromInputs:
@@ -1046,9 +1053,12 @@ begin
           ACommand.HeaderInput.WhiteName, ACommand.HeaderInput.BlackName,
           ACommand.HeaderInput.ResultText, ACommand.HeaderInput.StartingFEN);
         ACommand.Accepted := True;
+        InvalidateRebuildSignature := True;
         Inc(FRevision);
       end;
   end;
+  if InvalidateRebuildSignature then
+    ClearRebuildSignature;
 end;
 
 function TGameTreeActor.PostCommand(ACommand: TGameTreeCommand): Boolean;
