@@ -329,6 +329,8 @@ type
       ACommand: TGameTreeCommand; out AErrorText: string): Boolean;
     function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
       out ASearchId, ANodeId: Int64; out AErrorText: string): Boolean;
+    function AcceptSearchMove(AActor: TGameTreeActor; ASearchId,
+      ANodeId: Int64; const AMoveText: string; out AErrorText: string): Boolean;
     function ReleaseGameTreeSearch(AActor: TGameTreeActor;
       ASearchId: Int64): Boolean;
     function StoreSearchMoveVariation(AActor: TGameTreeActor;
@@ -1783,6 +1785,33 @@ begin
   end;
 end;
 
+function TMainForm.AcceptSearchMove(AActor: TGameTreeActor; ASearchId,
+  ANodeId: Int64; const AMoveText: string; out AErrorText: string): Boolean;
+var
+  Command: TGameTreeCommand;
+begin
+  Result := False;
+  AErrorText := '';
+  if (AActor = nil) or (ASearchId <= 0) then
+  begin
+    AErrorText := 'invalid search';
+    Exit;
+  end;
+
+  Command := AActor.CreateSearchDoneCommand(ASearchId, AMoveText);
+  try
+    if (ANodeId > 0) and (Command.NodeId <> ANodeId) then
+    begin
+      AErrorText := 'search node mismatch';
+      Exit;
+    end;
+
+    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
+  finally
+    Command.Free;
+  end;
+end;
+
 function TMainForm.ReleaseGameTreeSearch(AActor: TGameTreeActor;
   ASearchId: Int64): Boolean;
 var
@@ -2187,7 +2216,6 @@ procedure TMainForm.HandleAnalyzerMove(AGameTreeId, ASearchId, ANodeId: Int64;
   const AMoveText: string);
 var
   Actor: TGameTreeActor;
-  Command: TGameTreeCommand;
   LAccepted: Boolean;
   LErrorText: string;
   LRejectedReason: string;
@@ -2201,19 +2229,8 @@ begin
     Exit;
   end;
 
-  Command := Actor.CreateSearchDoneCommand(ASearchId, AMoveText);
-  try
-    if (ANodeId > 0) and (Command.NodeId <> ANodeId) then
-    begin
-      if FAnalyzerMemo <> nil then
-        FAnalyzerMemo.Lines.Add('Annotator move rejected; search node mismatch');
-      Exit;
-    end;
-
-    LAccepted := ExecuteGameTreeCommand(Actor, Command, LErrorText);
-  finally
-    Command.Free;
-  end;
+  LAccepted := AcceptSearchMove(Actor, ASearchId, ANodeId, AMoveText,
+    LErrorText);
 
   if LAccepted then
   begin
