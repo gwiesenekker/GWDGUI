@@ -3829,8 +3829,6 @@ end;
 function TMainForm.GameForTreeRefresh(AGameTree: TGameTree): TRunningGame;
 begin
   Result := GameForTree(AGameTree);
-  if (Result = nil) and (AGameTree <> nil) and (AGameTree <> FGameTree) then
-    Result := SelectedDisplayedGame;
 end;
 
 function TMainForm.StartingFenForTree(AGameTree: TGameTree): string;
