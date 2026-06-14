@@ -73,6 +73,7 @@ type
     ScoreText: string;
     PvText: string;
     VariationIndex: Integer;
+    RebuildVariationLines: TObjectList;
     constructor Create(AKind: TGameTreeActorCommandKind); reintroduce;
     destructor Destroy; override;
     function SearchRef: TGameTreeSearchRef;
@@ -88,6 +89,7 @@ type
     FOwnsGameTree: Boolean;
     FRevision: Int64;
     FSearches: TObjectList;
+    procedure CopyStoredVariationsToCommand(ACommand: TGameTreeCommand);
     function FindSearch(ASearchId: Int64): TGameTreeSearchRecord; overload;
     function FindSearch(const ASearch: TGameTreeSearchRef
       ): TGameTreeSearchRecord; overload;
@@ -195,6 +197,7 @@ begin
   MoveSource := gmsUnknown;
   MainlineInput.Moves := TStringList.Create;
   MainlineInput.Annotations := TStringList.Create;
+  RebuildVariationLines := TObjectList.Create(True);
   PlyNumber := -1;
   DisplayAfterPly := -1;
   BasePly := -1;
@@ -203,6 +206,7 @@ end;
 
 destructor TGameTreeCommand.Destroy;
 begin
+  RebuildVariationLines.Free;
   MainlineInput.Annotations.Free;
   MainlineInput.Moves.Free;
   inherited Destroy;
@@ -407,6 +411,32 @@ begin
   Result.GameTreeId := FGameTree.GameTreeId;
 end;
 
+procedure TGameTreeActor.CopyStoredVariationsToCommand(
+  ACommand: TGameTreeCommand);
+var
+  I: Integer;
+  SourceLine: TGameTreeVariationLine;
+  TargetLine: TGameTreeVariationLine;
+begin
+  if (ACommand = nil) or (FGameTree = nil) then
+    Exit;
+
+  ACommand.RebuildVariationLines.Clear;
+  for I := 0 to FGameTree.VariationLineCount - 1 do
+  begin
+    SourceLine := FGameTree.VariationLine[I];
+    if SourceLine = nil then
+      Continue;
+
+    TargetLine := TGameTreeVariationLine.Create;
+    TargetLine.BasePly := SourceLine.BasePly;
+    TargetLine.DisplayAfterPly := SourceLine.DisplayAfterPly;
+    TargetLine.MovesText := SourceLine.MovesText;
+    TargetLine.AnnotationText := SourceLine.AnnotationText;
+    ACommand.RebuildVariationLines.Add(TargetLine);
+  end;
+end;
+
 function TGameTreeActor.CreateRebuildFromInputsCommand(
   const AHeader: TGameTreeHeaderInput;
   const AMainline: TGameTreeMainlineInput;
@@ -418,6 +448,7 @@ begin
   Result := TGameTreeCommand.Create(gtcRebuildFromInputs);
   Result.CommandId := NextCommandId;
   Result.GameTreeId := FGameTree.GameTreeId;
+  CopyStoredVariationsToCommand(Result);
   Result.HeaderInput := AHeader;
   Result.MainlineInput.RecordClock := AMainline.RecordClock;
   Result.MainlineInput.WhiteRemainingSeconds :=
@@ -516,6 +547,8 @@ end;
 procedure TGameTreeActor.RebuildStoredVariations(ACommand: TGameTreeCommand);
 var
   I: Integer;
+  StoredLine: TGameTreeVariationLine;
+  StoredVariationIndex: Integer;
   VariationLine: TGameTreeVariationLine;
   VariationMoves: TStringList;
 begin
@@ -524,20 +557,29 @@ begin
 
   VariationMoves := TStringList.Create;
   try
-    for I := 0 to FGameTree.VariationLineCount - 1 do
+    for I := 0 to ACommand.RebuildVariationLines.Count - 1 do
     begin
-      VariationLine := FGameTree.VariationLine[I];
-      if VariationLine = nil then
+      StoredLine := TGameTreeVariationLine(ACommand.RebuildVariationLines[I]);
+      if StoredLine = nil then
         Continue;
 
       VariationMoves.Clear;
-      TextToMoveList(VariationLine.MovesText, VariationMoves);
+      TextToMoveList(StoredLine.MovesText, VariationMoves);
       if VariationMoves.Count = 0 then
         Continue;
 
+      StoredVariationIndex := FGameTree.StoreVariationLine(
+        StoredLine.DisplayAfterPly, StoredLine.BasePly,
+        StoredLine.MovesText, StoredLine.AnnotationText);
+      if StoredVariationIndex < 0 then
+        Continue;
+      VariationLine := FGameTree.VariationLine[StoredVariationIndex];
+      if VariationLine = nil then
+        Continue;
+
       RecordGameTreeVariationLine(FGameTree,
-        GameTreeVariationLineInput(VariationLine, I, VariationMoves,
-          nil));
+        GameTreeVariationLineInput(VariationLine, StoredVariationIndex,
+          VariationMoves, nil));
     end;
   finally
     VariationMoves.Free;

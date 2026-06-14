@@ -23,9 +23,14 @@ procedure CheckActorCommands;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
+  EmptyAnnotations: TStringList;
+  Moves: TStringList;
   Node: TGameTreePlyNode;
+  VariationNode: TGameTreePlyNode;
 begin
   Actor := TGameTreeActor.Create;
+  Moves := TStringList.Create;
+  EmptyAnnotations := TStringList.Create;
   try
     Actor.GameTree.BeginRebuild('actor', 'Event', 'White', 'Black', '*',
       'W:W31-50:B1-20');
@@ -94,6 +99,41 @@ begin
       Command.Free;
     end;
 
+    Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23', '',
+      gmsAutorandom);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'setup variation before rebuild should be accepted');
+      Check(Actor.GameTree.VariationLineCount = 1,
+        'setup variation should be stored before rebuild');
+    finally
+      Command.Free;
+    end;
+
+    Moves.Clear;
+    Moves.Add('32-28');
+    Moves.Add('31-27');
+    Command := Actor.CreateRebuildFromInputsCommand(
+      GameTreeHeaderInput('actor-rebuild-new-signature', 'Event', 'White',
+        'Black', '*', 'W:W31-50:B1-20', False, DefaultTimeControl),
+      GameTreeMainlineInput(Moves, EmptyAnnotations, False, 0, 0, 0, 0),
+      GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', ''));
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'rebuild with different signature should be accepted');
+      Check(Actor.GameTree.VariationLineCount = 1,
+        'rebuild should preserve stored variation lines');
+      VariationNode := Actor.GameTree.FindVariationNode(0, 1);
+      Check(VariationNode <> nil,
+        'rebuild should recreate stored variation node');
+      Check(VariationNode.MoveText = '18-23',
+        'recreated variation node should contain stored move');
+    finally
+      Command.Free;
+    end;
+
     Command := Actor.CreateSetHeaderCommand(
       GameTreeHeaderInput('', 'New Event', 'Alice', 'Bob', '1-0',
         'W:W31-50:B1-20', False, DefaultTimeControl));
@@ -112,6 +152,8 @@ begin
       Command.Free;
     end;
   finally
+    EmptyAnnotations.Free;
+    Moves.Free;
     Actor.Free;
   end;
 end;
