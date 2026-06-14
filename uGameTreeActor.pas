@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Contnrs, SysUtils,
-  uGameTree, uGameTreeBuilder, uThreadMessageQueue;
+  uGameTree, uGameTreeBuilder, uGameTreeSearchRef, uThreadMessageQueue;
 
 type
   TGameTreeMoveSource = (
@@ -47,6 +47,7 @@ type
     NodeId: Int64;
     State: TGameTreeSearchState;
     ResultMove: string;
+    function SearchRef: TGameTreeSearchRef;
   end;
 
   TGameTreeCommand = class(TThreadMessage)
@@ -144,6 +145,21 @@ implementation
 
 uses
   uDraughtsBoard;
+
+function TGameTreeSearchRecord.SearchRef: TGameTreeSearchRef;
+begin
+  Result := GameTreeSearchRef(GameTreeId, SearchId, NodeId);
+end;
+
+procedure SetCommandSearch(ACommand: TGameTreeCommand;
+  const ASearch: TGameTreeSearchRef);
+begin
+  if ACommand = nil then
+    Exit;
+  ACommand.GameTreeId := ASearch.GameTreeId;
+  ACommand.SearchId := ASearch.SearchId;
+  ACommand.NodeId := ASearch.NodeId;
+end;
 
 constructor TGameTreeCommand.Create(AKind: TGameTreeActorCommandKind);
 const
@@ -287,10 +303,7 @@ begin
   Result.MoveText := Trim(AMoveText);
   Search := FindSearch(ASearchId);
   if Search <> nil then
-  begin
-    Result.GameTreeId := Search.GameTreeId;
-    Result.NodeId := Search.NodeId;
-  end
+    SetCommandSearch(Result, Search.SearchRef)
   else
     Result.GameTreeId := FGameTree.GameTreeId;
 end;
@@ -642,7 +655,7 @@ begin
           Exit;
         end;
         Search.State := gssCancelled;
-        ACommand.NodeId := Search.NodeId;
+        SetCommandSearch(ACommand, Search.SearchRef);
         ACommand.Accepted := True;
         Inc(FRevision);
       end;
@@ -668,8 +681,7 @@ begin
         end;
         Search.State := gssDone;
         Search.ResultMove := Trim(ACommand.MoveText);
-        ACommand.GameTreeId := Search.GameTreeId;
-        ACommand.NodeId := Search.NodeId;
+        SetCommandSearch(ACommand, Search.SearchRef);
         ACommand.Accepted := True;
         Inc(FRevision);
       end;
@@ -686,7 +698,7 @@ begin
           Reject(ACommand, 'active search cannot be released');
           Exit;
         end;
-        ACommand.NodeId := Search.NodeId;
+        SetCommandSearch(ACommand, Search.SearchRef);
         if not RemoveSearch(ACommand.SearchId) then
         begin
           Reject(ACommand, 'search was not released');
