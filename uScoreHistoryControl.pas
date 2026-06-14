@@ -626,11 +626,18 @@ var
   EngineScoreText: string;
   HasAnnotatorScore: Boolean;
   HasEngineScore: Boolean;
+  Lines: TStringList;
 begin
-  HasEngineScore := TryAnnotationScoreTextForPly(APly, 'engine',
-    EngineScoreText);
-  HasAnnotatorScore := TryAnnotationScoreTextForPly(APly, 'annotator',
-    AnnotatorScoreText);
+  Lines := TStringList.Create;
+  try
+    Lines.Text := FAnnotationsText;
+    HasEngineScore := TryAnnotationScoreTextInLines(Lines, APly, 'engine',
+      EngineScoreText);
+    HasAnnotatorScore := TryAnnotationScoreTextInLines(Lines, APly,
+      'annotator', AnnotatorScoreText);
+  finally
+    Lines.Free;
+  end;
 
   Result := PlyLabel(APly) + ': ';
   if (not HasEngineScore) and (not HasAnnotatorScore) then
