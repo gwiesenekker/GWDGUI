@@ -542,6 +542,7 @@ var
   Search: TGameTreeSearchRef;
   StartCommand: TGameTreeCommand;
   StoreCommand: TGameTreeCommand;
+  RevisionAfterStore: Int64;
   VariationIndex: Integer;
   VariationNode: TGameTreePlyNode;
 begin
@@ -592,6 +593,19 @@ begin
         'root search variation should have base ply 0');
       Check(Actor.GameTree.VariationLine[0].MovesText = '31-26',
         'root search variation should store result move');
+      RevisionAfterStore := Actor.Revision;
+    finally
+      StoreCommand.Free;
+    end;
+
+    StoreCommand := Actor.CreateStoreSearchMoveVariationCommand(Search,
+      gmsAutoplay);
+    try
+      Actor.ExecuteCommand(StoreCommand);
+      Check(StoreCommand.Accepted,
+        'duplicate root search variation store should be accepted');
+      Check(Actor.Revision = RevisionAfterStore,
+        'duplicate root search variation store should not increment revision');
     finally
       StoreCommand.Free;
     end;
@@ -646,6 +660,7 @@ var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
   MainlineNode: TGameTreePlyNode;
+  RevisionAfterStore: Int64;
   VariationIndex: Integer;
   VariationNode: TGameTreePlyNode;
 begin
@@ -665,6 +680,19 @@ begin
         'direct move variation should create first variation');
       Check(Actor.GameTree.VariationLine[0].MovesText = '18-23',
         'direct move variation should store move');
+      RevisionAfterStore := Actor.Revision;
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateStoreMoveVariationCommand(MainlineNode.NodeId,
+      '18-23', gmsAutorandom);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'duplicate direct move variation command should be accepted');
+      Check(Actor.Revision = RevisionAfterStore,
+        'duplicate direct move variation should not increment revision');
     finally
       Command.Free;
     end;

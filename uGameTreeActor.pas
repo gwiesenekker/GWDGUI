@@ -104,7 +104,8 @@ type
     procedure Reject(ACommand: TGameTreeCommand; const AErrorText: string);
     procedure RebuildStoredVariations(ACommand: TGameTreeCommand);
     function StoreMoveVariationFromNode(ACommand: TGameTreeCommand;
-      ANode: TGameTreePlyNode; const AMoveText: string): Boolean;
+      ANode: TGameTreePlyNode; const AMoveText: string;
+      out AChanged: Boolean): Boolean;
   public
     constructor Create(AGameTree: TGameTree = nil;
       AOwnsGameTree: Boolean = True);
@@ -692,7 +693,7 @@ end;
 
 function TGameTreeActor.StoreMoveVariationFromNode(
   ACommand: TGameTreeCommand; ANode: TGameTreePlyNode;
-  const AMoveText: string): Boolean;
+  const AMoveText: string; out AChanged: Boolean): Boolean;
 var
   I: Integer;
   LBasePly: Integer;
@@ -705,6 +706,7 @@ var
   VariationLine: TGameTreeVariationLine;
 begin
   Result := False;
+  AChanged := False;
   if (ACommand = nil) or (ANode = nil) then
     Exit;
 
@@ -762,7 +764,7 @@ begin
   end;
 
   ACommand.VariationIndex := FGameTree.StoreVariationLine(
-    LDisplayAfterPly, LBasePly, LMovesText, '');
+    LDisplayAfterPly, LBasePly, LMovesText, '', AChanged);
   if ACommand.VariationIndex < 0 then
   begin
     Reject(ACommand, 'variation line was not stored');
@@ -1002,10 +1004,13 @@ begin
         end;
 
         if not StoreMoveVariationFromNode(ACommand, Node,
-          Search.ResultMove) then
+          Search.ResultMove, Changed) then
           Exit;
-        InvalidateRebuildSignature := True;
-        Inc(FRevision);
+        if Changed then
+        begin
+          InvalidateRebuildSignature := True;
+          Inc(FRevision);
+        end;
       end;
     gtcStoreMoveVariation:
       begin
@@ -1016,10 +1021,13 @@ begin
           Exit;
         end;
         if not StoreMoveVariationFromNode(ACommand, Node,
-          ACommand.MoveText) then
+          ACommand.MoveText, Changed) then
           Exit;
-        InvalidateRebuildSignature := True;
-        Inc(FRevision);
+        if Changed then
+        begin
+          InvalidateRebuildSignature := True;
+          Inc(FRevision);
+        end;
       end;
     gtcClearStoredVariations:
       begin
