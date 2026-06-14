@@ -190,10 +190,9 @@ begin
   Snapshot := TPvSnapshot.Create;
   FPvLock.Acquire;
   try
-    Snapshot.SetData(FPvBaseBoard, FPvBasePly, FEngine.PrincipalVariation,
-      FEngine.LastScore, FEngine.LastDepth, FEngine.LastTimeText,
-      FPvSearch.GameTreeId, FPvSearch.SearchId, FPvSearch.NodeId,
-      FPvGameTreeOnly);
+    Snapshot.SetDataWithSearch(FPvBaseBoard, FPvBasePly,
+      FEngine.PrincipalVariation, FEngine.LastScore, FEngine.LastDepth,
+      FEngine.LastTimeText, FPvSearch, FPvGameTreeOnly);
     FLastPublishedPv := FEngine.PrincipalVariation;
   finally
     FPvLock.Release;

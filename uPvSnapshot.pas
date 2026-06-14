@@ -30,6 +30,10 @@ type
       const APv, AScore, ADepth: string; const ATimeText: string = '';
       AGameTreeId: Int64 = 0; ASearchId: Int64 = 0; ANodeId: Int64 = 0;
       AGameTreeOnly: Boolean = False);
+    procedure SetDataWithSearch(ABaseBoard: TDraughtsBoard;
+      ABasePly: Integer; const APv, AScore, ADepth: string;
+      const ATimeText: string; const ASearch: TGameTreeSearchRef;
+      AGameTreeOnly: Boolean);
 
     property BaseBoard: TDraughtsBoard read FBaseBoard;
     property BasePly: Integer read FBasePly;
@@ -62,9 +66,9 @@ procedure TPvSnapshot.AssignFrom(ASource: TPvSnapshot);
 begin
   if ASource = nil then
     Exit;
-  SetData(ASource.BaseBoard, ASource.BasePly, ASource.PrincipalVariation,
-    ASource.Score, ASource.Depth, ASource.TimeText, ASource.GameTreeId,
-    ASource.SearchId, ASource.NodeId, ASource.GameTreeOnly);
+  SetDataWithSearch(ASource.BaseBoard, ASource.BasePly,
+    ASource.PrincipalVariation, ASource.Score, ASource.Depth,
+    ASource.TimeText, ASource.SearchRef, ASource.GameTreeOnly);
 end;
 
 function TPvSnapshot.SearchRef: TGameTreeSearchRef;
@@ -77,12 +81,21 @@ procedure TPvSnapshot.SetData(ABaseBoard: TDraughtsBoard; ABasePly: Integer;
   AGameTreeId: Int64; ASearchId: Int64; ANodeId: Int64;
   AGameTreeOnly: Boolean);
 begin
+  SetDataWithSearch(ABaseBoard, ABasePly, APv, AScore, ADepth, ATimeText,
+    GameTreeSearchRef(AGameTreeId, ASearchId, ANodeId), AGameTreeOnly);
+end;
+
+procedure TPvSnapshot.SetDataWithSearch(ABaseBoard: TDraughtsBoard;
+  ABasePly: Integer; const APv, AScore, ADepth: string;
+  const ATimeText: string; const ASearch: TGameTreeSearchRef;
+  AGameTreeOnly: Boolean);
+begin
   if ABaseBoard <> nil then
     FBaseBoard.AssignFrom(ABaseBoard);
   FBasePly := ABasePly;
-  FGameTreeId := AGameTreeId;
-  FSearchId := ASearchId;
-  FNodeId := ANodeId;
+  FGameTreeId := ASearch.GameTreeId;
+  FSearchId := ASearch.SearchId;
+  FNodeId := ASearch.NodeId;
   FGameTreeOnly := AGameTreeOnly;
   FPrincipalVariation := Trim(APv);
   FScore := Trim(AScore);
