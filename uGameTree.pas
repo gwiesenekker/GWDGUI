@@ -132,7 +132,9 @@ type
     procedure BeginRebuild(const ASignature, AEventName, AWhiteName,
       ABlackName, AResultText, AStartingFEN: string);
     procedure SetHeader(const AEventName, AWhiteName, ABlackName, AResultText,
-      AStartingFEN: string);
+      AStartingFEN: string); overload;
+    procedure SetHeader(const AEventName, AWhiteName, ABlackName, AResultText,
+      AStartingFEN: string; out AChanged: Boolean); overload;
     procedure SetTimeControl(AMovesPerPeriod: Integer; AMinutesPerPeriod,
       AIncrementSeconds: Double; const AIncrementModeText: string);
     procedure SetClockState(AWhiteRemainingSeconds, ABlackRemainingSeconds,
@@ -442,7 +444,19 @@ end;
 
 procedure TGameTree.SetHeader(const AEventName, AWhiteName, ABlackName,
   AResultText, AStartingFEN: string);
+var
+  Changed: Boolean;
 begin
+  SetHeader(AEventName, AWhiteName, ABlackName, AResultText, AStartingFEN,
+    Changed);
+end;
+
+procedure TGameTree.SetHeader(const AEventName, AWhiteName, ABlackName,
+  AResultText, AStartingFEN: string; out AChanged: Boolean);
+begin
+  AChanged := (EventName <> AEventName) or (WhiteName <> AWhiteName) or
+    (BlackName <> ABlackName) or (ResultText <> AResultText) or
+    (StartingFEN <> AStartingFEN);
   EventName := AEventName;
   WhiteName := AWhiteName;
   BlackName := ABlackName;

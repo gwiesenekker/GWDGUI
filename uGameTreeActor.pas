@@ -1060,10 +1060,14 @@ begin
       begin
         FGameTree.SetHeader(ACommand.HeaderInput.EventName,
           ACommand.HeaderInput.WhiteName, ACommand.HeaderInput.BlackName,
-          ACommand.HeaderInput.ResultText, ACommand.HeaderInput.StartingFEN);
+          ACommand.HeaderInput.ResultText, ACommand.HeaderInput.StartingFEN,
+          Changed);
         ACommand.Accepted := True;
-        InvalidateRebuildSignature := True;
-        Inc(FRevision);
+        if Changed then
+        begin
+          InvalidateRebuildSignature := True;
+          Inc(FRevision);
+        end;
       end;
   end;
   if InvalidateRebuildSignature then

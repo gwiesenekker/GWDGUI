@@ -26,6 +26,7 @@ var
   EmptyAnnotations: TStringList;
   Moves: TStringList;
   Node: TGameTreePlyNode;
+  RevisionAfterHeader: Int64;
   VariationNode: TGameTreePlyNode;
 begin
   Actor := TGameTreeActor.Create;
@@ -181,6 +182,22 @@ begin
         'set-header command should update black name');
       Check(Actor.GameTree.ResultText = '1-0',
         'set-header command should update result');
+      RevisionAfterHeader := Actor.Revision;
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateSetHeaderCommand(
+      GameTreeHeaderInput('', 'New Event', 'Alice', 'Bob', '1-0',
+        'W:W31-50:B1-20', False, DefaultTimeControl));
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'duplicate set-header command should be accepted');
+      Check(Actor.GameTree.EventName = 'New Event',
+        'duplicate set-header command should keep event');
+      Check(Actor.Revision = RevisionAfterHeader,
+        'duplicate set-header command should not increment revision');
     finally
       Command.Free;
     end;
