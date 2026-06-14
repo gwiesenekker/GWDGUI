@@ -28,6 +28,7 @@ var
   Moves: TStringList;
   Node: TGameTreePlyNode;
   RevisionAfterHeader: Int64;
+  RevisionAfterClock: Int64;
   RevisionAfterTimeControl: Int64;
   VariationNode: TGameTreePlyNode;
 begin
@@ -274,6 +275,45 @@ begin
         'duplicate set-header time-control command should be accepted');
       Check(Actor.Revision = RevisionAfterTimeControl,
         'duplicate set-header time-control command should not increment revision');
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateSetHeaderCommand(
+      GameTreeHeaderInput('', 'New Event', 'Alice', 'Bob', '1-0',
+        'W:W31-50:B1-20', True, CustomTimeControl),
+      GameTreeMainlineInput(nil, nil, True, 123.0, 234.0, 12.0, 23.0));
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'set-header command with clock state should be accepted');
+      Check(Actor.GameTree.HasClockInfo,
+        'set-header command should record clock state');
+      Check(Actor.GameTree.WhiteRemainingSeconds = 123.0,
+        'set-header command should record white remaining time');
+      Check(Actor.GameTree.BlackRemainingSeconds = 234.0,
+        'set-header command should record black remaining time');
+      Check(Actor.GameTree.WhiteUsedSeconds = 12.0,
+        'set-header command should record white used time');
+      Check(Actor.GameTree.BlackUsedSeconds = 23.0,
+        'set-header command should record black used time');
+      Check(Actor.Revision > RevisionAfterTimeControl,
+        'set-header clock change should increment revision');
+      RevisionAfterClock := Actor.Revision;
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateSetHeaderCommand(
+      GameTreeHeaderInput('', 'New Event', 'Alice', 'Bob', '1-0',
+        'W:W31-50:B1-20', True, CustomTimeControl),
+      GameTreeMainlineInput(nil, nil, True, 123.0, 234.0, 12.0, 23.0));
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'duplicate set-header clock command should be accepted');
+      Check(Actor.Revision = RevisionAfterClock,
+        'duplicate set-header clock command should not increment revision');
     finally
       Command.Free;
     end;

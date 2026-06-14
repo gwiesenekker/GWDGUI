@@ -4348,8 +4348,20 @@ begin
     begin
       Actor := ActorForGameTree(LGameTree);
       if Actor <> nil then
-        SetGameTreeHeader(Actor, RunningGameTreeHeaderInput(AGame,
-          AEventName), LErrorText);
+      begin
+        Command := Actor.CreateSetHeaderCommand(
+          RunningGameTreeHeaderInput(AGame, AEventName),
+          GameTreeMainlineInput(nil, nil, True,
+            AGame.Snapshot.WhiteRemainingSeconds,
+            AGame.Snapshot.BlackRemainingSeconds,
+            AGame.Snapshot.WhiteUsedSeconds,
+            AGame.Snapshot.BlackUsedSeconds));
+        try
+          ExecuteGameTreeCommand(Actor, Command, LErrorText);
+        finally
+          Command.Free;
+        end;
+      end;
       AGame.FLastSnapshotTreeSyncSignature := LSyncSignature;
       Exit;
     end;

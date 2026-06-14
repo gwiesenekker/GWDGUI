@@ -152,7 +152,9 @@ type
       const AVariationPvScore: string = '';
       const AVariationPvText: string = ''): TGameTreeCommand;
     function CreateSetHeaderCommand(const AHeader: TGameTreeHeaderInput
-      ): TGameTreeCommand;
+      ): TGameTreeCommand; overload;
+    function CreateSetHeaderCommand(const AHeader: TGameTreeHeaderInput;
+      const AMainline: TGameTreeMainlineInput): TGameTreeCommand; overload;
     function CreateStartSearchCommand(ANodeId: Int64;
       out ASearchId: Int64): TGameTreeCommand; overload;
     function CreateStartSearchCommand(ANodeId: Int64;
@@ -622,10 +624,25 @@ end;
 function TGameTreeActor.CreateSetHeaderCommand(
   const AHeader: TGameTreeHeaderInput): TGameTreeCommand;
 begin
+  Result := CreateSetHeaderCommand(AHeader,
+    GameTreeMainlineInput(nil, nil, False, 0, 0, 0, 0));
+end;
+
+function TGameTreeActor.CreateSetHeaderCommand(
+  const AHeader: TGameTreeHeaderInput;
+  const AMainline: TGameTreeMainlineInput): TGameTreeCommand;
+begin
   Result := TGameTreeCommand.Create(gtcSetHeader);
   Result.CommandId := NextCommandId;
   Result.GameTreeId := FGameTree.GameTreeId;
   Result.HeaderInput := AHeader;
+  Result.MainlineInput.RecordClock := AMainline.RecordClock;
+  Result.MainlineInput.WhiteRemainingSeconds :=
+    AMainline.WhiteRemainingSeconds;
+  Result.MainlineInput.BlackRemainingSeconds :=
+    AMainline.BlackRemainingSeconds;
+  Result.MainlineInput.WhiteUsedSeconds := AMainline.WhiteUsedSeconds;
+  Result.MainlineInput.BlackUsedSeconds := AMainline.BlackUsedSeconds;
 end;
 
 function TGameTreeActor.CreateStartSearchCommand(ANodeId: Int64;
@@ -831,6 +848,7 @@ var
   Node: TGameTreePlyNode;
   RebuildSignature: string;
   Search: TGameTreeSearchRecord;
+  ClockChanged: Boolean;
   TimeControlChanged: Boolean;
 
   function HeaderIncrementModeText: string;
@@ -1198,6 +1216,27 @@ begin
           if TimeControlChanged then
           begin
             FGameTree.RecordTimeControl(ACommand.HeaderInput.TimeControl);
+            Changed := True;
+          end;
+        end;
+        if ACommand.MainlineInput.RecordClock then
+        begin
+          ClockChanged := (not FGameTree.HasClockInfo) or
+            (FGameTree.WhiteRemainingSeconds <>
+              ACommand.MainlineInput.WhiteRemainingSeconds) or
+            (FGameTree.BlackRemainingSeconds <>
+              ACommand.MainlineInput.BlackRemainingSeconds) or
+            (FGameTree.WhiteUsedSeconds <>
+              ACommand.MainlineInput.WhiteUsedSeconds) or
+            (FGameTree.BlackUsedSeconds <>
+              ACommand.MainlineInput.BlackUsedSeconds);
+          if ClockChanged then
+          begin
+            FGameTree.RecordClockState(FGameTree.MainlineCount,
+              ACommand.MainlineInput.WhiteRemainingSeconds,
+              ACommand.MainlineInput.BlackRemainingSeconds,
+              ACommand.MainlineInput.WhiteUsedSeconds,
+              ACommand.MainlineInput.BlackUsedSeconds);
             Changed := True;
           end;
         end;
