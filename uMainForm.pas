@@ -28,6 +28,7 @@ type
 
   TGameTreeSearchRef = record
     GameTreeId: Int64;
+    NodeId: Int64;
     SearchId: Int64;
   end;
 
@@ -376,7 +377,8 @@ type
     function TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
       out AActor: TGameTreeActor; out AGameTree: TGameTree;
       out ANode: TGameTreePlyNode): Boolean;
-    procedure TrackAnalyzerSearch(AGameTree: TGameTree; ASearchId: Int64);
+    procedure TrackAnalyzerSearch(AGameTree: TGameTree; ASearchId,
+      ANodeId: Int64);
     procedure ClearAnalyzerSearchTracking;
     procedure SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
     procedure InvalidateAnalyzerPositionSignature;
@@ -2151,21 +2153,23 @@ begin
 end;
 
 procedure TMainForm.TrackAnalyzerSearch(AGameTree: TGameTree;
-  ASearchId: Int64);
+  ASearchId, ANodeId: Int64);
 begin
-  if (AGameTree = nil) or (ASearchId <= 0) then
+  if (AGameTree = nil) or (ASearchId <= 0) or (ANodeId <= 0) then
   begin
     ClearAnalyzerSearchTracking;
     Exit;
   end;
 
   FAnalyzerSearch.GameTreeId := AGameTree.GameTreeId;
+  FAnalyzerSearch.NodeId := ANodeId;
   FAnalyzerSearch.SearchId := ASearchId;
 end;
 
 procedure TMainForm.ClearAnalyzerSearchTracking;
 begin
   FAnalyzerSearch.SearchId := 0;
+  FAnalyzerSearch.NodeId := 0;
   FAnalyzerSearch.GameTreeId := 0;
 end;
 
@@ -2818,7 +2822,7 @@ begin
     Exit;
   end;
 
-  TrackAnalyzerSearch(LGameTree, LSearchId);
+  TrackAnalyzerSearch(LGameTree, LSearchId, LSearchNodeId);
   InvalidateAnalyzerPositionSignature;
   SetAnalyzerPvBase(ActiveBoard, LDisplayedMoveCount);
 
@@ -3072,7 +3076,7 @@ begin
       LSearchNodeId, LErrorText) then
     begin
       LSearchGameTreeId := LGameTree.GameTreeId;
-      TrackAnalyzerSearch(LGameTree, LSearchId);
+      TrackAnalyzerSearch(LGameTree, LSearchId, LSearchNodeId);
     end;
   end;
   FAnalyzerRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText,
