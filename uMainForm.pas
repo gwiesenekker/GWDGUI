@@ -4270,6 +4270,7 @@ end;
 procedure TMainForm.UpdateGameMoveHighlight;
 var
   I: Integer;
+  LHighlightPly: Integer;
 begin
   if FGameMoveMemo = nil then
     Exit;
@@ -4278,7 +4279,12 @@ begin
     RebuildGameMoveLabels(True, ActiveGameTree);
     Exit;
   end;
-  if (FHighlightedGameMovePly = FGameBrowsePly) and
+
+  LHighlightPly := FGameBrowsePly;
+  if (LHighlightPly < 0) and (SelectedDisplayedGame <> nil) then
+    LHighlightPly := CurrentMoveCount;
+
+  if (FHighlightedGameMovePly = LHighlightPly) and
     (not ((FVariationIndex >= 0) and (FVariationBrowsePly > 0))) then
     Exit;
   if (FVariationIndex >= 0) and (FVariationBrowsePly > 0) then
@@ -4293,17 +4299,17 @@ begin
         Exit;
       end;
   end;
-  if (FGameBrowsePly > 0) and (FGameBrowsePly <= Length(FGameMoveStarts)) then
+  if (LHighlightPly > 0) and (LHighlightPly <= Length(FGameMoveStarts)) then
   begin
-    FGameMoveMemo.SelStart := FGameMoveStarts[FGameBrowsePly - 1];
-    FGameMoveMemo.SelLength := FGameMoveLengths[FGameBrowsePly - 1];
+    FGameMoveMemo.SelStart := FGameMoveStarts[LHighlightPly - 1];
+    FGameMoveMemo.SelLength := FGameMoveLengths[LHighlightPly - 1];
   end
   else
   begin
     FGameMoveMemo.SelStart := 0;
     FGameMoveMemo.SelLength := 0;
   end;
-  FHighlightedGameMovePly := FGameBrowsePly;
+  FHighlightedGameMovePly := LHighlightPly;
 end;
 
 function TMainForm.MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
