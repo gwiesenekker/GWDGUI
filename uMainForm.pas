@@ -4299,7 +4299,7 @@ begin
     Exit;
   if Length(FGameMoveStarts) <> Length(FGameMoveLengths) then
   begin
-    RebuildGameMoveLabels(True, ActiveGameTree);
+    RebuildGameMoveLabels(False, ActiveGameTree);
     Exit;
   end;
 
