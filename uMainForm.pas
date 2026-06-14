@@ -589,6 +589,13 @@ var
 
 implementation
 
+function EmptyGameTreeSearchRef: TGameTreeSearchRef;
+begin
+  Result.GameTreeId := 0;
+  Result.NodeId := 0;
+  Result.SearchId := 0;
+end;
+
 function RunningGameLifecycleToString(ALifecycle: TRunningGameLifecycle): string;
 begin
   case ALifecycle of
@@ -1895,9 +1902,7 @@ var
   Node: TGameTreePlyNode;
   LSearchId: Int64;
 begin
-  ASearch.GameTreeId := 0;
-  ASearch.NodeId := 0;
-  ASearch.SearchId := 0;
+  ASearch := EmptyGameTreeSearchRef;
   AErrorText := '';
   Result := False;
 
@@ -2173,9 +2178,7 @@ end;
 
 procedure TMainForm.ClearAnalyzerSearchTracking;
 begin
-  FAnalyzerSearch.SearchId := 0;
-  FAnalyzerSearch.NodeId := 0;
-  FAnalyzerSearch.GameTreeId := 0;
+  FAnalyzerSearch := EmptyGameTreeSearchRef;
 end;
 
 procedure TMainForm.SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
@@ -3049,9 +3052,7 @@ begin
   LGameTree := AGameTree;
   if LGameTree = nil then
     Exit;
-  LSearch.GameTreeId := 0;
-  LSearch.NodeId := 0;
-  LSearch.SearchId := 0;
+  LSearch := EmptyGameTreeSearchRef;
 
   LStartingFEN := StartingFenForTree(LGameTree);
   if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
