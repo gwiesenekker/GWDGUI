@@ -452,7 +452,7 @@ type
       AGameTree: TGameTree; const AEventName: string;
       ARefreshTree: Boolean);
     function CurrentGameTreePdnText(const AEventName: string;
-      ARefreshTree: Boolean = True): string;
+      ARefreshTree: Boolean = False): string;
     function PlayerSetupDisplayName(AKind: TPlayerKind;
       AEngine: TExternalEngineDefinition): string;
     function FindHumanMoveToTarget(ATargetSquare: Integer; out AMove: string): Boolean;
@@ -5118,7 +5118,7 @@ begin
   if LGameTree = nil then
     Exit;
   LGame := GameForTreeRefresh(LGameTree);
-  PrepareGameTreeForPdn(LGame, LGameTree, '', True);
+  PrepareGameTreeForPdn(LGame, LGameTree, '', False);
   LOptions := CurrentFilteredGameTreePdnOptions;
   Clipboard.AsText := GameTreeToPdnTextEx(LGameTree, LOptions);
 end;
