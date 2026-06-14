@@ -6387,16 +6387,20 @@ begin
 
   if FBoardFlipped then
   begin
-    if FBlackClockLabel <> nil then
+    if (FBlackClockLabel <> nil) and
+      (FBlackClockLabel.Caption <> LWhiteCaption) then
       FBlackClockLabel.Caption := LWhiteCaption;
-    if FWhiteClockLabel <> nil then
+    if (FWhiteClockLabel <> nil) and
+      (FWhiteClockLabel.Caption <> LBlackCaption) then
       FWhiteClockLabel.Caption := LBlackCaption;
   end
   else
   begin
-    if FBlackClockLabel <> nil then
+    if (FBlackClockLabel <> nil) and
+      (FBlackClockLabel.Caption <> LBlackCaption) then
       FBlackClockLabel.Caption := LBlackCaption;
-    if FWhiteClockLabel <> nil then
+    if (FWhiteClockLabel <> nil) and
+      (FWhiteClockLabel.Caption <> LWhiteCaption) then
       FWhiteClockLabel.Caption := LWhiteCaption;
   end;
 end;
