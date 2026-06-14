@@ -174,6 +174,7 @@ begin
       (I < AMainline.Annotations.Count) then
       AGameTree.RecordMainlineAnnotation(I + 1, AMainline.Annotations[I]);
   end;
+  AGameTree.TrimMainlineToCount(AMainline.Moves.Count);
 
   if AMainline.RecordClock and (AMainline.Moves.Count > 0) then
     AGameTree.RecordClockState(AMainline.Moves.Count,
@@ -228,6 +229,9 @@ begin
       AVariationLine.VariationIndex, I + 1, AVariationLine.Moves[I]);
     LParentNode := LVariationNode;
   end;
+  AGameTree.TrimVariationLine(AVariationLine.Variation.BasePly,
+    AVariationLine.Variation.DisplayAfterPly,
+    AVariationLine.VariationIndex, AVariationLine.Moves.Count);
 
   if LVariationNode <> nil then
     AGameTree.RecordVariationAnnotation(AVariationLine.Variation.BasePly,

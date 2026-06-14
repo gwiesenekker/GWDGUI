@@ -24,6 +24,7 @@ type
     FWorker: TThread;
     FWorkerQueue: TThreadMessageQueue;
     FWorkerThreadId: TThreadID;
+    FWorkerThreadIdValid: Boolean;
     function BuildHubPositionCommand: string;
     function DoLaunchAndInit: Boolean;
     procedure DiscardDoneLinesBeforeNewSearch(const AReason: string);
@@ -258,6 +259,7 @@ var
   AutoFreeCommand: Boolean;
 begin
   FOwner.FWorkerThreadId := System.ThreadID;
+  FOwner.FWorkerThreadIdValid := True;
   try
     while (not Terminated) and FQueue.WaitPop(CommandObject) do
     begin
@@ -276,7 +278,7 @@ begin
         HubCommand.Free;
     end;
   finally
-    FOwner.FWorkerThreadId := 0;
+    FOwner.FWorkerThreadIdValid := False;
   end;
 end;
 
@@ -567,7 +569,7 @@ end;
 
 function THubEngine.IsWorkerThread: Boolean;
 begin
-  Result := (FWorkerThreadId <> 0) and (System.ThreadID = FWorkerThreadId);
+  Result := FWorkerThreadIdValid and (System.ThreadID = FWorkerThreadId);
 end;
 
 procedure THubEngine.SendLine(const ALine: string);

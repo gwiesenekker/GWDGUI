@@ -65,6 +65,7 @@ type
     FWorker: TThread;
     FWorkerQueue: TThreadMessageQueue;
     FWorkerThreadId: TThreadID;
+    FWorkerThreadIdValid: Boolean;
     procedure AcknowledgeGameEnd(AStopCode: Char);
     procedure CloseSocket;
     function ConnectSocket(ATimeoutMs: Integer): Boolean;
@@ -263,6 +264,7 @@ var
   AutoFreeCommand: Boolean;
 begin
   FOwner.FWorkerThreadId := System.ThreadID;
+  FOwner.FWorkerThreadIdValid := True;
   try
     while (not Terminated) and FQueue.WaitPop(CommandObject) do
     begin
@@ -281,7 +283,7 @@ begin
         DxpCommand.Free;
     end;
   finally
-    FOwner.FWorkerThreadId := 0;
+    FOwner.FWorkerThreadIdValid := False;
   end;
 end;
 
@@ -739,7 +741,7 @@ end;
 
 function TDxpEngine.IsWorkerThread: Boolean;
 begin
-  Result := (FWorkerThreadId <> 0) and (System.ThreadID = FWorkerThreadId);
+  Result := FWorkerThreadIdValid and (System.ThreadID = FWorkerThreadId);
 end;
 
 procedure TDxpEngine.AcknowledgeGameEnd(AStopCode: Char);

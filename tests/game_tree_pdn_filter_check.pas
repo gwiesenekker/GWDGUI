@@ -33,6 +33,120 @@ begin
   Check(Pos(ANeedle, AText) = 0, AMessage + '; text="' + AText + '"');
 end;
 
+procedure CheckGameTreeIds;
+var
+  FirstRootId: Int64;
+  GameTreeA: TGameTree;
+  GameTreeB: TGameTree;
+  Node: TGameTreePlyNode;
+  VariationIndex: Integer;
+  VariationNode: TGameTreePlyNode;
+begin
+  GameTreeA := TGameTree.Create;
+  GameTreeB := TGameTree.Create;
+  try
+    Check(GameTreeA.GameTreeId > 0, 'game tree id should be positive');
+    Check(GameTreeB.GameTreeId > 0, 'second game tree id should be positive');
+    Check(GameTreeA.GameTreeId <> GameTreeB.GameTreeId,
+      'game tree ids should be unique');
+    Check(GameTreeA.Root.NodeId > 0, 'root node id should be positive');
+    Check(GameTreeA.FindNodeById(GameTreeA.Root.NodeId) = GameTreeA.Root,
+      'root node id should resolve to root');
+
+    Node := GameTreeA.RecordMainlineMove(1, '32-28');
+    Check(Node <> nil, 'mainline node should be created');
+    Check(Node.NodeId <> GameTreeA.Root.NodeId,
+      'mainline node id should differ from root id');
+    Check(GameTreeA.FindNodeById(Node.NodeId) = Node,
+      'mainline node id should resolve to node');
+
+    VariationIndex := GameTreeA.StoreVariationLine(2, 1,
+      '16-21 37-32', '');
+    Check(VariationIndex >= 0, 'variation line should be stored');
+    VariationNode := GameTreeA.RecordVariationMove(Node, 1, 2,
+      VariationIndex, 1, '16-21');
+    Check(VariationNode <> nil, 'variation node should be created');
+    Check(GameTreeA.FindVariationNode(VariationIndex, 1) = VariationNode,
+      'variation node should resolve by variation index and ply');
+    Check(GameTreeA.FindNodeById(VariationNode.NodeId) = VariationNode,
+      'variation node id should resolve to node');
+
+    FirstRootId := GameTreeA.Root.NodeId;
+    GameTreeA.BeginRebuild('new', 'Event', 'White', 'Black', '*',
+      'W:W31-50:B1-20');
+    Check(GameTreeA.Root.NodeId <> FirstRootId,
+      'node ids should not be reused after different-tree rebuild');
+    Check(GameTreeA.FindNodeById(FirstRootId) = nil,
+      'old node id should not resolve after different-tree rebuild');
+  finally
+    GameTreeB.Free;
+    GameTreeA.Free;
+  end;
+end;
+
+procedure CheckStableRebuildNodeIds;
+var
+  FirstId: Int64;
+  GameTree: TGameTree;
+  RootId: Int64;
+  SecondId: Int64;
+  VariationId: Int64;
+  VariationIndex: Integer;
+  VariationMoves: TStringList;
+begin
+  GameTree := TGameTree.Create;
+  VariationMoves := TStringList.Create;
+  try
+    GameTree.BeginRebuild('stable', 'Event', 'White', 'Black', '*',
+      'W:W31-50:B1-20');
+    RootId := GameTree.Root.NodeId;
+    FirstId := GameTree.RecordMainlineMove(1, '32-28').NodeId;
+    SecondId := GameTree.RecordMainlineMove(2, '16-21').NodeId;
+
+    GameTree.BeginRebuild('stable', 'Event', 'White', 'Black', '*',
+      'W:W31-50:B1-20');
+    GameTree.RecordMainlineMove(1, '32-28');
+    GameTree.RecordMainlineMove(2, '16-21');
+    GameTree.TrimMainlineToCount(2);
+
+    Check(GameTree.Root.NodeId = RootId,
+      'same-signature rebuild should preserve root node id');
+    Check(GameTree.MainlineNode[1].NodeId = FirstId,
+      'same move at ply 1 should preserve node id');
+    Check(GameTree.MainlineNode[2].NodeId = SecondId,
+      'same move at ply 2 should preserve node id');
+
+    GameTree.BeginRebuild('stable', 'Event', 'White', 'Black', '*',
+      'W:W31-50:B1-20');
+    GameTree.RecordMainlineMove(1, '32-28');
+    GameTree.RecordMainlineMove(2, '18-23');
+    GameTree.TrimMainlineToCount(2);
+
+    Check(GameTree.MainlineNode[1].NodeId = FirstId,
+      'unchanged prefix should preserve node id after changed suffix');
+    Check(GameTree.MainlineNode[2].NodeId <> SecondId,
+      'changed move should receive a new node id');
+    Check(GameTree.FindNodeById(SecondId) = nil,
+      'old changed node id should no longer resolve');
+
+    VariationIndex := GameTree.StoreVariationLine(1, 1, '20-24 34-29', '');
+    TextToMoveList('20-24 34-29', VariationMoves);
+    RecordGameTreeVariationLine(GameTree,
+      GameTreeVariationLineInput(GameTree.VariationLine[VariationIndex],
+      VariationIndex, VariationMoves, nil));
+    VariationId := GameTree.FindVariationNode(VariationIndex, 1).NodeId;
+
+    RecordGameTreeVariationLine(GameTree,
+      GameTreeVariationLineInput(GameTree.VariationLine[VariationIndex],
+      VariationIndex, VariationMoves, nil));
+    Check(GameTree.FindVariationNode(VariationIndex, 1).NodeId = VariationId,
+      'same variation move should preserve node id');
+  finally
+    VariationMoves.Free;
+    GameTree.Free;
+  end;
+end;
+
 procedure CheckPdnDisplayFilters;
 var
   GameTree: TGameTree;
@@ -187,6 +301,8 @@ begin
 end;
 
 begin
+  CheckGameTreeIds;
+  CheckStableRebuildNodeIds;
   CheckPdnDisplayFilters;
   CheckSamePlyVariationsDoNotOverwrite;
   Writeln('OK');

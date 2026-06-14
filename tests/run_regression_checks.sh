@@ -7,6 +7,7 @@ CHECKS=(
   board_regression_check.pas
   pdn_regression_check.pas
   game_tree_pdn_filter_check.pas
+  game_tree_actor_check.pas
 )
 
 mkdir -p "$OUT_DIR"
