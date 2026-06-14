@@ -40,6 +40,16 @@ type
     procedure SetStartingSide(AValue: TDraughtsSide);
     function ScoreHintForPly(APly: Integer): string;
     procedure SetScoreHint(const AText: string; AX, AY: Integer);
+    function TryAnnotationScoreTextInLines(ALines: TStrings; APly: Integer;
+      const AName: string; out AScoreText: string): Boolean;
+    function TryAnnotationScoreInLines(ALines: TStrings; APly: Integer;
+      const AName: string; out AScore: Double): Boolean;
+    function TryScoreInLines(ALines: TStrings; APly: Integer;
+      out AScore: Double): Boolean;
+    function TryVisibleAnnotatorScoreInLines(ALines: TStrings;
+      out AScore: Double): Boolean;
+    function TryVisibleScoreInLines(ALines: TStrings;
+      out AScore: Double): Boolean;
     function TryAnnotationScoreTextForPly(APly: Integer; const AName: string;
       out AScoreText: string): Boolean;
     function TryAnnotationScoreForPly(APly: Integer; const AName: string;
@@ -364,6 +374,7 @@ var
   EngineY: Integer;
   LeftX: Integer;
   LColor: TColor;
+  Lines: TStringList;
   PrevAnnotatorHasScore: Boolean;
   PrevAnnotatorX: Integer;
   PrevAnnotatorY: Integer;
@@ -378,159 +389,166 @@ begin
   Canvas.Brush.Color := Color;
   Canvas.FillRect(ClientRect);
 
-  if (Width < 80) or (Height < 34) then
-    Exit;
+  Lines := TStringList.Create;
+  try
+    Lines.Text := FAnnotationsText;
 
-  if FShowEvaluationBar then
-  begin
-    BarRect := Types.Rect(8, 6, 30, Height - 6);
-    ChartRect := Types.Rect(42, 6, Width - 8, Height - 6);
-  end
-  else
-  begin
-    BarRect := Types.Rect(0, 0, 0, 0);
-    ChartRect := Types.Rect(8, 6, Width - 8, Height - 6);
-  end;
-  if ChartRect.Right <= ChartRect.Left + 12 then
-    Exit;
+    if (Width < 80) or (Height < 34) then
+      Exit;
 
-  Canvas.Pen.Color := clSilver;
-  Canvas.Brush.Style := bsClear;
-  if FShowEvaluationBar then
-    Canvas.Rectangle(BarRect);
-  Canvas.Rectangle(ChartRect);
-  MidY := (ChartRect.Top + ChartRect.Bottom) div 2;
-  Canvas.Line(ChartRect.Left, MidY, ChartRect.Right, MidY);
-
-  HasVisibleScore := TryVisibleScore(BarScore);
-  if not HasVisibleScore then
-    HasVisibleScore := TryVisibleAnnotatorScore(BarScore);
-  if not HasVisibleScore then
-    BarScore := 0.0;
-  if FShowEvaluationBar then
-  begin
-    InnerBarRect := Types.Rect(BarRect.Left + 1, BarRect.Top + 1,
-      BarRect.Right, BarRect.Bottom);
-    MappedBarScore := MappedScore(BarScore);
-    SplitY := InnerBarRect.Top + Round((InnerBarRect.Bottom -
-      InnerBarRect.Top) * (0.5 - MappedBarScore / 2.0));
-    SplitY := Max(InnerBarRect.Top, Min(InnerBarRect.Bottom, SplitY));
-    Canvas.Pen.Style := psClear;
-    Canvas.Brush.Color := clWhite;
-    Canvas.Rectangle(InnerBarRect);
-    Canvas.Brush.Color := clBlack;
-    Canvas.Rectangle(InnerBarRect.Left, SplitY, InnerBarRect.Right,
-      InnerBarRect.Bottom);
-    Canvas.Pen.Style := psSolid;
-  end;
-
-  Count := MoveCount;
-  if Count <= 0 then
-    Exit;
-
-  PlotLeft := ChartRect.Left + 3;
-  PlotRight := ChartRect.Right - 3;
-  BarWidth := BarPenWidth(PlotRight - PlotLeft + 1, Count);
-  DenseMode := Count * 2 > PlotRight - PlotLeft + 1;
-  PrevEngineHasScore := False;
-  PrevEngineX := 0;
-  PrevEngineY := 0;
-  PrevAnnotatorHasScore := False;
-  PrevAnnotatorX := 0;
-  PrevAnnotatorY := 0;
-  for I := 1 to Count do
-  begin
-    if Count = 1 then
-      X := (PlotLeft + PlotRight) div 2
-    else
-      X := PlotLeft + Round(((I - 1) / (Count - 1)) *
-        (PlotRight - PlotLeft));
-
-    HasEngineScore := TryScoreForPly(I, Score);
-    HasAnnotatorScore := TryAnnotationScoreForPly(I, 'annotator',
-      AnnotatorScore);
-    LeftX := X - BarWidth;
-    if LeftX < PlotLeft then
-      LeftX := PlotLeft
-    else if LeftX + BarWidth * 2 > PlotRight then
-      LeftX := PlotRight - BarWidth * 2;
-    if HasEngineScore then
+    if FShowEvaluationBar then
     begin
-      EngineY := ScoreY(Score, MidY, (ChartRect.Bottom - ChartRect.Top) div 2);
-      if Score >= 0.0 then
-        EngineColor := RGBToColor(54, 150, 79)
-      else
-        EngineColor := RGBToColor(190, 64, 64);
-    end
-    else if HasAnnotatorScore then
-      EngineY := ScoreY(AnnotatorScore, MidY,
-        (ChartRect.Bottom - ChartRect.Top) div 2)
-    else
-      EngineY := ScoreY(0.0, MidY, (ChartRect.Bottom - ChartRect.Top) div 2);
-
-    if HasAnnotatorScore then
-    begin
-      Y := ScoreY(AnnotatorScore, MidY, (ChartRect.Bottom -
-        ChartRect.Top) div 2);
-      if AnnotatorScore >= 0.0 then
-        LColor := RGBToColor(140, 210, 155)
-      else
-        LColor := RGBToColor(230, 145, 145);
-    end
-    else if HasEngineScore then
-      Y := EngineY
-    else
-      Y := ScoreY(0.0, MidY, (ChartRect.Bottom - ChartRect.Top) div 2);
-
-    if DenseMode then
-    begin
-      if HasEngineScore then
-      begin
-        Canvas.Pen.Color := EngineColor;
-        if PrevEngineHasScore then
-          Canvas.Line(PrevEngineX, PrevEngineY, X, EngineY)
-        else
-          Canvas.Line(X, MidY, X, EngineY);
-        PrevEngineX := X;
-        PrevEngineY := EngineY;
-        PrevEngineHasScore := True;
-      end;
-      if HasAnnotatorScore then
-      begin
-        Canvas.Pen.Color := LColor;
-        if PrevAnnotatorHasScore then
-          Canvas.Line(PrevAnnotatorX, PrevAnnotatorY, X, Y)
-        else
-          Canvas.Line(X, MidY, X, Y);
-        PrevAnnotatorX := X;
-        PrevAnnotatorY := Y;
-        PrevAnnotatorHasScore := True;
-      end;
+      BarRect := Types.Rect(8, 6, 30, Height - 6);
+      ChartRect := Types.Rect(42, 6, Width - 8, Height - 6);
     end
     else
     begin
-      if HasEngineScore then
-        DrawScoreRect(LeftX, MidY, EngineY, BarWidth, EngineColor)
-      else
-        DrawMissingScoreRect(LeftX, MidY,
-          (ChartRect.Bottom - ChartRect.Top) div 2, BarWidth,
-          RGBToColor(28, 74, 132));
-
-      if HasAnnotatorScore then
-        DrawScoreRect(LeftX + BarWidth, MidY, Y, BarWidth, LColor)
-      else
-        DrawMissingScoreRect(LeftX + BarWidth, MidY,
-          (ChartRect.Bottom - ChartRect.Top) div 2, BarWidth,
-          RGBToColor(102, 169, 220));
+      BarRect := Types.Rect(0, 0, 0, 0);
+      ChartRect := Types.Rect(8, 6, Width - 8, Height - 6);
     end;
-  end;
+    if ChartRect.Right <= ChartRect.Left + 12 then
+      Exit;
 
-  if (FCurrentPly > 0) and (FCurrentPly <= Count) and (Count > 1) then
-  begin
-    X := PlotLeft + Round(((FCurrentPly - 1) / (Count - 1)) *
-      (PlotRight - PlotLeft));
-    Canvas.Pen.Color := clGray;
-    Canvas.Line(X, ChartRect.Top, X, ChartRect.Bottom);
+    Canvas.Pen.Color := clSilver;
+    Canvas.Brush.Style := bsClear;
+    if FShowEvaluationBar then
+      Canvas.Rectangle(BarRect);
+    Canvas.Rectangle(ChartRect);
+    MidY := (ChartRect.Top + ChartRect.Bottom) div 2;
+    Canvas.Line(ChartRect.Left, MidY, ChartRect.Right, MidY);
+
+    HasVisibleScore := TryVisibleScoreInLines(Lines, BarScore);
+    if not HasVisibleScore then
+      HasVisibleScore := TryVisibleAnnotatorScoreInLines(Lines, BarScore);
+    if not HasVisibleScore then
+      BarScore := 0.0;
+    if FShowEvaluationBar then
+    begin
+      InnerBarRect := Types.Rect(BarRect.Left + 1, BarRect.Top + 1,
+        BarRect.Right, BarRect.Bottom);
+      MappedBarScore := MappedScore(BarScore);
+      SplitY := InnerBarRect.Top + Round((InnerBarRect.Bottom -
+        InnerBarRect.Top) * (0.5 - MappedBarScore / 2.0));
+      SplitY := Max(InnerBarRect.Top, Min(InnerBarRect.Bottom, SplitY));
+      Canvas.Pen.Style := psClear;
+      Canvas.Brush.Color := clWhite;
+      Canvas.Rectangle(InnerBarRect);
+      Canvas.Brush.Color := clBlack;
+      Canvas.Rectangle(InnerBarRect.Left, SplitY, InnerBarRect.Right,
+        InnerBarRect.Bottom);
+      Canvas.Pen.Style := psSolid;
+    end;
+
+    Count := Max(FPlyCount, Lines.Count);
+    if Count <= 0 then
+      Exit;
+
+    PlotLeft := ChartRect.Left + 3;
+    PlotRight := ChartRect.Right - 3;
+    BarWidth := BarPenWidth(PlotRight - PlotLeft + 1, Count);
+    DenseMode := Count * 2 > PlotRight - PlotLeft + 1;
+    PrevEngineHasScore := False;
+    PrevEngineX := 0;
+    PrevEngineY := 0;
+    PrevAnnotatorHasScore := False;
+    PrevAnnotatorX := 0;
+    PrevAnnotatorY := 0;
+    for I := 1 to Count do
+    begin
+      if Count = 1 then
+        X := (PlotLeft + PlotRight) div 2
+      else
+        X := PlotLeft + Round(((I - 1) / (Count - 1)) *
+          (PlotRight - PlotLeft));
+
+      HasEngineScore := TryScoreInLines(Lines, I, Score);
+      HasAnnotatorScore := TryAnnotationScoreInLines(Lines, I, 'annotator',
+        AnnotatorScore);
+      LeftX := X - BarWidth;
+      if LeftX < PlotLeft then
+        LeftX := PlotLeft
+      else if LeftX + BarWidth * 2 > PlotRight then
+        LeftX := PlotRight - BarWidth * 2;
+      if HasEngineScore then
+      begin
+        EngineY := ScoreY(Score, MidY, (ChartRect.Bottom - ChartRect.Top) div 2);
+        if Score >= 0.0 then
+          EngineColor := RGBToColor(54, 150, 79)
+        else
+          EngineColor := RGBToColor(190, 64, 64);
+      end
+      else if HasAnnotatorScore then
+        EngineY := ScoreY(AnnotatorScore, MidY,
+          (ChartRect.Bottom - ChartRect.Top) div 2)
+      else
+        EngineY := ScoreY(0.0, MidY, (ChartRect.Bottom - ChartRect.Top) div 2);
+
+      if HasAnnotatorScore then
+      begin
+        Y := ScoreY(AnnotatorScore, MidY, (ChartRect.Bottom -
+          ChartRect.Top) div 2);
+        if AnnotatorScore >= 0.0 then
+          LColor := RGBToColor(140, 210, 155)
+        else
+          LColor := RGBToColor(230, 145, 145);
+      end
+      else if HasEngineScore then
+        Y := EngineY
+      else
+        Y := ScoreY(0.0, MidY, (ChartRect.Bottom - ChartRect.Top) div 2);
+
+      if DenseMode then
+      begin
+        if HasEngineScore then
+        begin
+          Canvas.Pen.Color := EngineColor;
+          if PrevEngineHasScore then
+            Canvas.Line(PrevEngineX, PrevEngineY, X, EngineY)
+          else
+            Canvas.Line(X, MidY, X, EngineY);
+          PrevEngineX := X;
+          PrevEngineY := EngineY;
+          PrevEngineHasScore := True;
+        end;
+        if HasAnnotatorScore then
+        begin
+          Canvas.Pen.Color := LColor;
+          if PrevAnnotatorHasScore then
+            Canvas.Line(PrevAnnotatorX, PrevAnnotatorY, X, Y)
+          else
+            Canvas.Line(X, MidY, X, Y);
+          PrevAnnotatorX := X;
+          PrevAnnotatorY := Y;
+          PrevAnnotatorHasScore := True;
+        end;
+      end
+      else
+      begin
+        if HasEngineScore then
+          DrawScoreRect(LeftX, MidY, EngineY, BarWidth, EngineColor)
+        else
+          DrawMissingScoreRect(LeftX, MidY,
+            (ChartRect.Bottom - ChartRect.Top) div 2, BarWidth,
+            RGBToColor(28, 74, 132));
+
+        if HasAnnotatorScore then
+          DrawScoreRect(LeftX + BarWidth, MidY, Y, BarWidth, LColor)
+        else
+          DrawMissingScoreRect(LeftX + BarWidth, MidY,
+            (ChartRect.Bottom - ChartRect.Top) div 2, BarWidth,
+            RGBToColor(102, 169, 220));
+      end;
+    end;
+
+    if (FCurrentPly > 0) and (FCurrentPly <= Count) and (Count > 1) then
+    begin
+      X := PlotLeft + Round(((FCurrentPly - 1) / (Count - 1)) *
+        (PlotRight - PlotLeft));
+      Canvas.Pen.Color := clGray;
+      Canvas.Line(X, ChartRect.Top, X, ChartRect.Bottom);
+    end;
+  finally
+    Lines.Free;
   end;
 
 end;
@@ -648,11 +666,89 @@ begin
   Application.ActivateHint(ClientToScreen(Point(AX, AY)), True);
 end;
 
+function TScoreHistoryControl.TryAnnotationScoreTextInLines(ALines: TStrings;
+  APly: Integer; const AName: string; out AScoreText: string): Boolean;
+var
+  Score: Double;
+begin
+  Result := False;
+  AScoreText := '';
+  if (ALines = nil) or (APly <= 0) or (APly > ALines.Count) then
+    Exit;
+
+  AScoreText := ExtractAnnotationValue(ALines[APly - 1], AName);
+  if (AScoreText = '') and SameText(AName, 'engine') then
+    AScoreText := ExtractAnnotationValue(ALines[APly - 1], 'score');
+  if (AScoreText = '') and SameText(AName, 'engine') and
+    TryExtractScoreFromAnnotation('score=' + Trim(ALines[APly - 1]), Score) then
+  begin
+    AScoreText := Trim(ALines[APly - 1]);
+    Exit(True);
+  end;
+  if AScoreText = '' then
+    Exit;
+  Result := TryExtractScoreFromAnnotation('score=' + AScoreText, Score);
+  if not Result then
+    AScoreText := '';
+end;
+
+function TScoreHistoryControl.TryAnnotationScoreInLines(ALines: TStrings;
+  APly: Integer; const AName: string; out AScore: Double): Boolean;
+var
+  ScoreText: string;
+begin
+  Result := False;
+  AScore := 0.0;
+  if TryAnnotationScoreTextInLines(ALines, APly, AName, ScoreText) then
+    Result := TryExtractScoreFromAnnotation('score=' + ScoreText, AScore);
+end;
+
+function TScoreHistoryControl.TryScoreInLines(ALines: TStrings; APly: Integer;
+  out AScore: Double): Boolean;
+begin
+  Result := TryAnnotationScoreInLines(ALines, APly, 'engine', AScore);
+end;
+
+function TScoreHistoryControl.TryVisibleAnnotatorScoreInLines(ALines: TStrings;
+  out AScore: Double): Boolean;
+var
+  I: Integer;
+  Ply: Integer;
+begin
+  Result := False;
+  AScore := 0.0;
+  if ALines = nil then
+    Exit;
+  Ply := FCurrentPly;
+  if (Ply < 0) or (Ply > ALines.Count) then
+    Ply := ALines.Count;
+  for I := Ply downto 1 do
+    if TryAnnotationScoreInLines(ALines, I, 'annotator', AScore) then
+      Exit(True);
+end;
+
+function TScoreHistoryControl.TryVisibleScoreInLines(ALines: TStrings;
+  out AScore: Double): Boolean;
+var
+  I: Integer;
+  Ply: Integer;
+begin
+  Result := False;
+  AScore := 0.0;
+  if ALines = nil then
+    Exit;
+  Ply := FCurrentPly;
+  if (Ply < 0) or (Ply > ALines.Count) then
+    Ply := ALines.Count;
+  for I := Ply downto 1 do
+    if TryScoreInLines(ALines, I, AScore) then
+      Exit(True);
+end;
+
 function TScoreHistoryControl.TryAnnotationScoreTextForPly(APly: Integer;
   const AName: string; out AScoreText: string): Boolean;
 var
   Lines: TStringList;
-  Score: Double;
 begin
   Result := False;
   AScoreText := '';
@@ -662,22 +758,7 @@ begin
   Lines := TStringList.Create;
   try
     Lines.Text := FAnnotationsText;
-    if APly > Lines.Count then
-      Exit;
-    AScoreText := ExtractAnnotationValue(Lines[APly - 1], AName);
-    if (AScoreText = '') and SameText(AName, 'engine') then
-      AScoreText := ExtractAnnotationValue(Lines[APly - 1], 'score');
-    if (AScoreText = '') and SameText(AName, 'engine') and
-      TryExtractScoreFromAnnotation('score=' + Trim(Lines[APly - 1]), Score) then
-    begin
-      AScoreText := Trim(Lines[APly - 1]);
-      Exit(True);
-    end;
-    if AScoreText = '' then
-      Exit;
-    Result := TryExtractScoreFromAnnotation('score=' + AScoreText, Score);
-    if not Result then
-      AScoreText := '';
+    Result := TryAnnotationScoreTextInLines(Lines, APly, AName, AScoreText);
   finally
     Lines.Free;
   end;
@@ -702,21 +783,14 @@ end;
 
 function TScoreHistoryControl.TryVisibleAnnotatorScore(out AScore: Double): Boolean;
 var
-  I: Integer;
   Lines: TStringList;
-  Ply: Integer;
 begin
   Result := False;
   AScore := 0.0;
   Lines := TStringList.Create;
   try
     Lines.Text := FAnnotationsText;
-    Ply := FCurrentPly;
-    if (Ply < 0) or (Ply > Lines.Count) then
-      Ply := Lines.Count;
-    for I := Ply downto 1 do
-      if TryAnnotationScoreForPly(I, 'annotator', AScore) then
-        Exit(True);
+    Result := TryVisibleAnnotatorScoreInLines(Lines, AScore);
   finally
     Lines.Free;
   end;
@@ -724,21 +798,14 @@ end;
 
 function TScoreHistoryControl.TryVisibleScore(out AScore: Double): Boolean;
 var
-  I: Integer;
   Lines: TStringList;
-  Ply: Integer;
 begin
   Result := False;
   AScore := 0.0;
   Lines := TStringList.Create;
   try
     Lines.Text := FAnnotationsText;
-    Ply := FCurrentPly;
-    if (Ply < 0) or (Ply > Lines.Count) then
-      Ply := Lines.Count;
-    for I := Ply downto 1 do
-      if TryScoreForPly(I, AScore) then
-        Exit(True);
+    Result := TryVisibleScoreInLines(Lines, AScore);
   finally
     Lines.Free;
   end;
