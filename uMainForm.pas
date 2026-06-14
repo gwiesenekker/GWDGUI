@@ -329,6 +329,8 @@ type
       ACommand: TGameTreeCommand; out AErrorText: string): Boolean;
     function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
       out ASearchId, ANodeId: Int64; out AErrorText: string): Boolean;
+    procedure TrackAnalyzerSearch(AGameTree: TGameTree; ASearchId: Int64);
+    procedure ClearAnalyzerSearchTracking;
     procedure ApplyGameTreeCommandResult(AGameTree: TGameTree;
       ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
       ARefreshScoreHistory: Boolean = False);
@@ -1771,6 +1773,25 @@ begin
   end;
 end;
 
+procedure TMainForm.TrackAnalyzerSearch(AGameTree: TGameTree;
+  ASearchId: Int64);
+begin
+  if (AGameTree = nil) or (ASearchId <= 0) then
+  begin
+    ClearAnalyzerSearchTracking;
+    Exit;
+  end;
+
+  FAnalyzerSearchGameTreeId := AGameTree.GameTreeId;
+  FAnalyzerSearchId := ASearchId;
+end;
+
+procedure TMainForm.ClearAnalyzerSearchTracking;
+begin
+  FAnalyzerSearchId := 0;
+  FAnalyzerSearchGameTreeId := 0;
+end;
+
 procedure TMainForm.ApplyGameTreeCommandResult(AGameTree: TGameTree;
   ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
   ARefreshScoreHistory: Boolean);
@@ -2121,10 +2142,7 @@ begin
       LReleaseCommand.Free;
     end;
     if FAnalyzerSearchId = ASearchId then
-    begin
-      FAnalyzerSearchId := 0;
-      FAnalyzerSearchGameTreeId := 0;
-    end;
+      ClearAnalyzerSearchTracking;
   end
   else
   begin
@@ -2464,8 +2482,7 @@ begin
     Exit;
   end;
 
-  FAnalyzerSearchGameTreeId := LGameTree.GameTreeId;
-  FAnalyzerSearchId := LSearchId;
+  TrackAnalyzerSearch(LGameTree, LSearchId);
   FAnalyzerLastPositionSignature := '';
   FAnalyzerPvBaseBoard.AssignFrom(ActiveBoard);
   FAnalyzerPvBasePly := LDisplayedMoveCount;
@@ -2558,6 +2575,7 @@ procedure TMainForm.CancelAnalyzerSearch;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
+  LErrorText: string;
   LReleaseCommand: TGameTreeCommand;
 begin
   if FAnalyzerSearchId <= 0 then
@@ -2568,12 +2586,12 @@ begin
   begin
     Command := Actor.CreateCancelSearchCommand(FAnalyzerSearchId);
     try
-      Actor.ExecuteCommand(Command);
+      ExecuteGameTreeCommand(Actor, Command, LErrorText);
       if Command.Accepted then
       begin
         LReleaseCommand := Actor.CreateReleaseSearchCommand(FAnalyzerSearchId);
         try
-          Actor.ExecuteCommand(LReleaseCommand);
+          ExecuteGameTreeCommand(Actor, LReleaseCommand, LErrorText);
         finally
           LReleaseCommand.Free;
         end;
@@ -2583,8 +2601,7 @@ begin
     end;
   end;
 
-  FAnalyzerSearchId := 0;
-  FAnalyzerSearchGameTreeId := 0;
+  ClearAnalyzerSearchTracking;
 end;
 
 procedure TMainForm.MctsPopupPopup(Sender: TObject);
@@ -2748,8 +2765,7 @@ begin
       LSearchNodeId, LErrorText) then
     begin
       LSearchGameTreeId := LGameTree.GameTreeId;
-      FAnalyzerSearchGameTreeId := LSearchGameTreeId;
-      FAnalyzerSearchId := LSearchId;
+      TrackAnalyzerSearch(LGameTree, LSearchId);
     end;
   end;
   FAnalyzerRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText,
