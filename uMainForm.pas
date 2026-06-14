@@ -332,6 +332,7 @@ type
     procedure TrackAnalyzerSearch(AGameTree: TGameTree; ASearchId: Int64);
     procedure ClearAnalyzerSearchTracking;
     procedure SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
+    procedure InvalidateAnalyzerPositionSignature;
     procedure ApplyGameTreeCommandResult(AGameTree: TGameTree;
       ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
       ARefreshScoreHistory: Boolean = False);
@@ -1800,6 +1801,11 @@ begin
   FAnalyzerPvBasePly := APly;
 end;
 
+procedure TMainForm.InvalidateAnalyzerPositionSignature;
+begin
+  FAnalyzerLastPositionSignature := '';
+end;
+
 procedure TMainForm.ApplyGameTreeCommandResult(AGameTree: TGameTree;
   ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
   ARefreshScoreHistory: Boolean);
@@ -2491,7 +2497,7 @@ begin
   end;
 
   TrackAnalyzerSearch(LGameTree, LSearchId);
-  FAnalyzerLastPositionSignature := '';
+  InvalidateAnalyzerPositionSignature;
   SetAnalyzerPvBase(ActiveBoard, LDisplayedMoveCount);
 
   if FAnalyzerMemo <> nil then
@@ -2551,7 +2557,7 @@ begin
     if FAnalyzerPvBrowser <> nil then
       FAnalyzerPvBrowser.Clear;
     FAnalyzerEngineKey := EngineKey;
-    FAnalyzerLastPositionSignature := '';
+    InvalidateAnalyzerPositionSignature;
     FAnalyzerRunner := TAnalyzerRunnerThread.Create(Engine, @AnalyzerLog,
       @AnalyzerSnapshot, @AnalyzerFinished, armAnalyze, @AnalyzerMove);
     FAnalyzerRunner.Start;
@@ -2573,7 +2579,7 @@ begin
     FAnalyzerRunner.PostShutdown;
   end;
   FAnalyzerEngineKey := '';
-  FAnalyzerLastPositionSignature := '';
+  InvalidateAnalyzerPositionSignature;
   if FAnalyzerPvBrowser <> nil then
     FAnalyzerPvBrowser.Clear;
 end;
@@ -5322,7 +5328,7 @@ begin
           if FAnalyzerRunner = TAnalyzerFinishedGuiMessage(EventObject).Runner then
             FreeAndNil(FAnalyzerRunner);
           FAnalyzerEngineKey := '';
-          FAnalyzerLastPositionSignature := '';
+          InvalidateAnalyzerPositionSignature;
           UpdateAutoplayControls;
         end
         else if EventObject is TMctsFinishedGuiMessage then
