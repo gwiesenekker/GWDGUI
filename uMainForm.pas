@@ -604,6 +604,16 @@ begin
   Result.SearchId := ASearchId;
 end;
 
+function GameTreeSearchRefFromSnapshot(
+  ASnapshot: TPvSnapshot): TGameTreeSearchRef;
+begin
+  if ASnapshot = nil then
+    Result := EmptyGameTreeSearchRef
+  else
+    Result := GameTreeSearchRef(ASnapshot.GameTreeId, ASnapshot.SearchId,
+      ASnapshot.NodeId);
+end;
+
 function IsValidGameTreeSearchRef(const ASearch: TGameTreeSearchRef): Boolean;
 begin
   Result := (ASearch.GameTreeId > 0) and (ASearch.NodeId > 0) and
@@ -2149,25 +2159,27 @@ function TMainForm.TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
   out AActor: TGameTreeActor; out AGameTree: TGameTree;
   out ANode: TGameTreePlyNode): Boolean;
 var
+  LSearch: TGameTreeSearchRef;
   LSearchState: TGameTreeSearchState;
 begin
   Result := False;
   AActor := nil;
   AGameTree := nil;
   ANode := nil;
-  if (ASnapshot = nil) or (ASnapshot.SearchId <= 0) then
+  LSearch := GameTreeSearchRefFromSnapshot(ASnapshot);
+  if not IsValidGameTreeSearchRef(LSearch) then
     Exit;
 
-  AActor := ActorForGameTreeId(ASnapshot.GameTreeId);
+  AActor := ActorForGameTreeId(LSearch.GameTreeId);
   if AActor = nil then
     Exit;
-  if (not AActor.SearchState(ASnapshot.SearchId, LSearchState)) or
+  if (not AActor.SearchState(LSearch.SearchId, LSearchState)) or
     (LSearchState <> gssActive) then
   begin
     AActor := nil;
     Exit;
   end;
-  ANode := AActor.GameTree.FindNodeById(ASnapshot.NodeId);
+  ANode := AActor.GameTree.FindNodeById(LSearch.NodeId);
   if ANode = nil then
   begin
     AActor := nil;
