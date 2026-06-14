@@ -4163,10 +4163,7 @@ begin
     AGame.Snapshot.StartingFEN + #10 +
     IntToStr(Ord(AGame.Snapshot.State)) + #10 +
     AGame.Snapshot.MovesPlayedText + #10 +
-    AGame.Snapshot.MoveAnnotationsText + #10 +
-    IntToStr(AGame.Snapshot.PvBasePly) + #10 +
-    AGame.Snapshot.PvScore + #10 +
-    AGame.Snapshot.PrincipalVariation;
+    AGame.Snapshot.MoveAnnotationsText;
   if AGame.FLastSnapshotTreeSyncSignature = LSyncSignature then
     Exit;
 
