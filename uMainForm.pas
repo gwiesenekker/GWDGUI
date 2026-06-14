@@ -350,7 +350,7 @@ type
       AFollowVariationBrowse, ARefreshScoreHistory: Boolean;
       out AErrorText: string): Boolean;
     function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
-      out ASearchId, ANodeId: Int64; out AErrorText: string): Boolean;
+      out ASearch: TGameTreeSearchRef; out AErrorText: string): Boolean;
     function AnalyzerSearchMatches(AGameTreeId, ASearchId: Int64): Boolean;
     function AcceptSearchMove(AActor: TGameTreeActor; ASearchId,
       ANodeId: Int64; const AMoveText: string; out AErrorText: string): Boolean;
@@ -377,8 +377,7 @@ type
     function TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
       out AActor: TGameTreeActor; out AGameTree: TGameTree;
       out ANode: TGameTreePlyNode): Boolean;
-    procedure TrackAnalyzerSearch(AGameTree: TGameTree; ASearchId,
-      ANodeId: Int64);
+    procedure TrackAnalyzerSearch(const ASearch: TGameTreeSearchRef);
     procedure ClearAnalyzerSearchTracking;
     procedure SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
     procedure InvalidateAnalyzerPositionSignature;
@@ -1887,15 +1886,17 @@ begin
 end;
 
 function TMainForm.TryStartGameTreeSearchForDisplayedNode(
-  AGameTree: TGameTree; out ASearchId, ANodeId: Int64;
+  AGameTree: TGameTree; out ASearch: TGameTreeSearchRef;
   out AErrorText: string): Boolean;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
   Node: TGameTreePlyNode;
+  LSearchId: Int64;
 begin
-  ASearchId := 0;
-  ANodeId := 0;
+  ASearch.GameTreeId := 0;
+  ASearch.NodeId := 0;
+  ASearch.SearchId := 0;
   AErrorText := '';
   Result := False;
 
@@ -1907,13 +1908,16 @@ begin
     Exit;
   end;
 
-  Command := Actor.CreateStartSearchCommand(Node.NodeId, ASearchId);
+  LSearchId := 0;
+  Command := Actor.CreateStartSearchCommand(Node.NodeId, LSearchId);
   try
     Result := ExecuteGameTreeCommand(Actor, Command, AErrorText);
     if Result then
-      ANodeId := Node.NodeId
-    else
-      ASearchId := 0;
+    begin
+      ASearch.GameTreeId := AGameTree.GameTreeId;
+      ASearch.NodeId := Node.NodeId;
+      ASearch.SearchId := LSearchId;
+    end;
   finally
     Command.Free;
   end;
@@ -2152,18 +2156,16 @@ begin
   Result := AGameTree <> nil;
 end;
 
-procedure TMainForm.TrackAnalyzerSearch(AGameTree: TGameTree;
-  ASearchId, ANodeId: Int64);
+procedure TMainForm.TrackAnalyzerSearch(const ASearch: TGameTreeSearchRef);
 begin
-  if (AGameTree = nil) or (ASearchId <= 0) or (ANodeId <= 0) then
+  if (ASearch.GameTreeId <= 0) or (ASearch.SearchId <= 0) or
+    (ASearch.NodeId <= 0) then
   begin
     ClearAnalyzerSearchTracking;
     Exit;
   end;
 
-  FAnalyzerSearch.GameTreeId := AGameTree.GameTreeId;
-  FAnalyzerSearch.NodeId := ANodeId;
-  FAnalyzerSearch.SearchId := ASearchId;
+  FAnalyzerSearch := ASearch;
 end;
 
 procedure TMainForm.ClearAnalyzerSearchTracking;
@@ -2761,8 +2763,7 @@ var
   LDisplayedMovesText: string;
   LErrorText: string;
   LGameTree: TGameTree;
-  LSearchId: Int64;
-  LSearchNodeId: Int64;
+  LSearch: TGameTreeSearchRef;
   LStartingFEN: string;
 begin
   if not ReadAutoplaySecondsFromToolbar then
@@ -2813,8 +2814,8 @@ begin
   end;
 
   CancelAnalyzerSearch;
-  if not TryStartGameTreeSearchForDisplayedNode(LGameTree, LSearchId,
-    LSearchNodeId, LErrorText) then
+  if not TryStartGameTreeSearchForDisplayedNode(LGameTree, LSearch,
+    LErrorText) then
   begin
     if FAnalyzerMemo <> nil then
       FAnalyzerMemo.Lines.Add('Autoplay rejected; reason=' + LErrorText);
@@ -2822,7 +2823,7 @@ begin
     Exit;
   end;
 
-  TrackAnalyzerSearch(LGameTree, LSearchId, LSearchNodeId);
+  TrackAnalyzerSearch(LSearch);
   InvalidateAnalyzerPositionSignature;
   SetAnalyzerPvBase(ActiveBoard, LDisplayedMoveCount);
 
@@ -2831,7 +2832,7 @@ begin
       [FAutoplayThinkSeconds]));
   FAnalyzerRunner.PostThinkOnce(LStartingFEN, LDisplayedMovesText,
     FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, FAutoplayThinkSeconds,
-    LGameTree.GameTreeId, LSearchId, LSearchNodeId);
+    LSearch.GameTreeId, LSearch.SearchId, LSearch.NodeId);
   UpdateAutoplayControls;
 end;
 
@@ -3029,9 +3030,7 @@ end;
 procedure TMainForm.RestartAnalyzer(AGameTree: TGameTree);
 var
   LGameTree: TGameTree;
-  LSearchGameTreeId: Int64;
-  LSearchId: Int64;
-  LSearchNodeId: Int64;
+  LSearch: TGameTreeSearchRef;
   LDisplayedMoveCount: Integer;
   LDisplayedMovesText: string;
   LErrorText: string;
@@ -3047,9 +3046,9 @@ begin
   LGameTree := AGameTree;
   if LGameTree = nil then
     Exit;
-  LSearchGameTreeId := 0;
-  LSearchId := 0;
-  LSearchNodeId := 0;
+  LSearch.GameTreeId := 0;
+  LSearch.NodeId := 0;
+  LSearch.SearchId := 0;
 
   LStartingFEN := StartingFenForTree(LGameTree);
   if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
@@ -3072,16 +3071,13 @@ begin
     FAnalyzerPvBrowser.Clear;
   if not LTerminal then
   begin
-    if TryStartGameTreeSearchForDisplayedNode(LGameTree, LSearchId,
-      LSearchNodeId, LErrorText) then
-    begin
-      LSearchGameTreeId := LGameTree.GameTreeId;
-      TrackAnalyzerSearch(LGameTree, LSearchId, LSearchNodeId);
-    end;
+    if TryStartGameTreeSearchForDisplayedNode(LGameTree, LSearch,
+      LErrorText) then
+      TrackAnalyzerSearch(LSearch);
   end;
   FAnalyzerRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText,
     FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, LTerminal,
-    LSearchGameTreeId, LSearchId, LSearchNodeId);
+    LSearch.GameTreeId, LSearch.SearchId, LSearch.NodeId);
 end;
 
 procedure TMainForm.RestartMctsAnnotator(AGameTree: TGameTree);
