@@ -4504,6 +4504,8 @@ var
   LLogSourceChanged: Boolean;
   LMoveCount: Integer;
   LSnapshotSignature: string;
+  LTreeExtendsSnapshot: Boolean;
+  LTreeMatchesSnapshot: Boolean;
 
   function SecondsSignature(AValue: Double): string;
   begin
@@ -4607,12 +4609,19 @@ begin
   end;
   UpdateMiniBoardFromBoard(AGame.Snapshot.Board);
   FStartingFEN := AGame.Snapshot.StartingFEN;
-  if RunningGameTreeExtendsSnapshot(AGame) then
+  LTreeExtendsSnapshot := RunningGameTreeExtendsSnapshot(AGame);
+  LTreeMatchesSnapshot :=
+    (Trim(GameTreeMainlineMovesText(AGame.GameTree)) =
+      Trim(AGame.Snapshot.MovesPlayedText)) and
+    (Trim(GameTreeScoreAnnotationsText(AGame.GameTree)) =
+      Trim(AGame.Snapshot.MoveAnnotationsText));
+  if LTreeExtendsSnapshot then
     FDisplayedMovesSignature := GameTreeMainlineMovesText(AGame.GameTree)
   else
   begin
     FDisplayedMovesSignature := AGame.Snapshot.MovesPlayedText;
-    ClearStoredTreeVariations(AGame.GameTree);
+    if not LTreeMatchesSnapshot then
+      ClearStoredTreeVariations(AGame.GameTree);
   end;
   FGameState := AGame.Snapshot.State;
   FGameResult := AGame.Snapshot.GameResult;
@@ -4627,7 +4636,7 @@ begin
   FWhiteUsedSeconds := AGame.Snapshot.WhiteUsedSeconds;
   FBlackUsedSeconds := AGame.Snapshot.BlackUsedSeconds;
   FGameActive := True;
-  if not RunningGameTreeExtendsSnapshot(AGame) then
+  if (not LTreeExtendsSnapshot) and (not LTreeMatchesSnapshot) then
     UpdateGameTreeFromMoveText(AGame, AGame.GameTree,
       AGame.Snapshot.MovesPlayedText, AGame.Snapshot.MoveAnnotationsText);
   LMoveCount := CurrentMoveCount;
