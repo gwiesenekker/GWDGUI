@@ -2193,8 +2193,7 @@ end;
 
 procedure TMainForm.TrackAnalyzerSearch(const ASearch: TGameTreeSearchRef);
 begin
-  if (ASearch.GameTreeId <= 0) or (ASearch.SearchId <= 0) or
-    (ASearch.NodeId <= 0) then
+  if not IsValidGameTreeSearchRef(ASearch) then
   begin
     ClearAnalyzerSearchTracking;
     Exit;
@@ -2949,7 +2948,7 @@ procedure TMainForm.CancelAnalyzerSearch;
 var
   Actor: TGameTreeActor;
 begin
-  if FAnalyzerSearch.SearchId <= 0 then
+  if not IsValidGameTreeSearchRef(FAnalyzerSearch) then
     Exit;
 
   Actor := ActorForGameTreeId(FAnalyzerSearch.GameTreeId);
