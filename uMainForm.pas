@@ -4148,11 +4148,6 @@ var
   LGameTree: TGameTree;
   LMoves: TStringList;
   LSyncSignature: string;
-
-  function SecondsSignature(AValue: Double): string;
-  begin
-    Result := FormatFloat('0.000', AValue);
-  end;
 begin
   if (AGame = nil) or (AGame.GameTree = nil) then
     Exit;
@@ -4171,11 +4166,7 @@ begin
     AGame.Snapshot.MoveAnnotationsText + #10 +
     IntToStr(AGame.Snapshot.PvBasePly) + #10 +
     AGame.Snapshot.PvScore + #10 +
-    AGame.Snapshot.PrincipalVariation + #10 +
-    SecondsSignature(AGame.Snapshot.WhiteRemainingSeconds) + #10 +
-    SecondsSignature(AGame.Snapshot.BlackRemainingSeconds) + #10 +
-    SecondsSignature(AGame.Snapshot.WhiteUsedSeconds) + #10 +
-    SecondsSignature(AGame.Snapshot.BlackUsedSeconds);
+    AGame.Snapshot.PrincipalVariation;
   if AGame.FLastSnapshotTreeSyncSignature = LSyncSignature then
     Exit;
 
