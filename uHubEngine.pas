@@ -258,7 +258,7 @@ var
   HubCommand: THubWorkerCommand;
   AutoFreeCommand: Boolean;
 begin
-  FOwner.FWorkerThreadId := System.ThreadID;
+  FOwner.FWorkerThreadId := System.GetCurrentThreadId;
   FOwner.FWorkerThreadIdValid := True;
   try
     while (not Terminated) and FQueue.WaitPop(CommandObject) do
@@ -569,7 +569,8 @@ end;
 
 function THubEngine.IsWorkerThread: Boolean;
 begin
-  Result := FWorkerThreadIdValid and (System.ThreadID = FWorkerThreadId);
+  Result := FWorkerThreadIdValid and
+    (System.GetCurrentThreadId = FWorkerThreadId);
 end;
 
 procedure THubEngine.SendLine(const ALine: string);

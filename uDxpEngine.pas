@@ -263,7 +263,7 @@ var
   DxpCommand: TDxpWorkerCommand;
   AutoFreeCommand: Boolean;
 begin
-  FOwner.FWorkerThreadId := System.ThreadID;
+  FOwner.FWorkerThreadId := System.GetCurrentThreadId;
   FOwner.FWorkerThreadIdValid := True;
   try
     while (not Terminated) and FQueue.WaitPop(CommandObject) do
@@ -741,7 +741,8 @@ end;
 
 function TDxpEngine.IsWorkerThread: Boolean;
 begin
-  Result := FWorkerThreadIdValid and (System.ThreadID = FWorkerThreadId);
+  Result := FWorkerThreadIdValid and
+    (System.GetCurrentThreadId = FWorkerThreadId);
 end;
 
 procedure TDxpEngine.AcknowledgeGameEnd(AStopCode: Char);
