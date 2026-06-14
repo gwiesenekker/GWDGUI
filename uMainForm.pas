@@ -120,6 +120,7 @@ type
     FLifecycle: TRunningGameLifecycle;
     FShowStdout: Boolean;
     FSnapshot: TGameRunnerSnapshot;
+    FLastSnapshotTreeSyncSignature: string;
     FStopReason: string;
     FSetup: TGameSetup;
     FTitle: string;
@@ -4144,6 +4145,12 @@ var
   LAnnotations: TStringList;
   LGameTree: TGameTree;
   LMoves: TStringList;
+  LSyncSignature: string;
+
+  function SecondsSignature(AValue: Double): string;
+  begin
+    Result := FormatFloat('0.000', AValue);
+  end;
 begin
   if (AGame = nil) or (AGame.GameTree = nil) then
     Exit;
@@ -4151,6 +4158,25 @@ begin
     Exit;
 
   LGameTree := AGame.GameTree;
+  LSyncSignature :=
+    AEventName + #10 +
+    AGame.Snapshot.WhitePlayerName + #10 +
+    AGame.Snapshot.BlackPlayerName + #10 +
+    AGame.Snapshot.GameResult + #10 +
+    AGame.Snapshot.StartingFEN + #10 +
+    IntToStr(Ord(AGame.Snapshot.State)) + #10 +
+    AGame.Snapshot.MovesPlayedText + #10 +
+    AGame.Snapshot.MoveAnnotationsText + #10 +
+    IntToStr(AGame.Snapshot.PvBasePly) + #10 +
+    AGame.Snapshot.PvScore + #10 +
+    AGame.Snapshot.PrincipalVariation + #10 +
+    SecondsSignature(AGame.Snapshot.WhiteRemainingSeconds) + #10 +
+    SecondsSignature(AGame.Snapshot.BlackRemainingSeconds) + #10 +
+    SecondsSignature(AGame.Snapshot.WhiteUsedSeconds) + #10 +
+    SecondsSignature(AGame.Snapshot.BlackUsedSeconds);
+  if AGame.FLastSnapshotTreeSyncSignature = LSyncSignature then
+    Exit;
+
   LMoves := TStringList.Create;
   LAnnotations := TStringList.Create;
   try
@@ -4160,7 +4186,7 @@ begin
     Actor := ActorForGameTree(LGameTree);
     if Actor = nil then
       Exit;
-    RebuildGameTreeFromInputs(Actor,
+    if RebuildGameTreeFromInputs(Actor,
       RunningGameTreeHeaderInput(AGame, AEventName),
       GameTreeMainlineInput(LMoves, LAnnotations, True,
         AGame.Snapshot.WhiteRemainingSeconds,
@@ -4170,7 +4196,8 @@ begin
       GameTreePvInput(Trim(AGame.Snapshot.PrincipalVariation) <> '',
         AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
         AGame.Snapshot.PrincipalVariation),
-      GameTreePvInput(False, 0, '', ''), -1, 0, '', '', LErrorText);
+      GameTreePvInput(False, 0, '', ''), -1, 0, '', '', LErrorText) then
+      AGame.FLastSnapshotTreeSyncSignature := LSyncSignature;
   finally
     LAnnotations.Free;
     LMoves.Free;
