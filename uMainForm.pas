@@ -421,6 +421,10 @@ type
     function DisplayedMovesText(AGameTree: TGameTree): string;
     function DisplayedMoveContext(AGameTree: TGameTree;
       out AMovesText: string; out AMoveCount: Integer): Boolean;
+    function DisplayedPositionSignature(const AStartingFEN,
+      AMovesText: string; AGameState: TGameOrchestratorState): string;
+    function DisplayedPositionIsTerminal(ADisplayedMoveCount,
+      ATotalMoveCount: Integer; AGameState: TGameOrchestratorState): Boolean;
     function HasDisplayedGameToSave: Boolean;
     function EngineSupportsMcts(AEngine: TExternalEngineDefinition): Boolean;
     function GameForTree(AGameTree: TGameTree): TRunningGame;
@@ -3050,17 +3054,16 @@ begin
   LTotalMoveCount := CurrentMoveCount;
   LGameState := StateForTree(LGameTree);
 
-  Signature := LStartingFEN + #10 + LDisplayedMovesText + #10 +
-    IntToStr(Ord(LGameState));
+  Signature := DisplayedPositionSignature(LStartingFEN, LDisplayedMovesText,
+    LGameState);
   if Signature = FAnalyzerLastPositionSignature then
     Exit;
   FAnalyzerLastPositionSignature := Signature;
   CancelAnalyzerSearch;
 
   SetAnalyzerPvBase(ActiveBoard, LDisplayedMoveCount);
-  LTerminal := (ActiveBoard.LegalMoves.Count = 0) or
-    ((LGameState = gosGameOver) and
-      ((FGameBrowsePly < 0) or (LDisplayedMoveCount >= LTotalMoveCount)));
+  LTerminal := DisplayedPositionIsTerminal(LDisplayedMoveCount,
+    LTotalMoveCount, LGameState);
   if LTerminal and (FAnalyzerPvBrowser <> nil) then
     FAnalyzerPvBrowser.Clear;
   if not LTerminal then
@@ -3101,16 +3104,15 @@ begin
   LTotalMoveCount := CurrentMoveCount;
   LGameState := StateForTree(LGameTree);
 
-  Signature := LStartingFEN + #10 + LDisplayedMovesText + #10 +
-    IntToStr(Ord(LGameState));
+  Signature := DisplayedPositionSignature(LStartingFEN, LDisplayedMovesText,
+    LGameState);
   if Signature = FMctsLastPositionSignature then
     Exit;
   FMctsLastPositionSignature := Signature;
   ClearMctsStatsGrid;
 
-  LTerminal := (ActiveBoard.LegalMoves.Count = 0) or
-    ((LGameState = gosGameOver) and
-      ((FGameBrowsePly < 0) or (LDisplayedMoveCount >= LTotalMoveCount)));
+  LTerminal := DisplayedPositionIsTerminal(LDisplayedMoveCount,
+    LTotalMoveCount, LGameState);
   FMctsRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText, ActiveBoard,
     LDisplayedMoveCount, LTerminal);
 end;
@@ -3638,6 +3640,21 @@ begin
   finally
     LMoves.Free;
   end;
+end;
+
+function TMainForm.DisplayedPositionSignature(const AStartingFEN,
+  AMovesText: string; AGameState: TGameOrchestratorState): string;
+begin
+  Result := AStartingFEN + #10 + AMovesText + #10 +
+    IntToStr(Ord(AGameState));
+end;
+
+function TMainForm.DisplayedPositionIsTerminal(ADisplayedMoveCount,
+  ATotalMoveCount: Integer; AGameState: TGameOrchestratorState): Boolean;
+begin
+  Result := (not HasLegalDisplayedMove) or
+    ((AGameState = gosGameOver) and
+      ((FGameBrowsePly < 0) or (ADisplayedMoveCount >= ATotalMoveCount)));
 end;
 
 function TMainForm.HasDisplayedGameToSave: Boolean;
