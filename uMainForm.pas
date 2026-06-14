@@ -3324,9 +3324,7 @@ begin
     Exit;
   LGame := GameForTree(LGameTree);
   if LGame <> nil then
-    UpdateRunningGameTreeFromSnapshot(LGame)
-  else
-    UpdateGameTreeFromState(nil, LGameTree);
+    UpdateRunningGameTreeFromSnapshot(LGame);
   if LHasSearch and
     (not TryResolveActiveSearchSnapshot(ASnapshot, Actor, LGameTree,
       LNode)) then
