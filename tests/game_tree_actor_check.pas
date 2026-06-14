@@ -109,6 +109,7 @@ var
   CancelCommand: TGameTreeCommand;
   DoneCommand: TGameTreeCommand;
   MoveCommand: TGameTreeCommand;
+  ReleaseCommand: TGameTreeCommand;
   ResultMove: string;
   ResultNodeId: Int64;
   SearchId: Int64;
@@ -135,6 +136,19 @@ begin
         StartCommand.Free;
       end;
 
+      ReleaseCommand := Actor.CreateReleaseSearchCommand(SearchId);
+      try
+        Actor.ExecuteCommand(ReleaseCommand);
+        Check(not ReleaseCommand.Accepted,
+          'active search release should be rejected');
+        Check(Actor.SearchState(SearchId, State),
+          'active search should still exist after rejected release');
+        Check(State = gssActive,
+          'rejected release should keep search active');
+      finally
+        ReleaseCommand.Free;
+      end;
+
       CancelCommand := Actor.CreateCancelSearchCommand(SearchId);
       try
         Actor.ExecuteCommand(CancelCommand);
@@ -156,6 +170,17 @@ begin
           'late done should not change cancelled search state');
       finally
         DoneCommand.Free;
+      end;
+
+      ReleaseCommand := Actor.CreateReleaseSearchCommand(SearchId);
+      try
+        Actor.ExecuteCommand(ReleaseCommand);
+        Check(ReleaseCommand.Accepted,
+          'cancelled search release should be accepted');
+        Check(not Actor.SearchState(SearchId, State),
+          'released cancelled search should be removed');
+      finally
+        ReleaseCommand.Free;
       end;
 
       StartCommand := Actor.CreateStartSearchCommand(MoveCommand.CreatedNodeId,
@@ -196,6 +221,17 @@ begin
           'rejected second done should not overwrite result move');
       finally
         DoneCommand.Free;
+      end;
+
+      ReleaseCommand := Actor.CreateReleaseSearchCommand(SearchId);
+      try
+        Actor.ExecuteCommand(ReleaseCommand);
+        Check(ReleaseCommand.Accepted,
+          'done search release should be accepted');
+        Check(not Actor.SearchState(SearchId, State),
+          'released done search should be removed');
+      finally
+        ReleaseCommand.Free;
       end;
     finally
       MoveCommand.Free;

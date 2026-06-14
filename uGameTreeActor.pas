@@ -24,6 +24,7 @@ type
     gtcStartSearch,
     gtcCancelSearch,
     gtcSearchDone,
+    gtcReleaseSearch,
     gtcRecordAnnotatorPV,
     gtcStoreSearchMoveVariation,
     gtcStoreMoveVariation,
@@ -87,6 +88,7 @@ type
     function FindSearch(ASearchId: Int64): TGameTreeSearchRecord;
     function NextCommandId: Int64;
     function NextSearchId: Int64;
+    function RemoveSearch(ASearchId: Int64): Boolean;
     procedure Reject(ACommand: TGameTreeCommand; const AErrorText: string);
     procedure RebuildStoredVariations(ACommand: TGameTreeCommand);
     function StoreMoveVariationFromNode(ACommand: TGameTreeCommand;
@@ -101,6 +103,7 @@ type
     function CreateAppendMainlineMoveCommand(const AMoveText: string;
       ASource: TGameTreeMoveSource): TGameTreeCommand;
     function CreateCancelSearchCommand(ASearchId: Int64): TGameTreeCommand;
+    function CreateReleaseSearchCommand(ASearchId: Int64): TGameTreeCommand;
     function CreateSearchDoneCommand(ASearchId: Int64;
       const AMoveText: string): TGameTreeCommand;
     function CreateRecordAnnotatorPVCommand(ANodeId: Int64; const AScore,
@@ -151,6 +154,7 @@ const
     'game-tree-start-search',
     'game-tree-cancel-search',
     'game-tree-search-done',
+    'game-tree-release-search',
     'game-tree-record-annotator-pv',
     'game-tree-store-search-move-variation',
     'game-tree-store-move-variation',
@@ -216,6 +220,23 @@ begin
   Result := FNextSearchId;
 end;
 
+function TGameTreeActor.RemoveSearch(ASearchId: Int64): Boolean;
+var
+  I: Integer;
+  Search: TGameTreeSearchRecord;
+begin
+  Result := False;
+  for I := FSearches.Count - 1 downto 0 do
+  begin
+    Search := TGameTreeSearchRecord(FSearches[I]);
+    if (Search <> nil) and (Search.SearchId = ASearchId) then
+    begin
+      FSearches.Delete(I);
+      Exit(True);
+    end;
+  end;
+end;
+
 function TGameTreeActor.CreateAddMainlineMoveCommand(APlyNumber: Integer;
   const AMoveText: string; ASource: TGameTreeMoveSource): TGameTreeCommand;
 begin
@@ -241,6 +262,15 @@ function TGameTreeActor.CreateCancelSearchCommand(
   ASearchId: Int64): TGameTreeCommand;
 begin
   Result := TGameTreeCommand.Create(gtcCancelSearch);
+  Result.CommandId := NextCommandId;
+  Result.GameTreeId := FGameTree.GameTreeId;
+  Result.SearchId := ASearchId;
+end;
+
+function TGameTreeActor.CreateReleaseSearchCommand(
+  ASearchId: Int64): TGameTreeCommand;
+begin
+  Result := TGameTreeCommand.Create(gtcReleaseSearch);
   Result.CommandId := NextCommandId;
   Result.GameTreeId := FGameTree.GameTreeId;
   Result.SearchId := ASearchId;
@@ -640,6 +670,28 @@ begin
         Search.ResultMove := Trim(ACommand.MoveText);
         ACommand.GameTreeId := Search.GameTreeId;
         ACommand.NodeId := Search.NodeId;
+        ACommand.Accepted := True;
+        Inc(FRevision);
+      end;
+    gtcReleaseSearch:
+      begin
+        Search := FindSearch(ACommand.SearchId);
+        if Search = nil then
+        begin
+          Reject(ACommand, 'search id not found');
+          Exit;
+        end;
+        if Search.State = gssActive then
+        begin
+          Reject(ACommand, 'active search cannot be released');
+          Exit;
+        end;
+        ACommand.NodeId := Search.NodeId;
+        if not RemoveSearch(ACommand.SearchId) then
+        begin
+          Reject(ACommand, 'search was not released');
+          Exit;
+        end;
         ACommand.Accepted := True;
         Inc(FRevision);
       end;

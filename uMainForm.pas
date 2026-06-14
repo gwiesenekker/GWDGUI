@@ -2034,6 +2034,9 @@ var
   LAccepted: Boolean;
   LErrorText: string;
   LGameTree: TGameTree;
+  LRejectedReason: string;
+  LReleaseCommand: TGameTreeCommand;
+  LSearchState: TGameTreeSearchState;
   LStoreCommand: TGameTreeCommand;
 begin
   Actor := ActorForGameTreeId(AGameTreeId);
@@ -2076,14 +2079,35 @@ begin
     finally
       LStoreCommand.Free;
     end;
+    LReleaseCommand := Actor.CreateReleaseSearchCommand(ASearchId);
+    try
+      ExecuteGameTreeCommand(Actor, LReleaseCommand, LErrorText);
+    finally
+      LReleaseCommand.Free;
+    end;
     if FAnalyzerSearchId = ASearchId then
     begin
       FAnalyzerSearchId := 0;
       FAnalyzerSearchGameTreeId := 0;
     end;
   end
-  else if FAnalyzerMemo <> nil then
-    FAnalyzerMemo.Lines.Add('Annotator move rejected; reason=' + LErrorText);
+  else
+  begin
+    LRejectedReason := LErrorText;
+    if Actor.SearchState(ASearchId, LSearchState) and
+      (LSearchState in [gssCancelled, gssFailed]) then
+    begin
+      LReleaseCommand := Actor.CreateReleaseSearchCommand(ASearchId);
+      try
+        ExecuteGameTreeCommand(Actor, LReleaseCommand, LErrorText);
+      finally
+        LReleaseCommand.Free;
+      end;
+    end;
+    if FAnalyzerMemo <> nil then
+      FAnalyzerMemo.Lines.Add('Annotator move rejected; reason=' +
+        LRejectedReason);
+  end;
 end;
 
 procedure TMainForm.HandleMctsLog(const AMessage: string);
@@ -2516,6 +2540,7 @@ procedure TMainForm.CancelAnalyzerSearch;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
+  LReleaseCommand: TGameTreeCommand;
 begin
   if FAnalyzerSearchId <= 0 then
     Exit;
@@ -2526,6 +2551,15 @@ begin
     Command := Actor.CreateCancelSearchCommand(FAnalyzerSearchId);
     try
       Actor.ExecuteCommand(Command);
+      if Command.Accepted then
+      begin
+        LReleaseCommand := Actor.CreateReleaseSearchCommand(FAnalyzerSearchId);
+        try
+          Actor.ExecuteCommand(LReleaseCommand);
+        finally
+          LReleaseCommand.Free;
+        end;
+      end;
     finally
       Command.Free;
     end;
