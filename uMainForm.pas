@@ -4819,6 +4819,9 @@ var
   LTreeScore: string;
   LTreeTimeText: string;
   LEffectivePV: string;
+  LEffectivePvBaseFromTree: Boolean;
+  LEffectivePvBasePly: Integer;
+  LEffectivePvBasePositionKey: string;
   LEffectivePvScore: string;
   LEffectivePvDepth: string;
   LEffectivePvTimeText: string;
@@ -4950,6 +4953,9 @@ begin
   else
     LEffectiveAnnotationsText := LSnapshotAnnotationsText;
   LEffectivePV := AGame.Snapshot.PrincipalVariation;
+  LEffectivePvBasePly := AGame.Snapshot.PvBasePly;
+  LEffectivePvBaseFromTree := False;
+  LEffectivePvBasePositionKey := AGame.Snapshot.PvBaseBoard.PositionKey;
   LEffectivePvScore := AGame.Snapshot.PvScore;
   LEffectivePvDepth := AGame.Snapshot.PvSnapshot.Depth;
   LEffectivePvTimeText := AGame.Snapshot.PvSnapshot.TimeText;
@@ -4964,6 +4970,13 @@ begin
     if LTreeTimeText <> '' then
       LEffectivePvTimeText := LTreeTimeText;
   end;
+  if (Trim(LEffectivePV) <> '') and
+    TryBuildTreeBoardAtPly(AGame.GameTree, LEffectivePvBasePly,
+      FTreePvBaseBoard) then
+  begin
+    LEffectivePvBaseFromTree := True;
+    LEffectivePvBasePositionKey := FTreePvBaseBoard.PositionKey;
+  end;
 
   LPositionChanged := (FStartingFEN <> AGame.Snapshot.StartingFEN) or
     (FDisplayedAnnotationsSignature <> LEffectiveAnnotationsText) or
@@ -4974,8 +4987,8 @@ begin
     (FPrincipalVariationScore <> LEffectivePvScore) or
     (FPrincipalVariationDepth <> LEffectivePvDepth) or
     (FPrincipalVariationTimeText <> LEffectivePvTimeText) or
-    (FPvBasePly <> AGame.Snapshot.PvBasePly) or
-    (FPvBaseBoard.PositionKey <> AGame.Snapshot.PvBaseBoard.PositionKey);
+    (FPvBasePly <> LEffectivePvBasePly) or
+    (FPvBaseBoard.PositionKey <> LEffectivePvBasePositionKey);
   if FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText then
   begin
     ClearHumanMoveSelection;
@@ -4988,8 +5001,11 @@ begin
   FPrincipalVariationScore := LEffectivePvScore;
   FPrincipalVariationDepth := LEffectivePvDepth;
   FPrincipalVariationTimeText := LEffectivePvTimeText;
-  FPvBaseBoard.AssignFrom(AGame.Snapshot.PvBaseBoard);
-  FPvBasePly := AGame.Snapshot.PvBasePly;
+  if LEffectivePvBaseFromTree then
+    FPvBaseBoard.AssignFrom(FTreePvBaseBoard)
+  else
+    FPvBaseBoard.AssignFrom(AGame.Snapshot.PvBaseBoard);
+  FPvBasePly := LEffectivePvBasePly;
   FWhiteRemainingSeconds := AGame.Snapshot.WhiteRemainingSeconds;
   FBlackRemainingSeconds := AGame.Snapshot.BlackRemainingSeconds;
   FWhiteUsedSeconds := AGame.Snapshot.WhiteUsedSeconds;
