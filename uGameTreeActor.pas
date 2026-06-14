@@ -831,6 +831,19 @@ var
   Node: TGameTreePlyNode;
   RebuildSignature: string;
   Search: TGameTreeSearchRecord;
+  TimeControlChanged: Boolean;
+
+  function HeaderIncrementModeText: string;
+  begin
+    case Ord(ACommand.HeaderInput.TimeControl.IncrementMode) of
+      0:
+        Result := 'from start';
+      1:
+        Result := 'after move limit';
+    else
+      Result := '';
+    end;
+  end;
 begin
   if ACommand = nil then
     Exit;
@@ -1172,6 +1185,22 @@ begin
           ACommand.HeaderInput.WhiteName, ACommand.HeaderInput.BlackName,
           ACommand.HeaderInput.ResultText, ACommand.HeaderInput.StartingFEN,
           Changed);
+        if ACommand.HeaderInput.RecordTimeControl then
+        begin
+          TimeControlChanged := (not FGameTree.HasTimeControl) or
+            (FGameTree.MovesPerPeriod <>
+              ACommand.HeaderInput.TimeControl.MovesPerPeriod) or
+            (FGameTree.MinutesPerPeriod <>
+              ACommand.HeaderInput.TimeControl.MinutesPerPeriod) or
+            (FGameTree.IncrementSeconds <>
+              ACommand.HeaderInput.TimeControl.IncrementSeconds) or
+            (FGameTree.IncrementModeText <> HeaderIncrementModeText);
+          if TimeControlChanged then
+          begin
+            FGameTree.RecordTimeControl(ACommand.HeaderInput.TimeControl);
+            Changed := True;
+          end;
+        end;
         ACommand.Accepted := True;
         if Changed then
         begin

@@ -23,10 +23,12 @@ procedure CheckActorCommands;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
+  CustomTimeControl: TTimeControl;
   EmptyAnnotations: TStringList;
   Moves: TStringList;
   Node: TGameTreePlyNode;
   RevisionAfterHeader: Int64;
+  RevisionAfterTimeControl: Int64;
   VariationNode: TGameTreePlyNode;
 begin
   Actor := TGameTreeActor.Create;
@@ -230,6 +232,48 @@ begin
         'duplicate set-header command should keep event');
       Check(Actor.Revision = RevisionAfterHeader,
         'duplicate set-header command should not increment revision');
+    finally
+      Command.Free;
+    end;
+
+    CustomTimeControl := DefaultTimeControl;
+    CustomTimeControl.MovesPerPeriod := 40;
+    CustomTimeControl.MinutesPerPeriod := 10;
+    CustomTimeControl.IncrementSeconds := 1;
+    CustomTimeControl.IncrementMode := cimAfterMoveLimit;
+    Command := Actor.CreateSetHeaderCommand(
+      GameTreeHeaderInput('', 'New Event', 'Alice', 'Bob', '1-0',
+        'W:W31-50:B1-20', True, CustomTimeControl));
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'set-header command with time control should be accepted');
+      Check(Actor.GameTree.HasTimeControl,
+        'set-header command should record time control');
+      Check(Actor.GameTree.MovesPerPeriod = 40,
+        'set-header command should record moves per period');
+      Check(Actor.GameTree.MinutesPerPeriod = 10,
+        'set-header command should record minutes per period');
+      Check(Actor.GameTree.IncrementSeconds = 1,
+        'set-header command should record increment seconds');
+      Check(Actor.GameTree.IncrementModeText = 'after move limit',
+        'set-header command should record increment mode');
+      Check(Actor.Revision > RevisionAfterHeader,
+        'set-header time-control change should increment revision');
+      RevisionAfterTimeControl := Actor.Revision;
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateSetHeaderCommand(
+      GameTreeHeaderInput('', 'New Event', 'Alice', 'Bob', '1-0',
+        'W:W31-50:B1-20', True, CustomTimeControl));
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'duplicate set-header time-control command should be accepted');
+      Check(Actor.Revision = RevisionAfterTimeControl,
+        'duplicate set-header time-control command should not increment revision');
     finally
       Command.Free;
     end;
