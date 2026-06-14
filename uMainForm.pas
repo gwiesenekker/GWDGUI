@@ -3956,7 +3956,7 @@ begin
       ABasePly := LGame.Snapshot.PvBasePly;
     end;
   end
-  else
+  else if AGameTree = FGameTree then
   begin
     APV := FPrincipalVariation;
     AScore := FPrincipalVariationScore;
