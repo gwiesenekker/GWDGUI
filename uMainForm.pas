@@ -4683,6 +4683,7 @@ end;
 procedure TMainForm.ApplyGameToDisplay(AGame: TRunningGame);
 var
   LLogSourceChanged: Boolean;
+  LEffectiveAnnotationsText: string;
   LMoveCount: Integer;
   LPositionChanged: Boolean;
   LPvChanged: Boolean;
@@ -4793,9 +4794,20 @@ begin
   end;
   FDisplayedSnapshotSignature := LSnapshotSignature;
 
+  LTreeMovesText := GameTreeMainlineMovesText(AGame.GameTree);
+  LTreeAnnotationsText := GameTreeScoreAnnotationsText(AGame.GameTree);
+  LSnapshotAnnotationsText := AGame.Snapshot.MoveAnnotationsText;
+  LSnapshotAnnotationsEmpty := Trim(LSnapshotAnnotationsText) = '';
+  LTreeMovesMatchSnapshot :=
+    Trim(LTreeMovesText) = Trim(AGame.Snapshot.MovesPlayedText);
+  if LSnapshotAnnotationsEmpty and LTreeMovesMatchSnapshot and
+    (Trim(LTreeAnnotationsText) <> '') then
+    LEffectiveAnnotationsText := LTreeAnnotationsText
+  else
+    LEffectiveAnnotationsText := LSnapshotAnnotationsText;
+
   LPositionChanged := (FStartingFEN <> AGame.Snapshot.StartingFEN) or
-    (FDisplayedAnnotationsSignature <>
-      AGame.Snapshot.MoveAnnotationsText) or
+    (FDisplayedAnnotationsSignature <> LEffectiveAnnotationsText) or
     (FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText) or
     (FGameState <> AGame.Snapshot.State) or
     (FGameResult <> AGame.Snapshot.GameResult);
@@ -4846,12 +4858,6 @@ begin
 
   UpdateMiniBoardFromBoard(AGame.Snapshot.Board);
   LTreeExtendsSnapshot := RunningGameTreeExtendsSnapshot(AGame);
-  LTreeMovesText := GameTreeMainlineMovesText(AGame.GameTree);
-  LTreeAnnotationsText := GameTreeScoreAnnotationsText(AGame.GameTree);
-  LSnapshotAnnotationsText := AGame.Snapshot.MoveAnnotationsText;
-  LSnapshotAnnotationsEmpty := Trim(LSnapshotAnnotationsText) = '';
-  LTreeMovesMatchSnapshot :=
-    Trim(LTreeMovesText) = Trim(AGame.Snapshot.MovesPlayedText);
   LTreeAnnotationsMatchSnapshot := LSnapshotAnnotationsEmpty or
     (Trim(LTreeAnnotationsText) = Trim(LSnapshotAnnotationsText));
   LTreeMatchesSnapshot := LTreeMovesMatchSnapshot and
@@ -4863,10 +4869,7 @@ begin
   end
   else
   begin
-    if LSnapshotAnnotationsEmpty and (Trim(LTreeAnnotationsText) <> '') then
-      FDisplayedAnnotationsSignature := LTreeAnnotationsText
-    else
-      FDisplayedAnnotationsSignature := LSnapshotAnnotationsText;
+    FDisplayedAnnotationsSignature := LEffectiveAnnotationsText;
     FDisplayedMovesSignature := AGame.Snapshot.MovesPlayedText;
     if not LTreeMatchesSnapshot then
       ClearStoredTreeVariations(AGame.GameTree);
