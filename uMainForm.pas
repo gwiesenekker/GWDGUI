@@ -4151,7 +4151,7 @@ var
     I: Integer;
   begin
     Result := False;
-    if LGameTree.MainlineCount + 1 <> LMoves.Count then
+    if LGameTree.MainlineCount >= LMoves.Count then
       Exit;
     for I := 1 to LGameTree.MainlineCount do
       if not SameText(NormalizeMoveNotation(LGameTree.MainlineNode[I].MoveText),
@@ -4171,9 +4171,10 @@ var
     Result := True;
   end;
 
-  function TryAppendSnapshotMove: Boolean;
+  function TryAppendSnapshotMoves: Boolean;
   var
-    AppendIndex: Integer;
+    I: Integer;
+    IsLastMove: Boolean;
   begin
     Result := False;
     if not SnapshotExtendsCurrentTree then
@@ -4182,24 +4183,30 @@ var
     if Actor = nil then
       Exit;
 
-    AppendIndex := LMoves.Count - 1;
-    Command := Actor.CreateAppendMainlineSnapshotMoveCommand(
-      RunningGameTreeHeaderInput(AGame, AEventName),
-      LMoves[AppendIndex], LineOrEmpty(LAnnotations, AppendIndex),
-      GameTreeMainlineInput(nil, nil, True,
-        AGame.Snapshot.WhiteRemainingSeconds,
-        AGame.Snapshot.BlackRemainingSeconds,
-        AGame.Snapshot.WhiteUsedSeconds,
-        AGame.Snapshot.BlackUsedSeconds),
-      GameTreePvInput(Trim(AGame.Snapshot.PrincipalVariation) <> '',
-        AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
-        AGame.Snapshot.PrincipalVariation),
-      gmsEngineMatch);
-    try
-      Result := ExecuteGameTreeCommand(Actor, Command, LErrorText);
-    finally
-      Command.Free;
+    for I := LGameTree.MainlineCount to LMoves.Count - 1 do
+    begin
+      IsLastMove := I = LMoves.Count - 1;
+      Command := Actor.CreateAppendMainlineSnapshotMoveCommand(
+        RunningGameTreeHeaderInput(AGame, AEventName),
+        LMoves[I], LineOrEmpty(LAnnotations, I),
+        GameTreeMainlineInput(nil, nil, IsLastMove,
+          AGame.Snapshot.WhiteRemainingSeconds,
+          AGame.Snapshot.BlackRemainingSeconds,
+          AGame.Snapshot.WhiteUsedSeconds,
+          AGame.Snapshot.BlackUsedSeconds),
+        GameTreePvInput(IsLastMove and
+          (Trim(AGame.Snapshot.PrincipalVariation) <> ''),
+          AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
+          AGame.Snapshot.PrincipalVariation),
+        gmsEngineMatch);
+      try
+        if not ExecuteGameTreeCommand(Actor, Command, LErrorText) then
+          Exit;
+      finally
+        Command.Free;
+      end;
     end;
+    Result := True;
   end;
 begin
   if (AGame = nil) or (AGame.GameTree = nil) then
@@ -4226,7 +4233,7 @@ begin
     TextToMoveList(AGame.Snapshot.MovesPlayedText, LMoves);
     LAnnotations.Text := AGame.Snapshot.MoveAnnotationsText;
 
-    if TryAppendSnapshotMove then
+    if TryAppendSnapshotMoves then
     begin
       AGame.FLastSnapshotTreeSyncSignature := LSyncSignature;
       Exit;
