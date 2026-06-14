@@ -366,7 +366,8 @@ type
       out AErrorText: string): Boolean;
     function RecordEnginePvInGameTree(AActor: TGameTreeActor;
       AGameTree: TGameTree; ANodeId: Int64; const AScore,
-      APrincipalVariation: string; out AErrorText: string): Boolean;
+      APrincipalVariation, ADepth, ATimeText: string;
+      out AErrorText: string): Boolean;
     function RecordAnnotatorPvInGameTree(AActor: TGameTreeActor;
       AGameTree: TGameTree; ANodeId: Int64; const AScore,
       APrincipalVariation: string; out AErrorText: string): Boolean;
@@ -447,7 +448,7 @@ type
       out AWhiteRemainingSeconds, ABlackRemainingSeconds, AWhiteUsedSeconds,
       ABlackUsedSeconds: Double): Boolean;
     function EnginePvForTree(AGameTree: TGameTree; APly: Integer;
-      out APV, AScore: string): Boolean;
+      out APV, AScore, ADepth, ATimeText: string): Boolean;
     function VisibleMainPvForTree(AGameTree: TGameTree;
       out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV,
       AScore, ADepth, ATimeText: string): Boolean;
@@ -2078,7 +2079,8 @@ end;
 
 function TMainForm.RecordEnginePvInGameTree(AActor: TGameTreeActor;
   AGameTree: TGameTree; ANodeId: Int64; const AScore,
-  APrincipalVariation: string; out AErrorText: string): Boolean;
+  APrincipalVariation, ADepth, ATimeText: string; out AErrorText: string
+  ): Boolean;
 var
   Command: TGameTreeCommand;
 begin
@@ -2091,7 +2093,7 @@ begin
   end;
 
   Command := AActor.CreateRecordEnginePVCommand(ANodeId, AScore,
-    APrincipalVariation);
+    APrincipalVariation, ADepth, ATimeText);
   try
     Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
   finally
@@ -3968,12 +3970,14 @@ begin
 end;
 
 function TMainForm.EnginePvForTree(AGameTree: TGameTree; APly: Integer;
-  out APV, AScore: string): Boolean;
+  out APV, AScore, ADepth, ATimeText: string): Boolean;
 var
   LNode: TGameTreePlyNode;
 begin
   APV := '';
   AScore := '';
+  ADepth := '';
+  ATimeText := '';
   Result := False;
   if AGameTree = nil then
     Exit;
@@ -3987,6 +3991,8 @@ begin
 
   APV := Trim(LNode.EnginePV);
   AScore := Trim(LNode.EngineScore);
+  ADepth := Trim(LNode.EnginePVDepth);
+  ATimeText := Trim(LNode.EnginePVTimeText);
   Result := APV <> '';
 end;
 
@@ -3995,8 +4001,10 @@ function TMainForm.VisibleMainPvForTree(AGameTree: TGameTree;
   ADepth, ATimeText: string): Boolean;
 var
   LGame: TRunningGame;
+  LTreeDepth: string;
   LTreePV: string;
   LTreeScore: string;
+  LTreeTimeText: string;
 begin
   LGame := GameForTreeRefresh(AGameTree);
   APV := '';
@@ -4018,11 +4026,15 @@ begin
       ABasePly := LGame.Snapshot.PvBasePly;
     end;
     if EnginePvForTree(AGameTree, LGame.Snapshot.PvBasePly, LTreePV,
-      LTreeScore) then
+      LTreeScore, LTreeDepth, LTreeTimeText) then
     begin
       APV := LTreePV;
       if LTreeScore <> '' then
         AScore := LTreeScore;
+      if LTreeDepth <> '' then
+        ADepth := LTreeDepth;
+      if LTreeTimeText <> '' then
+        ATimeText := LTreeTimeText;
       ABaseBoard := LGame.Snapshot.PvBaseBoard;
       ABasePly := LGame.Snapshot.PvBasePly;
     end;
@@ -4038,11 +4050,16 @@ begin
       ABaseBoard := FPvBaseBoard;
       ABasePly := FPvBasePly;
     end;
-    if EnginePvForTree(AGameTree, FPvBasePly, LTreePV, LTreeScore) then
+    if EnginePvForTree(AGameTree, FPvBasePly, LTreePV, LTreeScore,
+      LTreeDepth, LTreeTimeText) then
     begin
       APV := LTreePV;
       if LTreeScore <> '' then
         AScore := LTreeScore;
+      if LTreeDepth <> '' then
+        ADepth := LTreeDepth;
+      if LTreeTimeText <> '' then
+        ATimeText := LTreeTimeText;
       ABaseBoard := FPvBaseBoard;
       ABasePly := FPvBasePly;
     end;
@@ -4317,7 +4334,8 @@ var
         GameTreePvInput(IsLastMove and
           (Trim(AGame.Snapshot.PrincipalVariation) <> ''),
           AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
-          AGame.Snapshot.PrincipalVariation),
+          AGame.Snapshot.PrincipalVariation, AGame.Snapshot.PvSnapshot.Depth,
+          AGame.Snapshot.PvSnapshot.TimeText),
         gmsEngineMatch);
       try
         if not ExecuteGameTreeCommand(Actor, Command, LErrorText) then
@@ -4347,11 +4365,14 @@ var
       Exit;
     LPvSignature := IntToStr(LGameTree.GameTreeId) + #10 +
       IntToStr(LNode.NodeId) + #10 + AGame.Snapshot.PvScore + #10 +
-      AGame.Snapshot.PrincipalVariation;
+      AGame.Snapshot.PrincipalVariation + #10 +
+      AGame.Snapshot.PvSnapshot.Depth + #10 +
+      AGame.Snapshot.PvSnapshot.TimeText;
     if AGame.FLastSnapshotTreePvSignature = LPvSignature then
       Exit;
     if RecordEnginePvInGameTree(Actor, LGameTree, LNode.NodeId,
       AGame.Snapshot.PvScore, AGame.Snapshot.PrincipalVariation,
+      AGame.Snapshot.PvSnapshot.Depth, AGame.Snapshot.PvSnapshot.TimeText,
       LErrorText) then
       AGame.FLastSnapshotTreePvSignature := LPvSignature;
   end;
@@ -4424,7 +4445,8 @@ begin
         AGame.Snapshot.BlackUsedSeconds),
       GameTreePvInput(Trim(AGame.Snapshot.PrincipalVariation) <> '',
         AGame.Snapshot.PvBasePly, AGame.Snapshot.PvScore,
-        AGame.Snapshot.PrincipalVariation),
+        AGame.Snapshot.PrincipalVariation, AGame.Snapshot.PvSnapshot.Depth,
+        AGame.Snapshot.PvSnapshot.TimeText),
       GameTreePvInput(False, 0, '', ''), -1, 0, '', '', LErrorText) then
       AGame.FLastSnapshotTreeSyncSignature := LSyncSignature;
   finally
@@ -4496,13 +4518,15 @@ begin
   begin
     Result := GameTreePvInput(Trim(LGame.Snapshot.PrincipalVariation) <> '',
       LGame.Snapshot.PvBasePly, LGame.Snapshot.PvScore,
-      LGame.Snapshot.PrincipalVariation);
+      LGame.Snapshot.PrincipalVariation, LGame.Snapshot.PvSnapshot.Depth,
+      LGame.Snapshot.PvSnapshot.TimeText);
     Exit;
   end;
 
   Result := GameTreePvInput((AGameTree = FGameTree) and
     (Trim(FPrincipalVariation) <> ''), FPvBasePly,
-    FPrincipalVariationScore, FPrincipalVariation);
+    FPrincipalVariationScore, FPrincipalVariation, FPrincipalVariationDepth,
+    FPrincipalVariationTimeText);
 end;
 
 function TMainForm.CurrentGameTreeAnnotatorPvInput(
@@ -4754,10 +4778,14 @@ var
   LTreeMatchesSnapshot: Boolean;
   LTreeMovesMatchSnapshot: Boolean;
   LTreeMovesText: string;
+  LTreeDepth: string;
   LTreePV: string;
   LTreeScore: string;
+  LTreeTimeText: string;
   LEffectivePV: string;
   LEffectivePvScore: string;
+  LEffectivePvDepth: string;
+  LEffectivePvTimeText: string;
   LPvBaseBoard: TDraughtsBoard;
   LPvBasePly: Integer;
   LPvDepth: string;
@@ -4887,12 +4915,18 @@ begin
     LEffectiveAnnotationsText := LSnapshotAnnotationsText;
   LEffectivePV := AGame.Snapshot.PrincipalVariation;
   LEffectivePvScore := AGame.Snapshot.PvScore;
+  LEffectivePvDepth := AGame.Snapshot.PvSnapshot.Depth;
+  LEffectivePvTimeText := AGame.Snapshot.PvSnapshot.TimeText;
   if EnginePvForTree(AGame.GameTree, AGame.Snapshot.PvBasePly, LTreePV,
-    LTreeScore) then
+    LTreeScore, LTreeDepth, LTreeTimeText) then
   begin
     LEffectivePV := LTreePV;
     if LTreeScore <> '' then
       LEffectivePvScore := LTreeScore;
+    if LTreeDepth <> '' then
+      LEffectivePvDepth := LTreeDepth;
+    if LTreeTimeText <> '' then
+      LEffectivePvTimeText := LTreeTimeText;
   end;
 
   LPositionChanged := (FStartingFEN <> AGame.Snapshot.StartingFEN) or
@@ -4902,8 +4936,8 @@ begin
     (FGameResult <> AGame.Snapshot.GameResult);
   LPvChanged := (FPrincipalVariation <> LEffectivePV) or
     (FPrincipalVariationScore <> LEffectivePvScore) or
-    (FPrincipalVariationDepth <> AGame.Snapshot.PvSnapshot.Depth) or
-    (FPrincipalVariationTimeText <> AGame.Snapshot.PvSnapshot.TimeText) or
+    (FPrincipalVariationDepth <> LEffectivePvDepth) or
+    (FPrincipalVariationTimeText <> LEffectivePvTimeText) or
     (FPvBasePly <> AGame.Snapshot.PvBasePly) or
     (FPvBaseBoard.PositionKey <> AGame.Snapshot.PvBaseBoard.PositionKey);
   if FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText then
@@ -4916,8 +4950,8 @@ begin
   FGameResult := AGame.Snapshot.GameResult;
   FPrincipalVariation := LEffectivePV;
   FPrincipalVariationScore := LEffectivePvScore;
-  FPrincipalVariationDepth := AGame.Snapshot.PvSnapshot.Depth;
-  FPrincipalVariationTimeText := AGame.Snapshot.PvSnapshot.TimeText;
+  FPrincipalVariationDepth := LEffectivePvDepth;
+  FPrincipalVariationTimeText := LEffectivePvTimeText;
   FPvBaseBoard.AssignFrom(AGame.Snapshot.PvBaseBoard);
   FPvBasePly := AGame.Snapshot.PvBasePly;
   FWhiteRemainingSeconds := AGame.Snapshot.WhiteRemainingSeconds;

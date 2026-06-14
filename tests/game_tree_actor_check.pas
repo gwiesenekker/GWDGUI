@@ -83,7 +83,8 @@ begin
         'W:W31-50:B1-20', True, DefaultTimeControl),
       '18-23', AnnotationWithScore('', 'engine', '0.37'),
       GameTreeMainlineInput(nil, nil, True, 299.0, 298.0, 1.0, 2.0),
-      GameTreePvInput(True, 3, '0.37', '38-33'), gmsEngineMatch);
+      GameTreePvInput(True, 3, '0.37', '38-33', '8', '0.21'),
+      gmsEngineMatch);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
@@ -100,6 +101,10 @@ begin
         'snapshot appended node should record engine PV');
       Check(Actor.GameTree.MainlineNode[3].EngineScore = '0.37',
         'snapshot appended node should record engine PV score');
+      Check(Actor.GameTree.MainlineNode[3].EnginePVDepth = '8',
+        'snapshot appended node should record engine PV depth');
+      Check(Actor.GameTree.MainlineNode[3].EnginePVTimeText = '0.21',
+        'snapshot appended node should record engine PV time');
       Check(Node.HasClockInfo,
         'snapshot appended node should record clock state');
       Check(Abs(Node.WhiteRemainingSeconds - 299.0) < 0.001,
@@ -643,7 +648,7 @@ begin
     Actor.GameTree.RecordMainlineAnnotation(Node.PlyNumber,
       AnnotationWithScore('', 'engine', '0.37'));
     Command := Actor.CreateRecordEnginePVCommand(Node.NodeId, '',
-      '18-23 39-33');
+      '18-23 39-33', '11', '1.25');
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'engine PV command should be accepted');
@@ -651,13 +656,17 @@ begin
         'engine PV command with empty score should preserve move score');
       Check(Node.EnginePV = '18-23 39-33',
         'engine PV command should record PV on target node');
+      Check(Node.EnginePVDepth = '11',
+        'engine PV command should record depth on target node');
+      Check(Node.EnginePVTimeText = '1.25',
+        'engine PV command should record time on target node');
       RevisionAfterPV := Actor.Revision;
     finally
       Command.Free;
     end;
 
     Command := Actor.CreateRecordEnginePVCommand(Node.NodeId, '',
-      '18-23 39-33');
+      '18-23 39-33', '11', '1.25');
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'duplicate engine PV command should be accepted');

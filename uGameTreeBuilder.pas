@@ -16,6 +16,8 @@ type
     BasePly: Integer;
     Score: string;
     PV: string;
+    Depth: string;
+    TimeText: string;
   end;
   TGameTreeHeaderInput = record
     Signature: string;
@@ -52,7 +54,8 @@ type
 
 procedure TextToMoveList(const AMovesText: string; AMoves: TStrings);
 function GameTreePvInput(ARecordPV: Boolean; ABasePly: Integer;
-  const AScore, APV: string): TGameTreePvInput;
+  const AScore, APV: string; const ADepth: string = '';
+  const ATimeText: string = ''): TGameTreePvInput;
 function GameTreeHeaderInput(const ASignature, AEventName, AWhiteName,
   ABlackName, AResultText, AStartingFEN: string; ARecordTimeControl: Boolean;
   const ATimeControl: TTimeControl): TGameTreeHeaderInput;
@@ -87,12 +90,15 @@ begin
 end;
 
 function GameTreePvInput(ARecordPV: Boolean; ABasePly: Integer;
-  const AScore, APV: string): TGameTreePvInput;
+  const AScore, APV: string; const ADepth: string; const ATimeText: string
+  ): TGameTreePvInput;
 begin
   Result.RecordPV := ARecordPV;
   Result.BasePly := ABasePly;
   Result.Score := AScore;
   Result.PV := APV;
+  Result.Depth := ADepth;
+  Result.TimeText := ATimeText;
 end;
 
 function GameTreeHeaderInput(const ASignature, AEventName, AWhiteName,
@@ -190,7 +196,7 @@ begin
 
   if AEnginePV.RecordPV and (Trim(AEnginePV.PV) <> '') then
     AGameTree.RecordEnginePV(AEnginePV.BasePly, AEnginePV.Score,
-      AEnginePV.PV);
+      AEnginePV.PV, AEnginePV.Depth, AEnginePV.TimeText);
   if AAnnotatorPV.RecordPV and (Trim(AAnnotatorPV.PV) <> '') then
     AGameTree.RecordAnnotatorPV(AAnnotatorPV.BasePly, AAnnotatorPV.Score,
       AAnnotatorPV.PV);
