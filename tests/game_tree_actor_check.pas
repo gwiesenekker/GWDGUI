@@ -655,6 +655,7 @@ var
   Moves: TStringList;
   NodeId: Int64;
   NullTimeControl: TTimeControl;
+  RevisionAfterRebuild: Int64;
   VariationIndex: Integer;
 begin
   Actor := TGameTreeActor.Create;
@@ -694,6 +695,23 @@ begin
       Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPV = '20-24',
         'rebuild command should record variation annotator PV');
       NodeId := Actor.GameTree.MainlineNode[1].NodeId;
+      RevisionAfterRebuild := Actor.Revision;
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateRebuildFromInputsCommand(
+      GameTreeHeaderInput('rebuild', 'Event', 'White', 'Black', '*',
+        'W:W31-50:B1-20', False, NullTimeControl),
+      GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
+      GameTreePvInput(True, 2, '0.10', '37-32'),
+      GameTreePvInput(False, 0, '', ''),
+      0, 1, '0.20', '20-24');
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'duplicate rebuild command should be accepted');
+      Check(Actor.Revision = RevisionAfterRebuild,
+        'duplicate rebuild command should not increment revision');
     finally
       Command.Free;
     end;

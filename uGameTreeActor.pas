@@ -84,12 +84,15 @@ type
   private
     FCommandQueue: TThreadMessageQueue;
     FGameTree: TGameTree;
+    FLastRebuildSignature: string;
     FNextCommandId: Int64;
     FNextSearchId: Int64;
     FOwnsGameTree: Boolean;
     FRevision: Int64;
     FSearches: TObjectList;
     procedure CopyStoredVariationsToCommand(ACommand: TGameTreeCommand);
+    function CommandRebuildSignature(ACommand: TGameTreeCommand): string;
+    procedure ClearRebuildSignature;
     function FindSearch(ASearchId: Int64): TGameTreeSearchRecord; overload;
     function FindSearch(const ASearch: TGameTreeSearchRef
       ): TGameTreeSearchRecord; overload;
@@ -437,6 +440,107 @@ begin
   end;
 end;
 
+function TGameTreeActor.CommandRebuildSignature(
+  ACommand: TGameTreeCommand): string;
+var
+  I: Integer;
+  Line: TGameTreeVariationLine;
+
+  procedure AddLine(const AText: string);
+  begin
+    Result += AText + #10;
+  end;
+
+  procedure AddStrings(AStrings: TStrings);
+  var
+    J: Integer;
+  begin
+    if AStrings = nil then
+    begin
+      AddLine('<nil>');
+      Exit;
+    end;
+    AddLine(IntToStr(AStrings.Count));
+    for J := 0 to AStrings.Count - 1 do
+      AddLine(AStrings[J]);
+  end;
+
+  function BoolText(AValue: Boolean): string;
+  begin
+    if AValue then
+      Result := '1'
+    else
+      Result := '0';
+  end;
+
+  function SecondsText(AValue: Double): string;
+  begin
+    Result := FormatFloat('0.000', AValue);
+  end;
+begin
+  Result := '';
+  if ACommand = nil then
+    Exit;
+
+  AddLine(ACommand.HeaderInput.Signature);
+  AddLine(ACommand.HeaderInput.EventName);
+  AddLine(ACommand.HeaderInput.WhiteName);
+  AddLine(ACommand.HeaderInput.BlackName);
+  AddLine(ACommand.HeaderInput.ResultText);
+  AddLine(ACommand.HeaderInput.StartingFEN);
+  AddLine(BoolText(ACommand.HeaderInput.RecordTimeControl));
+  AddLine(IntToStr(ACommand.HeaderInput.TimeControl.MovesPerPeriod));
+  AddLine(SecondsText(ACommand.HeaderInput.TimeControl.MinutesPerPeriod));
+  AddLine(SecondsText(ACommand.HeaderInput.TimeControl.IncrementSeconds));
+  AddLine(IntToStr(Ord(ACommand.HeaderInput.TimeControl.IncrementMode)));
+
+  AddStrings(ACommand.MainlineInput.Moves);
+  AddStrings(ACommand.MainlineInput.Annotations);
+  AddLine(BoolText(ACommand.MainlineInput.RecordClock));
+  AddLine(SecondsText(ACommand.MainlineInput.WhiteRemainingSeconds));
+  AddLine(SecondsText(ACommand.MainlineInput.BlackRemainingSeconds));
+  AddLine(SecondsText(ACommand.MainlineInput.WhiteUsedSeconds));
+  AddLine(SecondsText(ACommand.MainlineInput.BlackUsedSeconds));
+
+  AddLine(BoolText(ACommand.EnginePvInput.RecordPV));
+  AddLine(IntToStr(ACommand.EnginePvInput.BasePly));
+  AddLine(ACommand.EnginePvInput.Score);
+  AddLine(ACommand.EnginePvInput.PV);
+  AddLine(BoolText(ACommand.AnnotatorPvInput.RecordPV));
+  AddLine(IntToStr(ACommand.AnnotatorPvInput.BasePly));
+  AddLine(ACommand.AnnotatorPvInput.Score);
+  AddLine(ACommand.AnnotatorPvInput.PV);
+
+  AddLine(IntToStr(ACommand.VariationIndex));
+  AddLine(IntToStr(ACommand.PlyNumber));
+  AddLine(ACommand.ScoreText);
+  AddLine(ACommand.PvText);
+  if ACommand.RebuildVariationLines = nil then
+    AddLine('0')
+  else
+  begin
+    AddLine(IntToStr(ACommand.RebuildVariationLines.Count));
+    for I := 0 to ACommand.RebuildVariationLines.Count - 1 do
+    begin
+      Line := TGameTreeVariationLine(ACommand.RebuildVariationLines[I]);
+      if Line = nil then
+      begin
+        AddLine('<nil>');
+        Continue;
+      end;
+      AddLine(IntToStr(Line.DisplayAfterPly));
+      AddLine(IntToStr(Line.BasePly));
+      AddLine(Line.MovesText);
+      AddLine(Line.AnnotationText);
+    end;
+  end;
+end;
+
+procedure TGameTreeActor.ClearRebuildSignature;
+begin
+  FLastRebuildSignature := '';
+end;
+
 function TGameTreeActor.CreateRebuildFromInputsCommand(
   const AHeader: TGameTreeHeaderInput;
   const AMainline: TGameTreeMainlineInput;
@@ -676,6 +780,7 @@ end;
 procedure TGameTreeActor.ExecuteCommand(ACommand: TGameTreeCommand);
 var
   Node: TGameTreePlyNode;
+  RebuildSignature: string;
   Search: TGameTreeSearchRecord;
 begin
   if ACommand = nil then
@@ -688,6 +793,8 @@ begin
     Reject(ACommand, 'wrong game tree id');
     Exit;
   end;
+  if ACommand.CommandKind <> gtcRebuildFromInputs then
+    ClearRebuildSignature;
 
   case ACommand.CommandKind of
     gtcAddMainlineMove:
@@ -909,6 +1016,13 @@ begin
       end;
     gtcRebuildFromInputs:
       begin
+        RebuildSignature := CommandRebuildSignature(ACommand);
+        if (RebuildSignature <> '') and
+          (RebuildSignature = FLastRebuildSignature) then
+        begin
+          ACommand.Accepted := True;
+          Exit;
+        end;
         BeginGameTreeRebuild(FGameTree, ACommand.HeaderInput);
         RecordGameTreeMainline(FGameTree, ACommand.MainlineInput);
         RecordGameTreeAnalysis(FGameTree, ACommand.EnginePvInput,
@@ -923,6 +1037,7 @@ begin
               ACommand.VariationIndex, ACommand.PlyNumber,
               ACommand.ScoreText, ACommand.PvText));
         ACommand.Accepted := True;
+        FLastRebuildSignature := RebuildSignature;
         Inc(FRevision);
       end;
     gtcSetHeader:
