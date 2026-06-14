@@ -1900,11 +1900,8 @@ begin
   try
     Result := ExecuteGameTreeCommand(Actor, Command, AErrorText);
     if Result then
-    begin
-      ASearch.GameTreeId := AGameTree.GameTreeId;
-      ASearch.NodeId := Node.NodeId;
-      ASearch.SearchId := LSearchId;
-    end;
+      ASearch := GameTreeSearchRef(AGameTree.GameTreeId, LSearchId,
+        Node.NodeId);
   finally
     Command.Free;
   end;
