@@ -323,12 +323,10 @@ type
     procedure AddVariationMove(const AMove: string;
       ASource: TGameTreeMoveSource = gmsHuman);
     function ExecuteGameTreeAppendMainlineMove(AGameTree: TGameTree;
-      const AMove: string; ASource: TGameTreeMoveSource;
-      ARefreshScoreHistory: Boolean = False): TGameTreePlyNode;
+      const AMove: string; ASource: TGameTreeMoveSource): TGameTreePlyNode;
     function AppendGameTreeMainlineMove(AActor: TGameTreeActor;
       AGameTree: TGameTree; const AMove: string; ASource: TGameTreeMoveSource;
-      ARefreshScoreHistory: Boolean; out ACreatedNodeId: Int64;
-      out AErrorText: string): Boolean;
+      out ACreatedNodeId: Int64; out AErrorText: string): Boolean;
     function RebuildGameTreeFromInputs(AActor: TGameTreeActor;
       const AHeader: TGameTreeHeaderInput;
       const AMainline: TGameTreeMainlineInput;
@@ -342,8 +340,7 @@ type
       ACommand: TGameTreeCommand; out AErrorText: string): Boolean;
     function ExecuteAndApplyGameTreeCommand(AActor: TGameTreeActor;
       AGameTree: TGameTree; ACommand: TGameTreeCommand;
-      AFollowVariationBrowse, ARefreshScoreHistory: Boolean;
-      out AErrorText: string): Boolean;
+      AFollowVariationBrowse: Boolean; out AErrorText: string): Boolean;
     function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
       out ASearch: TGameTreeSearchRef; out AErrorText: string): Boolean;
     function AnalyzerSearchMatches(const ASearch: TGameTreeSearchRef): Boolean;
@@ -379,8 +376,7 @@ type
     procedure InvalidateAnalyzerPositionSignature;
     procedure InvalidateMctsPositionSignature;
     procedure ApplyGameTreeCommandResult(AGameTree: TGameTree;
-      ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
-      ARefreshScoreHistory: Boolean = False);
+      ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean);
     function ExecuteGameTreeRebuildFromInput(AGame: TRunningGame;
       AGameTree: TGameTree; AMoves, AAnnotations: TStrings): Boolean;
     function CurrentGameTreeHeaderInput(AGame: TRunningGame): TGameTreeHeaderInput;
@@ -555,7 +551,7 @@ type
     procedure UpdateBoardFromBrowseState(AGameTree: TGameTree);
     procedure UpdateBoardHighlights(AGameTree: TGameTree);
     procedure UpdateClockLabels(const AWhiteName, ABlackName: string);
-    procedure UpdateScoreHistory(ARefreshTree: Boolean; AGameTree: TGameTree);
+    procedure UpdateScoreHistory(AGameTree: TGameTree);
     procedure UpdateGameListItem(AGame: TRunningGame);
     procedure UpdateLegalMoves;
     procedure UpdateGameLogMemo;
@@ -1659,7 +1655,7 @@ begin
     FSetupForm.ApplyPreferences(FPreferences);
   if FDatabaseForm <> nil then
     FDatabaseForm.ApplyPreferences(FPreferences);
-  UpdateScoreHistory(True, ActiveGameTree);
+  UpdateScoreHistory(ActiveGameTree);
 end;
 
 procedure TMainForm.ApplyBoardFlipped;
@@ -1763,8 +1759,7 @@ end;
 
 function TMainForm.AppendGameTreeMainlineMove(AActor: TGameTreeActor;
   AGameTree: TGameTree; const AMove: string; ASource: TGameTreeMoveSource;
-  ARefreshScoreHistory: Boolean; out ACreatedNodeId: Int64;
-  out AErrorText: string): Boolean;
+  out ACreatedNodeId: Int64; out AErrorText: string): Boolean;
 var
   Command: TGameTreeCommand;
 begin
@@ -1780,7 +1775,7 @@ begin
   Command := AActor.CreateAppendMainlineMoveCommand(AMove, ASource);
   try
     Result := ExecuteAndApplyGameTreeCommand(AActor, AGameTree, Command,
-      False, ARefreshScoreHistory, AErrorText);
+      False, AErrorText);
     if not Result then
       Exit;
     ACreatedNodeId := Command.CreatedNodeId;
@@ -1790,8 +1785,7 @@ begin
 end;
 
 function TMainForm.ExecuteGameTreeAppendMainlineMove(AGameTree: TGameTree;
-  const AMove: string; ASource: TGameTreeMoveSource;
-  ARefreshScoreHistory: Boolean): TGameTreePlyNode;
+  const AMove: string; ASource: TGameTreeMoveSource): TGameTreePlyNode;
 var
   Actor: TGameTreeActor;
   CreatedNodeId: Int64;
@@ -1803,7 +1797,7 @@ begin
     Exit;
 
   if not AppendGameTreeMainlineMove(Actor, AGameTree, AMove, ASource,
-    ARefreshScoreHistory, CreatedNodeId, LErrorText) then
+    CreatedNodeId, LErrorText) then
     Exit;
 
   Result := AGameTree.FindNodeById(CreatedNodeId);
@@ -1875,13 +1869,11 @@ end;
 
 function TMainForm.ExecuteAndApplyGameTreeCommand(AActor: TGameTreeActor;
   AGameTree: TGameTree; ACommand: TGameTreeCommand;
-  AFollowVariationBrowse, ARefreshScoreHistory: Boolean;
-  out AErrorText: string): Boolean;
+  AFollowVariationBrowse: Boolean; out AErrorText: string): Boolean;
 begin
   Result := ExecuteGameTreeCommand(AActor, ACommand, AErrorText);
   if Result then
-    ApplyGameTreeCommandResult(AGameTree, ACommand, AFollowVariationBrowse,
-      ARefreshScoreHistory);
+    ApplyGameTreeCommandResult(AGameTree, ACommand, AFollowVariationBrowse);
 end;
 
 function TMainForm.TryStartGameTreeSearchForDisplayedNode(
@@ -2011,7 +2003,7 @@ begin
   Command := AActor.CreateStoreSearchMoveVariationCommand(ASearch, ASource);
   try
     Result := ExecuteAndApplyGameTreeCommand(AActor, LGameTree, Command,
-      True, False, AErrorText);
+      True, AErrorText);
   finally
     Command.Free;
   end;
@@ -2035,7 +2027,7 @@ begin
   Command := AActor.CreateStoreMoveVariationCommand(ANodeId, AMove, ASource);
   try
     Result := ExecuteAndApplyGameTreeCommand(AActor, AGameTree, Command,
-      True, False, AErrorText);
+      True, AErrorText);
   finally
     Command.Free;
   end;
@@ -2059,7 +2051,7 @@ begin
     APrincipalVariation);
   try
     Result := ExecuteAndApplyGameTreeCommand(AActor, AGameTree, Command,
-      False, False, AErrorText);
+      False, AErrorText);
   finally
     Command.Free;
   end;
@@ -2180,8 +2172,7 @@ begin
 end;
 
 procedure TMainForm.ApplyGameTreeCommandResult(AGameTree: TGameTree;
-  ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean;
-  ARefreshScoreHistory: Boolean);
+  ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean);
 begin
   if (AGameTree = nil) or (ACommand = nil) or (not ACommand.Accepted) then
     Exit;
@@ -2198,7 +2189,7 @@ begin
   end;
 
   RebuildGameMoveLabels(False, AGameTree);
-  UpdateScoreHistory(ARefreshScoreHistory, AGameTree);
+  UpdateScoreHistory(AGameTree);
   RefreshVisibleGameTreeView(False, AGameTree);
 end;
 
@@ -2287,8 +2278,7 @@ begin
     LGameTree := ActiveGameTree;
     if LGameTree = nil then
       Exit;
-    if ExecuteGameTreeAppendMainlineMove(LGameTree, LMove,
-      ASource, True) = nil then
+    if ExecuteGameTreeAppendMainlineMove(LGameTree, LMove, ASource) = nil then
       Exit;
     ClearVariationExploration;
     FGameBrowsePly := -1;
@@ -5506,7 +5496,7 @@ begin
     FScoreHistoryForm := TScoreHistoryForm.Create(Self);
     FScoreHistoryForm.OnClose := @ScoreHistoryFormClose;
   end;
-  UpdateScoreHistory(True, ActiveGameTree);
+  UpdateScoreHistory(ActiveGameTree);
   ShowFormCenteredOnOwner(FScoreHistoryForm, Self);
 end;
 
@@ -6093,7 +6083,7 @@ begin
   UpdateLegalMoves;
   RestartAnalyzer(LGameTree);
   RestartMctsAnnotator(LGameTree);
-  UpdateScoreHistory(True, LGameTree);
+  UpdateScoreHistory(LGameTree);
   VisibleMainPvForTree(LGameTree, LPvBaseBoard, LPvBasePly, LPvText,
     LPvScore, LPvDepth, LPvTimeText);
   if FPvBrowser <> nil then
@@ -6204,7 +6194,7 @@ begin
 
   UpdateBoardHighlights(LGameTree);
   RebuildGameMoveLabels(False, LGameTree);
-  UpdateScoreHistory(False, LGameTree);
+  UpdateScoreHistory(LGameTree);
   RefreshVisibleGameTreeView(False, LGameTree);
 
   UpdateLegalMoves;
@@ -6242,11 +6232,9 @@ begin
   FDatabaseForm.SearchCurrentPosition;
 end;
 
-procedure TMainForm.UpdateScoreHistory(ARefreshTree: Boolean;
-  AGameTree: TGameTree);
+procedure TMainForm.UpdateScoreHistory(AGameTree: TGameTree);
 var
   LAnnotationsText: string;
-  LGame: TRunningGame;
   LGameTree: TGameTree;
   LPly: Integer;
   LStartingFEN: string;
@@ -6257,11 +6245,6 @@ begin
   LGameTree := AGameTree;
   if LGameTree = nil then
     Exit;
-  if ARefreshTree then
-  begin
-    LGame := GameForTreeRefresh(LGameTree);
-    UpdateGameTreeFromState(LGame, LGameTree);
-  end;
   LAnnotationsText := GameTreeScoreAnnotationsText(LGameTree);
   LStartingFEN := StartingFenForTree(LGameTree);
 
