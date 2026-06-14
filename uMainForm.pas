@@ -343,6 +343,7 @@ type
     function RecordAnnotatorPvInGameTree(AActor: TGameTreeActor;
       AGameTree: TGameTree; ANodeId: Int64; const AScore,
       APrincipalVariation: string; out AErrorText: string): Boolean;
+    function ClearGameTreeStoredVariations(AActor: TGameTreeActor): Boolean;
     function TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
       out AActor: TGameTreeActor; out AGameTree: TGameTree): Boolean;
     procedure TrackAnalyzerSearch(AGameTree: TGameTree; ASearchId: Int64);
@@ -1919,6 +1920,24 @@ begin
   end;
 end;
 
+function TMainForm.ClearGameTreeStoredVariations(
+  AActor: TGameTreeActor): Boolean;
+var
+  Command: TGameTreeCommand;
+  LErrorText: string;
+begin
+  Result := False;
+  if AActor = nil then
+    Exit;
+
+  Command := AActor.CreateClearStoredVariationsCommand;
+  try
+    Result := ExecuteGameTreeCommand(AActor, Command, LErrorText);
+  finally
+    Command.Free;
+  end;
+end;
+
 function TMainForm.TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
   out AActor: TGameTreeActor; out AGameTree: TGameTree): Boolean;
 var
@@ -3457,20 +3476,10 @@ end;
 procedure TMainForm.ClearStoredTreeVariations(AGameTree: TGameTree);
 var
   Actor: TGameTreeActor;
-  Command: TGameTreeCommand;
-  LErrorText: string;
 begin
   SetLength(FVariationHits, 0);
   Actor := ActorForGameTree(AGameTree);
-  if Actor <> nil then
-  begin
-    Command := Actor.CreateClearStoredVariationsCommand;
-    try
-      ExecuteGameTreeCommand(Actor, Command, LErrorText);
-    finally
-      Command.Free;
-    end;
-  end;
+  ClearGameTreeStoredVariations(Actor);
   ClearVariationExploration;
 end;
 
