@@ -457,6 +457,8 @@ type
     function VisibleMainPvForTree(AGameTree: TGameTree;
       out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV,
       AScore, ADepth, ATimeText: string): Boolean;
+    procedure RefreshMainPvBrowserFromTree(AGameTree: TGameTree;
+      const AStartingFEN: string = '');
     procedure SetDisplayedPvCache(const APV, AScore, ADepth,
       ATimeText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer);
     procedure ClearDisplayedPvCache(ABaseBoard: TDraughtsBoard;
@@ -4110,6 +4112,30 @@ begin
   Result := Trim(APV) <> '';
 end;
 
+procedure TMainForm.RefreshMainPvBrowserFromTree(AGameTree: TGameTree;
+  const AStartingFEN: string);
+var
+  LPvBaseBoard: TDraughtsBoard;
+  LPvBasePly: Integer;
+  LPvDepth: string;
+  LPvScore: string;
+  LPvText: string;
+  LPvTimeText: string;
+  LStartingFEN: string;
+begin
+  if FPvBrowser = nil then
+    Exit;
+
+  LStartingFEN := AStartingFEN;
+  if LStartingFEN = '' then
+    LStartingFEN := StartingFenForTree(AGameTree);
+
+  VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
+    LPvScore, LPvDepth, LPvTimeText);
+  FPvBrowser.SetData(LPvBaseBoard, LPvBasePly, LStartingFEN, LPvText,
+    LPvScore, LPvDepth, LPvTimeText);
+end;
+
 procedure TMainForm.SetDisplayedPvCache(const APV, AScore, ADepth,
   ATimeText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer);
 begin
@@ -4944,12 +4970,7 @@ begin
     RefreshDisplayedGameTreeViews(AGame.GameTree, False);
     if AGame.GameTree = ActiveGameTree then
     begin
-      VisibleMainPvForTree(AGame.GameTree, LPvBaseBoard, LPvBasePly,
-        LPvText, LPvScore, LPvDepth, LPvTimeText);
-      if FPvBrowser <> nil then
-        FPvBrowser.SetData(LPvBaseBoard, LPvBasePly,
-          StartingFenForTree(AGame.GameTree), LPvText, LPvScore, LPvDepth,
-          LPvTimeText);
+      RefreshMainPvBrowserFromTree(AGame.GameTree);
       if FBoardControl <> nil then
         FBoardControl.Invalidate;
     end;
@@ -5021,14 +5042,7 @@ begin
     if LPvChanged then
     begin
       UpdateBoardHighlights(AGame.GameTree);
-      if FPvBrowser <> nil then
-      begin
-        VisibleMainPvForTree(AGame.GameTree, LPvBaseBoard, LPvBasePly,
-          LPvText, LPvScore, LPvDepth, LPvTimeText);
-        FPvBrowser.SetData(LPvBaseBoard, LPvBasePly,
-          StartingFenForTree(AGame.GameTree), LPvText, LPvScore, LPvDepth,
-          LPvTimeText);
-      end;
+      RefreshMainPvBrowserFromTree(AGame.GameTree);
       if FBoardControl <> nil then
         FBoardControl.Invalidate;
     end;
@@ -6580,12 +6594,6 @@ end;
 procedure TMainForm.UpdateBrowseInfo;
 var
   LGameTree: TGameTree;
-  LPvBaseBoard: TDraughtsBoard;
-  LPvBasePly: Integer;
-  LPvDepth: string;
-  LPvScore: string;
-  LPvText: string;
-  LPvTimeText: string;
 begin
   LGameTree := ActiveGameTree;
   UpdateBoardHighlights(LGameTree);
@@ -6596,12 +6604,7 @@ begin
   RestartAnalyzer(LGameTree);
   RestartMctsAnnotator(LGameTree);
   UpdateScoreHistory(LGameTree);
-  VisibleMainPvForTree(LGameTree, LPvBaseBoard, LPvBasePly, LPvText,
-    LPvScore, LPvDepth, LPvTimeText);
-  if FPvBrowser <> nil then
-    FPvBrowser.SetData(LPvBaseBoard, LPvBasePly,
-      StartingFenForTree(LGameTree), LPvText, LPvScore, LPvDepth,
-      LPvTimeText);
+  RefreshMainPvBrowserFromTree(LGameTree);
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
 end;
@@ -6658,12 +6661,6 @@ var
   LBlackName: string;
   LFenText: string;
   LGameTree: TGameTree;
-  LPvBaseBoard: TDraughtsBoard;
-  LPvBasePly: Integer;
-  LPvDepth: string;
-  LPvScore: string;
-  LPvText: string;
-  LPvTimeText: string;
   LResultText: string;
   LWhiteName: string;
 begin
@@ -6715,12 +6712,7 @@ begin
 
   UpdateGameLogMemo;
 
-  VisibleMainPvForTree(LGameTree, LPvBaseBoard, LPvBasePly, LPvText,
-    LPvScore, LPvDepth, LPvTimeText);
-
-  if FPvBrowser <> nil then
-    FPvBrowser.SetData(LPvBaseBoard, LPvBasePly, LFenText,
-      LPvText, LPvScore, LPvDepth, LPvTimeText);
+  RefreshMainPvBrowserFromTree(LGameTree, LFenText);
   HighlightGameMoveTextSelection(False, LGameTree);
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
