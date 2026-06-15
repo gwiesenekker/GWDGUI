@@ -176,7 +176,9 @@ type
     function SnapshotLastError: string;
     function SnapshotResultText: string;
     function SnapshotState: TGameOrchestratorState;
+    procedure AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
     procedure AssignSetupTo(out ASetup: TGameSetup);
+    procedure MarkSnapshotStopped(const AReason: string);
     property Id: Integer read FId;
     property GameTreeActor: TGameTreeActor read FGameTreeActor;
     property GameTree: TGameTree read FGameTree;
@@ -910,6 +912,16 @@ end;
 function TRunningGame.SnapshotState: TGameOrchestratorState;
 begin
   Result := FSnapshot.State;
+end;
+
+procedure TRunningGame.AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
+begin
+  FSnapshot.AssignFrom(ASnapshot);
+end;
+
+procedure TRunningGame.MarkSnapshotStopped(const AReason: string);
+begin
+  FSnapshot.MarkStopped(AReason);
 end;
 
 constructor TMainForm.Create(AOwner: TComponent);
@@ -6346,7 +6358,7 @@ begin
   if not (AGame.FLifecycle in [rglFinished, rglRemoveRequested]) then
     AGame.FLifecycle := rglStopRequested;
   AGame.FStopReason := AReason;
-  AGame.Snapshot.MarkStopped(AGame.StopReason);
+  AGame.MarkSnapshotStopped(AGame.StopReason);
   UpdateRunningGameTreeFromSnapshot(AGame);
   if not FClosing then
   begin
@@ -6464,14 +6476,14 @@ var
     if LGame = nil then
       Exit;
 
-    LGame.Snapshot.AssignFrom(AMessage.Snapshot);
+    LGame.AssignRunnerSnapshot(AMessage.Snapshot);
     UpdateRunningGameTreeFromSnapshot(LGame);
     if LGame.FLifecycle = rglStarting then
       LGame.FLifecycle := rglRunning;
     LInput := RunningSnapshotTreeInput(LGame, '');
     if (LGame.FLifecycle in [rglStopRequested, rglRemoveRequested]) and
       (LInput.State in [gosWaiting, gosRunning, gosError]) then
-      LGame.Snapshot.MarkStopped(LGame.StopReason);
+      LGame.MarkSnapshotStopped(LGame.StopReason);
     if not FClosing then
     begin
       UpdateGameListItem(LGame);
