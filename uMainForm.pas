@@ -520,7 +520,6 @@ type
     function ActorForGameTreeId(AGameTreeId: Int64): TGameTreeActor;
     function ActorForSearchRef(
       const ASearch: TGameTreeSearchRef): TGameTreeActor;
-    function GameForTreeRefresh(AGameTree: TGameTree): TRunningGame;
     function BlackNameForTree(AGameTree: TGameTree): string;
     function EventNameForTree(AGameTree: TGameTree): string;
     function ResultForTree(AGameTree: TGameTree): string;
@@ -4261,11 +4260,6 @@ begin
   Result := ActorForGameTreeId(ASearch.GameTreeId);
 end;
 
-function TMainForm.GameForTreeRefresh(AGameTree: TGameTree): TRunningGame;
-begin
-  Result := GameForTree(AGameTree);
-end;
-
 function TMainForm.StartingFenForTree(AGameTree: TGameTree): string;
 begin
   Result := '';
@@ -4510,7 +4504,7 @@ var
   LTreeScore: string;
   LTreeTimeText: string;
 begin
-  LGame := GameForTreeRefresh(AGameTree);
+  LGame := GameForTree(AGameTree);
   APV := '';
   AScore := '';
   ADepth := '';
@@ -5859,7 +5853,7 @@ begin
   if LGameTree = nil then
     Exit;
 
-  LGame := GameForTreeRefresh(LGameTree);
+  LGame := GameForTree(LGameTree);
   PrepareGameTreeForPdn(LGame, LGameTree, AEventName);
   LOptions := DefaultGameTreePdnRenderOptions;
   Result := GameTreeToPdnTextEx(LGameTree, LOptions);
@@ -6024,7 +6018,7 @@ begin
   LGameTree := ActiveGameTree;
   if LGameTree = nil then
     Exit;
-  LGame := GameForTreeRefresh(LGameTree);
+  LGame := GameForTree(LGameTree);
   PrepareGameTreeForPdn(LGame, LGameTree, '');
   LOptions := CurrentFilteredGameTreePdnOptions;
   Clipboard.AsText := GameTreeToPdnTextEx(LGameTree, LOptions);
