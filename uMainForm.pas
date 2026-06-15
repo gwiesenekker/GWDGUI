@@ -4391,16 +4391,7 @@ begin
         ABaseBoard := LInput.PvBaseBoard;
       Exit(True);
     end;
-
-    APV := LInput.PrincipalVariation;
-    AScore := LInput.PvScore;
-    ADepth := LInput.PvDepth;
-    ATimeText := LInput.PvTimeText;
-    if Trim(APV) <> '' then
-    begin
-      ABaseBoard := LInput.PvBaseBoard;
-      ABasePly := LInput.PvBasePly;
-    end;
+    Exit(False);
   end
   else if AGameTree = FGameTree then
   begin
@@ -4813,7 +4804,14 @@ begin
 
   if (AGame = nil) or (AGame.GameTree = nil) then
     Exit;
-  LPvBaseBoard := AInput.PvBaseBoard;
+  Result.PrincipalVariation := '';
+  Result.Score := '';
+  Result.Depth := '';
+  Result.TimeText := '';
+  Result.BasePly := 0;
+  Result.BaseBoard := nil;
+  Result.BasePositionKey := '';
+  LPvBaseBoard := nil;
   if VisibleMainPvForTree(AGame.GameTree, LPvBaseBoard, LPvBasePly,
     LPvText, LPvScore, LPvDepth, LPvTimeText) then
   begin
