@@ -94,6 +94,8 @@ type
     FOwnsGameTree: Boolean;
     FRevision: Int64;
     FSearches: TObjectList;
+    procedure CopyMainlineInputToCommand(ACommand: TGameTreeCommand;
+      const AMainline: TGameTreeMainlineInput; AIncludeMoves: Boolean);
     procedure CopyStoredVariationsToCommand(ACommand: TGameTreeCommand);
     function CommandRebuildSignature(ACommand: TGameTreeCommand): string;
     procedure ClearRebuildSignature;
@@ -365,13 +367,7 @@ begin
   Result.HeaderInput := AHeader;
   Result.MoveText := Trim(AMoveText);
   Result.AnnotationText := AAnnotationText;
-  Result.MainlineInput.RecordClock := AMainline.RecordClock;
-  Result.MainlineInput.WhiteRemainingSeconds :=
-    AMainline.WhiteRemainingSeconds;
-  Result.MainlineInput.BlackRemainingSeconds :=
-    AMainline.BlackRemainingSeconds;
-  Result.MainlineInput.WhiteUsedSeconds := AMainline.WhiteUsedSeconds;
-  Result.MainlineInput.BlackUsedSeconds := AMainline.BlackUsedSeconds;
+  CopyMainlineInputToCommand(Result, AMainline, False);
   Result.EnginePvInput := AEnginePV;
   Result.MoveSource := ASource;
 end;
@@ -476,6 +472,28 @@ end;
 function TGameTreeActor.CreateClearStoredVariationsCommand: TGameTreeCommand;
 begin
   Result := CreateCommand(gtcClearStoredVariations);
+end;
+
+procedure TGameTreeActor.CopyMainlineInputToCommand(ACommand: TGameTreeCommand;
+  const AMainline: TGameTreeMainlineInput; AIncludeMoves: Boolean);
+begin
+  if ACommand = nil then
+    Exit;
+
+  ACommand.MainlineInput.RecordClock := AMainline.RecordClock;
+  ACommand.MainlineInput.WhiteRemainingSeconds :=
+    AMainline.WhiteRemainingSeconds;
+  ACommand.MainlineInput.BlackRemainingSeconds :=
+    AMainline.BlackRemainingSeconds;
+  ACommand.MainlineInput.WhiteUsedSeconds := AMainline.WhiteUsedSeconds;
+  ACommand.MainlineInput.BlackUsedSeconds := AMainline.BlackUsedSeconds;
+
+  if not AIncludeMoves then
+    Exit;
+  if AMainline.Moves <> nil then
+    ACommand.MainlineInput.Moves.Assign(AMainline.Moves);
+  if AMainline.Annotations <> nil then
+    ACommand.MainlineInput.Annotations.Assign(AMainline.Annotations);
 end;
 
 procedure TGameTreeActor.CopyStoredVariationsToCommand(
@@ -625,17 +643,7 @@ begin
   Result := CreateCommand(gtcRebuildFromInputs);
   CopyStoredVariationsToCommand(Result);
   Result.HeaderInput := AHeader;
-  Result.MainlineInput.RecordClock := AMainline.RecordClock;
-  Result.MainlineInput.WhiteRemainingSeconds :=
-    AMainline.WhiteRemainingSeconds;
-  Result.MainlineInput.BlackRemainingSeconds :=
-    AMainline.BlackRemainingSeconds;
-  Result.MainlineInput.WhiteUsedSeconds := AMainline.WhiteUsedSeconds;
-  Result.MainlineInput.BlackUsedSeconds := AMainline.BlackUsedSeconds;
-  if AMainline.Moves <> nil then
-    Result.MainlineInput.Moves.Assign(AMainline.Moves);
-  if AMainline.Annotations <> nil then
-    Result.MainlineInput.Annotations.Assign(AMainline.Annotations);
+  CopyMainlineInputToCommand(Result, AMainline, True);
   Result.EnginePvInput := AEnginePV;
   Result.AnnotatorPvInput := AAnnotatorPV;
   Result.VariationIndex := AVariationPvIndex;
@@ -659,13 +667,7 @@ function TGameTreeActor.CreateSetHeaderCommand(
 begin
   Result := CreateCommand(gtcSetHeader);
   Result.HeaderInput := AHeader;
-  Result.MainlineInput.RecordClock := AMainline.RecordClock;
-  Result.MainlineInput.WhiteRemainingSeconds :=
-    AMainline.WhiteRemainingSeconds;
-  Result.MainlineInput.BlackRemainingSeconds :=
-    AMainline.BlackRemainingSeconds;
-  Result.MainlineInput.WhiteUsedSeconds := AMainline.WhiteUsedSeconds;
-  Result.MainlineInput.BlackUsedSeconds := AMainline.BlackUsedSeconds;
+  CopyMainlineInputToCommand(Result, AMainline, False);
 end;
 
 function TGameTreeActor.CreateStartSearchCommand(ANodeId: Int64;
