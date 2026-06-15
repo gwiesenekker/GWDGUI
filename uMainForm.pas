@@ -5470,35 +5470,19 @@ var
 
   function RunningTreeStartingFEN: string;
   begin
-    Result := Trim(AGame.GameTree.StartingFEN);
-    if Result = '' then
-      Result := LInput.StartingFEN;
+    Result := StartingFenForTree(AGame.GameTree);
   end;
 
   function RunningTreeResultText: string;
   begin
-    Result := Trim(AGame.GameTree.ResultText);
-    if Result = '' then
-      Result := LInput.ResultText;
+    Result := ResultForTree(AGame.GameTree);
   end;
 
   procedure RunningTreeClockValues(out AWhiteRemainingSeconds,
     ABlackRemainingSeconds, AWhiteUsedSeconds, ABlackUsedSeconds: Double);
   begin
-    if AGame.GameTree.HasClockInfo then
-    begin
-      AWhiteRemainingSeconds := AGame.GameTree.WhiteRemainingSeconds;
-      ABlackRemainingSeconds := AGame.GameTree.BlackRemainingSeconds;
-      AWhiteUsedSeconds := AGame.GameTree.WhiteUsedSeconds;
-      ABlackUsedSeconds := AGame.GameTree.BlackUsedSeconds;
-    end
-    else
-    begin
-      AWhiteRemainingSeconds := LInput.WhiteRemainingSeconds;
-      ABlackRemainingSeconds := LInput.BlackRemainingSeconds;
-      AWhiteUsedSeconds := LInput.WhiteUsedSeconds;
-      ABlackUsedSeconds := LInput.BlackUsedSeconds;
-    end;
+    ClockValuesForTree(AGame.GameTree, AWhiteRemainingSeconds,
+      ABlackRemainingSeconds, AWhiteUsedSeconds, ABlackUsedSeconds);
   end;
 begin
   if AGame = nil then

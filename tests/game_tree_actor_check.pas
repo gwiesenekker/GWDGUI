@@ -348,6 +348,30 @@ begin
     finally
       Command.Free;
     end;
+
+    Command := Actor.CreateRebuildFromInputsCommand(
+      GameTreeHeaderInput('clock-rebuild', 'Clock Event', 'Alice', 'Bob',
+        '*', 'W:W31-50:B1-20', True, CustomTimeControl),
+      GameTreeMainlineInput(nil, nil, True, 321.0, 432.0, 21.0, 32.0),
+      GameTreePvInput(False, 0, '', ''),
+      GameTreePvInput(False, 0, '', ''));
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'rebuild command with no moves and clock state should be accepted');
+      Check(Actor.GameTree.HasClockInfo,
+        'rebuild command with no moves should record clock state');
+      Check(Actor.GameTree.WhiteRemainingSeconds = 321.0,
+        'rebuild command with no moves should record white remaining time');
+      Check(Actor.GameTree.BlackRemainingSeconds = 432.0,
+        'rebuild command with no moves should record black remaining time');
+      Check(Actor.GameTree.WhiteUsedSeconds = 21.0,
+        'rebuild command with no moves should record white used time');
+      Check(Actor.GameTree.BlackUsedSeconds = 32.0,
+        'rebuild command with no moves should record black used time');
+    finally
+      Command.Free;
+    end;
   finally
     EmptyAnnotations.Free;
     Moves.Free;

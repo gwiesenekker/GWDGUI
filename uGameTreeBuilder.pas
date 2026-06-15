@@ -178,23 +178,31 @@ procedure RecordGameTreeMainline(AGameTree: TGameTree;
 var
   I: Integer;
   LNode: TGameTreePlyNode;
+  LMoveCount: Integer;
 begin
-  if (AGameTree = nil) or (AMainline.Moves = nil) then
+  if AGameTree = nil then
     Exit;
 
-  for I := 0 to AMainline.Moves.Count - 1 do
+  if AMainline.Moves <> nil then
   begin
-    LNode := AGameTree.RecordMainlineMove(I + 1, AMainline.Moves[I]);
-    if LNode = nil then
-      Continue;
-    if (AMainline.Annotations <> nil) and
-      (I < AMainline.Annotations.Count) then
-      AGameTree.RecordMainlineAnnotation(I + 1, AMainline.Annotations[I]);
+    for I := 0 to AMainline.Moves.Count - 1 do
+    begin
+      LNode := AGameTree.RecordMainlineMove(I + 1, AMainline.Moves[I]);
+      if LNode = nil then
+        Continue;
+      if (AMainline.Annotations <> nil) and
+        (I < AMainline.Annotations.Count) then
+        AGameTree.RecordMainlineAnnotation(I + 1, AMainline.Annotations[I]);
+    end;
+    AGameTree.TrimMainlineToCount(AMainline.Moves.Count);
   end;
-  AGameTree.TrimMainlineToCount(AMainline.Moves.Count);
 
-  if AMainline.RecordClock and (AMainline.Moves.Count > 0) then
-    AGameTree.RecordClockState(AMainline.Moves.Count,
+  if AMainline.Moves <> nil then
+    LMoveCount := AMainline.Moves.Count
+  else
+    LMoveCount := AGameTree.MainlineCount;
+  if AMainline.RecordClock then
+    AGameTree.RecordClockState(LMoveCount,
       AMainline.WhiteRemainingSeconds, AMainline.BlackRemainingSeconds,
       AMainline.WhiteUsedSeconds, AMainline.BlackUsedSeconds);
 end;
