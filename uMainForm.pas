@@ -2119,7 +2119,8 @@ begin
   Command := AActor.CreateRecordEnginePVCommand(ANodeId, AScore,
     APrincipalVariation, ADepth, ATimeText);
   try
-    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
+    Result := ExecuteAndApplyGameTreeCommand(AActor, AGameTree, Command,
+      False, AErrorText);
   finally
     Command.Free;
   end;
@@ -4449,6 +4450,7 @@ var
   var
     I: Integer;
     IsLastMove: Boolean;
+    LRevisionBefore: Int64;
   begin
     Result := False;
     if not SnapshotExtendsCurrentTree then
@@ -4457,6 +4459,7 @@ var
     if Actor = nil then
       Exit;
 
+    LRevisionBefore := Actor.Revision;
     for I := LGameTree.MainlineCount to LMoves.Count - 1 do
     begin
       IsLastMove := I = LMoves.Count - 1;
@@ -4473,6 +4476,8 @@ var
         Command.Free;
       end;
     end;
+    if Actor.Revision <> LRevisionBefore then
+      RefreshDisplayedGameTreeViews(LGameTree, False);
     Result := True;
   end;
 
