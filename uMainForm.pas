@@ -476,20 +476,13 @@ type
       AMovesText, AAnnotationsText: string): Boolean;
     function CurrentGameTreeHeaderInput(AGame: TRunningGame;
       AGameTree: TGameTree): TGameTreeHeaderInput;
-    function RunningGameTreeHeaderInput(AGame: TRunningGame;
-      const AEventName: string): TGameTreeHeaderInput;
     function RunningSnapshotTreeInput(AGame: TRunningGame;
       const AEventName: string): TRunningSnapshotTreeInput;
     function RunningSnapshotHeaderInput(
       const AInput: TRunningSnapshotTreeInput): TGameTreeHeaderInput;
-    function RunningSnapshotMainlineInput(AGame: TRunningGame;
-      AMoves, AAnnotations: TStrings; ARecordClock: Boolean
-      ): TGameTreeMainlineInput;
     function RunningSnapshotMainlineInput(
       const AInput: TRunningSnapshotTreeInput; AMoves, AAnnotations: TStrings;
       ARecordClock: Boolean): TGameTreeMainlineInput;
-    function RunningGameTreePvInput(AGame: TRunningGame;
-      ARecordPV: Boolean): TGameTreePvInput;
     function RunningSnapshotPvInput(const AInput: TRunningSnapshotTreeInput;
       ARecordPV: Boolean): TGameTreePvInput;
     function RunningSnapshotSyncSignature(
@@ -4767,13 +4760,6 @@ begin
       LRecordTimeControl, LTimeControl, LState);
 end;
 
-function TMainForm.RunningGameTreeHeaderInput(AGame: TRunningGame;
-  const AEventName: string): TGameTreeHeaderInput;
-begin
-  Result := RunningSnapshotHeaderInput(
-    RunningSnapshotTreeInput(AGame, AEventName));
-end;
-
 function TMainForm.RunningSnapshotTreeInput(AGame: TRunningGame;
   const AEventName: string): TRunningSnapshotTreeInput;
 var
@@ -4829,13 +4815,6 @@ begin
     AInput.StartingFEN, True, AInput.TimeControl, AInput.State);
 end;
 
-function TMainForm.RunningSnapshotMainlineInput(AGame: TRunningGame;
-  AMoves, AAnnotations: TStrings; ARecordClock: Boolean): TGameTreeMainlineInput;
-begin
-  Result := RunningSnapshotMainlineInput(
-    RunningSnapshotTreeInput(AGame, ''), AMoves, AAnnotations, ARecordClock);
-end;
-
 function TMainForm.RunningSnapshotMainlineInput(
   const AInput: TRunningSnapshotTreeInput; AMoves, AAnnotations: TStrings;
   ARecordClock: Boolean): TGameTreeMainlineInput;
@@ -4846,13 +4825,6 @@ begin
     Result := GameTreeMainlineInput(AMoves, AAnnotations, True,
       AInput.WhiteRemainingSeconds, AInput.BlackRemainingSeconds,
       AInput.WhiteUsedSeconds, AInput.BlackUsedSeconds);
-end;
-
-function TMainForm.RunningGameTreePvInput(AGame: TRunningGame;
-  ARecordPV: Boolean): TGameTreePvInput;
-begin
-  Result := RunningSnapshotPvInput(RunningSnapshotTreeInput(AGame, ''),
-    ARecordPV);
 end;
 
 function TMainForm.RunningSnapshotPvInput(
