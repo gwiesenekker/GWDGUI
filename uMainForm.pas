@@ -6841,6 +6841,7 @@ var
   LBlackName: string;
   LFenText: string;
   LGameTree: TGameTree;
+  LInput: TRunningSnapshotTreeInput;
   LResultText: string;
   LWhiteName: string;
 begin
@@ -6856,13 +6857,11 @@ begin
   end
   else if LGame <> nil then
   begin
-    LWhiteName := PlayerNameOrFallback(LGame.Snapshot.WhitePlayerName,
-      PlayerNameOrFallback(LGame.WhiteDisplayName, 'White'));
-    LBlackName := PlayerNameOrFallback(LGame.Snapshot.BlackPlayerName,
-      PlayerNameOrFallback(LGame.BlackDisplayName, 'Black'));
-    LResultText := PlayerNameOrFallback(LGame.Snapshot.GameResult, '*');
-    LFenText := PlayerNameOrFallback(LGame.Snapshot.StartingFEN,
-      LGame.FSetup.StartingFEN);
+    LInput := RunningSnapshotTreeInput(LGame, '');
+    LWhiteName := LInput.WhiteName;
+    LBlackName := LInput.BlackName;
+    LResultText := LInput.ResultText;
+    LFenText := LInput.StartingFEN;
   end
   else
   begin
