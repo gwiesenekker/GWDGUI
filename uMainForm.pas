@@ -3245,6 +3245,7 @@ end;
 
 procedure TMainForm.AutoplayClick(Sender: TObject);
 var
+  LBaseBoard: TDraughtsBoard;
   LDisplayedMoveCount: Integer;
   LDisplayedMovesText: string;
   LErrorText: string;
@@ -3297,37 +3298,47 @@ begin
     UpdateAutoplayControls;
     Exit;
   end;
+  LBaseBoard := TDraughtsBoard.Create;
+  try
+    if not TryBuildDisplayedBoard(LGameTree, LBaseBoard) then
+    begin
+      UpdateAutoplayControls;
+      Exit;
+    end;
 
-  LStartingFEN := StartingFenForTree(LGameTree);
-  if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
-    LDisplayedMoveCount) then
-  begin
-    UpdateAutoplayControls;
-    Exit;
-  end;
+    LStartingFEN := StartingFenForTree(LGameTree);
+    if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
+      LDisplayedMoveCount) then
+    begin
+      UpdateAutoplayControls;
+      Exit;
+    end;
 
-  CancelAnalyzerSearch;
-  if not TryStartGameTreeSearchForDisplayedNode(LGameTree, LSearch,
-    LErrorText) then
-  begin
+    CancelAnalyzerSearch;
+    if not TryStartGameTreeSearchForDisplayedNode(LGameTree, LSearch,
+      LErrorText) then
+    begin
+      if FAnalyzerMemo <> nil then
+        FAnalyzerMemo.Lines.Add('Autoplay rejected; reason=' + LErrorText);
+      UpdateAutoplayControls;
+      Exit;
+    end;
+
+    TrackAnalyzerSearch(LSearch);
+    InvalidateAnalyzerPositionSignature;
+    SetAnalyzerPvBaseFromTree(LGameTree, LNode.NodeId, LDisplayedMoveCount,
+      LBaseBoard);
+
     if FAnalyzerMemo <> nil then
-      FAnalyzerMemo.Lines.Add('Autoplay rejected; reason=' + LErrorText);
+      FAnalyzerMemo.Lines.Add(Format('Autoplay thinking; time=%.3g seconds',
+        [FAutoplayThinkSeconds]));
+    FAnalyzerRunner.PostThinkOnce(LStartingFEN, LDisplayedMovesText,
+      FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, FAutoplayThinkSeconds,
+      LSearch);
     UpdateAutoplayControls;
-    Exit;
+  finally
+    LBaseBoard.Free;
   end;
-
-  TrackAnalyzerSearch(LSearch);
-  InvalidateAnalyzerPositionSignature;
-  SetAnalyzerPvBaseFromTree(LGameTree, LNode.NodeId, LDisplayedMoveCount,
-    ActiveBoard);
-
-  if FAnalyzerMemo <> nil then
-    FAnalyzerMemo.Lines.Add(Format('Autoplay thinking; time=%.3g seconds',
-      [FAutoplayThinkSeconds]));
-  FAnalyzerRunner.PostThinkOnce(LStartingFEN, LDisplayedMovesText,
-    FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, FAutoplayThinkSeconds,
-    LSearch);
-  UpdateAutoplayControls;
 end;
 
 procedure TMainForm.AutorandomClick(Sender: TObject);
@@ -3537,6 +3548,7 @@ end;
 
 procedure TMainForm.RestartAnalyzer(AGameTree: TGameTree);
 var
+  LBaseBoard: TDraughtsBoard;
   LGameTree: TGameTree;
   LNode: TGameTreePlyNode;
   LSearch: TGameTreeSearchRef;
@@ -3559,40 +3571,48 @@ begin
   LNode := CurrentDisplayedGameTreeNode(LGameTree);
   if LNode = nil then
     Exit;
+  LBaseBoard := TDraughtsBoard.Create;
+  try
+    if not TryBuildDisplayedBoard(LGameTree, LBaseBoard) then
+      Exit;
 
-  LStartingFEN := StartingFenForTree(LGameTree);
-  if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
-    LDisplayedMoveCount) then
-    Exit;
-  LTotalMoveCount := LGameTree.MainlineCount;
-  LGameState := StateForTree(LGameTree);
+    LStartingFEN := StartingFenForTree(LGameTree);
+    if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
+      LDisplayedMoveCount) then
+      Exit;
+    LTotalMoveCount := LGameTree.MainlineCount;
+    LGameState := StateForTree(LGameTree);
 
-  Signature := DisplayedPositionSignature(LGameTree, LNode.NodeId,
-    LStartingFEN, LDisplayedMovesText, LGameState);
-  if Signature = FAnalyzerLastPositionSignature then
-    Exit;
-  FAnalyzerLastPositionSignature := Signature;
-  CancelAnalyzerSearch;
+    Signature := DisplayedPositionSignature(LGameTree, LNode.NodeId,
+      LStartingFEN, LDisplayedMovesText, LGameState);
+    if Signature = FAnalyzerLastPositionSignature then
+      Exit;
+    FAnalyzerLastPositionSignature := Signature;
+    CancelAnalyzerSearch;
 
-  SetAnalyzerPvBaseFromTree(LGameTree, LNode.NodeId, LDisplayedMoveCount,
-    ActiveBoard);
-  LTerminal := DisplayedPositionIsTerminal(LDisplayedMoveCount,
-    LTotalMoveCount, LGameState);
-  if LTerminal and (FAnalyzerPvBrowser <> nil) then
-    FAnalyzerPvBrowser.Clear;
-  if not LTerminal then
-  begin
-    if TryStartGameTreeSearchForDisplayedNode(LGameTree, LSearch,
-      LErrorText) then
-      TrackAnalyzerSearch(LSearch);
+    SetAnalyzerPvBaseFromTree(LGameTree, LNode.NodeId, LDisplayedMoveCount,
+      LBaseBoard);
+    LTerminal := DisplayedPositionIsTerminal(LDisplayedMoveCount,
+      LTotalMoveCount, LGameState);
+    if LTerminal and (FAnalyzerPvBrowser <> nil) then
+      FAnalyzerPvBrowser.Clear;
+    if not LTerminal then
+    begin
+      if TryStartGameTreeSearchForDisplayedNode(LGameTree, LSearch,
+        LErrorText) then
+        TrackAnalyzerSearch(LSearch);
+    end;
+    FAnalyzerRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText,
+      FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, LTerminal,
+      LSearch);
+  finally
+    LBaseBoard.Free;
   end;
-  FAnalyzerRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText,
-    FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, LTerminal,
-    LSearch);
 end;
 
 procedure TMainForm.RestartMctsAnnotator(AGameTree: TGameTree);
 var
+  LBaseBoard: TDraughtsBoard;
   LGameTree: TGameTree;
   LNode: TGameTreePlyNode;
   LDisplayedMoveCount: Integer;
@@ -3612,26 +3632,33 @@ begin
   LNode := CurrentDisplayedGameTreeNode(LGameTree);
   if LNode = nil then
     Exit;
-  LStartingFEN := StartingFenForTree(LGameTree);
-  if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
-    LDisplayedMoveCount) then
-    Exit;
-  LTotalMoveCount := LGameTree.MainlineCount;
-  LGameState := StateForTree(LGameTree);
+  LBaseBoard := TDraughtsBoard.Create;
+  try
+    if not TryBuildDisplayedBoard(LGameTree, LBaseBoard) then
+      Exit;
+    LStartingFEN := StartingFenForTree(LGameTree);
+    if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
+      LDisplayedMoveCount) then
+      Exit;
+    LTotalMoveCount := LGameTree.MainlineCount;
+    LGameState := StateForTree(LGameTree);
 
-  Signature := DisplayedPositionSignature(LGameTree, LNode.NodeId,
-    LStartingFEN, LDisplayedMovesText, LGameState);
-  if Signature = FMctsLastPositionSignature then
-    Exit;
-  FMctsLastPositionSignature := Signature;
-  ClearMctsStatsGrid;
+    Signature := DisplayedPositionSignature(LGameTree, LNode.NodeId,
+      LStartingFEN, LDisplayedMovesText, LGameState);
+    if Signature = FMctsLastPositionSignature then
+      Exit;
+    FMctsLastPositionSignature := Signature;
+    ClearMctsStatsGrid;
 
-  LTerminal := DisplayedPositionIsTerminal(LDisplayedMoveCount,
-    LTotalMoveCount, LGameState);
-  if not TryBuildTreeBoardAtNode(LGameTree, LNode, FTreePvBaseBoard) then
-    FTreePvBaseBoard.AssignFrom(ActiveBoard);
-  FMctsRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText, FTreePvBaseBoard,
-    LDisplayedMoveCount, LTerminal, EmptyGameTreeSearchRef);
+    LTerminal := DisplayedPositionIsTerminal(LDisplayedMoveCount,
+      LTotalMoveCount, LGameState);
+    if not TryBuildTreeBoardAtNode(LGameTree, LNode, FTreePvBaseBoard) then
+      FTreePvBaseBoard.AssignFrom(LBaseBoard);
+    FMctsRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText, FTreePvBaseBoard,
+      LDisplayedMoveCount, LTerminal, EmptyGameTreeSearchRef);
+  finally
+    LBaseBoard.Free;
+  end;
 end;
 
 function TMainForm.LiveGameCount: Integer;
