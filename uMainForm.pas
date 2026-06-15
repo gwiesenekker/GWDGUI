@@ -5302,12 +5302,7 @@ begin
       LPvBaseBoard := FAnalyzerPvBaseBoard;
       if not AnnotatorPvForTreeNode(AGameTree, FAnalyzerPvBaseNodeId,
         LPvText, LPvScore, LPvDepth, LPvTimeText) then
-      begin
-        if FAnalyzerPvBrowser <> nil then
-          LPvText := FAnalyzerPvBrowser.PrincipalVariation
-        else
-          LPvText := '';
-      end;
+        LPvText := '';
     end
     else
       VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
