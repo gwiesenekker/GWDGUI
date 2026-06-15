@@ -400,6 +400,10 @@ type
     function ReadAutoplaySecondsFromToolbar: Boolean;
     procedure UpdateAutoplayControls;
     function RecordAnalyzerSnapshotInGameTree(ASnapshot: TPvSnapshot): TGameTree;
+    function PublishAnalyzerSnapshotToGameTree(ASnapshot: TPvSnapshot
+      ): TGameTree;
+    function PublishRunnerSnapshotToGameTree(AGame: TRunningGame;
+      ASnapshot: TGameRunnerSnapshot): TGameTree;
     procedure ApplyVariationBrowsePly(AVariationIndex, AVariationPly: Integer;
       AGameTree: TGameTree);
     procedure BoardMouseDown(Sender: TObject; Button: TMouseButton;
@@ -3705,6 +3709,24 @@ begin
   Result := LGameTree;
 end;
 
+function TMainForm.PublishAnalyzerSnapshotToGameTree(
+  ASnapshot: TPvSnapshot): TGameTree;
+begin
+  Result := RecordAnalyzerSnapshotInGameTree(ASnapshot);
+end;
+
+function TMainForm.PublishRunnerSnapshotToGameTree(AGame: TRunningGame;
+  ASnapshot: TGameRunnerSnapshot): TGameTree;
+begin
+  Result := nil;
+  if (AGame = nil) or (ASnapshot = nil) then
+    Exit;
+
+  AGame.AssignRunnerSnapshot(ASnapshot);
+  UpdateRunningGameTreeFromSnapshot(AGame);
+  Result := AGame.GameTree;
+end;
+
 procedure TMainForm.LoadPdnGameToDisplay(AGame: TPdnGame);
 var
   I: Integer;
@@ -6697,7 +6719,7 @@ var
       Exit;
 
     SetAnalyzerPvBase(AMessage.Snapshot.BaseBoard, AMessage.Snapshot.BasePly);
-    LGameTree := RecordAnalyzerSnapshotInGameTree(AMessage.Snapshot);
+    LGameTree := PublishAnalyzerSnapshotToGameTree(AMessage.Snapshot);
     if LGameTree = nil then
       Exit;
     if (not AMessage.Snapshot.GameTreeOnly) and
@@ -6760,8 +6782,9 @@ var
     if LGame = nil then
       Exit;
 
-    LGame.AssignRunnerSnapshot(AMessage.Snapshot);
-    UpdateRunningGameTreeFromSnapshot(LGame);
+    LGameTree := PublishRunnerSnapshotToGameTree(LGame, AMessage.Snapshot);
+    if LGameTree = nil then
+      Exit;
     LGame.MarkRunningIfStarting;
     LInput := RunningSnapshotTreeInput(LGame, '');
     if LGame.IsStopOrRemoveRequested and
