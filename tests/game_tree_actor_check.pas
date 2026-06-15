@@ -980,6 +980,8 @@ var
     try
       Actor.ExecuteCommand(DuplicateCommand);
       Check(DuplicateCommand.Accepted, AMessage + ' should be accepted');
+      Check(not DuplicateCommand.TreeChanged,
+        AMessage + ' should not report tree change');
       Check(Actor.Revision = RevisionBeforeDuplicate,
         AMessage + ' should not increment revision');
     finally
@@ -1016,6 +1018,8 @@ begin
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'rebuild command should be accepted');
+      Check(Command.TreeChanged,
+        'rebuild command should report tree change');
       Check(Actor.GameTree.MainlineCount = 2,
         'rebuild command should record mainline count');
       Check(Actor.GameTree.MainlineNode[2].MoveText = '18-23',
@@ -1055,6 +1059,8 @@ begin
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'duplicate rebuild command should be accepted');
+      Check(not Command.TreeChanged,
+        'duplicate rebuild command should not report tree change');
       Check(Actor.Revision = RevisionAfterRebuild,
         'duplicate rebuild command should not increment revision');
     finally
@@ -1075,6 +1081,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'PV metadata-only rebuild command should be accepted');
+      Check(Command.TreeChanged,
+        'PV metadata-only rebuild command should report tree change');
       Check(Actor.Revision > RevisionAfterRebuild,
         'PV metadata-only rebuild should increment revision');
       Check(Actor.GameTree.MainlineNode[2].EnginePVDepth = EnginePvDepth,
@@ -1101,6 +1109,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'variation PV metadata-only rebuild command should be accepted');
+      Check(Command.TreeChanged,
+        'variation PV metadata-only rebuild command should report tree change');
       Check(Actor.Revision > RevisionAfterRebuild,
         'variation PV metadata-only rebuild should increment revision');
       Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPVDepth =
@@ -1158,6 +1168,8 @@ begin
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'second rebuild command should be accepted');
+      Check(Command.TreeChanged,
+        'second rebuild command should report tree change');
       Check(Actor.GameTree.MainlineNode[1].NodeId = NodeId,
         'unchanged rebuilt node id should stay stable');
       Check(Actor.GameTree.MainlineNode[2].MoveText = '20-24',
