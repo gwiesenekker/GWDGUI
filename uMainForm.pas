@@ -36,6 +36,7 @@ type
     MovesText: string;
     AnnotationsText: string;
     State: TGameOrchestratorState;
+    CurrentSide: TDraughtsSide;
     PrincipalVariation: string;
     PvScore: string;
     PvDepth: string;
@@ -483,6 +484,8 @@ type
     function EventNameForTree(AGameTree: TGameTree): string;
     function ResultForTree(AGameTree: TGameTree): string;
     function RunningGameTreeExtendsSnapshot(AGame: TRunningGame): Boolean;
+    function RunningGameTreeExtendsSnapshot(AGame: TRunningGame;
+      const AInput: TRunningSnapshotTreeInput): Boolean;
     function StartingFenForTree(AGameTree: TGameTree): string;
     function StateForTree(AGameTree: TGameTree): TGameOrchestratorState;
     function WhiteNameForTree(AGameTree: TGameTree): string;
@@ -3962,20 +3965,27 @@ end;
 
 function TMainForm.RunningGameTreeExtendsSnapshot(
   AGame: TRunningGame): Boolean;
+begin
+  Result := RunningGameTreeExtendsSnapshot(AGame,
+    RunningSnapshotTreeInput(AGame, ''));
+end;
+
+function TMainForm.RunningGameTreeExtendsSnapshot(AGame: TRunningGame;
+  const AInput: TRunningSnapshotTreeInput): Boolean;
 var
   LMoves: TStringList;
 begin
   Result := False;
   if (AGame = nil) or (AGame.GameTree = nil) then
     Exit;
-  if not (AGame.Snapshot.State in [gosStopped, gosGameOver]) then
+  if not (AInput.State in [gosStopped, gosGameOver]) then
     Exit;
   if AGame.GameTree.VariationLineCount > 0 then
     Exit(True);
 
   LMoves := TStringList.Create;
   try
-    TextToMoveList(AGame.Snapshot.MovesPlayedText, LMoves);
+    TextToMoveList(AInput.MovesText, LMoves);
     Result := AGame.GameTree.MainlineCount > LMoves.Count;
   finally
     LMoves.Free;
@@ -4369,6 +4379,7 @@ begin
   Result.MovesText := '';
   Result.AnnotationsText := '';
   Result.State := gosWaiting;
+  Result.CurrentSide := dsWhite;
   Result.PrincipalVariation := '';
   Result.PvScore := '';
   Result.PvDepth := '';
@@ -4395,6 +4406,7 @@ begin
   Result.MovesText := AGame.Snapshot.MovesPlayedText;
   Result.AnnotationsText := AGame.Snapshot.MoveAnnotationsText;
   Result.State := AGame.Snapshot.State;
+  Result.CurrentSide := AGame.Snapshot.CurrentSide;
   Result.PrincipalVariation := AGame.Snapshot.PrincipalVariation;
   Result.PvScore := AGame.Snapshot.PvScore;
   Result.PvDepth := AGame.Snapshot.PvSnapshot.Depth;
@@ -5029,6 +5041,7 @@ var
   LEffectivePvScore: string;
   LEffectivePvDepth: string;
   LEffectivePvTimeText: string;
+  LInput: TRunningSnapshotTreeInput;
   LPvBaseBoard: TDraughtsBoard;
   LPvBasePly: Integer;
   LPvDepth: string;
@@ -5093,25 +5106,26 @@ begin
     ClearStoredTreeVariations(AGame.GameTree);
   end;
 
+  LInput := RunningSnapshotTreeInput(AGame, '');
   LSnapshotSignature :=
     IntToStr(AGame.Id) + #10 +
-    AGame.Snapshot.WhitePlayerName + #10 +
-    AGame.Snapshot.BlackPlayerName + #10 +
-    AGame.Snapshot.StartingFEN + #10 +
-    AGame.Snapshot.MovesPlayedText + #10 +
-    AGame.Snapshot.MoveAnnotationsText + #10 +
-    IntToStr(Ord(AGame.Snapshot.State)) + #10 +
-    AGame.Snapshot.GameResult + #10 +
-    IntToStr(Ord(AGame.Snapshot.CurrentSide)) + #10 +
-    AGame.Snapshot.PrincipalVariation + #10 +
-    AGame.Snapshot.PvScore + #10 +
-    AGame.Snapshot.PvSnapshot.Depth + #10 +
-    AGame.Snapshot.PvSnapshot.TimeText + #10 +
-    IntToStr(AGame.Snapshot.PvBasePly) + #10 +
-    SecondsSignature(AGame.Snapshot.WhiteRemainingSeconds) + #10 +
-    SecondsSignature(AGame.Snapshot.BlackRemainingSeconds) + #10 +
-    SecondsSignature(AGame.Snapshot.WhiteUsedSeconds) + #10 +
-    SecondsSignature(AGame.Snapshot.BlackUsedSeconds);
+    LInput.WhiteName + #10 +
+    LInput.BlackName + #10 +
+    LInput.StartingFEN + #10 +
+    LInput.MovesText + #10 +
+    LInput.AnnotationsText + #10 +
+    IntToStr(Ord(LInput.State)) + #10 +
+    LInput.ResultText + #10 +
+    IntToStr(Ord(LInput.CurrentSide)) + #10 +
+    LInput.PrincipalVariation + #10 +
+    LInput.PvScore + #10 +
+    LInput.PvDepth + #10 +
+    LInput.PvTimeText + #10 +
+    IntToStr(LInput.PvBasePly) + #10 +
+    SecondsSignature(LInput.WhiteRemainingSeconds) + #10 +
+    SecondsSignature(LInput.BlackRemainingSeconds) + #10 +
+    SecondsSignature(LInput.WhiteUsedSeconds) + #10 +
+    SecondsSignature(LInput.BlackUsedSeconds);
   UpdateDisplayedGameLog;
   if FDisplayedSnapshotSignature = LSnapshotSignature then
   begin
@@ -5130,21 +5144,21 @@ begin
 
   LTreeMovesText := GameTreeMainlineMovesText(AGame.GameTree);
   LTreeAnnotationsText := GameTreeScoreAnnotationsText(AGame.GameTree);
-  LSnapshotAnnotationsText := AGame.Snapshot.MoveAnnotationsText;
+  LSnapshotAnnotationsText := LInput.AnnotationsText;
   LSnapshotAnnotationsEmpty := Trim(LSnapshotAnnotationsText) = '';
   LTreeMovesMatchSnapshot :=
-    Trim(LTreeMovesText) = Trim(AGame.Snapshot.MovesPlayedText);
+    Trim(LTreeMovesText) = Trim(LInput.MovesText);
   if LSnapshotAnnotationsEmpty and LTreeMovesMatchSnapshot and
     (Trim(LTreeAnnotationsText) <> '') then
     LEffectiveAnnotationsText := LTreeAnnotationsText
   else
     LEffectiveAnnotationsText := LSnapshotAnnotationsText;
-  LEffectivePV := AGame.Snapshot.PrincipalVariation;
-  LEffectivePvBasePly := AGame.Snapshot.PvBasePly;
+  LEffectivePV := LInput.PrincipalVariation;
+  LEffectivePvBasePly := LInput.PvBasePly;
   LEffectivePvBasePositionKey := AGame.Snapshot.PvBaseBoard.PositionKey;
-  LEffectivePvScore := AGame.Snapshot.PvScore;
-  LEffectivePvDepth := AGame.Snapshot.PvSnapshot.Depth;
-  LEffectivePvTimeText := AGame.Snapshot.PvSnapshot.TimeText;
+  LEffectivePvScore := LInput.PvScore;
+  LEffectivePvDepth := LInput.PvDepth;
+  LEffectivePvTimeText := LInput.PvTimeText;
   LPvBaseBoard := AGame.Snapshot.PvBaseBoard;
   if VisibleMainPvForTree(AGame.GameTree, LPvBaseBoard, LPvBasePly,
     LPvText, LPvScore, LPvDepth, LPvTimeText) then
@@ -5157,28 +5171,28 @@ begin
     LEffectivePvBasePositionKey := LPvBaseBoard.PositionKey;
   end;
 
-  LPositionChanged := (FStartingFEN <> AGame.Snapshot.StartingFEN) or
+  LPositionChanged := (FStartingFEN <> LInput.StartingFEN) or
     (FDisplayedAnnotationsSignature <> LEffectiveAnnotationsText) or
-    (FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText) or
-    (FGameState <> AGame.Snapshot.State) or
-    (FGameResult <> AGame.Snapshot.GameResult);
+    (FDisplayedMovesSignature <> LInput.MovesText) or
+    (FGameState <> LInput.State) or
+    (FGameResult <> LInput.ResultText);
   LPvChanged := not DisplayedPvCacheMatches(LEffectivePV,
     LEffectivePvScore, LEffectivePvDepth, LEffectivePvTimeText,
     LEffectivePvBasePositionKey, LEffectivePvBasePly);
-  if FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText then
+  if FDisplayedMovesSignature <> LInput.MovesText then
   begin
     ClearHumanMoveSelection;
     ClearVariationExploration;
   end;
-  FStartingFEN := AGame.Snapshot.StartingFEN;
-  FGameState := AGame.Snapshot.State;
-  FGameResult := AGame.Snapshot.GameResult;
+  FStartingFEN := LInput.StartingFEN;
+  FGameState := LInput.State;
+  FGameResult := LInput.ResultText;
   SetDisplayedPvCache(LEffectivePV, LEffectivePvScore, LEffectivePvDepth,
     LEffectivePvTimeText, LPvBaseBoard, LEffectivePvBasePly);
-  FWhiteRemainingSeconds := AGame.Snapshot.WhiteRemainingSeconds;
-  FBlackRemainingSeconds := AGame.Snapshot.BlackRemainingSeconds;
-  FWhiteUsedSeconds := AGame.Snapshot.WhiteUsedSeconds;
-  FBlackUsedSeconds := AGame.Snapshot.BlackUsedSeconds;
+  FWhiteRemainingSeconds := LInput.WhiteRemainingSeconds;
+  FBlackRemainingSeconds := LInput.BlackRemainingSeconds;
+  FWhiteUsedSeconds := LInput.WhiteUsedSeconds;
+  FBlackUsedSeconds := LInput.BlackUsedSeconds;
   FGameActive := True;
   if not LPositionChanged then
   begin
@@ -5197,7 +5211,7 @@ begin
   end;
 
   UpdateMiniBoardFromBoard(AGame.Snapshot.Board);
-  LTreeExtendsSnapshot := RunningGameTreeExtendsSnapshot(AGame);
+  LTreeExtendsSnapshot := RunningGameTreeExtendsSnapshot(AGame, LInput);
   LTreeAnnotationsMatchSnapshot := LSnapshotAnnotationsEmpty or
     (Trim(LTreeAnnotationsText) = Trim(LSnapshotAnnotationsText));
   LTreeMatchesSnapshot := LTreeMovesMatchSnapshot and
@@ -5210,13 +5224,13 @@ begin
   else
   begin
     FDisplayedAnnotationsSignature := LEffectiveAnnotationsText;
-    FDisplayedMovesSignature := AGame.Snapshot.MovesPlayedText;
+    FDisplayedMovesSignature := LInput.MovesText;
     if not LTreeMatchesSnapshot then
       ClearStoredTreeVariations(AGame.GameTree);
   end;
   if (not LTreeExtendsSnapshot) and (not LTreeMatchesSnapshot) then
     UpdateGameTreeFromMoveText(AGame, AGame.GameTree,
-      AGame.Snapshot.MovesPlayedText, AGame.Snapshot.MoveAnnotationsText);
+      LInput.MovesText, LInput.AnnotationsText);
   LMoveCount := CurrentMoveCount;
   if FGameBrowsePly > LMoveCount then
     FGameBrowsePly := -1;
