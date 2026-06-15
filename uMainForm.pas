@@ -179,6 +179,8 @@ type
     procedure AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
     procedure AssignSetupTo(out ASetup: TGameSetup);
     procedure MarkSnapshotStopped(const AReason: string);
+    procedure SnapshotTreeInput(const AEventName: string;
+      out AInput: TRunningSnapshotTreeInput);
     property Id: Integer read FId;
     property GameTreeActor: TGameTreeActor read FGameTreeActor;
     property GameTree: TGameTree read FGameTree;
@@ -925,6 +927,47 @@ end;
 procedure TRunningGame.MarkSnapshotStopped(const AReason: string);
 begin
   FSnapshot.MarkStopped(AReason);
+end;
+
+procedure TRunningGame.SnapshotTreeInput(const AEventName: string;
+  out AInput: TRunningSnapshotTreeInput);
+
+  function ValueOrFallback(const AValue, AFallback: string): string;
+  begin
+    Result := Trim(AValue);
+    if Result = '' then
+      Result := AFallback;
+  end;
+
+begin
+  AInput.GameId := FId;
+  AInput.EventName := ValueOrFallback(AEventName, '?');
+  AInput.WhiteName := ValueOrFallback(FSnapshot.WhitePlayerName,
+    ValueOrFallback(FWhiteDisplayName, 'White'));
+  AInput.BlackName := ValueOrFallback(FSnapshot.BlackPlayerName,
+    ValueOrFallback(FBlackDisplayName, 'Black'));
+  AInput.ResultText := ValueOrFallback(FSnapshot.GameResult, '*');
+  AInput.StartingFEN := ValueOrFallback(FSnapshot.StartingFEN,
+    FSetup.StartingFEN);
+  AInput.Board := FSnapshot.Board;
+  AInput.MovesText := FSnapshot.MovesPlayedText;
+  AInput.AnnotationsText := FSnapshot.MoveAnnotationsText;
+  AInput.State := FSnapshot.State;
+  AInput.CurrentSide := FSnapshot.CurrentSide;
+  AInput.PlyCount := FSnapshot.PlyCount;
+  AInput.PrincipalVariation := FSnapshot.PrincipalVariation;
+  AInput.PvScore := FSnapshot.PvScore;
+  AInput.PvDepth := FSnapshot.PvSnapshot.Depth;
+  AInput.PvTimeText := FSnapshot.PvSnapshot.TimeText;
+  AInput.PvBasePly := FSnapshot.PvBasePly;
+  AInput.PvBaseBoard := FSnapshot.PvBaseBoard;
+  AInput.LogLinesText := FSnapshot.LogLines.Text;
+  AInput.LogLineCount := FSnapshot.LogLines.Count;
+  AInput.WhiteRemainingSeconds := FSnapshot.WhiteRemainingSeconds;
+  AInput.BlackRemainingSeconds := FSnapshot.BlackRemainingSeconds;
+  AInput.WhiteUsedSeconds := FSnapshot.WhiteUsedSeconds;
+  AInput.BlackUsedSeconds := FSnapshot.BlackUsedSeconds;
+  AInput.TimeControl := FSetup.TimeControl;
 end;
 
 constructor TMainForm.Create(AOwner: TComponent);
@@ -4435,6 +4478,7 @@ end;
 function TMainForm.RunningSnapshotTreeInput(AGame: TRunningGame;
   const AEventName: string): TRunningSnapshotTreeInput;
 var
+  LEventName: string;
   LTimeControl: TTimeControl;
 begin
   LTimeControl := DefaultTimeControl;
@@ -4466,35 +4510,9 @@ begin
   if AGame = nil then
     Exit;
 
-  Result.GameId := AGame.Id;
-  Result.EventName := PlayerNameOrFallback(AEventName,
+  LEventName := PlayerNameOrFallback(AEventName,
     EventNameForTree(AGame.GameTree));
-  Result.WhiteName := PlayerNameOrFallback(AGame.FSnapshot.WhitePlayerName,
-    PlayerNameOrFallback(AGame.WhiteDisplayName, 'White'));
-  Result.BlackName := PlayerNameOrFallback(AGame.FSnapshot.BlackPlayerName,
-    PlayerNameOrFallback(AGame.BlackDisplayName, 'Black'));
-  Result.ResultText := PlayerNameOrFallback(AGame.FSnapshot.GameResult, '*');
-  Result.StartingFEN := PlayerNameOrFallback(AGame.FSnapshot.StartingFEN,
-    AGame.FSetup.StartingFEN);
-  Result.Board := AGame.FSnapshot.Board;
-  Result.MovesText := AGame.FSnapshot.MovesPlayedText;
-  Result.AnnotationsText := AGame.FSnapshot.MoveAnnotationsText;
-  Result.State := AGame.FSnapshot.State;
-  Result.CurrentSide := AGame.FSnapshot.CurrentSide;
-  Result.PlyCount := AGame.FSnapshot.PlyCount;
-  Result.PrincipalVariation := AGame.FSnapshot.PrincipalVariation;
-  Result.PvScore := AGame.FSnapshot.PvScore;
-  Result.PvDepth := AGame.FSnapshot.PvSnapshot.Depth;
-  Result.PvTimeText := AGame.FSnapshot.PvSnapshot.TimeText;
-  Result.PvBasePly := AGame.FSnapshot.PvBasePly;
-  Result.PvBaseBoard := AGame.FSnapshot.PvBaseBoard;
-  Result.LogLinesText := AGame.FSnapshot.LogLines.Text;
-  Result.LogLineCount := AGame.FSnapshot.LogLines.Count;
-  Result.WhiteRemainingSeconds := AGame.FSnapshot.WhiteRemainingSeconds;
-  Result.BlackRemainingSeconds := AGame.FSnapshot.BlackRemainingSeconds;
-  Result.WhiteUsedSeconds := AGame.FSnapshot.WhiteUsedSeconds;
-  Result.BlackUsedSeconds := AGame.FSnapshot.BlackUsedSeconds;
-  Result.TimeControl := AGame.FSetup.TimeControl;
+  AGame.SnapshotTreeInput(LEventName, Result);
 end;
 
 function TMainForm.RunningSnapshotHeaderInput(
