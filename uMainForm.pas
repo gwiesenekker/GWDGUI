@@ -5524,14 +5524,13 @@ begin
     Exit;
   end;
 
-  if LInput.Board <> nil then
-    UpdateMiniBoardFromBoard(LInput.Board);
   FDisplayedAnnotationsSignature := LEffectiveAnnotationsText;
   FDisplayedMovesSignature := LEffectiveMovesText;
   LMoveCount := CurrentMoveCount;
   if FGameBrowsePly > LMoveCount then
     FGameBrowsePly := -1;
   UpdateBoardFromBrowseState(AGame.GameTree);
+  UpdateMiniBoardFromBoard(FBoard);
   RefreshDisplayedGameTreeViews(AGame.GameTree, False);
   UpdateBoardInfo;
 end;
