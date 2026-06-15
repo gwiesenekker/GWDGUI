@@ -5396,14 +5396,20 @@ procedure TMainForm.ApplyGameToDisplay(AGame: TRunningGame);
 var
   LLogSourceChanged: Boolean;
   LEffectiveAnnotationsText: string;
+  LEffectiveResultText: string;
+  LEffectiveStartingFEN: string;
   LMoveCount: Integer;
   LPositionChanged: Boolean;
   LPvChanged: Boolean;
   LSnapshotSignature: string;
   LEffectiveMovesText: string;
+  LBlackRemainingSeconds: Double;
+  LBlackUsedSeconds: Double;
   LInput: TRunningSnapshotTreeInput;
   LPvState: TRunningDisplayPvState;
   LTextState: TRunningDisplayTextState;
+  LWhiteRemainingSeconds: Double;
+  LWhiteUsedSeconds: Double;
 
   procedure UpdateDisplayedGameLog;
   var
@@ -5467,6 +5473,8 @@ begin
   UpdateDisplayedGameLog;
   if FDisplayedSnapshotSignature = LSnapshotSignature then
   begin
+    UpdateClockLabels(AGame.GameTree, WhiteNameForTree(AGame.GameTree),
+      BlackNameForTree(AGame.GameTree));
     UpdateGameLogMemo;
     RefreshDisplayedGameTreeViews(AGame.GameTree, False);
     if AGame.GameTree = ActiveGameTree then
@@ -5484,12 +5492,32 @@ begin
   LEffectiveMovesText := LTextState.EffectiveMovesText;
   LEffectiveAnnotationsText := LTextState.EffectiveAnnotationsText;
   LPvState := RunningDisplayPvState(AGame, LInput);
+  LEffectiveStartingFEN := Trim(AGame.GameTree.StartingFEN);
+  if LEffectiveStartingFEN = '' then
+    LEffectiveStartingFEN := LInput.StartingFEN;
+  LEffectiveResultText := Trim(AGame.GameTree.ResultText);
+  if LEffectiveResultText = '' then
+    LEffectiveResultText := LInput.ResultText;
+  if AGame.GameTree.HasClockInfo then
+  begin
+    LWhiteRemainingSeconds := AGame.GameTree.WhiteRemainingSeconds;
+    LBlackRemainingSeconds := AGame.GameTree.BlackRemainingSeconds;
+    LWhiteUsedSeconds := AGame.GameTree.WhiteUsedSeconds;
+    LBlackUsedSeconds := AGame.GameTree.BlackUsedSeconds;
+  end
+  else
+  begin
+    LWhiteRemainingSeconds := LInput.WhiteRemainingSeconds;
+    LBlackRemainingSeconds := LInput.BlackRemainingSeconds;
+    LWhiteUsedSeconds := LInput.WhiteUsedSeconds;
+    LBlackUsedSeconds := LInput.BlackUsedSeconds;
+  end;
 
-  LPositionChanged := (FStartingFEN <> LInput.StartingFEN) or
+  LPositionChanged := (FStartingFEN <> LEffectiveStartingFEN) or
     (FDisplayedAnnotationsSignature <> LEffectiveAnnotationsText) or
     (FDisplayedMovesSignature <> LEffectiveMovesText) or
     (FGameState <> LInput.State) or
-    (FGameResult <> LInput.ResultText);
+    (FGameResult <> LEffectiveResultText);
   LPvChanged := not DisplayedPvCacheMatches(LPvState.PrincipalVariation,
     LPvState.Score, LPvState.Depth, LPvState.TimeText,
     LPvState.BasePositionKey, LPvState.BasePly);
@@ -5498,15 +5526,15 @@ begin
     ClearHumanMoveSelection;
     ClearVariationExploration;
   end;
-  FStartingFEN := LInput.StartingFEN;
+  FStartingFEN := LEffectiveStartingFEN;
   FGameState := LInput.State;
-  FGameResult := LInput.ResultText;
+  FGameResult := LEffectiveResultText;
   SetDisplayedPvCache(LPvState.PrincipalVariation, LPvState.Score,
     LPvState.Depth, LPvState.TimeText, LPvState.BaseBoard, LPvState.BasePly);
-  FWhiteRemainingSeconds := LInput.WhiteRemainingSeconds;
-  FBlackRemainingSeconds := LInput.BlackRemainingSeconds;
-  FWhiteUsedSeconds := LInput.WhiteUsedSeconds;
-  FBlackUsedSeconds := LInput.BlackUsedSeconds;
+  FWhiteRemainingSeconds := LWhiteRemainingSeconds;
+  FBlackRemainingSeconds := LBlackRemainingSeconds;
+  FWhiteUsedSeconds := LWhiteUsedSeconds;
+  FBlackUsedSeconds := LBlackUsedSeconds;
   FGameActive := True;
   if not LPositionChanged then
   begin
