@@ -41,7 +41,6 @@ type
     PvDepth: string;
     PvTimeText: string;
     PvBasePly: Integer;
-    PvBaseBoard: TDraughtsBoard;
     WhiteRemainingSeconds: Double;
     BlackRemainingSeconds: Double;
     WhiteUsedSeconds: Double;
@@ -1133,7 +1132,6 @@ begin
   AInput.PvDepth := FSnapshot.PvSnapshot.Depth;
   AInput.PvTimeText := FSnapshot.PvSnapshot.TimeText;
   AInput.PvBasePly := FSnapshot.PvBasePly;
-  AInput.PvBaseBoard := FSnapshot.PvBaseBoard;
   AInput.WhiteRemainingSeconds := FSnapshot.WhiteRemainingSeconds;
   AInput.BlackRemainingSeconds := FSnapshot.BlackRemainingSeconds;
   AInput.WhiteUsedSeconds := FSnapshot.WhiteUsedSeconds;
@@ -4842,7 +4840,6 @@ begin
   Result.PvDepth := '';
   Result.PvTimeText := '';
   Result.PvBasePly := 0;
-  Result.PvBaseBoard := nil;
   Result.WhiteRemainingSeconds := 0;
   Result.BlackRemainingSeconds := 0;
   Result.WhiteUsedSeconds := 0;
