@@ -33,6 +33,7 @@ type
     BlackName: string;
     ResultText: string;
     StartingFEN: string;
+    Board: TDraughtsBoard;
     MovesText: string;
     AnnotationsText: string;
     State: TGameOrchestratorState;
@@ -4396,6 +4397,7 @@ begin
   Result.BlackName := 'Black';
   Result.ResultText := '*';
   Result.StartingFEN := '';
+  Result.Board := nil;
   Result.MovesText := '';
   Result.AnnotationsText := '';
   Result.State := gosWaiting;
@@ -4425,6 +4427,7 @@ begin
   Result.ResultText := PlayerNameOrFallback(AGame.Snapshot.GameResult, '*');
   Result.StartingFEN := PlayerNameOrFallback(AGame.Snapshot.StartingFEN,
     AGame.FSetup.StartingFEN);
+  Result.Board := AGame.Snapshot.Board;
   Result.MovesText := AGame.Snapshot.MovesPlayedText;
   Result.AnnotationsText := AGame.Snapshot.MoveAnnotationsText;
   Result.State := AGame.Snapshot.State;
@@ -5263,7 +5266,8 @@ begin
     Exit;
   end;
 
-  UpdateMiniBoardFromBoard(AGame.Snapshot.Board);
+  if LInput.Board <> nil then
+    UpdateMiniBoardFromBoard(LInput.Board);
   LTreeExtendsSnapshot := RunningGameTreeExtendsSnapshot(AGame, LInput);
   if LTreeExtendsSnapshot then
   begin
