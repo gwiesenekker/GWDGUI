@@ -4091,6 +4091,7 @@ function TMainForm.VisibleMainPvForTree(AGameTree: TGameTree;
   ADepth, ATimeText: string): Boolean;
 var
   LGame: TRunningGame;
+  LInput: TRunningSnapshotTreeInput;
   LTreeDepth: string;
   LTreePV: string;
   LTreeScore: string;
@@ -4106,30 +4107,30 @@ begin
 
   if LGame <> nil then
   begin
-    APV := LGame.Snapshot.PrincipalVariation;
-    AScore := LGame.Snapshot.PvScore;
-    ADepth := LGame.Snapshot.PvSnapshot.Depth;
-    ATimeText := LGame.Snapshot.PvSnapshot.TimeText;
-    if Trim(APV) <> '' then
-    begin
-      ABaseBoard := LGame.Snapshot.PvBaseBoard;
-      ABasePly := LGame.Snapshot.PvBasePly;
-    end;
-    if EnginePvForTree(AGameTree, LGame.Snapshot.PvBasePly, LTreePV,
+    LInput := RunningSnapshotTreeInput(LGame, '');
+    if EnginePvForTree(AGameTree, LInput.PvBasePly, LTreePV,
       LTreeScore, LTreeDepth, LTreeTimeText) then
     begin
       APV := LTreePV;
-      if LTreeScore <> '' then
-        AScore := LTreeScore;
-      if LTreeDepth <> '' then
-        ADepth := LTreeDepth;
-      if LTreeTimeText <> '' then
-        ATimeText := LTreeTimeText;
-      ABasePly := LGame.Snapshot.PvBasePly;
+      AScore := LTreeScore;
+      ADepth := LTreeDepth;
+      ATimeText := LTreeTimeText;
+      ABasePly := LInput.PvBasePly;
       if TryBuildTreeBoardAtPly(AGameTree, ABasePly, FTreePvBaseBoard) then
         ABaseBoard := FTreePvBaseBoard
       else
         ABaseBoard := LGame.Snapshot.PvBaseBoard;
+      Exit(True);
+    end;
+
+    APV := LInput.PrincipalVariation;
+    AScore := LInput.PvScore;
+    ADepth := LInput.PvDepth;
+    ATimeText := LInput.PvTimeText;
+    if Trim(APV) <> '' then
+    begin
+      ABaseBoard := LGame.Snapshot.PvBaseBoard;
+      ABasePly := LInput.PvBasePly;
     end;
   end
   else if AGameTree = FGameTree then
@@ -4778,6 +4779,7 @@ end;
 function TMainForm.CurrentGameTreeEnginePvInput(
   AGameTree: TGameTree): TGameTreePvInput;
 var
+  LInput: TRunningSnapshotTreeInput;
   LPvBasePly: Integer;
   LPvDepth: string;
   LPvGame: TRunningGame;
@@ -4792,7 +4794,10 @@ begin
   begin
     LPvGame := GameForTreeRefresh(AGameTree);
     if LPvGame <> nil then
-      LPvBasePly := LPvGame.Snapshot.PvBasePly;
+    begin
+      LInput := RunningSnapshotTreeInput(LPvGame, '');
+      LPvBasePly := LInput.PvBasePly;
+    end;
   end;
 
   if EnginePvForTree(AGameTree, LPvBasePly, LPvText, LPvScore, LPvDepth,
