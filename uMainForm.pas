@@ -461,6 +461,9 @@ type
       out ANode: TGameTreePlyNode): Boolean;
     function TryResolveAnalyzerSnapshotNode(AGameTree: TGameTree;
       ASnapshot: TPvSnapshot; out ANode: TGameTreePlyNode): Boolean;
+    function TryResolveRunningSnapshotPvNode(AGameTree: TGameTree;
+      const AInput: TRunningSnapshotTreeInput;
+      out ANode: TGameTreePlyNode): Boolean;
     procedure TrackAnalyzerSearch(const ASearch: TGameTreeSearchRef);
     procedure ClearAnalyzerSearchTracking;
     procedure SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
@@ -2542,6 +2545,23 @@ begin
     else
       ANode := AGameTree.MainlineNode[ASnapshot.BasePly];
   end;
+
+  Result := ANode <> nil;
+end;
+
+function TMainForm.TryResolveRunningSnapshotPvNode(AGameTree: TGameTree;
+  const AInput: TRunningSnapshotTreeInput;
+  out ANode: TGameTreePlyNode): Boolean;
+begin
+  Result := False;
+  ANode := nil;
+  if AGameTree = nil then
+    Exit;
+
+  if AInput.PvBasePly <= 0 then
+    ANode := AGameTree.Root
+  else
+    ANode := AGameTree.MainlineNode[AInput.PvBasePly];
 
   Result := ANode <> nil;
 end;
@@ -5136,11 +5156,7 @@ var
   begin
     if Trim(LInput.PrincipalVariation) = '' then
       Exit;
-    if LInput.PvBasePly <= 0 then
-      LNode := LGameTree.Root
-    else
-      LNode := LGameTree.MainlineNode[LInput.PvBasePly];
-    if LNode = nil then
+    if not TryResolveRunningSnapshotPvNode(LGameTree, LInput, LNode) then
       Exit;
     Actor := ActorForGameTree(LGameTree);
     if Actor = nil then
