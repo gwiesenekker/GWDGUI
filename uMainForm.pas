@@ -7221,7 +7221,7 @@ var
   LGameTree: TGameTree;
 begin
   LGameTree := ActiveGameTree;
-  LGame := SelectedGame;
+  LGame := SelectedDisplayedGame;
   LInfo := DisplayedBoardInfo(LGameTree, LGame);
 
   UpdateClockLabels(LGameTree, LInfo.WhiteName, LInfo.BlackName);
