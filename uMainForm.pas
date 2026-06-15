@@ -7245,25 +7245,16 @@ end;
 
 function TMainForm.DisplayedBoardInfo(AGameTree: TGameTree;
   AGame: TRunningGame): TDisplayedBoardInfo;
-var
-  LInput: TRunningSnapshotTreeInput;
 begin
+  if (AGameTree = nil) and (AGame <> nil) then
+    AGameTree := AGame.GameTree;
+
   if AGameTree <> nil then
   begin
     Result.WhiteName := PlayerNameOrFallback(AGameTree.WhiteName, 'White');
     Result.BlackName := PlayerNameOrFallback(AGameTree.BlackName, 'Black');
     Result.ResultText := PlayerNameOrFallback(AGameTree.ResultText, '*');
     Result.StartingFEN := AGameTree.StartingFEN;
-    Exit;
-  end;
-
-  if AGame <> nil then
-  begin
-    LInput := RunningSnapshotTreeInput(AGame, '');
-    Result.WhiteName := LInput.WhiteName;
-    Result.BlackName := LInput.BlackName;
-    Result.ResultText := LInput.ResultText;
-    Result.StartingFEN := LInput.StartingFEN;
     Exit;
   end;
 
