@@ -1858,7 +1858,8 @@ begin
     AVariationPvScore, AVariationPvText, AVariationPvDepth,
     AVariationPvTimeText);
   try
-    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
+    Result := ExecuteAndApplyGameTreeCommand(AActor, AActor.GameTree,
+      Command, False, AErrorText);
   finally
     Command.Free;
   end;
@@ -1879,7 +1880,8 @@ begin
 
   Command := AActor.CreateSetHeaderCommand(AHeader);
   try
-    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
+    Result := ExecuteAndApplyGameTreeCommand(AActor, AActor.GameTree,
+      Command, False, AErrorText);
   finally
     Command.Free;
   end;
@@ -4548,7 +4550,8 @@ begin
           RunningGameTreeHeaderInput(AGame, AEventName),
           RunningSnapshotMainlineInput(AGame, nil, nil, True));
         try
-          ExecuteGameTreeCommand(Actor, Command, LErrorText);
+          ExecuteAndApplyGameTreeCommand(Actor, LGameTree, Command, False,
+            LErrorText);
         finally
           Command.Free;
         end;
