@@ -507,13 +507,6 @@ type
     function HasLegalDisplayedMove: Boolean;
     function CanStartAutoplayForGame(AGame: TRunningGame): Boolean;
     function CanStartAutoplay: Boolean;
-    function CanRecordCurrentAnnotatorPV: Boolean;
-    function CanRecordCurrentVariationAnnotatorPV(AVariationIndex,
-      AVariationPly: Integer): Boolean;
-    function CurrentGameTreeEnginePvInput(
-      AGameTree: TGameTree): TGameTreePvInput;
-    function CurrentGameTreeAnnotatorPvInput(
-      AGameTree: TGameTree): TGameTreePvInput;
     procedure ClearHumanMoveSelection;
     procedure ClearStoredTreeVariations(AGameTree: TGameTree);
     procedure ClearVariationExploration;
@@ -5163,107 +5156,6 @@ begin
   UpdateRunningGameTreeFromSnapshot(AGame, AEventName);
   LOptions := DefaultGameTreePdnRenderOptions;
   Result := GameTreeToPdnTextEx(AGame.GameTree, LOptions);
-end;
-
-function TMainForm.CanRecordCurrentAnnotatorPV: Boolean;
-var
-  LActiveBoard: TDraughtsBoard;
-  LDisplayedPly: Integer;
-begin
-  Result := False;
-  if FAnalyzerPvBrowser = nil then
-    Exit;
-  if Trim(FAnalyzerPvBrowser.PrincipalVariation) = '' then
-    Exit;
-  if (FVariationIndex >= 0) and (FVariationBrowsePly > 0) then
-    Exit;
-
-  if FGameBrowsePly >= 0 then
-    LDisplayedPly := FGameBrowsePly
-  else
-    LDisplayedPly := CurrentMoveCount;
-  if FAnalyzerPvBasePly <> LDisplayedPly then
-    Exit;
-  LActiveBoard := ActiveBoard;
-  if (LActiveBoard = nil) or
-    (FAnalyzerPvBaseBoard.PositionKey <> LActiveBoard.PositionKey) then
-    Exit;
-
-  Result := True;
-end;
-
-function TMainForm.CanRecordCurrentVariationAnnotatorPV(AVariationIndex,
-  AVariationPly: Integer): Boolean;
-begin
-  Result := False;
-  if FAnalyzerPvBrowser = nil then
-    Exit;
-  if Trim(FAnalyzerPvBrowser.PrincipalVariation) = '' then
-    Exit;
-  if (FVariationIndex <> AVariationIndex) or
-    (FVariationBrowsePly <> AVariationPly) then
-    Exit;
-
-  Result := True;
-end;
-
-function TMainForm.CurrentGameTreeEnginePvInput(
-  AGameTree: TGameTree): TGameTreePvInput;
-var
-  LActiveGameTree: TGameTree;
-  LPvBasePly: Integer;
-  LPvDepth: string;
-  LPvScore: string;
-  LPvText: string;
-  LPvTimeText: string;
-begin
-  LPvBasePly := 0;
-  LActiveGameTree := ActiveGameTree;
-  if AGameTree = LActiveGameTree then
-    LPvBasePly := FPvBasePly
-  else if LatestEnginePvForTree(AGameTree, LPvBasePly, LPvText, LPvScore,
-    LPvDepth, LPvTimeText) then
-  begin
-    Result := GameTreePvInput(True, LPvBasePly, LPvScore, LPvText,
-      LPvDepth, LPvTimeText);
-    Exit;
-  end;
-
-  if EnginePvForTree(AGameTree, LPvBasePly, LPvText, LPvScore, LPvDepth,
-    LPvTimeText) then
-    Result := GameTreePvInput(True, LPvBasePly, LPvScore, LPvText,
-      LPvDepth, LPvTimeText)
-  else
-    Result := GameTreePvInput(False, 0, '', '');
-end;
-
-function TMainForm.CurrentGameTreeAnnotatorPvInput(
-  AGameTree: TGameTree): TGameTreePvInput;
-var
-  LActiveGameTree: TGameTree;
-  LRecordAnnotatorPV: Boolean;
-  LAnnotatorPV: string;
-  LAnnotatorDepth: string;
-  LAnnotatorScore: string;
-  LAnnotatorTimeText: string;
-begin
-  LActiveGameTree := ActiveGameTree;
-  LRecordAnnotatorPV := (AGameTree = LActiveGameTree) and
-    CanRecordCurrentAnnotatorPV;
-  LAnnotatorPV := '';
-  LAnnotatorDepth := '';
-  LAnnotatorScore := '';
-  LAnnotatorTimeText := '';
-  if LRecordAnnotatorPV then
-  begin
-    LAnnotatorPV := FAnalyzerPvBrowser.PrincipalVariation;
-    LAnnotatorScore := FAnalyzerPvBrowser.Score;
-    LAnnotatorDepth := FAnalyzerPvBrowser.Depth;
-    LAnnotatorTimeText := FAnalyzerPvBrowser.TimeText;
-  end;
-
-  Result := GameTreePvInput(LRecordAnnotatorPV, FAnalyzerPvBasePly,
-    LAnnotatorScore, LAnnotatorPV, LAnnotatorDepth, LAnnotatorTimeText);
 end;
 
 procedure TMainForm.UpdateGameMoveHighlight;
