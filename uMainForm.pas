@@ -413,8 +413,9 @@ type
     procedure InvalidateMctsPositionSignature;
     procedure ApplyGameTreeCommandResult(AGameTree: TGameTree;
       ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean);
-    function ExecuteGameTreeRebuildFromInput(AGame: TRunningGame;
-      AGameTree: TGameTree; AMoves, AAnnotations: TStrings): Boolean;
+    function RebuildStandaloneGameTreeFromImport(AGameTree: TGameTree;
+      const AEventName, AWhiteName, ABlackName, AResultText, AStartingFEN,
+      AMovesText, AAnnotationsText: string): Boolean;
     function CurrentGameTreeHeaderInput(AGame: TRunningGame;
       AGameTree: TGameTree): TGameTreeHeaderInput;
     function RunningGameTreeHeaderInput(AGame: TRunningGame;
@@ -624,8 +625,6 @@ type
     procedure UpdateGameListItem(AGame: TRunningGame);
     procedure UpdateLegalMoves;
     procedure UpdateGameLogMemo;
-    procedure UpdateGameTreeFromMoveText(AGame: TRunningGame;
-      AGameTree: TGameTree; const AMovesText, AAnnotationsText: string);
     procedure RefreshVisibleGameTreeView(AGameTree: TGameTree);
     procedure RefreshDisplayedGameTreeViews(AGameTree: TGameTree;
       AForce: Boolean);
@@ -2300,51 +2299,42 @@ begin
   RefreshDisplayedGameTreeViews(AGameTree, True);
 end;
 
-function TMainForm.ExecuteGameTreeRebuildFromInput(AGame: TRunningGame;
-  AGameTree: TGameTree; AMoves, AAnnotations: TStrings): Boolean;
+function TMainForm.RebuildStandaloneGameTreeFromImport(AGameTree: TGameTree;
+  const AEventName, AWhiteName, ABlackName, AResultText, AStartingFEN,
+  AMovesText, AAnnotationsText: string): Boolean;
 var
   Actor: TGameTreeActor;
+  LAnnotations: TStringList;
   LErrorText: string;
-  LVariationPvIndex: Integer;
-  LVariationPvPly: Integer;
-  LVariationPvDepth: string;
-  LVariationPvScore: string;
-  LVariationPvText: string;
-  LVariationPvTimeText: string;
+  LHeader: TGameTreeHeaderInput;
+  LMoves: TStringList;
 begin
   Result := False;
   Actor := ActorForGameTree(AGameTree);
   if Actor = nil then
     Exit;
 
-  LVariationPvIndex := -1;
-  LVariationPvPly := 0;
-  LVariationPvDepth := '';
-  LVariationPvScore := '';
-  LVariationPvText := '';
-  LVariationPvTimeText := '';
-  if (AGameTree = ActiveGameTree) and
-    CanRecordCurrentVariationAnnotatorPV(FVariationIndex,
-      FVariationBrowsePly) then
-  begin
-    LVariationPvIndex := FVariationIndex;
-    LVariationPvPly := FVariationBrowsePly;
-    LVariationPvDepth := FAnalyzerPvBrowser.Depth;
-    LVariationPvScore := FAnalyzerPvBrowser.Score;
-    LVariationPvText := FAnalyzerPvBrowser.PrincipalVariation;
-    LVariationPvTimeText := FAnalyzerPvBrowser.TimeText;
+  LMoves := TStringList.Create;
+  LAnnotations := TStringList.Create;
+  try
+    TextToMoveList(AMovesText, LMoves);
+    LAnnotations.Text := AAnnotationsText;
+    LHeader := GameTreeHeaderInput(
+      'standalone:' + AStartingFEN + '|' + AEventName + '|' +
+      AWhiteName + '|' + ABlackName + '|moves=' + AMovesText,
+      PlayerNameOrFallback(AEventName, '?'),
+      PlayerNameOrFallback(AWhiteName, 'White'),
+      PlayerNameOrFallback(ABlackName, 'Black'),
+      PlayerNameOrFallback(AResultText, '*'),
+      AStartingFEN, False, DefaultTimeControl);
+    Result := RebuildGameTreeFromInputs(Actor, LHeader,
+      GameTreeMainlineInput(LMoves, LAnnotations, False, 0, 0, 0, 0),
+      GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', ''),
+      -1, 0, '', '', '', '', LErrorText);
+  finally
+    LAnnotations.Free;
+    LMoves.Free;
   end;
-
-  Result := RebuildGameTreeFromInputs(Actor,
-    CurrentGameTreeHeaderInput(AGame, AGameTree),
-    GameTreeMainlineInput(AMoves, AAnnotations,
-      (AGame <> nil) and (AGame = SelectedDisplayedGame),
-      FWhiteRemainingSeconds, FBlackRemainingSeconds, FWhiteUsedSeconds,
-      FBlackUsedSeconds),
-    CurrentGameTreeEnginePvInput(AGameTree),
-    CurrentGameTreeAnnotatorPvInput(AGameTree),
-    LVariationPvIndex, LVariationPvPly, LVariationPvScore,
-    LVariationPvText, LVariationPvDepth, LVariationPvTimeText, LErrorText);
 end;
 
 function TMainForm.FindHumanMoveToTarget(ATargetSquare: Integer;
@@ -3321,7 +3311,6 @@ begin
   FGameResult := '*';
   FStartingFEN := FBoard.StartingFEN;
   SetDisplayedTreeTracking('', '', '', 0, -1);
-  ClearStoredTreeVariations(FGameTree);
   FStandaloneWhitePlayerName := 'White';
   FStandaloneBlackPlayerName := 'Black';
   FStandaloneEventName := '?';
@@ -3338,6 +3327,9 @@ begin
   FGameLogSourceGameId := -1;
   FGameLogSourceLineCount := -1;
   FGameLogSourceShowStdout := False;
+  RebuildStandaloneGameTreeFromImport(FGameTree, FStandaloneEventName,
+    FStandaloneWhitePlayerName, FStandaloneBlackPlayerName, FGameResult,
+    FStartingFEN, '', '');
   UpdateMiniBoardFromBoard(FBoard);
   UpdateBoardInfo;
 end;
@@ -3501,14 +3493,15 @@ begin
     FStartingFEN := AGame.StartingFEN;
     SetDisplayedTreeTracking(AGame.MoveAnnotationsText, AGame.MovesText,
       '', 0, -1);
-    LoadTreeVariationsFromLegacyText(FGameTree, AGame.MoveVariationsText,
-      AGame.MoveVariationAnnotationsText);
     FStandaloneWhitePlayerName := PlayerNameOrFallback(AGame.WhiteName, 'White');
     FStandaloneBlackPlayerName := PlayerNameOrFallback(AGame.BlackName, 'Black');
     FStandaloneEventName := PlayerNameOrFallback(AGame.EventName, '?');
     FGameBrowsePly := 0;
-    UpdateGameTreeFromMoveText(nil, FGameTree, AGame.MovesText,
-      AGame.MoveAnnotationsText);
+    RebuildStandaloneGameTreeFromImport(FGameTree, FStandaloneEventName,
+      FStandaloneWhitePlayerName, FStandaloneBlackPlayerName, FGameResult,
+      FStartingFEN, AGame.MovesText, AGame.MoveAnnotationsText);
+    LoadTreeVariationsFromLegacyText(FGameTree, AGame.MoveVariationsText,
+      AGame.MoveVariationAnnotationsText);
     ClearDisplayedPvCache(FBoard, CurrentMoveCount);
     FWhiteRemainingSeconds := 0;
     FBlackRemainingSeconds := 0;
@@ -6949,29 +6942,6 @@ begin
     FScoreHistoryForm.UpdateScores(LAnnotationsText, LMoveCount, LPly,
       FPreferences.EvaluationMaxScore, FPreferences.EvaluationScale,
       FenSideToMove(LStartingFEN));
-end;
-
-procedure TMainForm.UpdateGameTreeFromMoveText(AGame: TRunningGame;
-  AGameTree: TGameTree; const AMovesText, AAnnotationsText: string);
-var
-  LAnnotations: TStringList;
-  LMoves: TStringList;
-begin
-  if AGameTree = nil then
-    Exit;
-
-  LMoves := TStringList.Create;
-  LAnnotations := TStringList.Create;
-  try
-    TextToMoveList(AMovesText, LMoves);
-    LAnnotations.Text := AAnnotationsText;
-
-    ExecuteGameTreeRebuildFromInput(AGame, AGameTree, LMoves,
-      LAnnotations);
-  finally
-    LAnnotations.Free;
-    LMoves.Free;
-  end;
 end;
 
 procedure TMainForm.RefreshVisibleGameTreeView(AGameTree: TGameTree);
