@@ -459,6 +459,8 @@ type
     function TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
       out AActor: TGameTreeActor; out AGameTree: TGameTree;
       out ANode: TGameTreePlyNode): Boolean;
+    function TryResolveAnalyzerSnapshotNode(AGameTree: TGameTree;
+      ASnapshot: TPvSnapshot; out ANode: TGameTreePlyNode): Boolean;
     procedure TrackAnalyzerSearch(const ASearch: TGameTreeSearchRef);
     procedure ClearAnalyzerSearchTracking;
     procedure SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
@@ -2519,6 +2521,32 @@ begin
   Result := AGameTree <> nil;
 end;
 
+function TMainForm.TryResolveAnalyzerSnapshotNode(AGameTree: TGameTree;
+  ASnapshot: TPvSnapshot; out ANode: TGameTreePlyNode): Boolean;
+var
+  LSearch: TGameTreeSearchRef;
+begin
+  Result := False;
+  ANode := nil;
+  if (AGameTree = nil) or (ASnapshot = nil) then
+    Exit;
+
+  LSearch := ASnapshot.SearchRef;
+  if IsValidGameTreeSearchRef(LSearch) and
+    (LSearch.GameTreeId = AGameTree.GameTreeId) and (LSearch.NodeId > 0) then
+    ANode := AGameTree.FindNodeById(LSearch.NodeId);
+
+  if ANode = nil then
+  begin
+    if ASnapshot.BasePly <= 0 then
+      ANode := AGameTree.Root
+    else
+      ANode := AGameTree.MainlineNode[ASnapshot.BasePly];
+  end;
+
+  Result := ANode <> nil;
+end;
+
 procedure TMainForm.TrackAnalyzerSearch(const ASearch: TGameTreeSearchRef);
 begin
   if not IsValidGameTreeSearchRef(ASearch) then
@@ -3736,23 +3764,10 @@ begin
   if Actor = nil then
     Exit;
 
-  if LNode <> nil then
-    LNodeId := LNode.NodeId
-  else
-  begin
-    LNodeId := LSearch.NodeId;
-    if LNodeId <= 0 then
-    begin
-      if ASnapshot.BasePly <= 0 then
-        LNode := LGameTree.Root
-      else
-        LNode := LGameTree.MainlineNode[ASnapshot.BasePly];
-    end;
-    if LNode <> nil then
-      LNodeId := LNode.NodeId;
-  end;
-  if LNodeId <= 0 then
+  if (LNode = nil) and
+    (not TryResolveAnalyzerSnapshotNode(LGameTree, ASnapshot, LNode)) then
     Exit;
+  LNodeId := LNode.NodeId;
 
   if not RecordAnnotatorPvInGameTree(Actor, LGameTree, LNodeId,
     ASnapshot.Score, ASnapshot.PrincipalVariation, ASnapshot.Depth,
@@ -6747,6 +6762,7 @@ var
 
   procedure ApplyAnalyzerSnapshot(AMessage: TAnalyzerSnapshotGuiMessage);
   var
+    LNode: TGameTreePlyNode;
     LNodeId: Int64;
   begin
     if (AMessage = nil) or (AMessage.Snapshot = nil) then
@@ -6755,14 +6771,10 @@ var
     LGameTree := PublishAnalyzerSnapshotToGameTree(AMessage.Snapshot);
     if LGameTree = nil then
       Exit;
-    LNodeId := AMessage.Snapshot.SearchRef.NodeId;
-    if LNodeId <= 0 then
-    begin
-      if AMessage.Snapshot.BasePly <= 0 then
-        LNodeId := LGameTree.Root.NodeId
-      else if LGameTree.MainlineNode[AMessage.Snapshot.BasePly] <> nil then
-        LNodeId := LGameTree.MainlineNode[AMessage.Snapshot.BasePly].NodeId;
-    end;
+    if not TryResolveAnalyzerSnapshotNode(LGameTree, AMessage.Snapshot,
+      LNode) then
+      Exit;
+    LNodeId := LNode.NodeId;
     SetAnalyzerPvBaseFromTree(LGameTree, LNodeId,
       AMessage.Snapshot.BasePly, AMessage.Snapshot.BaseBoard);
     if (not AMessage.Snapshot.GameTreeOnly) and
