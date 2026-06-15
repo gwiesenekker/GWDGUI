@@ -5045,6 +5045,23 @@ var
       Result := AStrings[AIndex];
   end;
 
+  function SnapshotMovesMatchTreePrefix(ATreeMoveCount: Integer): Boolean;
+  var
+    I: Integer;
+  begin
+    Result := False;
+    if (ATreeMoveCount < 0) or (ATreeMoveCount > LGameTree.MainlineCount) or
+      (ATreeMoveCount > LMoves.Count) then
+      Exit;
+
+    for I := 1 to ATreeMoveCount do
+      if not SameText(NormalizeMoveNotation(LGameTree.MainlineNode[I].MoveText),
+        NormalizeMoveNotation(LMoves[I - 1])) then
+        Exit;
+
+    Result := True;
+  end;
+
   function SnapshotExtendsCurrentTree: Boolean;
   var
     I: Integer;
@@ -5052,10 +5069,8 @@ var
     Result := False;
     if LGameTree.MainlineCount >= LMoves.Count then
       Exit;
-    for I := 1 to LGameTree.MainlineCount do
-      if not SameText(NormalizeMoveNotation(LGameTree.MainlineNode[I].MoveText),
-        NormalizeMoveNotation(LMoves[I - 1])) then
-        Exit;
+    if not SnapshotMovesMatchTreePrefix(LGameTree.MainlineCount) then
+      Exit;
 
     LExistingAnnotations := TStringList.Create;
     try
@@ -5071,17 +5086,11 @@ var
   end;
 
   function SnapshotMovesMatchCurrentTree: Boolean;
-  var
-    I: Integer;
   begin
     Result := False;
     if LGameTree.MainlineCount <> LMoves.Count then
       Exit;
-    for I := 1 to LGameTree.MainlineCount do
-      if not SameText(NormalizeMoveNotation(LGameTree.MainlineNode[I].MoveText),
-        NormalizeMoveNotation(LMoves[I - 1])) then
-        Exit;
-    Result := True;
+    Result := SnapshotMovesMatchTreePrefix(LGameTree.MainlineCount);
   end;
 
   procedure PreserveExistingSnapshotAnnotations;
