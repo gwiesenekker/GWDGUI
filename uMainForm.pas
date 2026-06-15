@@ -53,11 +53,6 @@ type
     LogLineCount: Integer;
   end;
 
-  TRunningDisplayTextState = record
-    EffectiveMovesText: string;
-    EffectiveAnnotationsText: string;
-  end;
-
   TRunningDisplayPvState = record
     PrincipalVariation: string;
     Score: string;
@@ -494,8 +489,6 @@ type
       const AInput: TRunningSnapshotTreeInput): string;
     function RunningDisplaySignature(AGame: TRunningGame;
       ALogLineCount: Integer): string;
-    function RunningDisplayTextState(
-      AGame: TRunningGame): TRunningDisplayTextState;
     function RunningDisplayPvState(AGame: TRunningGame): TRunningDisplayPvState;
     procedure InitializeRunningGameTree(AGame: TRunningGame);
     procedure UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
@@ -4932,19 +4925,6 @@ begin
     BoolToStr(LShowStdout, True);
 end;
 
-function TMainForm.RunningDisplayTextState(
-  AGame: TRunningGame): TRunningDisplayTextState;
-begin
-  Result.EffectiveMovesText := '';
-  Result.EffectiveAnnotationsText := '';
-  if (AGame = nil) or (AGame.GameTree = nil) then
-    Exit;
-
-  Result.EffectiveMovesText := GameTreeMainlineMovesText(AGame.GameTree);
-  Result.EffectiveAnnotationsText := GameTreeScoreAnnotationsText(
-    AGame.GameTree);
-end;
-
 function TMainForm.RunningDisplayPvState(
   AGame: TRunningGame): TRunningDisplayPvState;
 var
@@ -5466,7 +5446,6 @@ var
   LBlackUsedSeconds: Double;
   LLogInput: TRunningSnapshotLogInput;
   LPvState: TRunningDisplayPvState;
-  LTextState: TRunningDisplayTextState;
   LWhiteRemainingSeconds: Double;
   LWhiteUsedSeconds: Double;
 
@@ -5548,9 +5527,8 @@ begin
   end;
   FDisplayedRunningSignature := LRunningSignature;
 
-  LTextState := RunningDisplayTextState(AGame);
-  LEffectiveMovesText := LTextState.EffectiveMovesText;
-  LEffectiveAnnotationsText := LTextState.EffectiveAnnotationsText;
+  LEffectiveMovesText := GameTreeMainlineMovesText(AGame.GameTree);
+  LEffectiveAnnotationsText := GameTreeScoreAnnotationsText(AGame.GameTree);
   LPvState := RunningDisplayPvState(AGame);
   LEffectiveStartingFEN := StartingFenForTree(AGame.GameTree);
   LEffectiveResultText := ResultForTree(AGame.GameTree);
