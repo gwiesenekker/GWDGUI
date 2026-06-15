@@ -100,6 +100,9 @@ type
     function CommandRebuildSignature(ACommand: TGameTreeCommand): string;
     procedure ClearRebuildSignature;
     function CreateCommand(AKind: TGameTreeActorCommandKind): TGameTreeCommand;
+    function CreateRecordPVCommand(AKind: TGameTreeActorCommandKind;
+      ANodeId: Int64; const AScore, APV, ADepth,
+      ATimeText: string): TGameTreeCommand;
     function FindSearch(ASearchId: Int64): TGameTreeSearchRecord; overload;
     function FindSearch(const ASearch: TGameTreeSearchRef
       ): TGameTreeSearchRecord; overload;
@@ -424,24 +427,16 @@ function TGameTreeActor.CreateRecordAnnotatorPVCommand(ANodeId: Int64;
   const AScore, APV: string; const ADepth: string; const ATimeText: string
   ): TGameTreeCommand;
 begin
-  Result := CreateCommand(gtcRecordAnnotatorPV);
-  Result.NodeId := ANodeId;
-  Result.ScoreText := Trim(AScore);
-  Result.PvText := Trim(APV);
-  Result.PvDepthText := Trim(ADepth);
-  Result.PvTimeText := Trim(ATimeText);
+  Result := CreateRecordPVCommand(gtcRecordAnnotatorPV, ANodeId, AScore, APV,
+    ADepth, ATimeText);
 end;
 
 function TGameTreeActor.CreateRecordEnginePVCommand(ANodeId: Int64;
   const AScore, APV: string; const ADepth: string; const ATimeText: string
   ): TGameTreeCommand;
 begin
-  Result := CreateCommand(gtcRecordEnginePV);
-  Result.NodeId := ANodeId;
-  Result.ScoreText := Trim(AScore);
-  Result.PvText := Trim(APV);
-  Result.PvDepthText := Trim(ADepth);
-  Result.PvTimeText := Trim(ATimeText);
+  Result := CreateRecordPVCommand(gtcRecordEnginePV, ANodeId, AScore, APV,
+    ADepth, ATimeText);
 end;
 
 function TGameTreeActor.CreateStoreSearchMoveVariationCommand(
@@ -629,6 +624,18 @@ begin
   Result := TGameTreeCommand.Create(AKind);
   Result.CommandId := NextCommandId;
   Result.GameTreeId := FGameTree.GameTreeId;
+end;
+
+function TGameTreeActor.CreateRecordPVCommand(AKind: TGameTreeActorCommandKind;
+  ANodeId: Int64; const AScore, APV, ADepth,
+  ATimeText: string): TGameTreeCommand;
+begin
+  Result := CreateCommand(AKind);
+  Result.NodeId := ANodeId;
+  Result.ScoreText := Trim(AScore);
+  Result.PvText := Trim(APV);
+  Result.PvDepthText := Trim(ADepth);
+  Result.PvTimeText := Trim(ATimeText);
 end;
 
 function TGameTreeActor.CreateRebuildFromInputsCommand(
