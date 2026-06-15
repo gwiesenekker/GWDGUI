@@ -6462,6 +6462,7 @@ procedure TMainForm.AppendRunningGameToPdn(AGame: TRunningGame;
 var
   Game: TPdnGame;
   LInput: TRunningSnapshotTreeInput;
+  LSnapshotLoaded: Boolean;
   LPdnText: string;
 begin
   if (AGame = nil) or (Trim(AFileName) = '') then
@@ -6476,23 +6477,29 @@ begin
 
   Game := TPdnGame.Create;
   try
-    LInput := RunningSnapshotTreeInput(AGame, AEventName);
     Game.WhiteName := PlayerNameOrFallback(Trim(AGame.GameTree.WhiteName),
-      LInput.WhiteName);
+      AGame.WhiteDisplayName);
     Game.BlackName := PlayerNameOrFallback(Trim(AGame.GameTree.BlackName),
-      LInput.BlackName);
+      AGame.BlackDisplayName);
     Game.EventName := PlayerNameOrFallback(AEventName,
-      PlayerNameOrFallback(EventNameForTree(AGame.GameTree), LInput.EventName));
-    Game.ResultText := PlayerNameOrFallback(Trim(AGame.GameTree.ResultText),
-      LInput.ResultText);
-    Game.StartingFEN := PlayerNameOrFallback(Trim(AGame.GameTree.StartingFEN),
-      LInput.StartingFEN);
+      EventNameForTree(AGame.GameTree));
+    Game.ResultText := ResultForTree(AGame.GameTree);
+    Game.StartingFEN := StartingFenForTree(AGame.GameTree);
     Game.MovesText := GameTreeMainlineMovesText(AGame.GameTree);
+    LSnapshotLoaded := False;
     if Trim(Game.MovesText) = '' then
+    begin
+      LInput := RunningSnapshotTreeInput(AGame, AEventName);
+      LSnapshotLoaded := True;
       Game.MovesText := LInput.MovesText;
+    end;
     Game.MoveAnnotationsText := GameTreeScoreAnnotationsText(AGame.GameTree);
     if Trim(Game.MoveAnnotationsText) = '' then
+    begin
+      if not LSnapshotLoaded then
+        LInput := RunningSnapshotTreeInput(AGame, AEventName);
       Game.MoveAnnotationsText := LInput.AnnotationsText;
+    end;
     AppendPdnGameToFile(AFileName, Game);
   finally
     Game.Free;
