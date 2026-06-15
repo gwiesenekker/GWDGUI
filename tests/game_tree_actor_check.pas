@@ -674,6 +674,7 @@ var
   DoneCommand: TGameTreeCommand;
   Moves: TStringList;
   RebuildCommand: TGameTreeCommand;
+  ReleaseCommand: TGameTreeCommand;
   ResultMove: string;
   ResultNodeId: Int64;
   Search: TGameTreeSearchRef;
@@ -735,6 +736,19 @@ begin
         'rejected stale search answer should preserve rebuilt mainline');
     finally
       DoneCommand.Free;
+    end;
+
+    ReleaseCommand := Actor.CreateReleaseSearchCommand(Search);
+    try
+      Actor.ExecuteCommand(ReleaseCommand);
+      Check(ReleaseCommand.Accepted,
+        'failed search release should be accepted');
+      Check(not ReleaseCommand.TreeChanged,
+        'failed search release should not report tree change');
+      Check(not Actor.SearchState(Search, State),
+        'released failed search should be removed');
+    finally
+      ReleaseCommand.Free;
     end;
   finally
     Moves.Free;
