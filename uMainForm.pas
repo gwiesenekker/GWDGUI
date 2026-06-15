@@ -7031,21 +7031,26 @@ var
   LBaseTitle: string;
   LBlackName: string;
   LCaption: string;
+  LInput: TRunningSnapshotTreeInput;
+  LResultText: string;
   LWhiteName: string;
 begin
   if (AGame = nil) or (FGamesListBox = nil) then
     Exit;
 
-  LWhiteName := PlayerNameOrFallback(AGame.Snapshot.WhitePlayerName,
-    PlayerNameOrFallback(AGame.WhiteDisplayName, 'White'));
-  LBlackName := PlayerNameOrFallback(AGame.Snapshot.BlackPlayerName,
-    PlayerNameOrFallback(AGame.BlackDisplayName, 'Black'));
+  LInput := RunningSnapshotTreeInput(AGame, '');
+  LWhiteName := PlayerNameOrFallback(Trim(AGame.GameTree.WhiteName),
+    LInput.WhiteName);
+  LBlackName := PlayerNameOrFallback(Trim(AGame.GameTree.BlackName),
+    LInput.BlackName);
+  LResultText := PlayerNameOrFallback(Trim(AGame.GameTree.ResultText),
+    LInput.ResultText);
   LBaseTitle := AGame.Title;
   if Pos(' vs ', LBaseTitle) = 0 then
     LBaseTitle := LBaseTitle + ' ' + LWhiteName + ' vs ' + LBlackName;
 
   if AGame.Snapshot.State = gosGameOver then
-    LCaption := LBaseTitle + ' - ' + AGame.Snapshot.GameResult
+    LCaption := LBaseTitle + ' - ' + LResultText
   else
     LCaption := LBaseTitle + ' - ' +
       OrchestratorStateToString(AGame.Snapshot.State);
