@@ -5029,10 +5029,8 @@ var
   LSnapshotSignature: string;
   LSnapshotAnnotationsEmpty: Boolean;
   LSnapshotAnnotationsText: string;
-  LTreeAnnotationsMatchSnapshot: Boolean;
   LTreeAnnotationsText: string;
   LTreeExtendsSnapshot: Boolean;
-  LTreeMatchesSnapshot: Boolean;
   LTreeMovesMatchSnapshot: Boolean;
   LTreeMovesText: string;
   LEffectivePV: string;
@@ -5079,7 +5077,6 @@ begin
     FGameActive := False;
     FGameResult := '*';
     SetDisplayedTreeTracking('', '', '', 0, -1);
-    ClearStoredTreeVariations(FGameTree);
     FStandaloneWhitePlayerName := 'White';
     FStandaloneBlackPlayerName := 'Black';
     FStandaloneEventName := '?';
@@ -5103,7 +5100,6 @@ begin
     FViewedGameId := AGame.Id;
     FGameBrowsePly := -1;
     SetDisplayedTreeTracking('', FDisplayedMovesSignature, '', 0, -1);
-    ClearStoredTreeVariations(AGame.GameTree);
   end;
 
   LInput := RunningSnapshotTreeInput(AGame, '');
@@ -5212,10 +5208,6 @@ begin
 
   UpdateMiniBoardFromBoard(AGame.Snapshot.Board);
   LTreeExtendsSnapshot := RunningGameTreeExtendsSnapshot(AGame, LInput);
-  LTreeAnnotationsMatchSnapshot := LSnapshotAnnotationsEmpty or
-    (Trim(LTreeAnnotationsText) = Trim(LSnapshotAnnotationsText));
-  LTreeMatchesSnapshot := LTreeMovesMatchSnapshot and
-    LTreeAnnotationsMatchSnapshot;
   if LTreeExtendsSnapshot then
   begin
     FDisplayedAnnotationsSignature := LTreeAnnotationsText;
@@ -5225,12 +5217,7 @@ begin
   begin
     FDisplayedAnnotationsSignature := LEffectiveAnnotationsText;
     FDisplayedMovesSignature := LInput.MovesText;
-    if not LTreeMatchesSnapshot then
-      ClearStoredTreeVariations(AGame.GameTree);
   end;
-  if (not LTreeExtendsSnapshot) and (not LTreeMatchesSnapshot) then
-    UpdateGameTreeFromMoveText(AGame, AGame.GameTree,
-      LInput.MovesText, LInput.AnnotationsText);
   LMoveCount := CurrentMoveCount;
   if FGameBrowsePly > LMoveCount then
     FGameBrowsePly := -1;
@@ -6241,6 +6228,7 @@ begin
     AGame.FLifecycle := rglStopRequested;
   AGame.FStopReason := AReason;
   AGame.Snapshot.MarkStopped(AGame.StopReason);
+  UpdateRunningGameTreeFromSnapshot(AGame);
   if not FClosing then
   begin
     UpdateGameListItem(AGame);
