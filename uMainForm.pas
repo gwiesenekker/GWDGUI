@@ -332,7 +332,7 @@ type
     FPrincipalVariationDepth: string;
     FPrincipalVariationScore: string;
     FPrincipalVariationTimeText: string;
-    FPvBaseBoard: TDraughtsBoard;
+    FPvBasePositionKey: string;
     FPvBasePly: Integer;
     FTreePvBaseBoard: TDraughtsBoard;
     FPvInfoLabel: TLabel;
@@ -1261,7 +1261,6 @@ begin
   FAnalyzerMiniBoard := TDraughtsBoard.Create;
   FAnalyzerPopoutBoard := TDraughtsBoard.Create;
   FAnalyzerPvBaseBoard := TDraughtsBoard.Create;
-  FPvBaseBoard := TDraughtsBoard.Create;
   FTreePvBaseBoard := TDraughtsBoard.Create;
   FStartingFEN := FBoard.StartingFEN;
   FGameState := gosWaiting;
@@ -1962,7 +1961,6 @@ begin
   FPopoutBoard.Free;
   FMiniBoard.Free;
   FTreePvBaseBoard.Free;
-  FPvBaseBoard.Free;
   FBoard.Free;
   inherited Destroy;
 end;
@@ -4795,7 +4793,7 @@ begin
     (FPrincipalVariationDepth = ADepth) and
     (FPrincipalVariationTimeText = ATimeText) and
     (FPvBasePly = ABasePly) and
-    (FPvBaseBoard.PositionKey = ABasePositionKey);
+    (FPvBasePositionKey = ABasePositionKey);
 end;
 
 procedure TMainForm.SetDisplayedPvCache(const APV, AScore, ADepth,
@@ -4806,7 +4804,9 @@ begin
   FPrincipalVariationDepth := ADepth;
   FPrincipalVariationTimeText := ATimeText;
   if ABaseBoard <> nil then
-    FPvBaseBoard.AssignFrom(ABaseBoard);
+    FPvBasePositionKey := ABaseBoard.PositionKey
+  else
+    FPvBasePositionKey := '';
   FPvBasePly := ABasePly;
 end;
 
