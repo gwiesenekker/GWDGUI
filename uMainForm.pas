@@ -43,6 +43,7 @@ type
     PvDepth: string;
     PvTimeText: string;
     PvBasePly: Integer;
+    PvBaseBoard: TDraughtsBoard;
     WhiteRemainingSeconds: Double;
     BlackRemainingSeconds: Double;
     WhiteUsedSeconds: Double;
@@ -4140,7 +4141,7 @@ begin
       if TryBuildTreeBoardAtPly(AGameTree, ABasePly, FTreePvBaseBoard) then
         ABaseBoard := FTreePvBaseBoard
       else
-        ABaseBoard := LGame.Snapshot.PvBaseBoard;
+        ABaseBoard := LInput.PvBaseBoard;
       Exit(True);
     end;
 
@@ -4150,7 +4151,7 @@ begin
     ATimeText := LInput.PvTimeText;
     if Trim(APV) <> '' then
     begin
-      ABaseBoard := LGame.Snapshot.PvBaseBoard;
+      ABaseBoard := LInput.PvBaseBoard;
       ABasePly := LInput.PvBasePly;
     end;
   end
@@ -4405,6 +4406,7 @@ begin
   Result.PvDepth := '';
   Result.PvTimeText := '';
   Result.PvBasePly := 0;
+  Result.PvBaseBoard := nil;
   Result.WhiteRemainingSeconds := 0;
   Result.BlackRemainingSeconds := 0;
   Result.WhiteUsedSeconds := 0;
@@ -4433,6 +4435,7 @@ begin
   Result.PvDepth := AGame.Snapshot.PvSnapshot.Depth;
   Result.PvTimeText := AGame.Snapshot.PvSnapshot.TimeText;
   Result.PvBasePly := AGame.Snapshot.PvBasePly;
+  Result.PvBaseBoard := AGame.Snapshot.PvBaseBoard;
   Result.WhiteRemainingSeconds := AGame.Snapshot.WhiteRemainingSeconds;
   Result.BlackRemainingSeconds := AGame.Snapshot.BlackRemainingSeconds;
   Result.WhiteUsedSeconds := AGame.Snapshot.WhiteUsedSeconds;
@@ -5202,11 +5205,14 @@ begin
     LEffectiveAnnotationsText := LSnapshotAnnotationsText;
   LEffectivePV := LInput.PrincipalVariation;
   LEffectivePvBasePly := LInput.PvBasePly;
-  LEffectivePvBasePositionKey := AGame.Snapshot.PvBaseBoard.PositionKey;
+  if LInput.PvBaseBoard <> nil then
+    LEffectivePvBasePositionKey := LInput.PvBaseBoard.PositionKey
+  else
+    LEffectivePvBasePositionKey := '';
   LEffectivePvScore := LInput.PvScore;
   LEffectivePvDepth := LInput.PvDepth;
   LEffectivePvTimeText := LInput.PvTimeText;
-  LPvBaseBoard := AGame.Snapshot.PvBaseBoard;
+  LPvBaseBoard := LInput.PvBaseBoard;
   if VisibleMainPvForTree(AGame.GameTree, LPvBaseBoard, LPvBasePly,
     LPvText, LPvScore, LPvDepth, LPvTimeText) then
   begin
