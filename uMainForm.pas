@@ -33,12 +33,9 @@ type
     BlackName: string;
     ResultText: string;
     StartingFEN: string;
-    Board: TDraughtsBoard;
     MovesText: string;
     AnnotationsText: string;
     State: TGameOrchestratorState;
-    CurrentSide: TDraughtsSide;
-    PlyCount: Integer;
     PrincipalVariation: string;
     PvScore: string;
     PvDepth: string;
@@ -1121,12 +1118,9 @@ begin
   AInput.ResultText := ValueOrFallback(FSnapshot.GameResult, '*');
   AInput.StartingFEN := ValueOrFallback(FSnapshot.StartingFEN,
     FSetup.StartingFEN);
-  AInput.Board := FSnapshot.Board;
   AInput.MovesText := FSnapshot.MovesPlayedText;
   AInput.AnnotationsText := FSnapshot.MoveAnnotationsText;
   AInput.State := FSnapshot.State;
-  AInput.CurrentSide := FSnapshot.CurrentSide;
-  AInput.PlyCount := FSnapshot.PlyCount;
   AInput.PrincipalVariation := FSnapshot.PrincipalVariation;
   AInput.PvScore := FSnapshot.PvScore;
   AInput.PvDepth := FSnapshot.PvSnapshot.Depth;
@@ -4806,12 +4800,9 @@ begin
   Result.BlackName := 'Black';
   Result.ResultText := '*';
   Result.StartingFEN := '';
-  Result.Board := nil;
   Result.MovesText := '';
   Result.AnnotationsText := '';
   Result.State := gosWaiting;
-  Result.CurrentSide := dsWhite;
-  Result.PlyCount := 0;
   Result.PrincipalVariation := '';
   Result.PvScore := '';
   Result.PvDepth := '';
