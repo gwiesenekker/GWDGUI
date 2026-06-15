@@ -1985,8 +1985,11 @@ begin
 end;
 
 function TMainForm.HasLegalDisplayedMove: Boolean;
+var
+  LBoard: TDraughtsBoard;
 begin
-  Result := (ActiveBoard <> nil) and (ActiveBoard.LegalMoves.Count > 0);
+  LBoard := ActiveBoard;
+  Result := (LBoard <> nil) and (LBoard.LegalMoves.Count > 0);
 end;
 
 function TMainForm.CanStartAutoplayForGame(AGame: TRunningGame): Boolean;
@@ -7121,14 +7124,16 @@ end;
 
 procedure TMainForm.UpdateBrowseInfo;
 var
+  LBoard: TDraughtsBoard;
   LGameTree: TGameTree;
 begin
+  LBoard := ActiveBoard;
   LGameTree := ActiveGameTree;
   UpdateBoardHighlights(LGameTree);
 
   UpdateGameMoveHighlight;
   HighlightGameMoveTextSelection(False, LGameTree);
-  UpdateLegalMoves(ActiveBoard);
+  UpdateLegalMoves(LBoard);
   RestartAnalyzer(LGameTree);
   RestartMctsAnnotator(LGameTree);
   UpdateScoreHistory(LGameTree);
