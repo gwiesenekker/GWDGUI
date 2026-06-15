@@ -173,11 +173,14 @@ type
     function IsHumanToMove: Boolean;
     function ReservationSummary: string;
     function HasPlayedMoves: Boolean;
+    function InitialClockSeconds: Double;
     function LastErrorText: string;
     function ResultText: string;
+    function SetupTimeControl: TTimeControl;
     function State: TGameOrchestratorState;
     procedure AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
     procedure AssignSetupTo(out ASetup: TGameSetup);
+    procedure AddReservationKeysTo(AKeys: TStrings);
     procedure MarkSnapshotStopped(const AReason: string);
     procedure SnapshotTreeInput(const AEventName: string;
       out AInput: TRunningSnapshotTreeInput);
@@ -826,6 +829,12 @@ begin
   end;
 end;
 
+procedure TRunningGame.AddReservationKeysTo(AKeys: TStrings);
+begin
+  if AKeys <> nil then
+    AKeys.AddStrings(FReservationKeys);
+end;
+
 procedure TRunningGame.ReleaseRunner;
 begin
   if FRunner = nil then
@@ -902,6 +911,11 @@ begin
   Result := Trim(FSnapshot.MovesPlayedText) <> '';
 end;
 
+function TRunningGame.InitialClockSeconds: Double;
+begin
+  Result := FSetup.TimeControl.MinutesPerPeriod * 60;
+end;
+
 function TRunningGame.LastErrorText: string;
 begin
   Result := FSnapshot.LastError;
@@ -912,6 +926,11 @@ begin
   Result := FSnapshot.GameResult;
   if Result = '' then
     Result := '*';
+end;
+
+function TRunningGame.SetupTimeControl: TTimeControl;
+begin
+  Result := FSetup.TimeControl;
 end;
 
 function TRunningGame.State: TGameOrchestratorState;
@@ -4453,7 +4472,7 @@ begin
 
   LRecordTimeControl := AGame <> nil;
   if LRecordTimeControl then
-    LTimeControl := AGame.FSetup.TimeControl
+    LTimeControl := AGame.SetupTimeControl
   else
     FillChar(LTimeControl, SizeOf(LTimeControl), 0);
 
@@ -4599,7 +4618,7 @@ begin
 
   LInput := RunningSnapshotTreeInput(AGame, '');
   LInput.State := gosRunning;
-  LInput.WhiteRemainingSeconds := AGame.FSetup.TimeControl.MinutesPerPeriod * 60;
+  LInput.WhiteRemainingSeconds := AGame.InitialClockSeconds;
   LInput.BlackRemainingSeconds := LInput.WhiteRemainingSeconds;
   LInput.WhiteUsedSeconds := 0;
   LInput.BlackUsedSeconds := 0;
@@ -6438,7 +6457,7 @@ begin
     LGame := TRunningGame(FGames[I]);
     if not LGame.IsEngineReservationActive then
       Continue;
-    AKeys.AddStrings(LGame.FReservationKeys);
+    LGame.AddReservationKeysTo(AKeys);
   end;
 end;
 
