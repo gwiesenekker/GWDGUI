@@ -3227,6 +3227,7 @@ var
   LDisplayedMovesText: string;
   LErrorText: string;
   LGameTree: TGameTree;
+  LNode: TGameTreePlyNode;
   LSearch: TGameTreeSearchRef;
   LStartingFEN: string;
 begin
@@ -3268,6 +3269,12 @@ begin
     UpdateAutoplayControls;
     Exit;
   end;
+  LNode := CurrentDisplayedGameTreeNode(LGameTree);
+  if LNode = nil then
+  begin
+    UpdateAutoplayControls;
+    Exit;
+  end;
 
   LStartingFEN := StartingFenForTree(LGameTree);
   if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
@@ -3289,7 +3296,8 @@ begin
 
   TrackAnalyzerSearch(LSearch);
   InvalidateAnalyzerPositionSignature;
-  SetAnalyzerPvBase(ActiveBoard, LDisplayedMoveCount);
+  SetAnalyzerPvBaseFromTree(LGameTree, LNode.NodeId, LDisplayedMoveCount,
+    ActiveBoard);
 
   if FAnalyzerMemo <> nil then
     FAnalyzerMemo.Lines.Add(Format('Autoplay thinking; time=%.3g seconds',
@@ -3530,7 +3538,8 @@ begin
   FAnalyzerLastPositionSignature := Signature;
   CancelAnalyzerSearch;
 
-  SetAnalyzerPvBase(ActiveBoard, LDisplayedMoveCount);
+  SetAnalyzerPvBaseFromTree(LGameTree, LNode.NodeId, LDisplayedMoveCount,
+    ActiveBoard);
   LTerminal := DisplayedPositionIsTerminal(LDisplayedMoveCount,
     LTotalMoveCount, LGameState);
   if LTerminal and (FAnalyzerPvBrowser <> nil) then
@@ -3583,7 +3592,9 @@ begin
 
   LTerminal := DisplayedPositionIsTerminal(LDisplayedMoveCount,
     LTotalMoveCount, LGameState);
-  FMctsRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText, ActiveBoard,
+  if not TryBuildTreeBoardAtNode(LGameTree, LNode, FTreePvBaseBoard) then
+    FTreePvBaseBoard.AssignFrom(ActiveBoard);
+  FMctsRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText, FTreePvBaseBoard,
     LDisplayedMoveCount, LTerminal, EmptyGameTreeSearchRef);
 end;
 
