@@ -186,7 +186,6 @@ type
     property Paused: Boolean read FPaused write FPaused;
     property Runner: TGameRunnerThread read FRunner;
     property ShowStdout: Boolean read FShowStdout write FShowStdout;
-    property Snapshot: TGameRunnerSnapshot read FSnapshot;
     property StopReason: string read FStopReason;
     property Title: string read FTitle;
     property WhiteDisplayName: string read FWhiteDisplayName;
@@ -4462,31 +4461,31 @@ begin
   Result.GameId := AGame.Id;
   Result.EventName := PlayerNameOrFallback(AEventName,
     EventNameForTree(AGame.GameTree));
-  Result.WhiteName := PlayerNameOrFallback(AGame.Snapshot.WhitePlayerName,
+  Result.WhiteName := PlayerNameOrFallback(AGame.FSnapshot.WhitePlayerName,
     PlayerNameOrFallback(AGame.WhiteDisplayName, 'White'));
-  Result.BlackName := PlayerNameOrFallback(AGame.Snapshot.BlackPlayerName,
+  Result.BlackName := PlayerNameOrFallback(AGame.FSnapshot.BlackPlayerName,
     PlayerNameOrFallback(AGame.BlackDisplayName, 'Black'));
-  Result.ResultText := PlayerNameOrFallback(AGame.Snapshot.GameResult, '*');
-  Result.StartingFEN := PlayerNameOrFallback(AGame.Snapshot.StartingFEN,
+  Result.ResultText := PlayerNameOrFallback(AGame.FSnapshot.GameResult, '*');
+  Result.StartingFEN := PlayerNameOrFallback(AGame.FSnapshot.StartingFEN,
     AGame.FSetup.StartingFEN);
-  Result.Board := AGame.Snapshot.Board;
-  Result.MovesText := AGame.Snapshot.MovesPlayedText;
-  Result.AnnotationsText := AGame.Snapshot.MoveAnnotationsText;
-  Result.State := AGame.Snapshot.State;
-  Result.CurrentSide := AGame.Snapshot.CurrentSide;
-  Result.PlyCount := AGame.Snapshot.PlyCount;
-  Result.PrincipalVariation := AGame.Snapshot.PrincipalVariation;
-  Result.PvScore := AGame.Snapshot.PvScore;
-  Result.PvDepth := AGame.Snapshot.PvSnapshot.Depth;
-  Result.PvTimeText := AGame.Snapshot.PvSnapshot.TimeText;
-  Result.PvBasePly := AGame.Snapshot.PvBasePly;
-  Result.PvBaseBoard := AGame.Snapshot.PvBaseBoard;
-  Result.LogLinesText := AGame.Snapshot.LogLines.Text;
-  Result.LogLineCount := AGame.Snapshot.LogLines.Count;
-  Result.WhiteRemainingSeconds := AGame.Snapshot.WhiteRemainingSeconds;
-  Result.BlackRemainingSeconds := AGame.Snapshot.BlackRemainingSeconds;
-  Result.WhiteUsedSeconds := AGame.Snapshot.WhiteUsedSeconds;
-  Result.BlackUsedSeconds := AGame.Snapshot.BlackUsedSeconds;
+  Result.Board := AGame.FSnapshot.Board;
+  Result.MovesText := AGame.FSnapshot.MovesPlayedText;
+  Result.AnnotationsText := AGame.FSnapshot.MoveAnnotationsText;
+  Result.State := AGame.FSnapshot.State;
+  Result.CurrentSide := AGame.FSnapshot.CurrentSide;
+  Result.PlyCount := AGame.FSnapshot.PlyCount;
+  Result.PrincipalVariation := AGame.FSnapshot.PrincipalVariation;
+  Result.PvScore := AGame.FSnapshot.PvScore;
+  Result.PvDepth := AGame.FSnapshot.PvSnapshot.Depth;
+  Result.PvTimeText := AGame.FSnapshot.PvSnapshot.TimeText;
+  Result.PvBasePly := AGame.FSnapshot.PvBasePly;
+  Result.PvBaseBoard := AGame.FSnapshot.PvBaseBoard;
+  Result.LogLinesText := AGame.FSnapshot.LogLines.Text;
+  Result.LogLineCount := AGame.FSnapshot.LogLines.Count;
+  Result.WhiteRemainingSeconds := AGame.FSnapshot.WhiteRemainingSeconds;
+  Result.BlackRemainingSeconds := AGame.FSnapshot.BlackRemainingSeconds;
+  Result.WhiteUsedSeconds := AGame.FSnapshot.WhiteUsedSeconds;
+  Result.BlackUsedSeconds := AGame.FSnapshot.BlackUsedSeconds;
   Result.TimeControl := AGame.FSetup.TimeControl;
 end;
 
