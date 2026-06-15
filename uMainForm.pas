@@ -5519,8 +5519,8 @@ begin
   else
     LPvBasePositionKey := '';
   LEffectiveStartingFEN := StartingFenForTree(AGame.GameTree);
-  LEffectiveResultText := AGame.ResultText;
-  LEffectiveState := AGame.State;
+  LEffectiveResultText := ResultForTree(AGame.GameTree);
+  LEffectiveState := StateForTree(AGame.GameTree);
   ClockValuesForTree(AGame.GameTree, LWhiteRemainingSeconds,
     LBlackRemainingSeconds, LWhiteUsedSeconds, LBlackUsedSeconds);
 
