@@ -6282,7 +6282,9 @@ end;
 procedure TMainForm.CreateDatabaseClick(Sender: TObject);
 var
   Dialog: TSaveDialog;
+  LBoard: TDraughtsBoard;
 begin
+  LBoard := ActiveBoard;
   Dialog := TSaveDialog.Create(Self);
   try
     Dialog.Title := 'Create database';
@@ -6298,10 +6300,11 @@ begin
       FDatabaseForm.OnGameSelected := @PdnGameSelected;
       FDatabaseForm.ApplyPreferences(FPreferences);
       FDatabaseForm.CreateDatabase(Dialog.FileName);
-      FDatabaseForm.SetSearchFEN(ActiveBoard.CurrentFEN);
+      if LBoard <> nil then
+        FDatabaseForm.SetSearchFEN(LBoard.CurrentFEN);
       FLastDatabaseSearchFEN := '';
       ShowFormCenteredOnOwner(FDatabaseForm, Self);
-      UpdateDatabaseSearchPosition(ActiveBoard);
+      UpdateDatabaseSearchPosition(LBoard);
     except
       on E: Exception do
         ShowGuiOkDialog(Self, 'Create database',
@@ -6315,7 +6318,9 @@ end;
 procedure TMainForm.OpenDatabaseClick(Sender: TObject);
 var
   Dialog: TOpenDialog;
+  LBoard: TDraughtsBoard;
 begin
+  LBoard := ActiveBoard;
   Dialog := TOpenDialog.Create(Self);
   try
     Dialog.Title := 'Open database';
@@ -6330,10 +6335,11 @@ begin
       FDatabaseForm.OnGameSelected := @PdnGameSelected;
       FDatabaseForm.ApplyPreferences(FPreferences);
       FDatabaseForm.OpenDatabase(Dialog.FileName);
-      FDatabaseForm.SetSearchFEN(ActiveBoard.CurrentFEN);
+      if LBoard <> nil then
+        FDatabaseForm.SetSearchFEN(LBoard.CurrentFEN);
       FLastDatabaseSearchFEN := '';
       ShowFormCenteredOnOwner(FDatabaseForm, Self);
-      UpdateDatabaseSearchPosition(ActiveBoard);
+      UpdateDatabaseSearchPosition(LBoard);
     except
       on E: Exception do
         ShowGuiOkDialog(Self, 'Open database',
