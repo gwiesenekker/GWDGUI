@@ -5382,6 +5382,7 @@ end;
 
 procedure TMainForm.UpdateBoardHighlights(AGameTree: TGameTree);
 var
+  LDisplayedBoard: TDraughtsBoard;
   LDisplayedGamePly: Integer;
   LGameMoves: TStringList;
   LPvBaseBoard: TDraughtsBoard;
@@ -5398,6 +5399,7 @@ begin
   if AGameTree = nil then
     Exit;
 
+  LDisplayedBoard := TDraughtsBoard.Create;
   LGameMoves := TStringList.Create;
   LPvMoves := TStringList.Create;
   try
@@ -5425,7 +5427,8 @@ begin
       FBoardControl.LastMoveTargetSquare := 0;
 
     LPvHighlightsActive := (LPvBaseBoard <> nil) and
-      (FBoard.PositionKey = LPvBaseBoard.PositionKey);
+      TryBuildDisplayedBoard(AGameTree, LDisplayedBoard) and
+      (LDisplayedBoard.PositionKey = LPvBaseBoard.PositionKey);
 
     if LPvHighlightsActive and (LPvMoves.Count > 0) then
       FBoardControl.PvSourceSquare := MoveSquareAt(LPvMoves[0], 1)
@@ -5439,6 +5442,7 @@ begin
   finally
     LPvMoves.Free;
     LGameMoves.Free;
+    LDisplayedBoard.Free;
   end;
 end;
 
