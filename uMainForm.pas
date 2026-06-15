@@ -4785,31 +4785,7 @@ function TMainForm.RunningSnapshotTreeInput(AGame: TRunningGame;
   const AEventName: string): TRunningSnapshotTreeInput;
 var
   LEventName: string;
-  LTimeControl: TTimeControl;
 begin
-  LTimeControl := DefaultTimeControl;
-  Result.GameId := 0;
-  Result.EventName := '?';
-  Result.WhiteName := 'White';
-  Result.BlackName := 'Black';
-  Result.ResultText := '*';
-  Result.StartingFEN := '';
-  Result.MovesText := '';
-  Result.AnnotationsText := '';
-  Result.State := gosWaiting;
-  Result.PrincipalVariation := '';
-  Result.PvScore := '';
-  Result.PvDepth := '';
-  Result.PvTimeText := '';
-  Result.PvBasePly := 0;
-  Result.WhiteRemainingSeconds := 0;
-  Result.BlackRemainingSeconds := 0;
-  Result.WhiteUsedSeconds := 0;
-  Result.BlackUsedSeconds := 0;
-  Result.TimeControl := LTimeControl;
-  if AGame = nil then
-    Exit;
-
   LEventName := PlayerNameOrFallback(AEventName,
     EventNameForTree(AGame.GameTree));
   AGame.SnapshotTreeInput(LEventName, Result);
