@@ -363,7 +363,6 @@ type
     FWhitePlayerEdit: TEdit;
     FWhiteRemainingSeconds: Double;
     FWhiteUsedSeconds: Double;
-    function ActiveBoard: TDraughtsBoard;
     function ActiveGameTree: TGameTree;
     procedure ApplyBoardFlipped;
     procedure ApplyBoardTheme(AControl: TDraughtsBoardControl;
@@ -684,7 +683,7 @@ type
       ABlackName: string);
     procedure UpdateScoreHistory(AGameTree: TGameTree);
     procedure UpdateGameListItem(AGame: TRunningGame);
-    procedure UpdateLegalMoves(ABoard: TDraughtsBoard);
+    procedure UpdateLegalMovesFromTree(AGameTree: TGameTree);
     procedure UpdateGameLogMemo;
     procedure RefreshVisibleGameTreeView(AGameTree: TGameTree);
     procedure RefreshDisplayedGameTreeViews(AGameTree: TGameTree;
@@ -1968,11 +1967,6 @@ begin
   inherited Destroy;
 end;
 
-function TMainForm.ActiveBoard: TDraughtsBoard;
-begin
-  Result := FBoard;
-end;
-
 function TMainForm.ActiveGameTree: TGameTree;
 var
   LGame: TRunningGame;
@@ -2793,7 +2787,7 @@ begin
     UpdateBoardFromBrowseState(LGameTree);
     UpdateBrowseInfo;
     UpdateBoardInfo;
-    UpdateLegalMoves(ActiveBoard);
+    UpdateLegalMovesFromTree(LGameTree);
     Exit;
   end;
 
@@ -7294,16 +7288,14 @@ end;
 
 procedure TMainForm.UpdateBrowseInfo;
 var
-  LBoard: TDraughtsBoard;
   LGameTree: TGameTree;
 begin
-  LBoard := ActiveBoard;
   LGameTree := ActiveGameTree;
   UpdateBoardHighlights(LGameTree);
 
   UpdateGameMoveHighlight;
   HighlightGameMoveTextSelection(False, LGameTree);
-  UpdateLegalMoves(LBoard);
+  UpdateLegalMovesFromTree(LGameTree);
   RestartAnalyzer(LGameTree);
   RestartMctsAnnotator(LGameTree);
   UpdateScoreHistory(LGameTree);
@@ -7404,7 +7396,7 @@ begin
   UpdateBoardHighlights(LGameTree);
   RefreshDisplayedGameTreeViews(LGameTree, False);
 
-  UpdateLegalMoves(ActiveBoard);
+  UpdateLegalMovesFromTree(LGameTree);
   RestartAnalyzer(LGameTree);
   RestartMctsAnnotator(LGameTree);
 
@@ -7610,17 +7602,23 @@ begin
     end;
 end;
 
-procedure TMainForm.UpdateLegalMoves(ABoard: TDraughtsBoard);
+procedure TMainForm.UpdateLegalMovesFromTree(AGameTree: TGameTree);
+var
+  LBoard: TDraughtsBoard;
+  LHasBoard: Boolean;
 begin
+  LBoard := TDraughtsBoard.Create;
   FLegalMovesMemo.Lines.BeginUpdate;
   try
+    LHasBoard := TryBuildDisplayedBoard(AGameTree, LBoard);
     FLegalMovesMemo.Clear;
-    if (ABoard = nil) or (ABoard.LegalMoves.Count = 0) then
+    if (not LHasBoard) or (LBoard.LegalMoves.Count = 0) then
       FLegalMovesMemo.Lines.Add('(none)')
     else
-      FLegalMovesMemo.Lines.AddStrings(ABoard.LegalMoves);
+      FLegalMovesMemo.Lines.AddStrings(LBoard.LegalMoves);
   finally
     FLegalMovesMemo.Lines.EndUpdate;
+    LBoard.Free;
   end;
 end;
 
