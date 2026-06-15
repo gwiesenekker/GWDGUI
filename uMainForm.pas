@@ -5876,7 +5876,6 @@ procedure TMainForm.PrepareGameTreeForPdn(AGame: TRunningGame;
 var
   LBlackName: string;
   LEventName: string;
-  LInput: TRunningSnapshotTreeInput;
   LResultText: string;
   LStartingFEN: string;
   LWhiteName: string;
@@ -5902,17 +5901,13 @@ begin
 
   if AGame <> nil then
   begin
-    LInput := RunningSnapshotTreeInput(AGame, AEventName);
-    LEventName := PlayerNameOrFallback(AEventName,
-      PlayerNameOrFallback(EventNameForTree(AGameTree), LInput.EventName));
+    LEventName := PlayerNameOrFallback(AEventName, EventNameForTree(AGameTree));
     LWhiteName := PlayerNameOrFallback(Trim(AGameTree.WhiteName),
-      LInput.WhiteName);
+      AGame.WhiteDisplayName);
     LBlackName := PlayerNameOrFallback(Trim(AGameTree.BlackName),
-      LInput.BlackName);
-    LResultText := PlayerNameOrFallback(Trim(AGameTree.ResultText),
-      LInput.ResultText);
-    LStartingFEN := PlayerNameOrFallback(Trim(AGameTree.StartingFEN),
-      LInput.StartingFEN);
+      AGame.BlackDisplayName);
+    LResultText := ResultForTree(AGameTree);
+    LStartingFEN := StartingFenForTree(AGameTree);
     ApplyHeader(LEventName, LWhiteName, LBlackName, LResultText,
       LStartingFEN);
     Exit;
