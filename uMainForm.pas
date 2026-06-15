@@ -379,7 +379,7 @@ type
     function StoreGameTreeVariationLine(AActor: TGameTreeActor;
       ADisplayAfterPly, ABasePly: Integer; const AMovesText,
       AAnnotationText: string; ASource: TGameTreeMoveSource;
-      out AErrorText: string): Boolean;
+      out AErrorText: string; AApplyResult: Boolean = True): Boolean;
     function TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
       out AActor: TGameTreeActor; out AGameTree: TGameTree;
       out ANode: TGameTreePlyNode): Boolean;
@@ -576,7 +576,7 @@ type
       AGameTree: TGameTree): Integer;
     function StoreTreeVariation(ADisplayAfterPly, ABasePly: Integer;
       const AMovesText, AAnnotationText: string;
-      AGameTree: TGameTree): Boolean;
+      AGameTree: TGameTree; AApplyResult: Boolean = True): Boolean;
     procedure UpdateBrowseInfo;
     procedure UpdateBoardInfo;
     procedure UpdateDatabaseSearchPosition;
@@ -2146,7 +2146,7 @@ end;
 function TMainForm.StoreGameTreeVariationLine(AActor: TGameTreeActor;
   ADisplayAfterPly, ABasePly: Integer; const AMovesText,
   AAnnotationText: string; ASource: TGameTreeMoveSource;
-  out AErrorText: string): Boolean;
+  out AErrorText: string; AApplyResult: Boolean): Boolean;
 var
   Command: TGameTreeCommand;
 begin
@@ -2161,8 +2161,11 @@ begin
   Command := AActor.CreateStoreVariationLineCommand(ADisplayAfterPly,
     ABasePly, AMovesText, AAnnotationText, ASource);
   try
-    Result := ExecuteAndApplyGameTreeCommand(AActor, AActor.GameTree,
-      Command, False, AErrorText);
+    if AApplyResult then
+      Result := ExecuteAndApplyGameTreeCommand(AActor, AActor.GameTree,
+        Command, False, AErrorText)
+    else
+      Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
   finally
     Command.Free;
   end;
@@ -3733,6 +3736,7 @@ var
   BasePly: Integer;
   DisplayAfterPly: Integer;
   Lines: TStringList;
+  LStoredAny: Boolean;
   MovesText: string;
   RawAnnotationText: string;
   AnnotationLines: TStringList;
@@ -3744,6 +3748,7 @@ begin
   Lines := TStringList.Create;
   AnnotationLines := TStringList.Create;
   try
+    LStoredAny := False;
     Lines.Text := AVariationsText;
     AnnotationLines.Text := AVariationAnnotationsText;
     for I := 0 to Lines.Count - 1 do
@@ -3754,9 +3759,12 @@ begin
           RawAnnotationText := Trim(AnnotationLines[I]);
         if DecodePdnVariationLine(Lines[I], RawAnnotationText, I,
           DisplayAfterPly, BasePly, MovesText, AnnotationText) then
-          StoreTreeVariation(DisplayAfterPly, BasePly, MovesText,
-            AnnotationText, AGameTree);
+          if StoreTreeVariation(DisplayAfterPly, BasePly, MovesText,
+            AnnotationText, AGameTree, False) then
+            LStoredAny := True;
       end;
+    if LStoredAny then
+      RefreshDisplayedGameTreeViews(AGameTree, True);
   finally
     AnnotationLines.Free;
     Lines.Free;
@@ -3773,7 +3781,8 @@ begin
 end;
 
 function TMainForm.StoreTreeVariation(ADisplayAfterPly, ABasePly: Integer;
-  const AMovesText, AAnnotationText: string; AGameTree: TGameTree): Boolean;
+  const AMovesText, AAnnotationText: string; AGameTree: TGameTree;
+  AApplyResult: Boolean): Boolean;
 var
   Actor: TGameTreeActor;
   LErrorText: string;
@@ -3798,7 +3807,7 @@ begin
     Exit;
 
   Result := StoreGameTreeVariationLine(Actor, ADisplayAfterPly, ABasePly,
-    AMovesText, AAnnotationText, gmsUnknown, LErrorText);
+    AMovesText, AAnnotationText, gmsUnknown, LErrorText, AApplyResult);
 end;
 
 function TMainForm.EngineSupportsMcts(AEngine: TExternalEngineDefinition): Boolean;
