@@ -5606,6 +5606,8 @@ begin
 end;
 
 procedure TMainForm.PvBoardChanged(Sender: TObject);
+var
+  LGameTree: TGameTree;
 begin
   if (FMiniBoardForm <> nil) and FMiniBoardForm.Visible and
     (FPopoutBoard <> nil) then
@@ -5616,7 +5618,8 @@ begin
   end;
   if FPvHintSource = phsMain then
   begin
-    UpdateBoardHighlights(ActiveGameTree);
+    LGameTree := ActiveGameTree;
+    UpdateBoardHighlights(LGameTree);
     if FBoardControl <> nil then
       FBoardControl.Invalidate;
   end;
@@ -5678,6 +5681,8 @@ begin
 end;
 
 procedure TMainForm.AnalyzerPvBoardChanged(Sender: TObject);
+var
+  LGameTree: TGameTree;
 begin
   if (FAnalyzerMiniBoardForm <> nil) and FAnalyzerMiniBoardForm.Visible and
     (FAnalyzerPopoutBoard <> nil) then
@@ -5688,7 +5693,8 @@ begin
   end;
   if FPvHintSource = phsAnalyzer then
   begin
-    UpdateBoardHighlights(ActiveGameTree);
+    LGameTree := ActiveGameTree;
+    UpdateBoardHighlights(LGameTree);
     if FBoardControl <> nil then
       FBoardControl.Invalidate;
   end;
