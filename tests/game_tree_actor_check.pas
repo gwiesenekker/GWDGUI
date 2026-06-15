@@ -725,6 +725,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(not Command.Accepted,
         'engine PV command should reject missing target node');
+      Check(not Command.TreeChanged,
+        'rejected engine PV command should not report tree change');
     finally
       Command.Free;
     end;
@@ -735,6 +737,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(not Command.Accepted,
         'annotator PV command should reject missing target node');
+      Check(not Command.TreeChanged,
+        'rejected annotator PV command should not report tree change');
     finally
       Command.Free;
     end;
@@ -784,6 +788,8 @@ begin
       Actor.ExecuteCommand(StoreCommand);
       Check(not StoreCommand.Accepted,
         'store search variation with mismatched ref should be rejected');
+      Check(not StoreCommand.TreeChanged,
+        'mismatched store should not report tree change');
       Check(Actor.GameTree.VariationLineCount = 0,
         'mismatched store should not add a variation');
     finally
@@ -796,6 +802,8 @@ begin
       Actor.ExecuteCommand(StoreCommand);
       Check(StoreCommand.Accepted,
         'root search result should store as variation');
+      Check(StoreCommand.TreeChanged,
+        'root search result store should report tree change');
       Check(StoreCommand.VariationIndex = 0,
         'root search result should create first variation');
       Check(Actor.GameTree.VariationLine[0].BasePly = 0,
@@ -813,6 +821,8 @@ begin
       Actor.ExecuteCommand(StoreCommand);
       Check(StoreCommand.Accepted,
         'duplicate root search variation store should be accepted');
+      Check(not StoreCommand.TreeChanged,
+        'duplicate root search variation store should not report tree change');
       Check(Actor.Revision = RevisionAfterStore,
         'duplicate root search variation store should not increment revision');
     finally
@@ -849,6 +859,8 @@ begin
       Actor.ExecuteCommand(StoreCommand);
       Check(StoreCommand.Accepted,
         'variation search result should store as variation');
+      Check(StoreCommand.TreeChanged,
+        'variation search result store should report tree change');
       Check(StoreCommand.VariationIndex = VariationIndex,
         'variation search should update the same variation line');
       Check(Actor.GameTree.VariationLine[VariationIndex].MovesText =
@@ -885,6 +897,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'direct move variation command should be accepted');
+      Check(Command.TreeChanged,
+        'direct move variation command should report tree change');
       Check(Command.VariationIndex = 0,
         'direct move variation should create first variation');
       Check(Actor.GameTree.VariationLine[0].MovesText = '18-23',
@@ -900,6 +914,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'duplicate direct move variation command should be accepted');
+      Check(not Command.TreeChanged,
+        'duplicate direct move variation should not report tree change');
       Check(Actor.Revision = RevisionAfterStore,
         'duplicate direct move variation should not increment revision');
     finally
@@ -917,6 +933,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'direct move from variation node should be accepted');
+      Check(Command.TreeChanged,
+        'direct move from variation node should report tree change');
       Check(Actor.GameTree.VariationLine[VariationIndex].MovesText =
         '18-23 20-24',
         'direct move from variation node should append to variation line');
