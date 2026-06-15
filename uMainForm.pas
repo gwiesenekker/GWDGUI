@@ -5133,6 +5133,7 @@ var
   LTreeExtendsSnapshot: Boolean;
   LTreeMovesMatchSnapshot: Boolean;
   LTreeMovesText: string;
+  LEffectiveMovesText: string;
   LEffectivePV: string;
   LEffectivePvBasePly: Integer;
   LEffectivePvBasePositionKey: string;
@@ -5251,6 +5252,11 @@ begin
   LSnapshotAnnotationsEmpty := Trim(LSnapshotAnnotationsText) = '';
   LTreeMovesMatchSnapshot :=
     Trim(LTreeMovesText) = Trim(LInput.MovesText);
+  LTreeExtendsSnapshot := RunningGameTreeExtendsSnapshot(AGame, LInput);
+  if LTreeExtendsSnapshot then
+    LEffectiveMovesText := LTreeMovesText
+  else
+    LEffectiveMovesText := LInput.MovesText;
   if LSnapshotAnnotationsEmpty and LTreeMovesMatchSnapshot and
     (Trim(LTreeAnnotationsText) <> '') then
     LEffectiveAnnotationsText := LTreeAnnotationsText
@@ -5279,13 +5285,13 @@ begin
 
   LPositionChanged := (FStartingFEN <> LInput.StartingFEN) or
     (FDisplayedAnnotationsSignature <> LEffectiveAnnotationsText) or
-    (FDisplayedMovesSignature <> LInput.MovesText) or
+    (FDisplayedMovesSignature <> LEffectiveMovesText) or
     (FGameState <> LInput.State) or
     (FGameResult <> LInput.ResultText);
   LPvChanged := not DisplayedPvCacheMatches(LEffectivePV,
     LEffectivePvScore, LEffectivePvDepth, LEffectivePvTimeText,
     LEffectivePvBasePositionKey, LEffectivePvBasePly);
-  if FDisplayedMovesSignature <> LInput.MovesText then
+  if FDisplayedMovesSignature <> LEffectiveMovesText then
   begin
     ClearHumanMoveSelection;
     ClearVariationExploration;
@@ -5318,7 +5324,6 @@ begin
 
   if LInput.Board <> nil then
     UpdateMiniBoardFromBoard(LInput.Board);
-  LTreeExtendsSnapshot := RunningGameTreeExtendsSnapshot(AGame, LInput);
   if LTreeExtendsSnapshot then
   begin
     FDisplayedAnnotationsSignature := LTreeAnnotationsText;
@@ -5327,7 +5332,7 @@ begin
   else
   begin
     FDisplayedAnnotationsSignature := LEffectiveAnnotationsText;
-    FDisplayedMovesSignature := LInput.MovesText;
+    FDisplayedMovesSignature := LEffectiveMovesText;
   end;
   LMoveCount := CurrentMoveCount;
   if FGameBrowsePly > LMoveCount then
