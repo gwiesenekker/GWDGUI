@@ -557,6 +557,8 @@ type
       ABlackUsedSeconds: Double): Boolean;
     function EnginePvForTree(AGameTree: TGameTree; APly: Integer;
       out APV, AScore, ADepth, ATimeText: string): Boolean;
+    function AnnotatorPvForTreeNode(AGameTree: TGameTree; ANodeId: Int64;
+      out APV, AScore, ADepth, ATimeText: string): Boolean;
     function LatestEnginePvForTree(AGameTree: TGameTree; out ABasePly: Integer;
       out APV, AScore, ADepth, ATimeText: string): Boolean;
     function TryBuildTreeBoardAtPly(AGameTree: TGameTree; APly: Integer;
@@ -566,6 +568,8 @@ type
       AScore, ADepth, ATimeText: string): Boolean;
     procedure RefreshMainPvBrowserFromTree(AGameTree: TGameTree;
       const AStartingFEN: string = '');
+    procedure RefreshAnalyzerPvBrowserFromTree(AGameTree: TGameTree;
+      ANodeId: Int64; AFallbackBasePly: Integer);
     procedure SetDisplayedTreeTracking(const AAnnotationsSignature,
       AMovesSignature, ASnapshotSignature: string; AGameTreeId,
       AGameTreeRevision: Int64);
@@ -4334,6 +4338,30 @@ begin
   Result := APV <> '';
 end;
 
+function TMainForm.AnnotatorPvForTreeNode(AGameTree: TGameTree;
+  ANodeId: Int64; out APV, AScore, ADepth, ATimeText: string): Boolean;
+var
+  LNode: TGameTreePlyNode;
+begin
+  APV := '';
+  AScore := '';
+  ADepth := '';
+  ATimeText := '';
+  Result := False;
+  if (AGameTree = nil) or (ANodeId <= 0) then
+    Exit;
+
+  LNode := AGameTree.FindNodeById(ANodeId);
+  if LNode = nil then
+    Exit;
+
+  APV := Trim(LNode.AnnotatorPV);
+  AScore := Trim(LNode.AnnotatorScore);
+  ADepth := Trim(LNode.AnnotatorPVDepth);
+  ATimeText := Trim(LNode.AnnotatorPVTimeText);
+  Result := APV <> '';
+end;
+
 function TMainForm.LatestEnginePvForTree(AGameTree: TGameTree;
   out ABasePly: Integer; out APV, AScore, ADepth, ATimeText: string): Boolean;
 var
@@ -4468,6 +4496,39 @@ begin
     LPvScore, LPvDepth, LPvTimeText);
   FPvBrowser.SetData(LPvBaseBoard, LPvBasePly, LStartingFEN, LPvText,
     LPvScore, LPvDepth, LPvTimeText);
+end;
+
+procedure TMainForm.RefreshAnalyzerPvBrowserFromTree(AGameTree: TGameTree;
+  ANodeId: Int64; AFallbackBasePly: Integer);
+var
+  LPvDepth: string;
+  LPvScore: string;
+  LPvText: string;
+  LPvTimeText: string;
+begin
+  if FAnalyzerPvBrowser = nil then
+    Exit;
+
+  if not AnnotatorPvForTreeNode(AGameTree, ANodeId, LPvText, LPvScore,
+    LPvDepth, LPvTimeText) then
+  begin
+    if (ANodeId <= 0) and (AGameTree <> nil) then
+    begin
+      if AFallbackBasePly <= 0 then
+        ANodeId := AGameTree.Root.NodeId
+      else if AGameTree.MainlineNode[AFallbackBasePly] <> nil then
+        ANodeId := AGameTree.MainlineNode[AFallbackBasePly].NodeId;
+    end;
+    if not AnnotatorPvForTreeNode(AGameTree, ANodeId, LPvText, LPvScore,
+      LPvDepth, LPvTimeText) then
+    begin
+      FAnalyzerPvBrowser.Clear;
+      Exit;
+    end;
+  end;
+
+  FAnalyzerPvBrowser.SetData(FAnalyzerPvBaseBoard, FAnalyzerPvBasePly,
+    StartingFenForTree(AGameTree), LPvText, LPvScore, LPvDepth, LPvTimeText);
 end;
 
 procedure TMainForm.SetDisplayedTreeTracking(const AAnnotationsSignature,
@@ -6751,6 +6812,8 @@ var
   end;
 
   procedure ApplyAnalyzerSnapshot(AMessage: TAnalyzerSnapshotGuiMessage);
+  var
+    LNodeId: Int64;
   begin
     if (AMessage = nil) or (AMessage.Snapshot = nil) then
       Exit;
@@ -6761,8 +6824,18 @@ var
       Exit;
     if (not AMessage.Snapshot.GameTreeOnly) and
       (FAnalyzerPvBrowser <> nil) then
-      FAnalyzerPvBrowser.SetSnapshot(AMessage.Snapshot,
-        StartingFenForTree(LGameTree));
+    begin
+      LNodeId := AMessage.Snapshot.SearchRef.NodeId;
+      if LNodeId <= 0 then
+      begin
+        if AMessage.Snapshot.BasePly <= 0 then
+          LNodeId := LGameTree.Root.NodeId
+        else if LGameTree.MainlineNode[AMessage.Snapshot.BasePly] <> nil then
+          LNodeId := LGameTree.MainlineNode[AMessage.Snapshot.BasePly].NodeId;
+      end;
+      RefreshAnalyzerPvBrowserFromTree(LGameTree, LNodeId,
+        AMessage.Snapshot.BasePly);
+    end;
     RefreshVisibleGameTreeView(LGameTree);
     if (not AMessage.Snapshot.GameTreeOnly) and
       (FPvHintSource = phsAnalyzer) then
