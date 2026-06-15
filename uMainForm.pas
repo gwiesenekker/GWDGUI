@@ -42,8 +42,6 @@ type
     PvTimeText: string;
     PvBasePly: Integer;
     PvBaseBoard: TDraughtsBoard;
-    LogLinesText: string;
-    LogLineCount: Integer;
     WhiteRemainingSeconds: Double;
     BlackRemainingSeconds: Double;
     WhiteUsedSeconds: Double;
@@ -1136,8 +1134,6 @@ begin
   AInput.PvTimeText := FSnapshot.PvSnapshot.TimeText;
   AInput.PvBasePly := FSnapshot.PvBasePly;
   AInput.PvBaseBoard := FSnapshot.PvBaseBoard;
-  AInput.LogLinesText := FSnapshot.LogLines.Text;
-  AInput.LogLineCount := FSnapshot.LogLines.Count;
   AInput.WhiteRemainingSeconds := FSnapshot.WhiteRemainingSeconds;
   AInput.BlackRemainingSeconds := FSnapshot.BlackRemainingSeconds;
   AInput.WhiteUsedSeconds := FSnapshot.WhiteUsedSeconds;
@@ -4847,8 +4843,6 @@ begin
   Result.PvTimeText := '';
   Result.PvBasePly := 0;
   Result.PvBaseBoard := nil;
-  Result.LogLinesText := '';
-  Result.LogLineCount := 0;
   Result.WhiteRemainingSeconds := 0;
   Result.BlackRemainingSeconds := 0;
   Result.WhiteUsedSeconds := 0;
