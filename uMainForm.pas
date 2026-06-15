@@ -172,6 +172,10 @@ type
     function IsEngineReservationActive: Boolean;
     function IsHumanToMove: Boolean;
     function ReservationSummary: string;
+    function SnapshotHasPlayedMoves: Boolean;
+    function SnapshotLastError: string;
+    function SnapshotResultText: string;
+    function SnapshotState: TGameOrchestratorState;
     procedure AssignSetupTo(out ASetup: TGameSetup);
     property Id: Integer read FId;
     property GameTreeActor: TGameTreeActor read FGameTreeActor;
@@ -884,6 +888,28 @@ begin
   Result := Trim(FReservationKeys.CommaText);
   if Result = '' then
     Result := 'none';
+end;
+
+function TRunningGame.SnapshotHasPlayedMoves: Boolean;
+begin
+  Result := Trim(FSnapshot.MovesPlayedText) <> '';
+end;
+
+function TRunningGame.SnapshotLastError: string;
+begin
+  Result := FSnapshot.LastError;
+end;
+
+function TRunningGame.SnapshotResultText: string;
+begin
+  Result := FSnapshot.GameResult;
+  if Result = '' then
+    Result := '*';
+end;
+
+function TRunningGame.SnapshotState: TGameOrchestratorState;
+begin
+  Result := FSnapshot.State;
 end;
 
 constructor TMainForm.Create(AOwner: TComponent);
