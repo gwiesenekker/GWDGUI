@@ -4962,7 +4962,6 @@ var
   var
     I: Integer;
     IsLastMove: Boolean;
-    LTreeChanged: Boolean;
   begin
     Result := False;
     if not SnapshotExtendsCurrentTree then
@@ -4971,7 +4970,6 @@ var
     if Actor = nil then
       Exit;
 
-    LTreeChanged := False;
     for I := LGameTree.MainlineCount to LMoves.Count - 1 do
     begin
       IsLastMove := I = LMoves.Count - 1;
@@ -4984,14 +4982,10 @@ var
       try
         if not ExecuteGameTreeCommand(Actor, Command, LErrorText) then
           Exit;
-        if Command.TreeChanged then
-          LTreeChanged := True;
       finally
         Command.Free;
       end;
     end;
-    if LTreeChanged then
-      RefreshDisplayedGameTreeViews(LGameTree, False);
     Result := True;
   end;
 
