@@ -9,10 +9,13 @@ uses
   uPdn, uPreferences;
 
 type
+  TScoreHistoryDisplayMode = (shdmAuto, shdmGraph, shdmBars);
+
   TScoreHistoryControl = class(TCustomControl)
   private
     FAnnotationsText: string;
     FCurrentPly: Integer;
+    FDisplayMode: TScoreHistoryDisplayMode;
     FHintText: string;
     FMaxScore: Double;
     FPlyCount: Integer;
@@ -37,6 +40,7 @@ type
     procedure ClearScoreHint;
     procedure SetAnnotationsText(const AValue: string);
     procedure SetCurrentPly(AValue: Integer);
+    procedure SetDisplayMode(AValue: TScoreHistoryDisplayMode);
     procedure SetMaxScore(AValue: Double);
     procedure SetPlyCount(AValue: Integer);
     procedure SetScale(AValue: TScoreScale);
@@ -64,6 +68,8 @@ type
     property AnnotationsText: string read FAnnotationsText
       write SetAnnotationsText;
     property CurrentPly: Integer read FCurrentPly write SetCurrentPly;
+    property DisplayMode: TScoreHistoryDisplayMode read FDisplayMode
+      write SetDisplayMode;
     property MaxScore: Double read FMaxScore write SetMaxScore;
     property PlyCount: Integer read FPlyCount write SetPlyCount;
     property Scale: TScoreScale read FScale write SetScale;
@@ -138,6 +144,7 @@ begin
   ShowHint := True;
   Height := 84;
   FCurrentPly := -1;
+  FDisplayMode := shdmAuto;
   FMaxScore := 10.0;
   FPlyCount := 0;
   FScale := ssLogarithmic;
@@ -462,7 +469,14 @@ begin
     PlotLeft := ChartRect.Left + 3;
     PlotRight := ChartRect.Right - 3;
     BarWidth := BarPenWidth(PlotRight - PlotLeft + 1, Count);
-    DenseMode := (Count > 8) and (Count * 2 > PlotRight - PlotLeft + 1);
+    case FDisplayMode of
+      shdmGraph:
+        DenseMode := True;
+      shdmBars:
+        DenseMode := False;
+    else
+      DenseMode := (Count > 8) and (Count * 2 > PlotRight - PlotLeft + 1);
+    end;
     PrevEngineHasScore := False;
     PrevEngineX := 0;
     PrevEngineY := 0;
@@ -586,6 +600,16 @@ begin
     Exit;
   ClearScoreHint;
   FCurrentPly := AValue;
+  Invalidate;
+end;
+
+procedure TScoreHistoryControl.SetDisplayMode(
+  AValue: TScoreHistoryDisplayMode);
+begin
+  if FDisplayMode = AValue then
+    Exit;
+  ClearScoreHint;
+  FDisplayMode := AValue;
   Invalidate;
 end;
 

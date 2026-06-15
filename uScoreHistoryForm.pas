@@ -35,6 +35,7 @@ begin
   FScoreHistoryControl := TScoreHistoryControl.Create(Self);
   FScoreHistoryControl.Parent := Self;
   FScoreHistoryControl.Align := alClient;
+  FScoreHistoryControl.DisplayMode := shdmBars;
   FScoreHistoryControl.ShowEvaluationBar := True;
 end;
 

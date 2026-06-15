@@ -1813,6 +1813,7 @@ begin
   FScoreHistoryControl.Parent := LPvScorePanel;
   FScoreHistoryControl.Align := alClient;
   FScoreHistoryControl.ParentFont := True;
+  FScoreHistoryControl.DisplayMode := shdmGraph;
   FScoreHistoryControl.ShowEvaluationBar := True;
   LScoreHistoryPopup := TPopupMenu.Create(Self);
   LMenuItem := TMenuItem.Create(Self);
