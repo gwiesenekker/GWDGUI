@@ -199,7 +199,8 @@ type
     procedure RememberSnapshotSyncSignature(const ASignature: string);
     procedure RequestRemoval;
     procedure RequestStop(const AReason: string);
-    procedure SnapshotTreeInput(const AEventName: string;
+    procedure SnapshotTreeInput(ASnapshot: TGameRunnerSnapshot;
+      const AEventName: string;
       out AInput: TRunningSnapshotTreeInput);
     procedure SnapshotLogInput(out AInput: TRunningSnapshotLogInput);
     procedure UpdateListCaption(const ACaption: string);
@@ -467,6 +468,7 @@ type
     function CurrentGameTreeHeaderInput(AGame: TRunningGame;
       AGameTree: TGameTree): TGameTreeHeaderInput;
     function RunningSnapshotTreeInput(AGame: TRunningGame;
+      ASnapshot: TGameRunnerSnapshot;
       const AEventName: string): TRunningSnapshotTreeInput;
     function RunningSnapshotHeaderInput(
       const AInput: TRunningSnapshotTreeInput): TGameTreeHeaderInput;
@@ -481,6 +483,7 @@ type
       ALogLineCount: Integer): string;
     procedure InitializeRunningGameTree(AGame: TRunningGame);
     procedure UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
+      ASnapshot: TGameRunnerSnapshot = nil;
       const AEventName: string = '');
     function RunningGameTreePdnText(AGame: TRunningGame;
       const AEventName: string): string;
@@ -1066,7 +1069,8 @@ begin
   MarkSnapshotStopped(FStopReason);
 end;
 
-procedure TRunningGame.SnapshotTreeInput(const AEventName: string;
+procedure TRunningGame.SnapshotTreeInput(ASnapshot: TGameRunnerSnapshot;
+  const AEventName: string;
   out AInput: TRunningSnapshotTreeInput);
 
   function ValueOrFallback(const AValue, AFallback: string): string;
@@ -1076,28 +1080,34 @@ procedure TRunningGame.SnapshotTreeInput(const AEventName: string;
       Result := AFallback;
   end;
 
+var
+  LSnapshot: TGameRunnerSnapshot;
 begin
+  LSnapshot := ASnapshot;
+  if LSnapshot = nil then
+    LSnapshot := FSnapshot;
+
   AInput.GameId := FId;
   AInput.EventName := ValueOrFallback(AEventName, '?');
-  AInput.WhiteName := ValueOrFallback(FSnapshot.WhitePlayerName,
+  AInput.WhiteName := ValueOrFallback(LSnapshot.WhitePlayerName,
     ValueOrFallback(FWhiteDisplayName, 'White'));
-  AInput.BlackName := ValueOrFallback(FSnapshot.BlackPlayerName,
+  AInput.BlackName := ValueOrFallback(LSnapshot.BlackPlayerName,
     ValueOrFallback(FBlackDisplayName, 'Black'));
-  AInput.ResultText := ValueOrFallback(FSnapshot.GameResult, '*');
-  AInput.StartingFEN := ValueOrFallback(FSnapshot.StartingFEN,
+  AInput.ResultText := ValueOrFallback(LSnapshot.GameResult, '*');
+  AInput.StartingFEN := ValueOrFallback(LSnapshot.StartingFEN,
     FSetup.StartingFEN);
-  AInput.MovesText := FSnapshot.MovesPlayedText;
-  AInput.AnnotationsText := FSnapshot.MoveAnnotationsText;
-  AInput.State := FSnapshot.State;
-  AInput.PrincipalVariation := FSnapshot.PrincipalVariation;
-  AInput.PvScore := FSnapshot.PvScore;
-  AInput.PvDepth := FSnapshot.PvSnapshot.Depth;
-  AInput.PvTimeText := FSnapshot.PvSnapshot.TimeText;
-  AInput.PvBasePly := FSnapshot.PvBasePly;
-  AInput.WhiteRemainingSeconds := FSnapshot.WhiteRemainingSeconds;
-  AInput.BlackRemainingSeconds := FSnapshot.BlackRemainingSeconds;
-  AInput.WhiteUsedSeconds := FSnapshot.WhiteUsedSeconds;
-  AInput.BlackUsedSeconds := FSnapshot.BlackUsedSeconds;
+  AInput.MovesText := LSnapshot.MovesPlayedText;
+  AInput.AnnotationsText := LSnapshot.MoveAnnotationsText;
+  AInput.State := LSnapshot.State;
+  AInput.PrincipalVariation := LSnapshot.PrincipalVariation;
+  AInput.PvScore := LSnapshot.PvScore;
+  AInput.PvDepth := LSnapshot.PvSnapshot.Depth;
+  AInput.PvTimeText := LSnapshot.PvSnapshot.TimeText;
+  AInput.PvBasePly := LSnapshot.PvBasePly;
+  AInput.WhiteRemainingSeconds := LSnapshot.WhiteRemainingSeconds;
+  AInput.BlackRemainingSeconds := LSnapshot.BlackRemainingSeconds;
+  AInput.WhiteUsedSeconds := LSnapshot.WhiteUsedSeconds;
+  AInput.BlackUsedSeconds := LSnapshot.BlackUsedSeconds;
   AInput.TimeControl := FSetup.TimeControl;
 end;
 
@@ -3780,8 +3790,8 @@ begin
   if (AGame = nil) or (ASnapshot = nil) then
     Exit;
 
+  UpdateRunningGameTreeFromSnapshot(AGame, ASnapshot);
   AGame.AssignRunnerSnapshot(ASnapshot);
-  UpdateRunningGameTreeFromSnapshot(AGame);
   Result := AGame.GameTree;
 end;
 
@@ -4782,13 +4792,14 @@ begin
 end;
 
 function TMainForm.RunningSnapshotTreeInput(AGame: TRunningGame;
+  ASnapshot: TGameRunnerSnapshot;
   const AEventName: string): TRunningSnapshotTreeInput;
 var
   LEventName: string;
 begin
   LEventName := PlayerNameOrFallback(AEventName,
     EventNameForTree(AGame.GameTree));
-  AGame.SnapshotTreeInput(LEventName, Result);
+  AGame.SnapshotTreeInput(ASnapshot, LEventName, Result);
 end;
 
 function TMainForm.RunningSnapshotHeaderInput(
@@ -4881,7 +4892,7 @@ begin
   if Actor = nil then
     Exit;
 
-  LInput := RunningSnapshotTreeInput(AGame, '');
+  LInput := RunningSnapshotTreeInput(AGame, nil, '');
   LInput.State := gosRunning;
   LInput.WhiteRemainingSeconds := AGame.InitialClockSeconds;
   LInput.BlackRemainingSeconds := LInput.WhiteRemainingSeconds;
@@ -4895,6 +4906,7 @@ begin
 end;
 
 procedure TMainForm.UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
+  ASnapshot: TGameRunnerSnapshot;
   const AEventName: string);
 var
   Actor: TGameTreeActor;
@@ -5045,7 +5057,7 @@ var
 begin
   if AGame = nil then
     Exit;
-  LInput := RunningSnapshotTreeInput(AGame, AEventName);
+  LInput := RunningSnapshotTreeInput(AGame, ASnapshot, AEventName);
   if RunningGameTreeExtendsSnapshot(AGame, LInput) then
     Exit;
 
@@ -5113,7 +5125,7 @@ begin
   if AGame = nil then
     Exit;
 
-  UpdateRunningGameTreeFromSnapshot(AGame, AEventName);
+  UpdateRunningGameTreeFromSnapshot(AGame, nil, AEventName);
   LOptions := DefaultGameTreePdnRenderOptions;
   Result := GameTreeToPdnTextEx(AGame.GameTree, LOptions);
 end;
