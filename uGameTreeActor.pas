@@ -97,6 +97,7 @@ type
     procedure CopyStoredVariationsToCommand(ACommand: TGameTreeCommand);
     function CommandRebuildSignature(ACommand: TGameTreeCommand): string;
     procedure ClearRebuildSignature;
+    function CreateCommand(AKind: TGameTreeActorCommandKind): TGameTreeCommand;
     function FindSearch(ASearchId: Int64): TGameTreeSearchRecord; overload;
     function FindSearch(const ASearch: TGameTreeSearchRef
       ): TGameTreeSearchRecord; overload;
@@ -340,9 +341,7 @@ end;
 function TGameTreeActor.CreateAddMainlineMoveCommand(APlyNumber: Integer;
   const AMoveText: string; ASource: TGameTreeMoveSource): TGameTreeCommand;
 begin
-  Result := TGameTreeCommand.Create(gtcAddMainlineMove);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcAddMainlineMove);
   Result.PlyNumber := APlyNumber;
   Result.MoveText := Trim(AMoveText);
   Result.MoveSource := ASource;
@@ -351,9 +350,7 @@ end;
 function TGameTreeActor.CreateAppendMainlineMoveCommand(
   const AMoveText: string; ASource: TGameTreeMoveSource): TGameTreeCommand;
 begin
-  Result := TGameTreeCommand.Create(gtcAppendMainlineMove);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcAppendMainlineMove);
   Result.MoveText := Trim(AMoveText);
   Result.MoveSource := ASource;
 end;
@@ -364,9 +361,7 @@ function TGameTreeActor.CreateAppendMainlineSnapshotMoveCommand(
   const AEnginePV: TGameTreePvInput; ASource: TGameTreeMoveSource
   ): TGameTreeCommand;
 begin
-  Result := TGameTreeCommand.Create(gtcAppendMainlineSnapshotMove);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcAppendMainlineSnapshotMove);
   Result.HeaderInput := AHeader;
   Result.MoveText := Trim(AMoveText);
   Result.AnnotationText := AAnnotationText;
@@ -384,9 +379,7 @@ end;
 function TGameTreeActor.CreateCancelSearchCommand(
   ASearchId: Int64): TGameTreeCommand;
 begin
-  Result := TGameTreeCommand.Create(gtcCancelSearch);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcCancelSearch);
   Result.SearchId := ASearchId;
 end;
 
@@ -400,9 +393,7 @@ end;
 function TGameTreeActor.CreateReleaseSearchCommand(
   ASearchId: Int64): TGameTreeCommand;
 begin
-  Result := TGameTreeCommand.Create(gtcReleaseSearch);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcReleaseSearch);
   Result.SearchId := ASearchId;
 end;
 
@@ -418,15 +409,12 @@ function TGameTreeActor.CreateSearchDoneCommand(ASearchId: Int64;
 var
   Search: TGameTreeSearchRecord;
 begin
-  Result := TGameTreeCommand.Create(gtcSearchDone);
-  Result.CommandId := NextCommandId;
+  Result := CreateCommand(gtcSearchDone);
   Result.SearchId := ASearchId;
   Result.MoveText := Trim(AMoveText);
   Search := FindSearch(ASearchId);
   if Search <> nil then
-    Result.SetSearchRef(Search.SearchRef)
-  else
-    Result.GameTreeId := FGameTree.GameTreeId;
+    Result.SetSearchRef(Search.SearchRef);
 end;
 
 function TGameTreeActor.CreateSearchDoneCommand(
@@ -440,9 +428,7 @@ function TGameTreeActor.CreateRecordAnnotatorPVCommand(ANodeId: Int64;
   const AScore, APV: string; const ADepth: string; const ATimeText: string
   ): TGameTreeCommand;
 begin
-  Result := TGameTreeCommand.Create(gtcRecordAnnotatorPV);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcRecordAnnotatorPV);
   Result.NodeId := ANodeId;
   Result.ScoreText := Trim(AScore);
   Result.PvText := Trim(APV);
@@ -454,9 +440,7 @@ function TGameTreeActor.CreateRecordEnginePVCommand(ANodeId: Int64;
   const AScore, APV: string; const ADepth: string; const ATimeText: string
   ): TGameTreeCommand;
 begin
-  Result := TGameTreeCommand.Create(gtcRecordEnginePV);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcRecordEnginePV);
   Result.NodeId := ANodeId;
   Result.ScoreText := Trim(AScore);
   Result.PvText := Trim(APV);
@@ -467,9 +451,7 @@ end;
 function TGameTreeActor.CreateStoreSearchMoveVariationCommand(
   ASearchId: Int64; ASource: TGameTreeMoveSource): TGameTreeCommand;
 begin
-  Result := TGameTreeCommand.Create(gtcStoreSearchMoveVariation);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcStoreSearchMoveVariation);
   Result.SearchId := ASearchId;
   Result.MoveSource := ASource;
 end;
@@ -485,9 +467,7 @@ end;
 function TGameTreeActor.CreateStoreMoveVariationCommand(ANodeId: Int64;
   const AMoveText: string; ASource: TGameTreeMoveSource): TGameTreeCommand;
 begin
-  Result := TGameTreeCommand.Create(gtcStoreMoveVariation);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcStoreMoveVariation);
   Result.NodeId := ANodeId;
   Result.MoveText := Trim(AMoveText);
   Result.MoveSource := ASource;
@@ -495,9 +475,7 @@ end;
 
 function TGameTreeActor.CreateClearStoredVariationsCommand: TGameTreeCommand;
 begin
-  Result := TGameTreeCommand.Create(gtcClearStoredVariations);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcClearStoredVariations);
 end;
 
 procedure TGameTreeActor.CopyStoredVariationsToCommand(
@@ -627,6 +605,14 @@ begin
   FLastRebuildSignature := '';
 end;
 
+function TGameTreeActor.CreateCommand(
+  AKind: TGameTreeActorCommandKind): TGameTreeCommand;
+begin
+  Result := TGameTreeCommand.Create(AKind);
+  Result.CommandId := NextCommandId;
+  Result.GameTreeId := FGameTree.GameTreeId;
+end;
+
 function TGameTreeActor.CreateRebuildFromInputsCommand(
   const AHeader: TGameTreeHeaderInput;
   const AMainline: TGameTreeMainlineInput;
@@ -636,9 +622,7 @@ function TGameTreeActor.CreateRebuildFromInputsCommand(
   const AVariationPvDepth: string; const AVariationPvTimeText: string
   ): TGameTreeCommand;
 begin
-  Result := TGameTreeCommand.Create(gtcRebuildFromInputs);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcRebuildFromInputs);
   CopyStoredVariationsToCommand(Result);
   Result.HeaderInput := AHeader;
   Result.MainlineInput.RecordClock := AMainline.RecordClock;
@@ -673,9 +657,7 @@ function TGameTreeActor.CreateSetHeaderCommand(
   const AHeader: TGameTreeHeaderInput;
   const AMainline: TGameTreeMainlineInput): TGameTreeCommand;
 begin
-  Result := TGameTreeCommand.Create(gtcSetHeader);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcSetHeader);
   Result.HeaderInput := AHeader;
   Result.MainlineInput.RecordClock := AMainline.RecordClock;
   Result.MainlineInput.WhiteRemainingSeconds :=
@@ -690,9 +672,7 @@ function TGameTreeActor.CreateStartSearchCommand(ANodeId: Int64;
   out ASearchId: Int64): TGameTreeCommand;
 begin
   ASearchId := NextSearchId;
-  Result := TGameTreeCommand.Create(gtcStartSearch);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcStartSearch);
   Result.NodeId := ANodeId;
   Result.SearchId := ASearchId;
 end;
@@ -710,9 +690,7 @@ function TGameTreeActor.CreateStoreVariationLineCommand(ADisplayAfterPly,
   ABasePly: Integer; const AMovesText, AAnnotationText: string;
   ASource: TGameTreeMoveSource): TGameTreeCommand;
 begin
-  Result := TGameTreeCommand.Create(gtcStoreVariationLine);
-  Result.CommandId := NextCommandId;
-  Result.GameTreeId := FGameTree.GameTreeId;
+  Result := CreateCommand(gtcStoreVariationLine);
   Result.DisplayAfterPly := ADisplayAfterPly;
   Result.BasePly := ABasePly;
   Result.MoveText := Trim(AMovesText);
