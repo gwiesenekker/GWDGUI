@@ -3887,10 +3887,9 @@ begin
     FGameState := gosWaiting;
     FGameResult := AGame.ResultText;
     if Trim(FGameResult) = '' then
-    FGameResult := '*';
+      FGameResult := '*';
     FStartingFEN := AGame.StartingFEN;
-    SetDisplayedTreeTracking(AGame.MoveAnnotationsText, AGame.MovesText,
-      '', 0, -1);
+    SetDisplayedTreeTracking('', '', '', 0, -1);
     FStandaloneWhitePlayerName := PlayerNameOrFallback(AGame.WhiteName, 'White');
     FStandaloneBlackPlayerName := PlayerNameOrFallback(AGame.BlackName, 'Black');
     FStandaloneEventName := PlayerNameOrFallback(AGame.EventName, '?');
