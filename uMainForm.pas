@@ -174,6 +174,9 @@ type
     function ReservationSummary: string;
     function HasPlayedMoves: Boolean;
     function InitialClockSeconds: Double;
+    function IsStopOrRemoveRequested: Boolean;
+    function IsTournamentGame: Boolean;
+    function ListCaptionMatches(const ACaption: string): Boolean;
     function LastErrorText: string;
     function ResultText: string;
     function SetupTimeControl: TTimeControl;
@@ -181,9 +184,14 @@ type
     procedure AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
     procedure AssignSetupTo(out ASetup: TGameSetup);
     procedure AddReservationKeysTo(AKeys: TStrings);
+    procedure MarkFinished;
+    procedure MarkRunningIfStarting;
     procedure MarkSnapshotStopped(const AReason: string);
+    procedure RequestRemoval;
+    procedure RequestStop(const AReason: string);
     procedure SnapshotTreeInput(const AEventName: string;
       out AInput: TRunningSnapshotTreeInput);
+    procedure UpdateListCaption(const ACaption: string);
     property Id: Integer read FId;
     property GameTreeActor: TGameTreeActor read FGameTreeActor;
     property GameTree: TGameTree read FGameTree;
@@ -916,6 +924,21 @@ begin
   Result := FSetup.TimeControl.MinutesPerPeriod * 60;
 end;
 
+function TRunningGame.IsStopOrRemoveRequested: Boolean;
+begin
+  Result := FLifecycle in [rglStopRequested, rglRemoveRequested];
+end;
+
+function TRunningGame.IsTournamentGame: Boolean;
+begin
+  Result := (FTitle <> '') and (Pos('Tournament ', FTitle) = 1);
+end;
+
+function TRunningGame.ListCaptionMatches(const ACaption: string): Boolean;
+begin
+  Result := FListCaption = ACaption;
+end;
+
 function TRunningGame.LastErrorText: string;
 begin
   Result := FSnapshot.LastError;
@@ -946,6 +969,33 @@ end;
 procedure TRunningGame.MarkSnapshotStopped(const AReason: string);
 begin
   FSnapshot.MarkStopped(AReason);
+end;
+
+procedure TRunningGame.MarkFinished;
+begin
+  FLifecycle := rglFinished;
+end;
+
+procedure TRunningGame.MarkRunningIfStarting;
+begin
+  if FLifecycle = rglStarting then
+    FLifecycle := rglRunning;
+end;
+
+procedure TRunningGame.RequestRemoval;
+begin
+  FLifecycle := rglRemoveRequested;
+end;
+
+procedure TRunningGame.RequestStop(const AReason: string);
+begin
+  if FRunner <> nil then
+    FRunner.PostStop;
+  FPaused := False;
+  if not (FLifecycle in [rglFinished, rglRemoveRequested]) then
+    FLifecycle := rglStopRequested;
+  FStopReason := AReason;
+  MarkSnapshotStopped(FStopReason);
 end;
 
 procedure TRunningGame.SnapshotTreeInput(const AEventName: string;
@@ -987,6 +1037,11 @@ begin
   AInput.WhiteUsedSeconds := FSnapshot.WhiteUsedSeconds;
   AInput.BlackUsedSeconds := FSnapshot.BlackUsedSeconds;
   AInput.TimeControl := FSetup.TimeControl;
+end;
+
+procedure TRunningGame.UpdateListCaption(const ACaption: string);
+begin
+  FListCaption := ACaption;
 end;
 
 constructor TMainForm.Create(AOwner: TComponent);
@@ -6466,13 +6521,7 @@ begin
   if AGame = nil then
     Exit;
 
-  if AGame.Runner <> nil then
-    AGame.Runner.PostStop;
-  AGame.Paused := False;
-  if not (AGame.FLifecycle in [rglFinished, rglRemoveRequested]) then
-    AGame.FLifecycle := rglStopRequested;
-  AGame.FStopReason := AReason;
-  AGame.MarkSnapshotStopped(AGame.StopReason);
+  AGame.RequestStop(AReason);
   UpdateRunningGameTreeFromSnapshot(AGame);
   if not FClosing then
   begin
@@ -6592,10 +6641,9 @@ var
 
     LGame.AssignRunnerSnapshot(AMessage.Snapshot);
     UpdateRunningGameTreeFromSnapshot(LGame);
-    if LGame.FLifecycle = rglStarting then
-      LGame.FLifecycle := rglRunning;
+    LGame.MarkRunningIfStarting;
     LInput := RunningSnapshotTreeInput(LGame, '');
-    if (LGame.FLifecycle in [rglStopRequested, rglRemoveRequested]) and
+    if LGame.IsStopOrRemoveRequested and
       (LInput.State in [gosWaiting, gosRunning, gosError]) then
       LGame.MarkSnapshotStopped(LGame.StopReason);
     if not FClosing then
@@ -6698,7 +6746,7 @@ begin
           if LGame <> nil then
           begin
             RemoveAfterFinish := LGame.Lifecycle = rglRemoveRequested;
-            LGame.FLifecycle := rglFinished;
+            LGame.MarkFinished;
             if RemoveAfterFinish then
               RemoveGame(LGame)
             else if not FClosing then
@@ -6844,15 +6892,14 @@ begin
   if AGame.Lifecycle <> rglFinished then
   begin
     MarkGameStopped(AGame, 'Stopped');
-    AGame.FLifecycle := rglRemoveRequested;
+    AGame.RequestRemoval;
     if not FClosing then
       UpdateGameListItem(AGame);
     Exit;
   end;
 
   LIndex := FGamesListBox.Items.IndexOfObject(AGame);
-  if (FTournamentDialog <> nil) and
-    ((AGame.FTitle <> '') and (Pos('Tournament ', AGame.FTitle) = 1)) then
+  if (FTournamentDialog <> nil) and AGame.IsTournamentGame then
     FTournamentDialog.GameStopped(AGame);
   FGames.Remove(AGame);
   if LIndex >= 0 then
@@ -6925,7 +6972,7 @@ begin
       Continue;
     end;
     MarkGameStopped(LGame, 'Application shutdown');
-    LGame.FLifecycle := rglRemoveRequested;
+    LGame.RequestRemoval;
   end;
 
   LastWarningTick := GetTickCount64;
@@ -7272,14 +7319,14 @@ begin
   if AGame.Paused and (LInput.State in [gosWaiting, gosRunning]) then
     LCaption := LCaption + ' (paused)';
   LCaption := LCaption + ' - ' + IntToStr(LInput.PlyCount) + ' plies';
-  if AGame.FListCaption = LCaption then
+  if AGame.ListCaptionMatches(LCaption) then
     Exit;
   for I := 0 to FGamesListBox.Items.Count - 1 do
     if FGamesListBox.Items.Objects[I] = AGame then
     begin
       FGamesListBox.Items[I] := LCaption;
       FGamesListBox.Items.Objects[I] := AGame;
-      AGame.FListCaption := LCaption;
+      AGame.UpdateListCaption(LCaption);
       Exit;
     end;
 end;
