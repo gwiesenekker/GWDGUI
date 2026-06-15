@@ -677,7 +677,8 @@ type
     procedure UpdateDatabaseSearchPosition;
     procedure UpdateBoardFromBrowseState(AGameTree: TGameTree);
     procedure UpdateBoardHighlights(AGameTree: TGameTree);
-    procedure UpdateClockLabels(const AWhiteName, ABlackName: string);
+    procedure UpdateClockLabels(AGameTree: TGameTree; const AWhiteName,
+      ABlackName: string);
     procedure UpdateScoreHistory(AGameTree: TGameTree);
     procedure UpdateGameListItem(AGame: TRunningGame);
     procedure UpdateLegalMoves;
@@ -2043,7 +2044,8 @@ begin
   ClearHumanMoveSelection;
   ApplyBoardFlipped;
   if FGameActive then
-    UpdateClockLabels(FWhitePlayerEdit.Text, FBlackPlayerEdit.Text);
+    UpdateClockLabels(ActiveGameTree, FWhitePlayerEdit.Text,
+      FBlackPlayerEdit.Text);
 end;
 
 function TMainForm.TreeVariationLineByIndex(AIndex: Integer;
@@ -5487,7 +5489,7 @@ begin
   FGameActive := True;
   if not LPositionChanged then
   begin
-    UpdateClockLabels(WhiteNameForTree(AGame.GameTree),
+    UpdateClockLabels(AGame.GameTree, WhiteNameForTree(AGame.GameTree),
       BlackNameForTree(AGame.GameTree));
     UpdateGameLogMemo;
     if LPvChanged then
@@ -7126,7 +7128,8 @@ begin
     FBoardControl.Invalidate;
 end;
 
-procedure TMainForm.UpdateClockLabels(const AWhiteName, ABlackName: string);
+procedure TMainForm.UpdateClockLabels(AGameTree: TGameTree; const AWhiteName,
+  ABlackName: string);
 var
   LBlackRemainingSeconds: Double;
   LBlackCaption: string;
@@ -7144,7 +7147,7 @@ begin
     Exit;
   end;
 
-  ClockValuesForTree(ActiveGameTree, LWhiteRemainingSeconds,
+  ClockValuesForTree(AGameTree, LWhiteRemainingSeconds,
     LBlackRemainingSeconds, LWhiteUsedSeconds, LBlackUsedSeconds);
 
   LBlackCaption := ABlackName + '  ' + FormatClock(LBlackRemainingSeconds) +
@@ -7208,7 +7211,7 @@ begin
     LFenText := StartingFenForTree(FGameTree);
   end;
 
-  UpdateClockLabels(LWhiteName, LBlackName);
+  UpdateClockLabels(LGameTree, LWhiteName, LBlackName);
 
   if FWhitePlayerEdit <> nil then
     FWhitePlayerEdit.Text := LWhiteName;
