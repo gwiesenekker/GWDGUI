@@ -4885,33 +4885,19 @@ function TMainForm.RunningDisplaySignature(AGame: TRunningGame;
 var
   Actor: TGameTreeActor;
   LRevision: Int64;
-  LShowStdout: Boolean;
-  LState: TGameOrchestratorState;
 begin
-  LShowStdout := False;
-  LState := gosWaiting;
-  if AGame = nil then
-    Result := 'none'
-  else
-  begin
-    Result := IntToStr(AGame.Id);
-    LShowStdout := AGame.ShowStdout;
-  end;
+  Result := IntToStr(AGame.Id);
   LRevision := -1;
-  if (AGame <> nil) and (AGame.GameTree <> nil) then
-  begin
-    Actor := ActorForGameTree(AGame.GameTree);
-    if Actor <> nil then
-      LRevision := Actor.Revision;
-    LState := StateForTree(AGame.GameTree);
-    Result := Result + #10 +
-      'tree=' + IntToStr(AGame.GameTree.GameTreeId) + #10 +
-      'revision=' + IntToStr(LRevision);
-  end;
+  Actor := ActorForGameTree(AGame.GameTree);
+  if Actor <> nil then
+    LRevision := Actor.Revision;
   Result := Result + #10 +
-    IntToStr(Ord(LState)) + #10 +
+    'tree=' + IntToStr(AGame.GameTree.GameTreeId) + #10 +
+    'revision=' + IntToStr(LRevision);
+  Result := Result + #10 +
+    IntToStr(Ord(StateForTree(AGame.GameTree))) + #10 +
     IntToStr(ALogLineCount) + #10 +
-    BoolToStr(LShowStdout, True);
+    BoolToStr(AGame.ShowStdout, True);
 end;
 
 procedure TMainForm.InitializeRunningGameTree(AGame: TRunningGame);
