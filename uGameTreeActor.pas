@@ -103,6 +103,8 @@ type
     function NextCommandId: Int64;
     function NextSearchId: Int64;
     function RemoveSearch(ASearchId: Int64): Boolean;
+    function ResolveSearchCommand(ACommand: TGameTreeCommand;
+      out ASearch: TGameTreeSearchRecord): Boolean;
     function SearchCommandMatches(ACommand: TGameTreeCommand;
       ASearch: TGameTreeSearchRecord): Boolean;
     procedure Reject(ACommand: TGameTreeCommand; const AErrorText: string);
@@ -308,6 +310,31 @@ begin
   Result := (ACommand <> nil) and (ASearch <> nil);
   if Result and (ACommand.NodeId > 0) then
     Result := SameGameTreeSearchRef(ACommand.SearchRef, ASearch.SearchRef);
+end;
+
+function TGameTreeActor.ResolveSearchCommand(ACommand: TGameTreeCommand;
+  out ASearch: TGameTreeSearchRecord): Boolean;
+begin
+  Result := False;
+  ASearch := nil;
+  if ACommand = nil then
+    Exit;
+
+  ASearch := FindSearch(ACommand.SearchId);
+  if ASearch = nil then
+  begin
+    Reject(ACommand, 'search id not found');
+    Exit;
+  end;
+
+  if not SearchCommandMatches(ACommand, ASearch) then
+  begin
+    Reject(ACommand, 'search reference mismatch');
+    ASearch := nil;
+    Exit;
+  end;
+
+  Result := True;
 end;
 
 function TGameTreeActor.CreateAddMainlineMoveCommand(APlyNumber: Integer;
@@ -1003,17 +1030,8 @@ begin
       end;
     gtcCancelSearch:
       begin
-        Search := FindSearch(ACommand.SearchId);
-        if Search = nil then
-        begin
-          Reject(ACommand, 'search id not found');
+        if not ResolveSearchCommand(ACommand, Search) then
           Exit;
-        end;
-        if not SearchCommandMatches(ACommand, Search) then
-        begin
-          Reject(ACommand, 'search reference mismatch');
-          Exit;
-        end;
         if Search.State <> gssActive then
         begin
           Reject(ACommand, 'search is not active');
@@ -1026,17 +1044,8 @@ begin
       end;
     gtcSearchDone:
       begin
-        Search := FindSearch(ACommand.SearchId);
-        if Search = nil then
-        begin
-          Reject(ACommand, 'search id not found');
+        if not ResolveSearchCommand(ACommand, Search) then
           Exit;
-        end;
-        if not SearchCommandMatches(ACommand, Search) then
-        begin
-          Reject(ACommand, 'search reference mismatch');
-          Exit;
-        end;
         if Search.State <> gssActive then
         begin
           Reject(ACommand, 'search is not active');
@@ -1057,17 +1066,8 @@ begin
       end;
     gtcReleaseSearch:
       begin
-        Search := FindSearch(ACommand.SearchId);
-        if Search = nil then
-        begin
-          Reject(ACommand, 'search id not found');
+        if not ResolveSearchCommand(ACommand, Search) then
           Exit;
-        end;
-        if not SearchCommandMatches(ACommand, Search) then
-        begin
-          Reject(ACommand, 'search reference mismatch');
-          Exit;
-        end;
         if Search.State = gssActive then
         begin
           Reject(ACommand, 'active search cannot be released');
@@ -1126,17 +1126,8 @@ begin
       end;
     gtcStoreSearchMoveVariation:
       begin
-        Search := FindSearch(ACommand.SearchId);
-        if Search = nil then
-        begin
-          Reject(ACommand, 'search id not found');
+        if not ResolveSearchCommand(ACommand, Search) then
           Exit;
-        end;
-        if not SearchCommandMatches(ACommand, Search) then
-        begin
-          Reject(ACommand, 'search reference mismatch');
-          Exit;
-        end;
         if Search.State <> gssDone then
         begin
           Reject(ACommand, 'search is not done');
