@@ -121,6 +121,9 @@ type
     procedure ExecuteRecordPVCommand(ACommand: TGameTreeCommand;
       var AInvalidateRebuildSignature: Boolean;
       ARecordEnginePV: Boolean);
+    procedure ExecuteStoreMoveVariationCommand(ACommand: TGameTreeCommand;
+      ANode: TGameTreePlyNode; const AMoveText: string;
+      var AInvalidateRebuildSignature: Boolean);
     procedure Reject(ACommand: TGameTreeCommand; const AErrorText: string);
     procedure RebuildStoredVariations(ACommand: TGameTreeCommand);
     function StoreMoveVariationFromNode(ACommand: TGameTreeCommand;
@@ -386,6 +389,18 @@ begin
   end;
 
   ACommand.Accepted := True;
+  if Changed then
+    AcceptTreeMutation(ACommand, AInvalidateRebuildSignature);
+end;
+
+procedure TGameTreeActor.ExecuteStoreMoveVariationCommand(
+  ACommand: TGameTreeCommand; ANode: TGameTreePlyNode; const AMoveText: string;
+  var AInvalidateRebuildSignature: Boolean);
+var
+  Changed: Boolean;
+begin
+  if not StoreMoveVariationFromNode(ACommand, ANode, AMoveText, Changed) then
+    Exit;
   if Changed then
     AcceptTreeMutation(ACommand, AInvalidateRebuildSignature);
 end;
@@ -1159,11 +1174,8 @@ begin
           Exit;
         end;
 
-        if not StoreMoveVariationFromNode(ACommand, Node,
-          Search.ResultMove, Changed) then
-          Exit;
-        if Changed then
-          AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
+        ExecuteStoreMoveVariationCommand(ACommand, Node, Search.ResultMove,
+          InvalidateRebuildSignature);
       end;
     gtcStoreMoveVariation:
       begin
@@ -1173,11 +1185,8 @@ begin
           Reject(ACommand, 'variation target node does not exist');
           Exit;
         end;
-        if not StoreMoveVariationFromNode(ACommand, Node,
-          ACommand.MoveText, Changed) then
-          Exit;
-        if Changed then
-          AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
+        ExecuteStoreMoveVariationCommand(ACommand, Node, ACommand.MoveText,
+          InvalidateRebuildSignature);
       end;
     gtcClearStoredVariations:
       begin
