@@ -4305,8 +4305,10 @@ function TMainForm.CurrentGameTreeHeaderInput(AGame: TRunningGame;
   AGameTree: TGameTree): TGameTreeHeaderInput;
 var
   LBlackName: string;
+  LInput: TRunningSnapshotTreeInput;
   LMovesText: string;
   LRecordTimeControl: Boolean;
+  LResultText: string;
   LStartingFEN: string;
   LTimeControl: TTimeControl;
   LTreeSignature: string;
@@ -4314,22 +4316,28 @@ var
 begin
   if AGame <> nil then
   begin
-    LWhiteName := PlayerNameOrFallback(AGame.Snapshot.WhitePlayerName,
-      PlayerNameOrFallback(AGame.WhiteDisplayName, 'White'));
-    LBlackName := PlayerNameOrFallback(AGame.Snapshot.BlackPlayerName,
-      PlayerNameOrFallback(AGame.BlackDisplayName, 'Black'));
+    LInput := RunningSnapshotTreeInput(AGame, EventNameForTree(AGameTree));
+    LWhiteName := PlayerNameOrFallback(Trim(AGameTree.WhiteName),
+      LInput.WhiteName);
+    LBlackName := PlayerNameOrFallback(Trim(AGameTree.BlackName),
+      LInput.BlackName);
+    LResultText := PlayerNameOrFallback(Trim(AGameTree.ResultText),
+      LInput.ResultText);
+    LStartingFEN := PlayerNameOrFallback(Trim(AGameTree.StartingFEN),
+      LInput.StartingFEN);
   end
   else
   begin
     LWhiteName := WhiteNameForTree(AGameTree);
     LBlackName := BlackNameForTree(AGameTree);
+    LResultText := ResultForTree(AGameTree);
+    LStartingFEN := StartingFenForTree(AGameTree);
   end;
 
   if AGame <> nil then
     LTreeSignature := 'running:' + IntToStr(AGame.Id)
   else
   begin
-    LStartingFEN := StartingFenForTree(AGameTree);
     LMovesText := GameTreeMainlineMovesText(AGameTree);
     LTreeSignature := 'standalone:' + LStartingFEN + '|' +
       EventNameForTree(AGameTree) + '|' + LWhiteName +
@@ -4345,17 +4353,12 @@ begin
   if AGame <> nil then
     Result := GameTreeHeaderInput(LTreeSignature,
       EventNameForTree(AGameTree), LWhiteName, LBlackName,
-      PlayerNameOrFallback(AGame.Snapshot.GameResult, '*'),
-      PlayerNameOrFallback(AGame.Snapshot.StartingFEN, AGame.FSetup.StartingFEN),
-      LRecordTimeControl, LTimeControl)
+      LResultText, LStartingFEN, LRecordTimeControl, LTimeControl)
   else
-  begin
-    LStartingFEN := StartingFenForTree(AGameTree);
     Result := GameTreeHeaderInput(LTreeSignature,
       EventNameForTree(AGameTree), LWhiteName, LBlackName,
-      ResultForTree(AGameTree), LStartingFEN,
+      LResultText, LStartingFEN,
       LRecordTimeControl, LTimeControl);
-  end;
 end;
 
 function TMainForm.RunningGameTreeHeaderInput(AGame: TRunningGame;
@@ -5465,6 +5468,7 @@ procedure TMainForm.PrepareGameTreeForPdn(AGame: TRunningGame;
 var
   LBlackName: string;
   LEventName: string;
+  LInput: TRunningSnapshotTreeInput;
   LResultText: string;
   LStartingFEN: string;
   LWhiteName: string;
@@ -5490,15 +5494,17 @@ begin
 
   if AGame <> nil then
   begin
+    LInput := RunningSnapshotTreeInput(AGame, AEventName);
     LEventName := PlayerNameOrFallback(AEventName,
-      EventNameForTree(AGameTree));
-    LWhiteName := PlayerNameOrFallback(AGame.Snapshot.WhitePlayerName,
-      PlayerNameOrFallback(AGame.WhiteDisplayName, 'White'));
-    LBlackName := PlayerNameOrFallback(AGame.Snapshot.BlackPlayerName,
-      PlayerNameOrFallback(AGame.BlackDisplayName, 'Black'));
-    LResultText := PlayerNameOrFallback(AGame.Snapshot.GameResult, '*');
-    LStartingFEN := PlayerNameOrFallback(AGame.Snapshot.StartingFEN,
-      AGame.FSetup.StartingFEN);
+      PlayerNameOrFallback(EventNameForTree(AGameTree), LInput.EventName));
+    LWhiteName := PlayerNameOrFallback(Trim(AGameTree.WhiteName),
+      LInput.WhiteName);
+    LBlackName := PlayerNameOrFallback(Trim(AGameTree.BlackName),
+      LInput.BlackName);
+    LResultText := PlayerNameOrFallback(Trim(AGameTree.ResultText),
+      LInput.ResultText);
+    LStartingFEN := PlayerNameOrFallback(Trim(AGameTree.StartingFEN),
+      LInput.StartingFEN);
     ApplyHeader(LEventName, LWhiteName, LBlackName, LResultText,
       LStartingFEN);
     Exit;
@@ -6039,6 +6045,7 @@ procedure TMainForm.AppendRunningGameToPdn(AGame: TRunningGame;
   const AFileName, AEventName: string);
 var
   Game: TPdnGame;
+  LInput: TRunningSnapshotTreeInput;
   LPdnText: string;
 begin
   if (AGame = nil) or (Trim(AFileName) = '') then
@@ -6053,15 +6060,23 @@ begin
 
   Game := TPdnGame.Create;
   try
-    Game.WhiteName := PlayerNameOrFallback(AGame.Snapshot.WhitePlayerName,
-      'White');
-    Game.BlackName := PlayerNameOrFallback(AGame.Snapshot.BlackPlayerName,
-      'Black');
-    Game.EventName := PlayerNameOrFallback(AEventName, '?');
-    Game.ResultText := AGame.Snapshot.GameResult;
-    Game.StartingFEN := AGame.Snapshot.StartingFEN;
-    Game.MovesText := AGame.Snapshot.MovesPlayedText;
-    Game.MoveAnnotationsText := AGame.Snapshot.MoveAnnotationsText;
+    LInput := RunningSnapshotTreeInput(AGame, AEventName);
+    Game.WhiteName := PlayerNameOrFallback(Trim(AGame.GameTree.WhiteName),
+      LInput.WhiteName);
+    Game.BlackName := PlayerNameOrFallback(Trim(AGame.GameTree.BlackName),
+      LInput.BlackName);
+    Game.EventName := PlayerNameOrFallback(AEventName,
+      PlayerNameOrFallback(EventNameForTree(AGame.GameTree), LInput.EventName));
+    Game.ResultText := PlayerNameOrFallback(Trim(AGame.GameTree.ResultText),
+      LInput.ResultText);
+    Game.StartingFEN := PlayerNameOrFallback(Trim(AGame.GameTree.StartingFEN),
+      LInput.StartingFEN);
+    Game.MovesText := GameTreeMainlineMovesText(AGame.GameTree);
+    if Trim(Game.MovesText) = '' then
+      Game.MovesText := LInput.MovesText;
+    Game.MoveAnnotationsText := GameTreeScoreAnnotationsText(AGame.GameTree);
+    if Trim(Game.MoveAnnotationsText) = '' then
+      Game.MoveAnnotationsText := LInput.AnnotationsText;
     AppendPdnGameToFile(AFileName, Game);
   finally
     Game.Free;
