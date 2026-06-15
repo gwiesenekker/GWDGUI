@@ -116,6 +116,9 @@ begin
       AGameTree.EventName);
     ATreeView.Items.AddChild(LRootTreeNode, 'FEN: ' +
       AGameTree.StartingFEN);
+    if Trim(AGameTree.StatusText) <> '' then
+      ATreeView.Items.AddChild(LRootTreeNode, 'Status: ' +
+        AGameTree.StatusText);
     if AGameTree.HasTimeControl then
     begin
       ATreeView.Items.AddChild(LRootTreeNode, 'Moves per period: ' +
