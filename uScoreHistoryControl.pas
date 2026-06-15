@@ -214,6 +214,7 @@ begin
   if AWidth < 1 then
     AWidth := 1;
   Distance := Max(1, AHalfHeight div 30);
+  Canvas.Brush.Style := bsSolid;
   Canvas.Brush.Color := AColor;
   Canvas.Pen.Style := psClear;
   Canvas.Rectangle(ALeft, AMidY - Distance, ALeft + AWidth, AMidY + Distance + 1);
@@ -232,6 +233,7 @@ begin
   LBottom := Max(AMidY, AY);
   if LBottom = LTop then
     Inc(LBottom);
+  Canvas.Brush.Style := bsSolid;
   Canvas.Brush.Color := AColor;
   Canvas.Pen.Style := psClear;
   Canvas.Rectangle(ALeft, LTop, ALeft + AWidth, LBottom + 1);
@@ -439,6 +441,7 @@ begin
         InnerBarRect.Top) * (0.5 - MappedBarScore / 2.0));
       SplitY := Max(InnerBarRect.Top, Min(InnerBarRect.Bottom, SplitY));
       Canvas.Pen.Style := psClear;
+      Canvas.Brush.Style := bsSolid;
       Canvas.Brush.Color := clWhite;
       Canvas.Rectangle(InnerBarRect);
       Canvas.Brush.Color := clBlack;
