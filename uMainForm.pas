@@ -180,6 +180,8 @@ type
     function LastErrorText: string;
     function ResultText: string;
     function SetupTimeControl: TTimeControl;
+    function SnapshotPvSignatureMatches(const ASignature: string): Boolean;
+    function SnapshotSyncSignatureMatches(const ASignature: string): Boolean;
     function State: TGameOrchestratorState;
     procedure AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
     procedure AssignSetupTo(out ASetup: TGameSetup);
@@ -187,6 +189,8 @@ type
     procedure MarkFinished;
     procedure MarkRunningIfStarting;
     procedure MarkSnapshotStopped(const AReason: string);
+    procedure RememberSnapshotPvSignature(const ASignature: string);
+    procedure RememberSnapshotSyncSignature(const ASignature: string);
     procedure RequestRemoval;
     procedure RequestStop(const AReason: string);
     procedure SnapshotTreeInput(const AEventName: string;
@@ -956,6 +960,18 @@ begin
   Result := FSetup.TimeControl;
 end;
 
+function TRunningGame.SnapshotPvSignatureMatches(
+  const ASignature: string): Boolean;
+begin
+  Result := FLastSnapshotTreePvSignature = ASignature;
+end;
+
+function TRunningGame.SnapshotSyncSignatureMatches(
+  const ASignature: string): Boolean;
+begin
+  Result := FLastSnapshotTreeSyncSignature = ASignature;
+end;
+
 function TRunningGame.State: TGameOrchestratorState;
 begin
   Result := FSnapshot.State;
@@ -969,6 +985,16 @@ end;
 procedure TRunningGame.MarkSnapshotStopped(const AReason: string);
 begin
   FSnapshot.MarkStopped(AReason);
+end;
+
+procedure TRunningGame.RememberSnapshotPvSignature(const ASignature: string);
+begin
+  FLastSnapshotTreePvSignature := ASignature;
+end;
+
+procedure TRunningGame.RememberSnapshotSyncSignature(const ASignature: string);
+begin
+  FLastSnapshotTreeSyncSignature := ASignature;
 end;
 
 procedure TRunningGame.MarkFinished;
@@ -4826,12 +4852,12 @@ var
       IntToStr(LNode.NodeId) + #10 + LInput.PvScore + #10 +
       LInput.PrincipalVariation + #10 + LInput.PvDepth + #10 +
       LInput.PvTimeText;
-    if AGame.FLastSnapshotTreePvSignature = LPvSignature then
+    if AGame.SnapshotPvSignatureMatches(LPvSignature) then
       Exit;
     if RecordEnginePvInGameTree(Actor, LGameTree, LNode.NodeId,
       LInput.PvScore, LInput.PrincipalVariation, LInput.PvDepth,
       LInput.PvTimeText, LErrorText) then
-      AGame.FLastSnapshotTreePvSignature := LPvSignature;
+      AGame.RememberSnapshotPvSignature(LPvSignature);
   end;
 begin
   if (AGame = nil) or (AGame.GameTree = nil) then
@@ -4843,7 +4869,7 @@ begin
   LInput := RunningSnapshotTreeInput(AGame, AEventName);
   TryRecordSnapshotPV;
   LSyncSignature := RunningSnapshotSyncSignature(LInput);
-  if AGame.FLastSnapshotTreeSyncSignature = LSyncSignature then
+  if AGame.SnapshotSyncSignatureMatches(LSyncSignature) then
     Exit;
 
   LMoves := TStringList.Create;
@@ -4855,7 +4881,7 @@ begin
 
     if TryAppendSnapshotMoves then
     begin
-      AGame.FLastSnapshotTreeSyncSignature := LSyncSignature;
+      AGame.RememberSnapshotSyncSignature(LSyncSignature);
       Exit;
     end;
 
@@ -4876,7 +4902,7 @@ begin
           Command.Free;
         end;
       end;
-      AGame.FLastSnapshotTreeSyncSignature := LSyncSignature;
+      AGame.RememberSnapshotSyncSignature(LSyncSignature);
       Exit;
     end;
 
@@ -4888,7 +4914,7 @@ begin
       RunningSnapshotMainlineInput(LInput, LMoves, LAnnotations, True),
       RunningSnapshotPvInput(LInput, True),
       GameTreePvInput(False, 0, '', ''), -1, 0, '', '', '', '', LErrorText) then
-      AGame.FLastSnapshotTreeSyncSignature := LSyncSignature;
+      AGame.RememberSnapshotSyncSignature(LSyncSignature);
   finally
     LAnnotations.Free;
     LMoves.Free;
