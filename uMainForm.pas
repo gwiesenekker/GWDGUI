@@ -464,6 +464,8 @@ type
     procedure TrackAnalyzerSearch(const ASearch: TGameTreeSearchRef);
     procedure ClearAnalyzerSearchTracking;
     procedure SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
+    procedure SetAnalyzerPvBaseFromTree(AGameTree: TGameTree; ANodeId: Int64;
+      AFallbackBasePly: Integer; AFallbackBoard: TDraughtsBoard);
     procedure InvalidateAnalyzerPositionSignature;
     procedure InvalidateMctsPositionSignature;
     procedure ApplyGameTreeCommandResult(AGameTree: TGameTree;
@@ -556,6 +558,8 @@ type
       out APV, AScore, ADepth, ATimeText: string): Boolean;
     function TryBuildTreeBoardAtPly(AGameTree: TGameTree; APly: Integer;
       ABoard: TDraughtsBoard): Boolean;
+    function TryBuildTreeBoardAtNode(AGameTree: TGameTree;
+      ANode: TGameTreePlyNode; ABoard: TDraughtsBoard): Boolean;
     function VisibleMainPvForTree(AGameTree: TGameTree;
       out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV,
       AScore, ADepth, ATimeText: string): Boolean;
@@ -2517,6 +2521,32 @@ begin
   FAnalyzerPvBasePly := APly;
 end;
 
+procedure TMainForm.SetAnalyzerPvBaseFromTree(AGameTree: TGameTree;
+  ANodeId: Int64; AFallbackBasePly: Integer; AFallbackBoard: TDraughtsBoard);
+var
+  LNode: TGameTreePlyNode;
+begin
+  LNode := nil;
+  if (AGameTree <> nil) and (ANodeId > 0) then
+    LNode := AGameTree.FindNodeById(ANodeId);
+
+  if (LNode <> nil) and
+    TryBuildTreeBoardAtNode(AGameTree, LNode, FAnalyzerPvBaseBoard) then
+  begin
+    FAnalyzerPvBasePly := LNode.PlyNumber;
+    Exit;
+  end;
+
+  if (AGameTree <> nil) and (AFallbackBasePly >= 0) and
+    TryBuildTreeBoardAtPly(AGameTree, AFallbackBasePly, FAnalyzerPvBaseBoard) then
+  begin
+    FAnalyzerPvBasePly := AFallbackBasePly;
+    Exit;
+  end;
+
+  SetAnalyzerPvBase(AFallbackBoard, AFallbackBasePly);
+end;
+
 procedure TMainForm.InvalidateAnalyzerPositionSignature;
 begin
   FAnalyzerLastPositionSignature := '';
@@ -4399,6 +4429,46 @@ begin
     Result := True;
   except
     Result := False;
+  end;
+end;
+
+function TMainForm.TryBuildTreeBoardAtNode(AGameTree: TGameTree;
+  ANode: TGameTreePlyNode; ABoard: TDraughtsBoard): Boolean;
+var
+  I: Integer;
+  LBasePly: Integer;
+  LDisplayAfterPly: Integer;
+  LVariationIndex: Integer;
+  LVariationLine: TGameTreeVariationLine;
+  LVariationMoves: TStringList;
+  LVariationPly: Integer;
+begin
+  Result := False;
+  if (AGameTree = nil) or (ANode = nil) or (ABoard = nil) then
+    Exit;
+
+  if Trim(ANode.VariationKey) = '' then
+    Exit(TryBuildTreeBoardAtPly(AGameTree, ANode.PlyNumber, ABoard));
+
+  if not AGameTree.ParseVariationKey(ANode.VariationKey, LBasePly,
+    LDisplayAfterPly, LVariationIndex, LVariationPly) then
+    Exit;
+  LVariationLine := AGameTree.VariationLine[LVariationIndex];
+  if LVariationLine = nil then
+    Exit;
+  if not TryBuildTreeBoardAtPly(AGameTree, LBasePly, ABoard) then
+    Exit;
+
+  LVariationMoves := TStringList.Create;
+  try
+    TextToMoveList(LVariationLine.MovesText, LVariationMoves);
+    if LVariationPly > LVariationMoves.Count then
+      LVariationPly := LVariationMoves.Count;
+    for I := 0 to LVariationPly - 1 do
+      ABoard.PlayMove(LVariationMoves[I], True, True);
+    Result := True;
+  finally
+    LVariationMoves.Free;
   end;
 end;
 
@@ -6710,24 +6780,23 @@ var
     if (AMessage = nil) or (AMessage.Snapshot = nil) then
       Exit;
 
-    SetAnalyzerPvBase(AMessage.Snapshot.BaseBoard, AMessage.Snapshot.BasePly);
     LGameTree := PublishAnalyzerSnapshotToGameTree(AMessage.Snapshot);
     if LGameTree = nil then
       Exit;
+    LNodeId := AMessage.Snapshot.SearchRef.NodeId;
+    if LNodeId <= 0 then
+    begin
+      if AMessage.Snapshot.BasePly <= 0 then
+        LNodeId := LGameTree.Root.NodeId
+      else if LGameTree.MainlineNode[AMessage.Snapshot.BasePly] <> nil then
+        LNodeId := LGameTree.MainlineNode[AMessage.Snapshot.BasePly].NodeId;
+    end;
+    SetAnalyzerPvBaseFromTree(LGameTree, LNodeId,
+      AMessage.Snapshot.BasePly, AMessage.Snapshot.BaseBoard);
     if (not AMessage.Snapshot.GameTreeOnly) and
       (FAnalyzerPvBrowser <> nil) then
-    begin
-      LNodeId := AMessage.Snapshot.SearchRef.NodeId;
-      if LNodeId <= 0 then
-      begin
-        if AMessage.Snapshot.BasePly <= 0 then
-          LNodeId := LGameTree.Root.NodeId
-        else if LGameTree.MainlineNode[AMessage.Snapshot.BasePly] <> nil then
-          LNodeId := LGameTree.MainlineNode[AMessage.Snapshot.BasePly].NodeId;
-      end;
       RefreshAnalyzerPvBrowserFromTree(LGameTree, LNodeId,
         AMessage.Snapshot.BasePly);
-    end;
     RefreshVisibleGameTreeView(LGameTree);
     if (not AMessage.Snapshot.GameTreeOnly) and
       (FPvHintSource = phsAnalyzer) then
