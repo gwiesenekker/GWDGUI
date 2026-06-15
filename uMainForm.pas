@@ -294,7 +294,7 @@ type
     FDisplayedMovesSignature: string;
     FDisplayedMoveLabelsSignature: string;
     FDisplayedScoreHistorySignature: string;
-    FDisplayedSnapshotSignature: string;
+    FDisplayedRunningSignature: string;
     FDisplayedGameTreeId: Int64;
     FDisplayedGameTreeRevision: Int64;
     FHighlightedGameMovePly: Integer;
@@ -487,7 +487,7 @@ type
       ARecordPV: Boolean): TGameTreePvInput;
     function RunningSnapshotSyncSignature(
       const AInput: TRunningSnapshotTreeInput): string;
-    function RunningSnapshotDisplaySignature(AGame: TRunningGame;
+    function RunningDisplaySignature(AGame: TRunningGame;
       const AInput: TRunningSnapshotTreeInput): string;
     function RunningDisplayTextState(AGame: TRunningGame;
       const AInput: TRunningSnapshotTreeInput): TRunningDisplayTextState;
@@ -562,7 +562,7 @@ type
     procedure RefreshAnalyzerPvBrowserFromTree(AGameTree: TGameTree;
       ANodeId: Int64; AFallbackBasePly: Integer);
     procedure SetDisplayedTreeTracking(const AAnnotationsSignature,
-      AMovesSignature, ASnapshotSignature: string; AGameTreeId,
+      AMovesSignature, ARunningSignature: string; AGameTreeId,
       AGameTreeRevision: Int64);
     function DisplayedPvCacheMatches(const APV, AScore, ADepth,
       ATimeText, ABasePositionKey: string; ABasePly: Integer): Boolean;
@@ -4592,14 +4592,14 @@ begin
 end;
 
 procedure TMainForm.SetDisplayedTreeTracking(const AAnnotationsSignature,
-  AMovesSignature, ASnapshotSignature: string; AGameTreeId,
+  AMovesSignature, ARunningSignature: string; AGameTreeId,
   AGameTreeRevision: Int64);
 begin
   FDisplayedAnnotationsSignature := AAnnotationsSignature;
   FDisplayedMovesSignature := AMovesSignature;
   FDisplayedMoveLabelsSignature := '';
   FDisplayedScoreHistorySignature := '';
-  FDisplayedSnapshotSignature := ASnapshotSignature;
+  FDisplayedRunningSignature := ARunningSignature;
   FDisplayedGameTreeId := AGameTreeId;
   FDisplayedGameTreeRevision := AGameTreeRevision;
 end;
@@ -4865,7 +4865,7 @@ begin
     SecondsSignature(AInput.BlackUsedSeconds);
 end;
 
-function TMainForm.RunningSnapshotDisplaySignature(AGame: TRunningGame;
+function TMainForm.RunningDisplaySignature(AGame: TRunningGame;
   const AInput: TRunningSnapshotTreeInput): string;
 var
   Actor: TGameTreeActor;
@@ -5432,7 +5432,7 @@ var
   LMoveCount: Integer;
   LPositionChanged: Boolean;
   LPvChanged: Boolean;
-  LSnapshotSignature: string;
+  LRunningSignature: string;
   LEffectiveMovesText: string;
   LBlackRemainingSeconds: Double;
   LBlackUsedSeconds: Double;
@@ -5517,9 +5517,9 @@ begin
   end;
 
   LInput := RunningSnapshotTreeInput(AGame, '');
-  LSnapshotSignature := RunningSnapshotDisplaySignature(AGame, LInput);
+  LRunningSignature := RunningDisplaySignature(AGame, LInput);
   UpdateDisplayedGameLog;
-  if FDisplayedSnapshotSignature = LSnapshotSignature then
+  if FDisplayedRunningSignature = LRunningSignature then
   begin
     UpdateClockLabels(AGame.GameTree, WhiteNameForTree(AGame.GameTree),
       BlackNameForTree(AGame.GameTree));
@@ -5534,7 +5534,7 @@ begin
     UpdateAutoplayControls;
     Exit;
   end;
-  FDisplayedSnapshotSignature := LSnapshotSignature;
+  FDisplayedRunningSignature := LRunningSignature;
 
   LTextState := RunningDisplayTextState(AGame, LInput);
   LEffectiveMovesText := LTextState.EffectiveMovesText;
