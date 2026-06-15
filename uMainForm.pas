@@ -3768,37 +3768,37 @@ begin
   LBoard := TDraughtsBoard.Create;
   try
     LBoard.LoadFromFEN(AFEN);
-    FBoard.AssignFrom(LBoard);
+
+    FGameActive := False;
+    FGameState := gosWaiting;
+    FGameResult := '*';
+    FStartingFEN := LBoard.StartingFEN;
+    SetDisplayedTreeTracking('', '', '', 0, -1);
+    FStandaloneWhitePlayerName := 'White';
+    FStandaloneBlackPlayerName := 'Black';
+    FStandaloneEventName := '?';
+    FGameBrowsePly := -1;
+    ClearDisplayedPvCache(LBoard, 0);
+    FWhiteRemainingSeconds := 0;
+    FBlackRemainingSeconds := 0;
+    FWhiteUsedSeconds := 0;
+    FBlackUsedSeconds := 0;
+    FViewedGameId := -1;
+    if FGamesListBox <> nil then
+      FGamesListBox.ItemIndex := -1;
+    FGameLog.Clear;
+    FGameLogSourceGameId := -1;
+    FGameLogSourceLineCount := -1;
+    FGameLogSourceShowStdout := False;
+    RebuildStandaloneGameTreeFromImport(FGameTree, FStandaloneEventName,
+      FStandaloneWhitePlayerName, FStandaloneBlackPlayerName, FGameResult,
+      FStartingFEN, '', '');
+    UpdateBoardFromBrowseState(FGameTree);
+    UpdateMiniBoardFromBoard(FBoard);
+    UpdateBoardInfo;
   finally
     LBoard.Free;
   end;
-
-  FGameActive := False;
-  FGameState := gosWaiting;
-  FGameResult := '*';
-  FStartingFEN := FBoard.StartingFEN;
-  SetDisplayedTreeTracking('', '', '', 0, -1);
-  FStandaloneWhitePlayerName := 'White';
-  FStandaloneBlackPlayerName := 'Black';
-  FStandaloneEventName := '?';
-  FGameBrowsePly := -1;
-  ClearDisplayedPvCache(FBoard, 0);
-  FWhiteRemainingSeconds := 0;
-  FBlackRemainingSeconds := 0;
-  FWhiteUsedSeconds := 0;
-  FBlackUsedSeconds := 0;
-  FViewedGameId := -1;
-  if FGamesListBox <> nil then
-    FGamesListBox.ItemIndex := -1;
-  FGameLog.Clear;
-  FGameLogSourceGameId := -1;
-  FGameLogSourceLineCount := -1;
-  FGameLogSourceShowStdout := False;
-  RebuildStandaloneGameTreeFromImport(FGameTree, FStandaloneEventName,
-    FStandaloneWhitePlayerName, FStandaloneBlackPlayerName, FGameResult,
-    FStartingFEN, '', '');
-  UpdateMiniBoardFromBoard(FBoard);
-  UpdateBoardInfo;
 end;
 
 procedure TMainForm.PasteFenClick(Sender: TObject);
@@ -3956,7 +3956,6 @@ begin
         end;
       end;
 
-    FBoard.AssignFrom(LBoard);
     FGameActive := False;
     FGameState := gosWaiting;
     FGameResult := AGame.ResultText;
@@ -3973,7 +3972,7 @@ begin
       FStartingFEN, AGame.MovesText, AGame.MoveAnnotationsText);
     LoadTreeVariationsFromLegacyText(FGameTree, AGame.MoveVariationsText,
       AGame.MoveVariationAnnotationsText);
-    ClearDisplayedPvCache(FBoard, CurrentMoveCount);
+    ClearDisplayedPvCache(LBoard, CurrentMoveCount);
     FWhiteRemainingSeconds := 0;
     FBlackRemainingSeconds := 0;
     FWhiteUsedSeconds := 0;
