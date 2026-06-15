@@ -118,6 +118,9 @@ type
     procedure AcceptTreeMutation(ACommand: TGameTreeCommand;
       var AInvalidateRebuildSignature: Boolean;
       AInvalidateSignature: Boolean = True);
+    procedure ExecuteRecordPVCommand(ACommand: TGameTreeCommand;
+      var AInvalidateRebuildSignature: Boolean;
+      ARecordEnginePV: Boolean);
     procedure Reject(ACommand: TGameTreeCommand; const AErrorText: string);
     procedure RebuildStoredVariations(ACommand: TGameTreeCommand);
     function StoreMoveVariationFromNode(ACommand: TGameTreeCommand;
@@ -341,6 +344,50 @@ begin
   if AInvalidateSignature then
     AInvalidateRebuildSignature := True;
   Inc(FRevision);
+end;
+
+procedure TGameTreeActor.ExecuteRecordPVCommand(ACommand: TGameTreeCommand;
+  var AInvalidateRebuildSignature: Boolean; ARecordEnginePV: Boolean);
+var
+  Changed: Boolean;
+  FailedText: string;
+  MissingTargetText: string;
+  Recorded: Boolean;
+begin
+  if ARecordEnginePV then
+  begin
+    MissingTargetText := 'engine PV target node does not exist';
+    FailedText := 'engine PV was not recorded';
+  end
+  else
+  begin
+    MissingTargetText := 'annotator PV target node does not exist';
+    FailedText := 'annotator PV was not recorded';
+  end;
+
+  if FGameTree.FindNodeById(ACommand.NodeId) = nil then
+  begin
+    Reject(ACommand, MissingTargetText);
+    Exit;
+  end;
+
+  if ARecordEnginePV then
+    Recorded := FGameTree.RecordEnginePVForNodeId(ACommand.NodeId,
+      ACommand.ScoreText, ACommand.PvText, ACommand.PvDepthText,
+      ACommand.PvTimeText, Changed)
+  else
+    Recorded := FGameTree.RecordAnnotatorPVForNodeId(ACommand.NodeId,
+      ACommand.ScoreText, ACommand.PvText, ACommand.PvDepthText,
+      ACommand.PvTimeText, Changed);
+  if not Recorded then
+  begin
+    Reject(ACommand, FailedText);
+    Exit;
+  end;
+
+  ACommand.Accepted := True;
+  if Changed then
+    AcceptTreeMutation(ACommand, AInvalidateRebuildSignature);
 end;
 
 function TGameTreeActor.ResolveSearchCommand(ACommand: TGameTreeCommand;
@@ -1090,39 +1137,11 @@ begin
       end;
     gtcRecordEnginePV:
       begin
-        if FGameTree.FindNodeById(ACommand.NodeId) = nil then
-        begin
-          Reject(ACommand, 'engine PV target node does not exist');
-          Exit;
-        end;
-        if not FGameTree.RecordEnginePVForNodeId(ACommand.NodeId,
-          ACommand.ScoreText, ACommand.PvText, ACommand.PvDepthText,
-          ACommand.PvTimeText, Changed) then
-        begin
-          Reject(ACommand, 'engine PV was not recorded');
-          Exit;
-        end;
-        ACommand.Accepted := True;
-        if Changed then
-          AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
+        ExecuteRecordPVCommand(ACommand, InvalidateRebuildSignature, True);
       end;
     gtcRecordAnnotatorPV:
       begin
-        if FGameTree.FindNodeById(ACommand.NodeId) = nil then
-        begin
-          Reject(ACommand, 'annotator PV target node does not exist');
-          Exit;
-        end;
-        if not FGameTree.RecordAnnotatorPVForNodeId(ACommand.NodeId,
-          ACommand.ScoreText, ACommand.PvText, ACommand.PvDepthText,
-          ACommand.PvTimeText, Changed) then
-        begin
-          Reject(ACommand, 'annotator PV was not recorded');
-          Exit;
-        end;
-        ACommand.Accepted := True;
-        if Changed then
-          AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
+        ExecuteRecordPVCommand(ACommand, InvalidateRebuildSignature, False);
       end;
     gtcStoreSearchMoveVariation:
       begin
