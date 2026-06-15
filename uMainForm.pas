@@ -467,6 +467,8 @@ type
     procedure SetDisplayedTreeTracking(const AAnnotationsSignature,
       AMovesSignature, ASnapshotSignature: string; AGameTreeId,
       AGameTreeRevision: Int64);
+    function DisplayedPvCacheMatches(const APV, AScore, ADepth,
+      ATimeText, ABasePositionKey: string; ABasePly: Integer): Boolean;
     procedure SetDisplayedPvCache(const APV, AScore, ADepth,
       ATimeText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer);
     procedure ClearDisplayedPvCache(ABaseBoard: TDraughtsBoard;
@@ -4146,6 +4148,17 @@ begin
   FDisplayedGameTreeRevision := AGameTreeRevision;
 end;
 
+function TMainForm.DisplayedPvCacheMatches(const APV, AScore, ADepth,
+  ATimeText, ABasePositionKey: string; ABasePly: Integer): Boolean;
+begin
+  Result := (FPrincipalVariation = APV) and
+    (FPrincipalVariationScore = AScore) and
+    (FPrincipalVariationDepth = ADepth) and
+    (FPrincipalVariationTimeText = ATimeText) and
+    (FPvBasePly = ABasePly) and
+    (FPvBaseBoard.PositionKey = ABasePositionKey);
+end;
+
 procedure TMainForm.SetDisplayedPvCache(const APV, AScore, ADepth,
   ATimeText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer);
 begin
@@ -5035,12 +5048,9 @@ begin
     (FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText) or
     (FGameState <> AGame.Snapshot.State) or
     (FGameResult <> AGame.Snapshot.GameResult);
-  LPvChanged := (FPrincipalVariation <> LEffectivePV) or
-    (FPrincipalVariationScore <> LEffectivePvScore) or
-    (FPrincipalVariationDepth <> LEffectivePvDepth) or
-    (FPrincipalVariationTimeText <> LEffectivePvTimeText) or
-    (FPvBasePly <> LEffectivePvBasePly) or
-    (FPvBaseBoard.PositionKey <> LEffectivePvBasePositionKey);
+  LPvChanged := not DisplayedPvCacheMatches(LEffectivePV,
+    LEffectivePvScore, LEffectivePvDepth, LEffectivePvTimeText,
+    LEffectivePvBasePositionKey, LEffectivePvBasePly);
   if FDisplayedMovesSignature <> AGame.Snapshot.MovesPlayedText then
   begin
     ClearHumanMoveSelection;
