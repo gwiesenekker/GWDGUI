@@ -5468,22 +5468,6 @@ var
     end;
   end;
 
-  function RunningTreeStartingFEN: string;
-  begin
-    Result := StartingFenForTree(AGame.GameTree);
-  end;
-
-  function RunningTreeResultText: string;
-  begin
-    Result := ResultForTree(AGame.GameTree);
-  end;
-
-  procedure RunningTreeClockValues(out AWhiteRemainingSeconds,
-    ABlackRemainingSeconds, AWhiteUsedSeconds, ABlackUsedSeconds: Double);
-  begin
-    ClockValuesForTree(AGame.GameTree, AWhiteRemainingSeconds,
-      ABlackRemainingSeconds, AWhiteUsedSeconds, ABlackUsedSeconds);
-  end;
 begin
   if AGame = nil then
   begin
@@ -5540,11 +5524,11 @@ begin
   LEffectiveMovesText := LTextState.EffectiveMovesText;
   LEffectiveAnnotationsText := LTextState.EffectiveAnnotationsText;
   LPvState := RunningDisplayPvState(AGame, LInput);
-  LEffectiveStartingFEN := RunningTreeStartingFEN;
-  LEffectiveResultText := RunningTreeResultText;
+  LEffectiveStartingFEN := StartingFenForTree(AGame.GameTree);
+  LEffectiveResultText := ResultForTree(AGame.GameTree);
   LEffectiveState := StateForTree(AGame.GameTree);
-  RunningTreeClockValues(LWhiteRemainingSeconds, LBlackRemainingSeconds,
-    LWhiteUsedSeconds, LBlackUsedSeconds);
+  ClockValuesForTree(AGame.GameTree, LWhiteRemainingSeconds,
+    LBlackRemainingSeconds, LWhiteUsedSeconds, LBlackUsedSeconds);
 
   LPositionChanged := (FStartingFEN <> LEffectiveStartingFEN) or
     (FDisplayedAnnotationsSignature <> LEffectiveAnnotationsText) or
