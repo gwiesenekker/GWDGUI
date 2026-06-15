@@ -5110,11 +5110,12 @@ begin
   if AGame = nil then
     Exit;
   LInput := RunningSnapshotTreeInput(AGame, ASnapshot, AEventName);
-  if RunningGameTreeExtendsSnapshot(AGame, LInput) then
-    Exit;
 
   LGameTree := AGame.GameTree;
   TryRecordSnapshotPV;
+  if RunningGameTreeExtendsSnapshot(AGame, LInput) then
+    Exit;
+
   LSyncSignature := RunningSnapshotSyncSignature(LInput);
   if AGame.SnapshotSyncSignatureMatches(LSyncSignature) then
     Exit;
