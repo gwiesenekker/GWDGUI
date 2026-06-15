@@ -26,6 +26,28 @@ type
   end;
   TMoveVariationHitArray = array of TMoveVariationHit;
 
+  TRunningSnapshotTreeInput = record
+    GameId: Integer;
+    EventName: string;
+    WhiteName: string;
+    BlackName: string;
+    ResultText: string;
+    StartingFEN: string;
+    MovesText: string;
+    AnnotationsText: string;
+    State: TGameOrchestratorState;
+    PrincipalVariation: string;
+    PvScore: string;
+    PvDepth: string;
+    PvTimeText: string;
+    PvBasePly: Integer;
+    WhiteRemainingSeconds: Double;
+    BlackRemainingSeconds: Double;
+    WhiteUsedSeconds: Double;
+    BlackUsedSeconds: Double;
+    TimeControl: TTimeControl;
+  end;
+
   TRunnerSnapshotGuiMessage = class(TThreadMessage)
   private
     FGameId: Integer;
@@ -396,11 +418,22 @@ type
       AGameTree: TGameTree): TGameTreeHeaderInput;
     function RunningGameTreeHeaderInput(AGame: TRunningGame;
       const AEventName: string): TGameTreeHeaderInput;
+    function RunningSnapshotTreeInput(AGame: TRunningGame;
+      const AEventName: string): TRunningSnapshotTreeInput;
+    function RunningSnapshotHeaderInput(
+      const AInput: TRunningSnapshotTreeInput): TGameTreeHeaderInput;
     function RunningSnapshotMainlineInput(AGame: TRunningGame;
       AMoves, AAnnotations: TStrings; ARecordClock: Boolean
       ): TGameTreeMainlineInput;
+    function RunningSnapshotMainlineInput(
+      const AInput: TRunningSnapshotTreeInput; AMoves, AAnnotations: TStrings;
+      ARecordClock: Boolean): TGameTreeMainlineInput;
     function RunningGameTreePvInput(AGame: TRunningGame;
       ARecordPV: Boolean): TGameTreePvInput;
+    function RunningSnapshotPvInput(const AInput: TRunningSnapshotTreeInput;
+      ARecordPV: Boolean): TGameTreePvInput;
+    function RunningSnapshotSyncSignature(
+      const AInput: TRunningSnapshotTreeInput): string;
     procedure UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
       const AEventName: string = '');
     function RunningGameTreePdnText(AGame: TRunningGame;
@@ -4316,63 +4349,131 @@ end;
 
 function TMainForm.RunningGameTreeHeaderInput(AGame: TRunningGame;
   const AEventName: string): TGameTreeHeaderInput;
+begin
+  Result := RunningSnapshotHeaderInput(
+    RunningSnapshotTreeInput(AGame, AEventName));
+end;
+
+function TMainForm.RunningSnapshotTreeInput(AGame: TRunningGame;
+  const AEventName: string): TRunningSnapshotTreeInput;
 var
-  LBlackName: string;
-  LEventName: string;
-  LResultText: string;
-  LStartingFEN: string;
   LTimeControl: TTimeControl;
-  LWhiteName: string;
 begin
   LTimeControl := DefaultTimeControl;
+  Result.GameId := 0;
+  Result.EventName := '?';
+  Result.WhiteName := 'White';
+  Result.BlackName := 'Black';
+  Result.ResultText := '*';
+  Result.StartingFEN := '';
+  Result.MovesText := '';
+  Result.AnnotationsText := '';
+  Result.State := gosWaiting;
+  Result.PrincipalVariation := '';
+  Result.PvScore := '';
+  Result.PvDepth := '';
+  Result.PvTimeText := '';
+  Result.PvBasePly := 0;
+  Result.WhiteRemainingSeconds := 0;
+  Result.BlackRemainingSeconds := 0;
+  Result.WhiteUsedSeconds := 0;
+  Result.BlackUsedSeconds := 0;
+  Result.TimeControl := LTimeControl;
   if AGame = nil then
+    Exit;
+
+  Result.GameId := AGame.Id;
+  Result.EventName := PlayerNameOrFallback(AEventName,
+    EventNameForTree(AGame.GameTree));
+  Result.WhiteName := PlayerNameOrFallback(AGame.Snapshot.WhitePlayerName,
+    PlayerNameOrFallback(AGame.WhiteDisplayName, 'White'));
+  Result.BlackName := PlayerNameOrFallback(AGame.Snapshot.BlackPlayerName,
+    PlayerNameOrFallback(AGame.BlackDisplayName, 'Black'));
+  Result.ResultText := PlayerNameOrFallback(AGame.Snapshot.GameResult, '*');
+  Result.StartingFEN := PlayerNameOrFallback(AGame.Snapshot.StartingFEN,
+    AGame.FSetup.StartingFEN);
+  Result.MovesText := AGame.Snapshot.MovesPlayedText;
+  Result.AnnotationsText := AGame.Snapshot.MoveAnnotationsText;
+  Result.State := AGame.Snapshot.State;
+  Result.PrincipalVariation := AGame.Snapshot.PrincipalVariation;
+  Result.PvScore := AGame.Snapshot.PvScore;
+  Result.PvDepth := AGame.Snapshot.PvSnapshot.Depth;
+  Result.PvTimeText := AGame.Snapshot.PvSnapshot.TimeText;
+  Result.PvBasePly := AGame.Snapshot.PvBasePly;
+  Result.WhiteRemainingSeconds := AGame.Snapshot.WhiteRemainingSeconds;
+  Result.BlackRemainingSeconds := AGame.Snapshot.BlackRemainingSeconds;
+  Result.WhiteUsedSeconds := AGame.Snapshot.WhiteUsedSeconds;
+  Result.BlackUsedSeconds := AGame.Snapshot.BlackUsedSeconds;
+  Result.TimeControl := AGame.FSetup.TimeControl;
+end;
+
+function TMainForm.RunningSnapshotHeaderInput(
+  const AInput: TRunningSnapshotTreeInput): TGameTreeHeaderInput;
+begin
+  if AInput.GameId <= 0 then
   begin
     Result := GameTreeHeaderInput('', '?', 'White', 'Black', '*', '',
-      False, LTimeControl);
+      False, AInput.TimeControl);
     Exit;
   end;
 
-  LEventName := PlayerNameOrFallback(AEventName,
-    EventNameForTree(AGame.GameTree));
-  LWhiteName := PlayerNameOrFallback(AGame.Snapshot.WhitePlayerName,
-    PlayerNameOrFallback(AGame.WhiteDisplayName, 'White'));
-  LBlackName := PlayerNameOrFallback(AGame.Snapshot.BlackPlayerName,
-    PlayerNameOrFallback(AGame.BlackDisplayName, 'Black'));
-  LResultText := PlayerNameOrFallback(AGame.Snapshot.GameResult, '*');
-  LStartingFEN := PlayerNameOrFallback(AGame.Snapshot.StartingFEN,
-    AGame.FSetup.StartingFEN);
-
-  Result := GameTreeHeaderInput('running:' + IntToStr(AGame.Id),
-    LEventName, LWhiteName, LBlackName, LResultText, LStartingFEN, True,
-    AGame.FSetup.TimeControl);
+  Result := GameTreeHeaderInput('running:' + IntToStr(AInput.GameId),
+    AInput.EventName, AInput.WhiteName, AInput.BlackName, AInput.ResultText,
+    AInput.StartingFEN, True, AInput.TimeControl);
 end;
 
 function TMainForm.RunningSnapshotMainlineInput(AGame: TRunningGame;
   AMoves, AAnnotations: TStrings; ARecordClock: Boolean): TGameTreeMainlineInput;
 begin
-  if (AGame = nil) or (not ARecordClock) then
+  Result := RunningSnapshotMainlineInput(
+    RunningSnapshotTreeInput(AGame, ''), AMoves, AAnnotations, ARecordClock);
+end;
+
+function TMainForm.RunningSnapshotMainlineInput(
+  const AInput: TRunningSnapshotTreeInput; AMoves, AAnnotations: TStrings;
+  ARecordClock: Boolean): TGameTreeMainlineInput;
+begin
+  if (AInput.GameId <= 0) or (not ARecordClock) then
     Result := GameTreeMainlineInput(AMoves, AAnnotations, False, 0, 0, 0, 0)
   else
     Result := GameTreeMainlineInput(AMoves, AAnnotations, True,
-      AGame.Snapshot.WhiteRemainingSeconds,
-      AGame.Snapshot.BlackRemainingSeconds,
-      AGame.Snapshot.WhiteUsedSeconds,
-      AGame.Snapshot.BlackUsedSeconds);
+      AInput.WhiteRemainingSeconds, AInput.BlackRemainingSeconds,
+      AInput.WhiteUsedSeconds, AInput.BlackUsedSeconds);
 end;
 
 function TMainForm.RunningGameTreePvInput(AGame: TRunningGame;
   ARecordPV: Boolean): TGameTreePvInput;
 begin
-  if (AGame = nil) or (not ARecordPV) or
-    (Trim(AGame.Snapshot.PrincipalVariation) = '') then
+  Result := RunningSnapshotPvInput(RunningSnapshotTreeInput(AGame, ''),
+    ARecordPV);
+end;
+
+function TMainForm.RunningSnapshotPvInput(
+  const AInput: TRunningSnapshotTreeInput; ARecordPV: Boolean): TGameTreePvInput;
+begin
+  if (AInput.GameId <= 0) or (not ARecordPV) or
+    (Trim(AInput.PrincipalVariation) = '') then
   begin
     Result := GameTreePvInput(False, 0, '', '');
     Exit;
   end;
 
-  Result := GameTreePvInput(True, AGame.Snapshot.PvBasePly,
-    AGame.Snapshot.PvScore, AGame.Snapshot.PrincipalVariation,
-    AGame.Snapshot.PvSnapshot.Depth, AGame.Snapshot.PvSnapshot.TimeText);
+  Result := GameTreePvInput(True, AInput.PvBasePly, AInput.PvScore,
+    AInput.PrincipalVariation, AInput.PvDepth, AInput.PvTimeText);
+end;
+
+function TMainForm.RunningSnapshotSyncSignature(
+  const AInput: TRunningSnapshotTreeInput): string;
+begin
+  Result :=
+    AInput.EventName + #10 +
+    AInput.WhiteName + #10 +
+    AInput.BlackName + #10 +
+    AInput.ResultText + #10 +
+    AInput.StartingFEN + #10 +
+    IntToStr(Ord(AInput.State)) + #10 +
+    AInput.MovesText + #10 +
+    AInput.AnnotationsText;
 end;
 
 procedure TMainForm.UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
@@ -4384,6 +4485,7 @@ var
   LAnnotations: TStringList;
   LExistingAnnotations: TStringList;
   LGameTree: TGameTree;
+  LInput: TRunningSnapshotTreeInput;
   LMoves: TStringList;
   LSyncSignature: string;
 
@@ -4477,10 +4579,10 @@ var
     begin
       IsLastMove := I = LMoves.Count - 1;
       Command := Actor.CreateAppendMainlineSnapshotMoveCommand(
-        RunningGameTreeHeaderInput(AGame, AEventName),
+        RunningSnapshotHeaderInput(LInput),
         LMoves[I], LineOrEmpty(LAnnotations, I),
-        RunningSnapshotMainlineInput(AGame, nil, nil, IsLastMove),
-        RunningGameTreePvInput(AGame, IsLastMove),
+        RunningSnapshotMainlineInput(LInput, nil, nil, IsLastMove),
+        RunningSnapshotPvInput(LInput, IsLastMove),
         gmsEngineMatch);
       try
         if not ExecuteGameTreeCommand(Actor, Command, LErrorText) then
@@ -4501,28 +4603,26 @@ var
     LNode: TGameTreePlyNode;
     LPvSignature: string;
   begin
-    if Trim(AGame.Snapshot.PrincipalVariation) = '' then
+    if Trim(LInput.PrincipalVariation) = '' then
       Exit;
-    if AGame.Snapshot.PvBasePly <= 0 then
+    if LInput.PvBasePly <= 0 then
       LNode := LGameTree.Root
     else
-      LNode := LGameTree.MainlineNode[AGame.Snapshot.PvBasePly];
+      LNode := LGameTree.MainlineNode[LInput.PvBasePly];
     if LNode = nil then
       Exit;
     Actor := ActorForGameTree(LGameTree);
     if Actor = nil then
       Exit;
     LPvSignature := IntToStr(LGameTree.GameTreeId) + #10 +
-      IntToStr(LNode.NodeId) + #10 + AGame.Snapshot.PvScore + #10 +
-      AGame.Snapshot.PrincipalVariation + #10 +
-      AGame.Snapshot.PvSnapshot.Depth + #10 +
-      AGame.Snapshot.PvSnapshot.TimeText;
+      IntToStr(LNode.NodeId) + #10 + LInput.PvScore + #10 +
+      LInput.PrincipalVariation + #10 + LInput.PvDepth + #10 +
+      LInput.PvTimeText;
     if AGame.FLastSnapshotTreePvSignature = LPvSignature then
       Exit;
     if RecordEnginePvInGameTree(Actor, LGameTree, LNode.NodeId,
-      AGame.Snapshot.PvScore, AGame.Snapshot.PrincipalVariation,
-      AGame.Snapshot.PvSnapshot.Depth, AGame.Snapshot.PvSnapshot.TimeText,
-      LErrorText) then
+      LInput.PvScore, LInput.PrincipalVariation, LInput.PvDepth,
+      LInput.PvTimeText, LErrorText) then
       AGame.FLastSnapshotTreePvSignature := LPvSignature;
   end;
 begin
@@ -4532,24 +4632,17 @@ begin
     Exit;
 
   LGameTree := AGame.GameTree;
+  LInput := RunningSnapshotTreeInput(AGame, AEventName);
   TryRecordSnapshotPV;
-  LSyncSignature :=
-    AEventName + #10 +
-    AGame.Snapshot.WhitePlayerName + #10 +
-    AGame.Snapshot.BlackPlayerName + #10 +
-    AGame.Snapshot.GameResult + #10 +
-    AGame.Snapshot.StartingFEN + #10 +
-    IntToStr(Ord(AGame.Snapshot.State)) + #10 +
-    AGame.Snapshot.MovesPlayedText + #10 +
-    AGame.Snapshot.MoveAnnotationsText;
+  LSyncSignature := RunningSnapshotSyncSignature(LInput);
   if AGame.FLastSnapshotTreeSyncSignature = LSyncSignature then
     Exit;
 
   LMoves := TStringList.Create;
   LAnnotations := TStringList.Create;
   try
-    TextToMoveList(AGame.Snapshot.MovesPlayedText, LMoves);
-    LAnnotations.Text := AGame.Snapshot.MoveAnnotationsText;
+    TextToMoveList(LInput.MovesText, LMoves);
+    LAnnotations.Text := LInput.AnnotationsText;
     PreserveExistingSnapshotAnnotations;
 
     if TryAppendSnapshotMoves then
@@ -4566,8 +4659,8 @@ begin
       if Actor <> nil then
       begin
         Command := Actor.CreateSetHeaderCommand(
-          RunningGameTreeHeaderInput(AGame, AEventName),
-          RunningSnapshotMainlineInput(AGame, nil, nil, True));
+          RunningSnapshotHeaderInput(LInput),
+          RunningSnapshotMainlineInput(LInput, nil, nil, True));
         try
           ExecuteAndApplyGameTreeCommand(Actor, LGameTree, Command, False,
             LErrorText);
@@ -4583,9 +4676,9 @@ begin
     if Actor = nil then
       Exit;
     if RebuildGameTreeFromInputs(Actor,
-      RunningGameTreeHeaderInput(AGame, AEventName),
-      RunningSnapshotMainlineInput(AGame, LMoves, LAnnotations, True),
-      RunningGameTreePvInput(AGame, True),
+      RunningSnapshotHeaderInput(LInput),
+      RunningSnapshotMainlineInput(LInput, LMoves, LAnnotations, True),
+      RunningSnapshotPvInput(LInput, True),
       GameTreePvInput(False, 0, '', ''), -1, 0, '', '', '', '', LErrorText) then
       AGame.FLastSnapshotTreeSyncSignature := LSyncSignature;
   finally
