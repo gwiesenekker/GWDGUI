@@ -114,6 +114,9 @@ type
       out ASearch: TGameTreeSearchRecord): Boolean;
     function SearchCommandMatches(ACommand: TGameTreeCommand;
       ASearch: TGameTreeSearchRecord): Boolean;
+    procedure AcceptTreeMutation(ACommand: TGameTreeCommand;
+      var AInvalidateRebuildSignature: Boolean;
+      AInvalidateSignature: Boolean = True);
     procedure Reject(ACommand: TGameTreeCommand; const AErrorText: string);
     procedure RebuildStoredVariations(ACommand: TGameTreeCommand);
     function StoreMoveVariationFromNode(ACommand: TGameTreeCommand;
@@ -317,6 +320,18 @@ begin
   Result := (ACommand <> nil) and (ASearch <> nil);
   if Result and (ACommand.NodeId > 0) then
     Result := SameGameTreeSearchRef(ACommand.SearchRef, ASearch.SearchRef);
+end;
+
+procedure TGameTreeActor.AcceptTreeMutation(ACommand: TGameTreeCommand;
+  var AInvalidateRebuildSignature: Boolean; AInvalidateSignature: Boolean);
+begin
+  if ACommand = nil then
+    Exit;
+  ACommand.Accepted := True;
+  ACommand.TreeChanged := True;
+  if AInvalidateSignature then
+    AInvalidateRebuildSignature := True;
+  Inc(FRevision);
 end;
 
 function TGameTreeActor.ResolveSearchCommand(ACommand: TGameTreeCommand;
@@ -925,10 +940,7 @@ begin
         ACommand.NodeId := Node.NodeId;
         ACommand.PlyNumber := Node.PlyNumber;
         ACommand.MoveText := Node.MoveText;
-        ACommand.Accepted := True;
-        ACommand.TreeChanged := True;
-        InvalidateRebuildSignature := True;
-        Inc(FRevision);
+        AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
       end;
     gtcAppendMainlineMove:
       begin
@@ -943,10 +955,7 @@ begin
         ACommand.NodeId := Node.NodeId;
         ACommand.PlyNumber := Node.PlyNumber;
         ACommand.MoveText := Node.MoveText;
-        ACommand.Accepted := True;
-        ACommand.TreeChanged := True;
-        InvalidateRebuildSignature := True;
-        Inc(FRevision);
+        AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
       end;
     gtcAppendMainlineSnapshotMove:
       begin
@@ -978,10 +987,7 @@ begin
             ACommand.MainlineInput.BlackUsedSeconds);
         RecordGameTreeAnalysis(FGameTree, ACommand.EnginePvInput,
           GameTreePvInput(False, 0, '', ''));
-        ACommand.Accepted := True;
-        ACommand.TreeChanged := True;
-        InvalidateRebuildSignature := True;
-        Inc(FRevision);
+        AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
       end;
     gtcStoreVariationLine:
       begin
@@ -995,11 +1001,7 @@ begin
         end;
         ACommand.Accepted := True;
         if Changed then
-        begin
-          ACommand.TreeChanged := True;
-          InvalidateRebuildSignature := True;
-          Inc(FRevision);
-        end;
+          AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
       end;
     gtcStartSearch:
       begin
@@ -1097,11 +1099,7 @@ begin
         end;
         ACommand.Accepted := True;
         if Changed then
-        begin
-          ACommand.TreeChanged := True;
-          InvalidateRebuildSignature := True;
-          Inc(FRevision);
-        end;
+          AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
       end;
     gtcRecordAnnotatorPV:
       begin
@@ -1119,11 +1117,7 @@ begin
         end;
         ACommand.Accepted := True;
         if Changed then
-        begin
-          ACommand.TreeChanged := True;
-          InvalidateRebuildSignature := True;
-          Inc(FRevision);
-        end;
+          AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
       end;
     gtcStoreSearchMoveVariation:
       begin
@@ -1145,11 +1139,7 @@ begin
           Search.ResultMove, Changed) then
           Exit;
         if Changed then
-        begin
-          ACommand.TreeChanged := True;
-          InvalidateRebuildSignature := True;
-          Inc(FRevision);
-        end;
+          AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
       end;
     gtcStoreMoveVariation:
       begin
@@ -1163,11 +1153,7 @@ begin
           ACommand.MoveText, Changed) then
           Exit;
         if Changed then
-        begin
-          ACommand.TreeChanged := True;
-          InvalidateRebuildSignature := True;
-          Inc(FRevision);
-        end;
+          AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
       end;
     gtcClearStoredVariations:
       begin
@@ -1177,10 +1163,7 @@ begin
           Exit;
         end;
         FGameTree.ClearStoredVariations;
-        ACommand.Accepted := True;
-        ACommand.TreeChanged := True;
-        InvalidateRebuildSignature := True;
-        Inc(FRevision);
+        AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
       end;
     gtcRebuildFromInputs:
       begin
@@ -1205,10 +1188,8 @@ begin
               ACommand.VariationIndex, ACommand.PlyNumber,
               ACommand.ScoreText, ACommand.PvText, ACommand.PvDepthText,
               ACommand.PvTimeText));
-        ACommand.Accepted := True;
-        ACommand.TreeChanged := True;
+        AcceptTreeMutation(ACommand, InvalidateRebuildSignature, False);
         FLastRebuildSignature := RebuildSignature;
-        Inc(FRevision);
       end;
     gtcSetHeader:
       begin
@@ -1255,11 +1236,7 @@ begin
         end;
         ACommand.Accepted := True;
         if Changed then
-        begin
-          ACommand.TreeChanged := True;
-          InvalidateRebuildSignature := True;
-          Inc(FRevision);
-        end;
+          AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
       end;
   end;
   if InvalidateRebuildSignature then
