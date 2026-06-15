@@ -178,6 +178,7 @@ type
 
     function IsEngineReservationActive: Boolean;
     function IsHumanToMove: Boolean;
+    function GameTreeId: Int64;
     function ReservationSummary: string;
     function HasPlayedMoves: Boolean;
     function InitialClockSeconds: Double;
@@ -192,6 +193,7 @@ type
     function SnapshotPvSignatureMatches(const ASignature: string): Boolean;
     function SnapshotSyncSignatureMatches(const ASignature: string): Boolean;
     function State: TGameOrchestratorState;
+    function VariationLineCount: Integer;
     function WhiteNameText: string;
     procedure AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
     procedure AssignSetupTo(out ASetup: TGameSetup);
@@ -959,6 +961,14 @@ begin
     Result := FWhitePlayerKind = pkHuman;
 end;
 
+function TRunningGame.GameTreeId: Int64;
+begin
+  if FGameTree <> nil then
+    Result := FGameTree.GameTreeId
+  else
+    Result := 0;
+end;
+
 function TRunningGame.ReservationSummary: string;
 begin
   Result := Trim(FReservationKeys.CommaText);
@@ -1042,6 +1052,14 @@ end;
 function TRunningGame.State: TGameOrchestratorState;
 begin
   Result := FGameTree.GameState;
+end;
+
+function TRunningGame.VariationLineCount: Integer;
+begin
+  if FGameTree <> nil then
+    Result := FGameTree.VariationLineCount
+  else
+    Result := 0;
 end;
 
 function TRunningGame.WhiteNameText: string;
@@ -4278,8 +4296,7 @@ begin
   for I := 0 to FGames.Count - 1 do
   begin
     LGame := TRunningGame(FGames[I]);
-    if (LGame <> nil) and (LGame.GameTree <> nil) and
-      (LGame.GameTree.GameTreeId = AGameTreeId) then
+    if (LGame <> nil) and (LGame.GameTreeId = AGameTreeId) then
       Exit(LGame.GameTreeActor);
   end;
 end;
@@ -4329,7 +4346,7 @@ begin
     Exit;
   if not (AInput.State in [gosStopped, gosGameOver]) then
     Exit;
-  if AGame.GameTree.VariationLineCount > 0 then
+  if AGame.VariationLineCount > 0 then
     Exit(True);
 
   LMoves := TStringList.Create;
@@ -4905,7 +4922,7 @@ begin
   if Actor <> nil then
     LRevision := Actor.Revision;
   Result := Result + #10 +
-    'tree=' + IntToStr(AGame.GameTree.GameTreeId) + #10 +
+    'tree=' + IntToStr(AGame.GameTreeId) + #10 +
     'revision=' + IntToStr(LRevision);
   Result := Result + #10 +
     IntToStr(Ord(AGame.State)) + #10 +
