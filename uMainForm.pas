@@ -253,6 +253,7 @@ type
     FDisplayedAnnotationsSignature: string;
     FDisplayedMovesSignature: string;
     FDisplayedMoveLabelsSignature: string;
+    FDisplayedScoreHistorySignature: string;
     FDisplayedSnapshotSignature: string;
     FDisplayedGameTreeId: Int64;
     FDisplayedGameTreeRevision: Int64;
@@ -4261,6 +4262,7 @@ begin
   FDisplayedAnnotationsSignature := AAnnotationsSignature;
   FDisplayedMovesSignature := AMovesSignature;
   FDisplayedMoveLabelsSignature := '';
+  FDisplayedScoreHistorySignature := '';
   FDisplayedSnapshotSignature := ASnapshotSignature;
   FDisplayedGameTreeId := AGameTreeId;
   FDisplayedGameTreeRevision := AGameTreeRevision;
@@ -7092,6 +7094,7 @@ var
   LGameTree: TGameTree;
   LMoveCount: Integer;
   LPly: Integer;
+  LSignature: string;
   LStartingFEN: string;
 begin
   if FScoreHistoryControl = nil then
@@ -7107,6 +7110,17 @@ begin
   LPly := FGameBrowsePly;
   if LPly < 0 then
     LPly := LMoveCount;
+  LSignature := IntToStr(LGameTree.GameTreeId) + #10 +
+    IntToStr(LMoveCount) + #10 +
+    IntToStr(LPly) + #10 +
+    LStartingFEN + #10 +
+    LAnnotationsText + #10 +
+    FormatFloat('0.000000', FPreferences.EvaluationMaxScore) + #10 +
+    IntToStr(Ord(FPreferences.EvaluationScale));
+  if FDisplayedScoreHistorySignature = LSignature then
+    Exit;
+  FDisplayedScoreHistorySignature := LSignature;
+
   FScoreHistoryControl.MaxScore := FPreferences.EvaluationMaxScore;
   FScoreHistoryControl.Scale := FPreferences.EvaluationScale;
   FScoreHistoryControl.StartingSide := FenSideToMove(LStartingFEN);
