@@ -6760,6 +6760,7 @@ var
   I: Integer;
   LastWarningTick: QWord;
   LGame: TRunningGame;
+  LInput: TRunningSnapshotTreeInput;
   PendingText: string;
   WarningText: string;
 begin
@@ -6788,12 +6789,13 @@ begin
       for I := 0 to FGames.Count - 1 do
       begin
         LGame := TRunningGame(FGames[I]);
+        LInput := RunningSnapshotTreeInput(LGame, '');
         if PendingText <> '' then
           PendingText += '; ';
         PendingText += '#' + IntToStr(LGame.Id) + ' ' + LGame.Title +
           ' [lifecycle=' + RunningGameLifecycleToString(LGame.Lifecycle) +
-          ', state=' + OrchestratorStateToString(LGame.Snapshot.State) +
-          ', plies=' + IntToStr(LGame.Snapshot.PlyCount) +
+          ', state=' + OrchestratorStateToString(LInput.State) +
+          ', plies=' + IntToStr(LInput.PlyCount) +
           ', reservations=' + LGame.ReservationSummary + ']';
       end;
       WarningText := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
