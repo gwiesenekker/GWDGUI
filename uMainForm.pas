@@ -488,10 +488,9 @@ type
       const AInput: TRunningSnapshotTreeInput): string;
     function RunningDisplaySignature(AGame: TRunningGame;
       const AInput: TRunningSnapshotTreeInput): string;
-    function RunningDisplayTextState(AGame: TRunningGame;
-      const AInput: TRunningSnapshotTreeInput): TRunningDisplayTextState;
-    function RunningDisplayPvState(AGame: TRunningGame;
-      const AInput: TRunningSnapshotTreeInput): TRunningDisplayPvState;
+    function RunningDisplayTextState(
+      AGame: TRunningGame): TRunningDisplayTextState;
+    function RunningDisplayPvState(AGame: TRunningGame): TRunningDisplayPvState;
     procedure InitializeRunningGameTree(AGame: TRunningGame);
     procedure UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
       const AEventName: string = '');
@@ -4938,11 +4937,11 @@ begin
     BoolToStr(LShowStdout, True);
 end;
 
-function TMainForm.RunningDisplayTextState(AGame: TRunningGame;
-  const AInput: TRunningSnapshotTreeInput): TRunningDisplayTextState;
+function TMainForm.RunningDisplayTextState(
+  AGame: TRunningGame): TRunningDisplayTextState;
 begin
-  Result.EffectiveMovesText := AInput.MovesText;
-  Result.EffectiveAnnotationsText := AInput.AnnotationsText;
+  Result.EffectiveMovesText := '';
+  Result.EffectiveAnnotationsText := '';
   if (AGame = nil) or (AGame.GameTree = nil) then
     Exit;
 
@@ -4951,8 +4950,8 @@ begin
     AGame.GameTree);
 end;
 
-function TMainForm.RunningDisplayPvState(AGame: TRunningGame;
-  const AInput: TRunningSnapshotTreeInput): TRunningDisplayPvState;
+function TMainForm.RunningDisplayPvState(
+  AGame: TRunningGame): TRunningDisplayPvState;
 var
   LPvBaseBoard: TDraughtsBoard;
   LPvBasePly: Integer;
@@ -4961,19 +4960,6 @@ var
   LPvText: string;
   LPvTimeText: string;
 begin
-  Result.PrincipalVariation := AInput.PrincipalVariation;
-  Result.Score := AInput.PvScore;
-  Result.Depth := AInput.PvDepth;
-  Result.TimeText := AInput.PvTimeText;
-  Result.BasePly := AInput.PvBasePly;
-  Result.BaseBoard := AInput.PvBaseBoard;
-  if Result.BaseBoard <> nil then
-    Result.BasePositionKey := Result.BaseBoard.PositionKey
-  else
-    Result.BasePositionKey := '';
-
-  if (AGame = nil) or (AGame.GameTree = nil) then
-    Exit;
   Result.PrincipalVariation := '';
   Result.Score := '';
   Result.Depth := '';
@@ -4981,6 +4967,9 @@ begin
   Result.BasePly := 0;
   Result.BaseBoard := nil;
   Result.BasePositionKey := '';
+  if (AGame = nil) or (AGame.GameTree = nil) then
+    Exit;
+
   LPvBaseBoard := nil;
   if VisibleMainPvForTree(AGame.GameTree, LPvBaseBoard, LPvBasePly,
     LPvText, LPvScore, LPvDepth, LPvTimeText) then
@@ -5559,10 +5548,10 @@ begin
   end;
   FDisplayedRunningSignature := LRunningSignature;
 
-  LTextState := RunningDisplayTextState(AGame, LInput);
+  LTextState := RunningDisplayTextState(AGame);
   LEffectiveMovesText := LTextState.EffectiveMovesText;
   LEffectiveAnnotationsText := LTextState.EffectiveAnnotationsText;
-  LPvState := RunningDisplayPvState(AGame, LInput);
+  LPvState := RunningDisplayPvState(AGame);
   LEffectiveStartingFEN := StartingFenForTree(AGame.GameTree);
   LEffectiveResultText := ResultForTree(AGame.GameTree);
   LEffectiveState := StateForTree(AGame.GameTree);
