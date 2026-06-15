@@ -4701,25 +4701,24 @@ begin
   end
   else if AGameTree = FGameTree then
   begin
+    if LatestEnginePvForTree(AGameTree, ABasePly, LTreePV, LTreeScore,
+      LTreeDepth, LTreeTimeText) then
+    begin
+      APV := LTreePV;
+      AScore := LTreeScore;
+      ADepth := LTreeDepth;
+      ATimeText := LTreeTimeText;
+      if TryBuildTreeBoardAtPly(AGameTree, ABasePly, FTreePvBaseBoard) then
+        ABaseBoard := FTreePvBaseBoard;
+      Exit(True);
+    end;
+
     APV := FPrincipalVariation;
     AScore := FPrincipalVariationScore;
     ADepth := FPrincipalVariationDepth;
     ATimeText := FPrincipalVariationTimeText;
     if Trim(APV) <> '' then
     begin
-      ABaseBoard := FPvBaseBoard;
-      ABasePly := FPvBasePly;
-    end;
-    if EnginePvForTree(AGameTree, FPvBasePly, LTreePV, LTreeScore,
-      LTreeDepth, LTreeTimeText) then
-    begin
-      APV := LTreePV;
-      if LTreeScore <> '' then
-        AScore := LTreeScore;
-      if LTreeDepth <> '' then
-        ADepth := LTreeDepth;
-      if LTreeTimeText <> '' then
-        ATimeText := LTreeTimeText;
       ABasePly := FPvBasePly;
       if TryBuildTreeBoardAtPly(AGameTree, ABasePly, FTreePvBaseBoard) then
         ABaseBoard := FTreePvBaseBoard
