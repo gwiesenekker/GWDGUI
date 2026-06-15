@@ -7451,7 +7451,6 @@ var
   LBaseTitle: string;
   LBlackName: string;
   LCaption: string;
-  LInput: TRunningSnapshotTreeInput;
   LPlyCount: Integer;
   LResultText: string;
   LState: TGameOrchestratorState;
@@ -7460,18 +7459,16 @@ begin
   if (AGame = nil) or (FGamesListBox = nil) then
     Exit;
 
-  LInput := RunningSnapshotTreeInput(AGame, '');
   LWhiteName := PlayerNameOrFallback(Trim(AGame.GameTree.WhiteName),
-    LInput.WhiteName);
+    AGame.WhiteDisplayName);
   LBlackName := PlayerNameOrFallback(Trim(AGame.GameTree.BlackName),
-    LInput.BlackName);
-  LResultText := PlayerNameOrFallback(Trim(AGame.GameTree.ResultText),
-    LInput.ResultText);
+    AGame.BlackDisplayName);
+  LResultText := ResultForTree(AGame.GameTree);
   LState := StateForTree(AGame.GameTree);
   if AGame.GameTree <> nil then
     LPlyCount := AGame.GameTree.MainlineCount
   else
-    LPlyCount := LInput.PlyCount;
+    LPlyCount := 0;
   LBaseTitle := AGame.Title;
   if Pos(' vs ', LBaseTitle) = 0 then
     LBaseTitle := LBaseTitle + ' ' + LWhiteName + ' vs ' + LBlackName;
