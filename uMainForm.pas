@@ -53,16 +53,6 @@ type
     LogLineCount: Integer;
   end;
 
-  TRunningDisplayPvState = record
-    PrincipalVariation: string;
-    Score: string;
-    Depth: string;
-    TimeText: string;
-    BasePly: Integer;
-    BaseBoard: TDraughtsBoard;
-    BasePositionKey: string;
-  end;
-
   TDisplayedBoardInfo = record
     WhiteName: string;
     BlackName: string;
@@ -489,7 +479,6 @@ type
       const AInput: TRunningSnapshotTreeInput): string;
     function RunningDisplaySignature(AGame: TRunningGame;
       ALogLineCount: Integer): string;
-    function RunningDisplayPvState(AGame: TRunningGame): TRunningDisplayPvState;
     procedure InitializeRunningGameTree(AGame: TRunningGame);
     procedure UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
       const AEventName: string = '');
@@ -4925,43 +4914,6 @@ begin
     BoolToStr(LShowStdout, True);
 end;
 
-function TMainForm.RunningDisplayPvState(
-  AGame: TRunningGame): TRunningDisplayPvState;
-var
-  LPvBaseBoard: TDraughtsBoard;
-  LPvBasePly: Integer;
-  LPvDepth: string;
-  LPvScore: string;
-  LPvText: string;
-  LPvTimeText: string;
-begin
-  Result.PrincipalVariation := '';
-  Result.Score := '';
-  Result.Depth := '';
-  Result.TimeText := '';
-  Result.BasePly := 0;
-  Result.BaseBoard := nil;
-  Result.BasePositionKey := '';
-  if (AGame = nil) or (AGame.GameTree = nil) then
-    Exit;
-
-  LPvBaseBoard := nil;
-  if VisibleMainPvForTree(AGame.GameTree, LPvBaseBoard, LPvBasePly,
-    LPvText, LPvScore, LPvDepth, LPvTimeText) then
-  begin
-    Result.PrincipalVariation := LPvText;
-    Result.Score := LPvScore;
-    Result.Depth := LPvDepth;
-    Result.TimeText := LPvTimeText;
-    Result.BasePly := LPvBasePly;
-    Result.BaseBoard := LPvBaseBoard;
-    if Result.BaseBoard <> nil then
-      Result.BasePositionKey := Result.BaseBoard.PositionKey
-    else
-      Result.BasePositionKey := '';
-  end;
-end;
-
 procedure TMainForm.InitializeRunningGameTree(AGame: TRunningGame);
 var
   Actor: TGameTreeActor;
@@ -5445,7 +5397,13 @@ var
   LBlackRemainingSeconds: Double;
   LBlackUsedSeconds: Double;
   LLogInput: TRunningSnapshotLogInput;
-  LPvState: TRunningDisplayPvState;
+  LPvBaseBoard: TDraughtsBoard;
+  LPvBasePly: Integer;
+  LPvBasePositionKey: string;
+  LPvDepth: string;
+  LPvScore: string;
+  LPvText: string;
+  LPvTimeText: string;
   LWhiteRemainingSeconds: Double;
   LWhiteUsedSeconds: Double;
 
@@ -5529,7 +5487,18 @@ begin
 
   LEffectiveMovesText := GameTreeMainlineMovesText(AGame.GameTree);
   LEffectiveAnnotationsText := GameTreeScoreAnnotationsText(AGame.GameTree);
-  LPvState := RunningDisplayPvState(AGame);
+  LPvBaseBoard := nil;
+  LPvBasePly := 0;
+  LPvText := '';
+  LPvScore := '';
+  LPvDepth := '';
+  LPvTimeText := '';
+  if VisibleMainPvForTree(AGame.GameTree, LPvBaseBoard, LPvBasePly,
+    LPvText, LPvScore, LPvDepth, LPvTimeText) and
+    (LPvBaseBoard <> nil) then
+    LPvBasePositionKey := LPvBaseBoard.PositionKey
+  else
+    LPvBasePositionKey := '';
   LEffectiveStartingFEN := StartingFenForTree(AGame.GameTree);
   LEffectiveResultText := ResultForTree(AGame.GameTree);
   LEffectiveState := StateForTree(AGame.GameTree);
@@ -5541,9 +5510,8 @@ begin
     (FDisplayedMovesSignature <> LEffectiveMovesText) or
     (FGameState <> LEffectiveState) or
     (FGameResult <> LEffectiveResultText);
-  LPvChanged := not DisplayedPvCacheMatches(LPvState.PrincipalVariation,
-    LPvState.Score, LPvState.Depth, LPvState.TimeText,
-    LPvState.BasePositionKey, LPvState.BasePly);
+  LPvChanged := not DisplayedPvCacheMatches(LPvText, LPvScore, LPvDepth,
+    LPvTimeText, LPvBasePositionKey, LPvBasePly);
   if FDisplayedMovesSignature <> LEffectiveMovesText then
   begin
     ClearHumanMoveSelection;
@@ -5552,8 +5520,8 @@ begin
   FStartingFEN := LEffectiveStartingFEN;
   FGameState := LEffectiveState;
   FGameResult := LEffectiveResultText;
-  SetDisplayedPvCache(LPvState.PrincipalVariation, LPvState.Score,
-    LPvState.Depth, LPvState.TimeText, LPvState.BaseBoard, LPvState.BasePly);
+  SetDisplayedPvCache(LPvText, LPvScore, LPvDepth, LPvTimeText,
+    LPvBaseBoard, LPvBasePly);
   FWhiteRemainingSeconds := LWhiteRemainingSeconds;
   FBlackRemainingSeconds := LBlackRemainingSeconds;
   FWhiteUsedSeconds := LWhiteUsedSeconds;
