@@ -2524,11 +2524,14 @@ end;
 
 procedure TMainForm.ApplyGameTreeCommandResult(AGameTree: TGameTree;
   ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean);
+var
+  LActiveGameTree: TGameTree;
 begin
   if (AGameTree = nil) or (ACommand = nil) or (not ACommand.Accepted) then
     Exit;
 
-  if AFollowVariationBrowse and (AGameTree = ActiveGameTree) and
+  LActiveGameTree := ActiveGameTree;
+  if AFollowVariationBrowse and (AGameTree = LActiveGameTree) and
     (ACommand.CommandKind in [gtcStoreSearchMoveVariation,
       gtcStoreMoveVariation]) and (ACommand.VariationIndex >= 0) then
   begin
@@ -2635,7 +2638,7 @@ begin
     UpdateBoardFromBrowseState(LGameTree);
     UpdateBrowseInfo;
     UpdateBoardInfo;
-    UpdateLegalMoves(ActiveBoard);
+    UpdateLegalMoves(LBoard);
     Exit;
   end;
 
