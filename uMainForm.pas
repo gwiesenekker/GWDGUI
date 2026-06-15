@@ -4818,13 +4818,6 @@ end;
 function TMainForm.RunningSnapshotHeaderInput(
   const AInput: TRunningSnapshotTreeInput): TGameTreeHeaderInput;
 begin
-  if AInput.GameId <= 0 then
-  begin
-    Result := GameTreeHeaderInput('', '?', 'White', 'Black', '*', '',
-      False, AInput.TimeControl, AInput.State);
-    Exit;
-  end;
-
   Result := GameTreeHeaderInput('running:' + IntToStr(AInput.GameId),
     AInput.EventName, AInput.WhiteName, AInput.BlackName, AInput.ResultText,
     AInput.StartingFEN, True, AInput.TimeControl, AInput.State);
@@ -4834,7 +4827,7 @@ function TMainForm.RunningSnapshotMainlineInput(
   const AInput: TRunningSnapshotTreeInput; AMoves, AAnnotations: TStrings;
   ARecordClock: Boolean): TGameTreeMainlineInput;
 begin
-  if (AInput.GameId <= 0) or (not ARecordClock) then
+  if not ARecordClock then
     Result := GameTreeMainlineInput(AMoves, AAnnotations, False, 0, 0, 0, 0)
   else
     Result := GameTreeMainlineInput(AMoves, AAnnotations, True,
@@ -4845,8 +4838,7 @@ end;
 function TMainForm.RunningSnapshotPvInput(
   const AInput: TRunningSnapshotTreeInput; ARecordPV: Boolean): TGameTreePvInput;
 begin
-  if (AInput.GameId <= 0) or (not ARecordPV) or
-    (Trim(AInput.PrincipalVariation) = '') then
+  if (not ARecordPV) or (Trim(AInput.PrincipalVariation) = '') then
   begin
     Result := GameTreePvInput(False, 0, '', '');
     Exit;
