@@ -487,7 +487,7 @@ type
     function RunningSnapshotSyncSignature(
       const AInput: TRunningSnapshotTreeInput): string;
     function RunningDisplaySignature(AGame: TRunningGame;
-      const AInput: TRunningSnapshotTreeInput): string;
+      ALogLineCount: Integer): string;
     function RunningDisplayTextState(
       AGame: TRunningGame): TRunningDisplayTextState;
     function RunningDisplayPvState(AGame: TRunningGame): TRunningDisplayPvState;
@@ -4904,7 +4904,7 @@ begin
 end;
 
 function TMainForm.RunningDisplaySignature(AGame: TRunningGame;
-  const AInput: TRunningSnapshotTreeInput): string;
+  ALogLineCount: Integer): string;
 var
   Actor: TGameTreeActor;
   LRevision: Int64;
@@ -4912,7 +4912,7 @@ var
   LState: TGameOrchestratorState;
 begin
   LShowStdout := False;
-  LState := AInput.State;
+  LState := gosWaiting;
   if AGame = nil then
     Result := 'none'
   else
@@ -4933,7 +4933,7 @@ begin
   end;
   Result := Result + #10 +
     IntToStr(Ord(LState)) + #10 +
-    IntToStr(AInput.LogLineCount) + #10 +
+    IntToStr(ALogLineCount) + #10 +
     BoolToStr(LShowStdout, True);
 end;
 
@@ -5529,7 +5529,7 @@ begin
   end;
 
   LInput := RunningSnapshotTreeInput(AGame, '');
-  LRunningSignature := RunningDisplaySignature(AGame, LInput);
+  LRunningSignature := RunningDisplaySignature(AGame, LInput.LogLineCount);
   UpdateDisplayedGameLog;
   if FDisplayedRunningSignature = LRunningSignature then
   begin
