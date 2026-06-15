@@ -5525,6 +5525,7 @@ var
   LEffectiveStartingFEN: string;
   LEffectiveState: TGameOrchestratorState;
   LMoveCount: Integer;
+  LBoard: TDraughtsBoard;
   LPositionChanged: Boolean;
   LPvChanged: Boolean;
   LRunningSignature: string;
@@ -5572,23 +5573,12 @@ begin
   if AGame = nil then
   begin
     ClearHumanMoveSelection;
-    FGameActive := False;
-    FGameResult := '*';
-    SetDisplayedTreeTracking('', '', '', 0, -1);
-    FStandaloneWhitePlayerName := 'White';
-    FStandaloneBlackPlayerName := 'Black';
-    FStandaloneEventName := '?';
-    FGameBrowsePly := -1;
-    FViewedGameId := -1;
-    FGameLog.Clear;
-    FGameLogSourceGameId := -1;
-    FGameLogSourceLineCount := -1;
-    FGameLogSourceShowStdout := False;
-    FBoard.SetBeginPosition;
-    FStartingFEN := FBoard.StartingFEN;
-    ClearDisplayedPvCache(FBoard, 0);
-    UpdateMiniBoardFromBoard(FBoard);
-    UpdateBoardInfo;
+    LBoard := TDraughtsBoard.Create;
+    try
+      LoadStandaloneFen(LBoard.StartingFEN);
+    finally
+      LBoard.Free;
+    end;
     Exit;
   end;
 
@@ -6667,6 +6657,7 @@ end;
 function TMainForm.StartGameFromSetup(const ASetup: TGameSetup;
   const ATitlePrefix: string): TRunningGame;
 var
+  LBoard: TDraughtsBoard;
   LBlackEngineKey: string;
   LBlackName: string;
   LGameId: Integer;
@@ -6714,7 +6705,6 @@ begin
   FGamesListBox.ItemIndex := FGamesListBox.Items.Count - 1;
 
   ClearHumanMoveSelection;
-  FBoard.LoadFromFEN(ASetup.StartingFEN);
   FStartingFEN := ASetup.StartingFEN;
   SetDisplayedTreeTracking('', '', '', 0, -1);
   FGameBrowsePly := -1;
@@ -6724,14 +6714,21 @@ begin
   FBlackUsedSeconds := 0;
   FGameState := gosRunning;
   FGameResult := '*';
-  ClearDisplayedPvCache(FBoard, 0);
   FGameActive := True;
-  FBoardControl.Board := FBoard;
-  UpdateMiniBoardFromBoard(FBoard);
   FGameLogMemo.Clear;
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
   InitializeRunningGameTree(Result);
+  LBoard := TDraughtsBoard.Create;
+  try
+    LBoard.LoadFromFEN(ASetup.StartingFEN);
+    ClearDisplayedPvCache(LBoard, 0);
+  finally
+    LBoard.Free;
+  end;
+  UpdateBoardFromBrowseState(Result.GameTree);
+  FBoardControl.Board := FBoard;
+  UpdateMiniBoardFromBoard(FBoard);
   UpdateBoardInfo;
 
   LRunner.Start;
