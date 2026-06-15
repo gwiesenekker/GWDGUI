@@ -465,6 +465,8 @@ type
       ARecordPV: Boolean): TGameTreePvInput;
     function RunningSnapshotSyncSignature(
       const AInput: TRunningSnapshotTreeInput): string;
+    function RunningSnapshotDisplaySignature(AGame: TRunningGame;
+      const AInput: TRunningSnapshotTreeInput): string;
     procedure InitializeRunningGameTree(AGame: TRunningGame);
     procedure UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
       const AEventName: string = '');
@@ -4684,6 +4686,39 @@ begin
     AInput.AnnotationsText;
 end;
 
+function TMainForm.RunningSnapshotDisplaySignature(AGame: TRunningGame;
+  const AInput: TRunningSnapshotTreeInput): string;
+
+  function SecondsSignature(AValue: Double): string;
+  begin
+    Result := FormatFloat('0.000', AValue);
+  end;
+
+begin
+  if AGame = nil then
+    Result := 'none'
+  else
+    Result := IntToStr(AGame.Id);
+  Result := Result + #10 +
+    AInput.WhiteName + #10 +
+    AInput.BlackName + #10 +
+    AInput.StartingFEN + #10 +
+    AInput.MovesText + #10 +
+    AInput.AnnotationsText + #10 +
+    IntToStr(Ord(AInput.State)) + #10 +
+    AInput.ResultText + #10 +
+    IntToStr(Ord(AInput.CurrentSide)) + #10 +
+    AInput.PrincipalVariation + #10 +
+    AInput.PvScore + #10 +
+    AInput.PvDepth + #10 +
+    AInput.PvTimeText + #10 +
+    IntToStr(AInput.PvBasePly) + #10 +
+    SecondsSignature(AInput.WhiteRemainingSeconds) + #10 +
+    SecondsSignature(AInput.BlackRemainingSeconds) + #10 +
+    SecondsSignature(AInput.WhiteUsedSeconds) + #10 +
+    SecondsSignature(AInput.BlackUsedSeconds);
+end;
+
 procedure TMainForm.InitializeRunningGameTree(AGame: TRunningGame);
 var
   Actor: TGameTreeActor;
@@ -5274,11 +5309,6 @@ var
   LPvText: string;
   LPvTimeText: string;
 
-  function SecondsSignature(AValue: Double): string;
-  begin
-    Result := FormatFloat('0.000', AValue);
-  end;
-
   procedure UpdateDisplayedGameLog;
   var
     J: Integer;
@@ -5337,25 +5367,7 @@ begin
   end;
 
   LInput := RunningSnapshotTreeInput(AGame, '');
-  LSnapshotSignature :=
-    IntToStr(AGame.Id) + #10 +
-    LInput.WhiteName + #10 +
-    LInput.BlackName + #10 +
-    LInput.StartingFEN + #10 +
-    LInput.MovesText + #10 +
-    LInput.AnnotationsText + #10 +
-    IntToStr(Ord(LInput.State)) + #10 +
-    LInput.ResultText + #10 +
-    IntToStr(Ord(LInput.CurrentSide)) + #10 +
-    LInput.PrincipalVariation + #10 +
-    LInput.PvScore + #10 +
-    LInput.PvDepth + #10 +
-    LInput.PvTimeText + #10 +
-    IntToStr(LInput.PvBasePly) + #10 +
-    SecondsSignature(LInput.WhiteRemainingSeconds) + #10 +
-    SecondsSignature(LInput.BlackRemainingSeconds) + #10 +
-    SecondsSignature(LInput.WhiteUsedSeconds) + #10 +
-    SecondsSignature(LInput.BlackUsedSeconds);
+  LSnapshotSignature := RunningSnapshotDisplaySignature(AGame, LInput);
   UpdateDisplayedGameLog;
   if FDisplayedSnapshotSignature = LSnapshotSignature then
   begin
