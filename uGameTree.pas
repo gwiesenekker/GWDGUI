@@ -130,6 +130,7 @@ type
     BlackName: string;
     ResultText: string;
     StartingFEN: string;
+    GameState: TGameOrchestratorState;
     HasTimeControl: Boolean;
     MovesPerPeriod: Integer;
     MinutesPerPeriod: Double;
@@ -149,6 +150,8 @@ type
       AStartingFEN: string); overload;
     procedure SetHeader(const AEventName, AWhiteName, ABlackName, AResultText,
       AStartingFEN: string; out AChanged: Boolean); overload;
+    procedure SetGameState(AState: TGameOrchestratorState;
+      out AChanged: Boolean);
     procedure SetTimeControl(AMovesPerPeriod: Integer; AMinutesPerPeriod,
       AIncrementSeconds: Double; const AIncrementModeText: string);
     procedure SetClockState(AWhiteRemainingSeconds, ABlackRemainingSeconds,
@@ -398,6 +401,7 @@ begin
   BlackName := 'Black';
   ResultText := '*';
   StartingFEN := '';
+  GameState := gosWaiting;
   HasTimeControl := False;
   MovesPerPeriod := 0;
   MinutesPerPeriod := 0;
@@ -518,6 +522,13 @@ begin
   BlackName := ABlackName;
   ResultText := AResultText;
   StartingFEN := AStartingFEN;
+end;
+
+procedure TGameTree.SetGameState(AState: TGameOrchestratorState;
+  out AChanged: Boolean);
+begin
+  AChanged := GameState <> AState;
+  GameState := AState;
 end;
 
 procedure TGameTree.SetTimeControl(AMovesPerPeriod: Integer;

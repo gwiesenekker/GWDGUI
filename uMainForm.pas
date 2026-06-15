@@ -4203,16 +4203,9 @@ begin
 end;
 
 function TMainForm.StateForTree(AGameTree: TGameTree): TGameOrchestratorState;
-var
-  LGame: TRunningGame;
-  LInput: TRunningSnapshotTreeInput;
 begin
-  LGame := GameForTreeRefresh(AGameTree);
-  if LGame <> nil then
-  begin
-    LInput := RunningSnapshotTreeInput(LGame, '');
-    Result := LInput.State;
-  end
+  if AGameTree <> nil then
+    Result := AGameTree.GameState
   else
     Result := FGameState;
 end;
@@ -4567,6 +4560,7 @@ var
   LMovesText: string;
   LRecordTimeControl: Boolean;
   LResultText: string;
+  LState: TGameOrchestratorState;
   LStartingFEN: string;
   LTimeControl: TTimeControl;
   LTreeSignature: string;
@@ -4583,6 +4577,7 @@ begin
       LInput.ResultText);
     LStartingFEN := PlayerNameOrFallback(Trim(AGameTree.StartingFEN),
       LInput.StartingFEN);
+    LState := StateForTree(AGameTree);
   end
   else
   begin
@@ -4590,6 +4585,7 @@ begin
     LBlackName := BlackNameForTree(AGameTree);
     LResultText := ResultForTree(AGameTree);
     LStartingFEN := StartingFenForTree(AGameTree);
+    LState := StateForTree(AGameTree);
   end;
 
   if AGame <> nil then
@@ -4611,12 +4607,12 @@ begin
   if AGame <> nil then
     Result := GameTreeHeaderInput(LTreeSignature,
       EventNameForTree(AGameTree), LWhiteName, LBlackName,
-      LResultText, LStartingFEN, LRecordTimeControl, LTimeControl)
+      LResultText, LStartingFEN, LRecordTimeControl, LTimeControl, LState)
   else
     Result := GameTreeHeaderInput(LTreeSignature,
       EventNameForTree(AGameTree), LWhiteName, LBlackName,
       LResultText, LStartingFEN,
-      LRecordTimeControl, LTimeControl);
+      LRecordTimeControl, LTimeControl, LState);
 end;
 
 function TMainForm.RunningGameTreeHeaderInput(AGame: TRunningGame;
@@ -4672,13 +4668,13 @@ begin
   if AInput.GameId <= 0 then
   begin
     Result := GameTreeHeaderInput('', '?', 'White', 'Black', '*', '',
-      False, AInput.TimeControl);
+      False, AInput.TimeControl, AInput.State);
     Exit;
   end;
 
   Result := GameTreeHeaderInput('running:' + IntToStr(AInput.GameId),
     AInput.EventName, AInput.WhiteName, AInput.BlackName, AInput.ResultText,
-    AInput.StartingFEN, True, AInput.TimeControl);
+    AInput.StartingFEN, True, AInput.TimeControl, AInput.State);
 end;
 
 function TMainForm.RunningSnapshotMainlineInput(AGame: TRunningGame;
@@ -4751,8 +4747,10 @@ var
   Actor: TGameTreeActor;
   LRevision: Int64;
   LShowStdout: Boolean;
+  LState: TGameOrchestratorState;
 begin
   LShowStdout := False;
+  LState := AInput.State;
   if AGame = nil then
     Result := 'none'
   else
@@ -4766,12 +4764,13 @@ begin
     Actor := ActorForGameTree(AGame.GameTree);
     if Actor <> nil then
       LRevision := Actor.Revision;
+    LState := StateForTree(AGame.GameTree);
     Result := Result + #10 +
       'tree=' + IntToStr(AGame.GameTree.GameTreeId) + #10 +
       'revision=' + IntToStr(LRevision);
   end;
   Result := Result + #10 +
-    IntToStr(Ord(AInput.State)) + #10 +
+    IntToStr(Ord(LState)) + #10 +
     IntToStr(AInput.LogLineCount) + #10 +
     BoolToStr(LShowStdout, True);
 end;
@@ -5406,6 +5405,7 @@ var
   LEffectiveAnnotationsText: string;
   LEffectiveResultText: string;
   LEffectiveStartingFEN: string;
+  LEffectiveState: TGameOrchestratorState;
   LMoveCount: Integer;
   LPositionChanged: Boolean;
   LPvChanged: Boolean;
@@ -5506,6 +5506,7 @@ begin
   LEffectiveResultText := Trim(AGame.GameTree.ResultText);
   if LEffectiveResultText = '' then
     LEffectiveResultText := LInput.ResultText;
+  LEffectiveState := StateForTree(AGame.GameTree);
   if AGame.GameTree.HasClockInfo then
   begin
     LWhiteRemainingSeconds := AGame.GameTree.WhiteRemainingSeconds;
@@ -5524,7 +5525,7 @@ begin
   LPositionChanged := (FStartingFEN <> LEffectiveStartingFEN) or
     (FDisplayedAnnotationsSignature <> LEffectiveAnnotationsText) or
     (FDisplayedMovesSignature <> LEffectiveMovesText) or
-    (FGameState <> LInput.State) or
+    (FGameState <> LEffectiveState) or
     (FGameResult <> LEffectiveResultText);
   LPvChanged := not DisplayedPvCacheMatches(LPvState.PrincipalVariation,
     LPvState.Score, LPvState.Depth, LPvState.TimeText,
@@ -5535,7 +5536,7 @@ begin
     ClearVariationExploration;
   end;
   FStartingFEN := LEffectiveStartingFEN;
-  FGameState := LInput.State;
+  FGameState := LEffectiveState;
   FGameResult := LEffectiveResultText;
   SetDisplayedPvCache(LPvState.PrincipalVariation, LPvState.Score,
     LPvState.Depth, LPvState.TimeText, LPvState.BaseBoard, LPvState.BasePly);
@@ -5869,7 +5870,7 @@ var
     SetGameTreeHeader(Actor,
       GameTreeHeaderInput('', AResolvedEventName, AResolvedWhiteName,
         AResolvedBlackName, AResolvedResultText, AResolvedStartingFEN,
-        False, DefaultTimeControl), LErrorText);
+        False, DefaultTimeControl, StateForTree(AGameTree)), LErrorText);
   end;
 begin
   if AGameTree = nil then

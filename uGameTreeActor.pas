@@ -652,6 +652,7 @@ begin
   AddLine(ACommand.HeaderInput.BlackName);
   AddLine(ACommand.HeaderInput.ResultText);
   AddLine(ACommand.HeaderInput.StartingFEN);
+  AddLine(IntToStr(Ord(ACommand.HeaderInput.GameState)));
   AddLine(BoolText(ACommand.HeaderInput.RecordTimeControl));
   AddLine(IntToStr(ACommand.HeaderInput.TimeControl.MovesPerPeriod));
   AddLine(SecondsText(ACommand.HeaderInput.TimeControl.MinutesPerPeriod));
@@ -970,6 +971,7 @@ var
   RebuildSignature: string;
   Search: TGameTreeSearchRecord;
   ClockChanged: Boolean;
+  StateChanged: Boolean;
   TimeControlChanged: Boolean;
 
   function HeaderIncrementModeText: string;
@@ -1034,6 +1036,7 @@ begin
           ACommand.HeaderInput.WhiteName, ACommand.HeaderInput.BlackName,
           ACommand.HeaderInput.ResultText, ACommand.HeaderInput.StartingFEN,
           Changed);
+        FGameTree.GameState := ACommand.HeaderInput.GameState;
         if ACommand.HeaderInput.RecordTimeControl then
           FGameTree.RecordTimeControl(ACommand.HeaderInput.TimeControl);
         Node := FGameTree.RecordMainlineMove(FGameTree.MainlineCount + 1,
@@ -1230,6 +1233,9 @@ begin
           ACommand.HeaderInput.WhiteName, ACommand.HeaderInput.BlackName,
           ACommand.HeaderInput.ResultText, ACommand.HeaderInput.StartingFEN,
           Changed);
+        FGameTree.SetGameState(ACommand.HeaderInput.GameState, StateChanged);
+        if StateChanged then
+          Changed := True;
         if ACommand.HeaderInput.RecordTimeControl then
         begin
           TimeControlChanged := (not FGameTree.HasTimeControl) or
