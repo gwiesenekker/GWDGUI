@@ -74,6 +74,13 @@ type
     BasePositionKey: string;
   end;
 
+  TDisplayedBoardInfo = record
+    WhiteName: string;
+    BlackName: string;
+    ResultText: string;
+    StartingFEN: string;
+  end;
+
   TRunnerSnapshotGuiMessage = class(TThreadMessage)
   private
     FGameId: Integer;
@@ -677,6 +684,8 @@ type
     procedure UpdateDatabaseSearchPosition;
     procedure UpdateBoardFromBrowseState(AGameTree: TGameTree);
     procedure UpdateBoardHighlights(AGameTree: TGameTree);
+    function DisplayedBoardInfo(AGameTree: TGameTree;
+      AGame: TRunningGame): TDisplayedBoardInfo;
     procedure UpdateClockLabels(AGameTree: TGameTree; const AWhiteName,
       ABlackName: string);
     procedure UpdateScoreHistory(AGameTree: TGameTree);
@@ -7175,52 +7184,56 @@ begin
   end;
 end;
 
+function TMainForm.DisplayedBoardInfo(AGameTree: TGameTree;
+  AGame: TRunningGame): TDisplayedBoardInfo;
+var
+  LInput: TRunningSnapshotTreeInput;
+begin
+  if AGameTree <> nil then
+  begin
+    Result.WhiteName := PlayerNameOrFallback(AGameTree.WhiteName, 'White');
+    Result.BlackName := PlayerNameOrFallback(AGameTree.BlackName, 'Black');
+    Result.ResultText := PlayerNameOrFallback(AGameTree.ResultText, '*');
+    Result.StartingFEN := AGameTree.StartingFEN;
+    Exit;
+  end;
+
+  if AGame <> nil then
+  begin
+    LInput := RunningSnapshotTreeInput(AGame, '');
+    Result.WhiteName := LInput.WhiteName;
+    Result.BlackName := LInput.BlackName;
+    Result.ResultText := LInput.ResultText;
+    Result.StartingFEN := LInput.StartingFEN;
+    Exit;
+  end;
+
+  Result.WhiteName := WhiteNameForTree(FGameTree);
+  Result.BlackName := BlackNameForTree(FGameTree);
+  Result.ResultText := ResultForTree(FGameTree);
+  Result.StartingFEN := StartingFenForTree(FGameTree);
+end;
+
 procedure TMainForm.UpdateBoardInfo;
 var
   LGame: TRunningGame;
-  LBlackName: string;
-  LFenText: string;
+  LInfo: TDisplayedBoardInfo;
   LGameTree: TGameTree;
-  LInput: TRunningSnapshotTreeInput;
-  LResultText: string;
-  LWhiteName: string;
 begin
   LGameTree := ActiveGameTree;
   LGame := SelectedGame;
+  LInfo := DisplayedBoardInfo(LGameTree, LGame);
 
-  if LGameTree <> nil then
-  begin
-    LWhiteName := PlayerNameOrFallback(LGameTree.WhiteName, 'White');
-    LBlackName := PlayerNameOrFallback(LGameTree.BlackName, 'Black');
-    LResultText := PlayerNameOrFallback(LGameTree.ResultText, '*');
-    LFenText := LGameTree.StartingFEN;
-  end
-  else if LGame <> nil then
-  begin
-    LInput := RunningSnapshotTreeInput(LGame, '');
-    LWhiteName := LInput.WhiteName;
-    LBlackName := LInput.BlackName;
-    LResultText := LInput.ResultText;
-    LFenText := LInput.StartingFEN;
-  end
-  else
-  begin
-    LWhiteName := WhiteNameForTree(FGameTree);
-    LBlackName := BlackNameForTree(FGameTree);
-    LResultText := ResultForTree(FGameTree);
-    LFenText := StartingFenForTree(FGameTree);
-  end;
-
-  UpdateClockLabels(LGameTree, LWhiteName, LBlackName);
+  UpdateClockLabels(LGameTree, LInfo.WhiteName, LInfo.BlackName);
 
   if FWhitePlayerEdit <> nil then
-    FWhitePlayerEdit.Text := LWhiteName;
+    FWhitePlayerEdit.Text := LInfo.WhiteName;
   if FBlackPlayerEdit <> nil then
-    FBlackPlayerEdit.Text := LBlackName;
+    FBlackPlayerEdit.Text := LInfo.BlackName;
   if FResultEdit <> nil then
-    FResultEdit.Text := LResultText;
+    FResultEdit.Text := LInfo.ResultText;
   if FFenEdit <> nil then
-    FFenEdit.Text := LFenText;
+    FFenEdit.Text := LInfo.StartingFEN;
 
   UpdateBoardHighlights(LGameTree);
   RefreshDisplayedGameTreeViews(LGameTree, False);
@@ -7231,7 +7244,7 @@ begin
 
   UpdateGameLogMemo;
 
-  RefreshMainPvBrowserFromTree(LGameTree, LFenText);
+  RefreshMainPvBrowserFromTree(LGameTree, LInfo.StartingFEN);
   HighlightGameMoveTextSelection(False, LGameTree);
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
