@@ -6377,8 +6377,6 @@ procedure TMainForm.AppendRunningGameToPdn(AGame: TRunningGame;
   const AFileName, AEventName: string);
 var
   Game: TPdnGame;
-  LInput: TRunningSnapshotTreeInput;
-  LSnapshotLoaded: Boolean;
   LPdnText: string;
 begin
   if (AGame = nil) or (Trim(AFileName) = '') then
@@ -6402,20 +6400,7 @@ begin
     Game.ResultText := ResultForTree(AGame.GameTree);
     Game.StartingFEN := StartingFenForTree(AGame.GameTree);
     Game.MovesText := GameTreeMainlineMovesText(AGame.GameTree);
-    LSnapshotLoaded := False;
-    if Trim(Game.MovesText) = '' then
-    begin
-      LInput := RunningSnapshotTreeInput(AGame, AEventName);
-      LSnapshotLoaded := True;
-      Game.MovesText := LInput.MovesText;
-    end;
     Game.MoveAnnotationsText := GameTreeScoreAnnotationsText(AGame.GameTree);
-    if Trim(Game.MoveAnnotationsText) = '' then
-    begin
-      if not LSnapshotLoaded then
-        LInput := RunningSnapshotTreeInput(AGame, AEventName);
-      Game.MoveAnnotationsText := LInput.AnnotationsText;
-    end;
     AppendPdnGameToFile(AFileName, Game);
   finally
     Game.Free;
