@@ -252,6 +252,7 @@ type
     FGameTreeView: TTreeView;
     FDisplayedAnnotationsSignature: string;
     FDisplayedMovesSignature: string;
+    FDisplayedMoveLabelsSignature: string;
     FDisplayedSnapshotSignature: string;
     FDisplayedGameTreeId: Int64;
     FDisplayedGameTreeRevision: Int64;
@@ -524,6 +525,8 @@ type
       ABasePly: Integer);
     function FormatClock(ASeconds: Double): string;
     function CurrentFilteredGameTreePdnOptions: TGameTreePdnRenderOptions;
+    function GameTreeMoveLabelsSignature(AGameTree: TGameTree;
+      const AOptions: TGameTreePdnRenderOptions): string;
     function GameLogLineVisible(const ALine: string; AGame: TRunningGame): Boolean;
     function GameTitleEngineName(AEngine: TExternalEngineDefinition): string;
     procedure PrepareGameTreeForPdn(AGame: TRunningGame;
@@ -4257,6 +4260,7 @@ procedure TMainForm.SetDisplayedTreeTracking(const AAnnotationsSignature,
 begin
   FDisplayedAnnotationsSignature := AAnnotationsSignature;
   FDisplayedMovesSignature := AMovesSignature;
+  FDisplayedMoveLabelsSignature := '';
   FDisplayedSnapshotSignature := ASnapshotSignature;
   FDisplayedGameTreeId := AGameTreeId;
   FDisplayedGameTreeRevision := AGameTreeRevision;
@@ -4326,6 +4330,8 @@ begin
   LGameTree := AGameTree;
   if LGameTree = nil then
     Exit;
+  FDisplayedMoveLabelsSignature :=
+    GameTreeMoveLabelsSignature(LGameTree, LOptions);
   RenderGameTreeMovesToPdn(LGameTree, LOptions, LRenderResult);
   LText := LRenderResult.Text;
   SetLength(FGameMoveStarts, Length(LRenderResult.MoveStarts));
@@ -5520,6 +5526,71 @@ begin
   Result.ShowAnnotatorFullPV := FMoveShowAnnotatorFullPV;
   Result.ShowClocks := FMoveShowClocks;
   Result.ShowAnnotatorScore := FMoveShowAnnotatorScore;
+end;
+
+function TMainForm.GameTreeMoveLabelsSignature(AGameTree: TGameTree;
+  const AOptions: TGameTreePdnRenderOptions): string;
+var
+  I: Integer;
+
+  procedure AppendFlag(var AText: string; AValue: Boolean);
+  begin
+    if AValue then
+      AText += '1|'
+    else
+      AText += '0|';
+  end;
+
+  procedure AppendNode(var AText: string; ANode: TGameTreePlyNode);
+  var
+    ChildIndex: Integer;
+  begin
+    if ANode = nil then
+      Exit;
+    AText += IntToStr(ANode.PlyNumber) + '|' +
+      IntToStr(Ord(ANode.SideToMove)) + '|' + ANode.MoveText + '|' +
+      ANode.VariationKey + '|';
+    if not AOptions.HideAnnotations then
+    begin
+      if AOptions.ShowEngineScore then
+        AText += 'es=' + ANode.EngineScore + '|';
+      if AOptions.ShowAnnotatorScore then
+        AText += 'as=' + ANode.AnnotatorScore + '|';
+      if AOptions.ShowClocks and ANode.HasClockInfo then
+        AText += 'clk=' + FormatFloat('0.000', ANode.WhiteRemainingSeconds) +
+          ',' + FormatFloat('0.000', ANode.BlackRemainingSeconds) + ',' +
+          FormatFloat('0.000', ANode.WhiteUsedSeconds) + ',' +
+          FormatFloat('0.000', ANode.BlackUsedSeconds) + '|';
+    end;
+    if AOptions.ShowEnginePVMove or AOptions.ShowEngineFullPV then
+      AText += 'epv=' + ANode.EnginePV + '|';
+    if AOptions.ShowAnnotatorPVMove or AOptions.ShowAnnotatorFullPV then
+      AText += 'apv=' + ANode.AnnotatorPV + '|';
+    AText += 'children=' + IntToStr(ANode.ChildCount) + '|';
+    for ChildIndex := 0 to ANode.ChildCount - 1 do
+      AppendNode(AText, ANode.Children[ChildIndex]);
+  end;
+
+begin
+  Result := '';
+  if AGameTree = nil then
+    Exit;
+  AppendFlag(Result, AOptions.HideAnnotations);
+  AppendFlag(Result, AOptions.ShowEngineScore);
+  AppendFlag(Result, AOptions.ShowClocks);
+  AppendFlag(Result, AOptions.ShowEnginePVMove);
+  AppendFlag(Result, AOptions.ShowEngineFullPV);
+  AppendFlag(Result, AOptions.ShowAnnotatorPVMove);
+  AppendFlag(Result, AOptions.ShowAnnotatorFullPV);
+  AppendFlag(Result, AOptions.ShowAnnotatorScore);
+  Result += 'main=' + IntToStr(AGameTree.MainlineCount) + '|';
+  Result += 'vars=' + IntToStr(AGameTree.VariationLineCount) + '|';
+  for I := 0 to AGameTree.VariationLineCount - 1 do
+    Result += IntToStr(AGameTree.VariationLine[I].DisplayAfterPly) + ':' +
+      IntToStr(AGameTree.VariationLine[I].BasePly) + ':' +
+      AGameTree.VariationLine[I].MovesText + ':' +
+      AGameTree.VariationLine[I].AnnotationText + '|';
+  AppendNode(Result, AGameTree.Root);
 end;
 
 function TMainForm.GameLogLineVisible(const ALine: string;
@@ -7067,6 +7138,8 @@ procedure TMainForm.RefreshDisplayedGameTreeViews(AGameTree: TGameTree;
 var
   Actor: TGameTreeActor;
   LGameTreeId: Int64;
+  LLabelSignature: string;
+  LOptions: TGameTreePdnRenderOptions;
   LRevision: Int64;
 begin
   if AGameTree = nil then
@@ -7084,7 +7157,10 @@ begin
     (FDisplayedGameTreeRevision = LRevision) then
     Exit;
 
-  RebuildGameMoveLabels(AGameTree);
+  LOptions := CurrentFilteredGameTreePdnOptions;
+  LLabelSignature := GameTreeMoveLabelsSignature(AGameTree, LOptions);
+  if FDisplayedMoveLabelsSignature <> LLabelSignature then
+    RebuildGameMoveLabels(AGameTree);
   UpdateScoreHistory(AGameTree);
   RefreshVisibleGameTreeView(AGameTree);
   FDisplayedGameTreeId := LGameTreeId;
