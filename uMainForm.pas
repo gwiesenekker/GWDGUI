@@ -5956,11 +5956,14 @@ begin
 end;
 
 procedure TMainForm.HideMoveAnnotationsClick(Sender: TObject);
+var
+  LGameTree: TGameTree;
 begin
+  LGameTree := ActiveGameTree;
   FHideMoveAnnotations := not FHideMoveAnnotations;
   if FHideMoveAnnotationsMenuItem <> nil then
     FHideMoveAnnotationsMenuItem.Checked := FHideMoveAnnotations;
-  RebuildGameMoveLabels(ActiveGameTree);
+  RebuildGameMoveLabels(LGameTree);
 end;
 
 procedure TMainForm.GameMovePopupPopup(Sender: TObject);
