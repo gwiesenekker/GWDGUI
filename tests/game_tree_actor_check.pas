@@ -901,6 +901,8 @@ var
   RevisionAfterRebuild: Int64;
   Search: TGameTreeSearchRef;
   SearchCommand: TGameTreeCommand;
+  VariationPvDepth: string;
+  VariationPvTimeText: string;
   VariationIndex: Integer;
 
   procedure CheckDuplicateRebuildDoesNotMutate(const AMessage: string);
@@ -916,7 +918,7 @@ var
       GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
         EnginePvTimeText),
       GameTreePvInput(False, 0, '', ''),
-      0, 1, '0.20', '20-24', '7', '0.33');
+      0, 1, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
     try
       Actor.ExecuteCommand(DuplicateCommand);
       Check(DuplicateCommand.Accepted, AMessage + ' should be accepted');
@@ -934,6 +936,8 @@ begin
     FillChar(NullTimeControl, SizeOf(NullTimeControl), 0);
     EnginePvDepth := '12';
     EnginePvTimeText := '1.20';
+    VariationPvDepth := '7';
+    VariationPvTimeText := '0.33';
     Actor.GameTree.BeginRebuild('rebuild', 'Event', 'White', 'Black', '*',
       'W:W31-50:B1-20');
     Actor.GameTree.RecordMainlineMove(1, '32-28');
@@ -950,7 +954,7 @@ begin
       GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
         EnginePvTimeText),
       GameTreePvInput(False, 0, '', ''),
-      0, 1, '0.20', '20-24', '7', '0.33');
+      0, 1, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'rebuild command should be accepted');
@@ -970,9 +974,11 @@ begin
         'rebuild command should rebuild variation nodes');
       Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPV = '20-24',
         'rebuild command should record variation annotator PV');
-      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPVDepth = '7',
+      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPVDepth =
+        VariationPvDepth,
         'rebuild command should record variation annotator PV depth');
-      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPVTimeText = '0.33',
+      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPVTimeText =
+        VariationPvTimeText,
         'rebuild command should record variation annotator PV time');
       NodeId := Actor.GameTree.MainlineNode[1].NodeId;
       RevisionAfterRebuild := Actor.Revision;
@@ -987,7 +993,7 @@ begin
       GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
         EnginePvTimeText),
       GameTreePvInput(False, 0, '', ''),
-      0, 1, '0.20', '20-24', '7', '0.33');
+      0, 1, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'duplicate rebuild command should be accepted');
@@ -1006,7 +1012,7 @@ begin
       GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
         EnginePvTimeText),
       GameTreePvInput(False, 0, '', ''),
-      0, 1, '0.20', '20-24', '7', '0.33');
+      0, 1, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
@@ -1018,6 +1024,33 @@ begin
       Check(Actor.GameTree.MainlineNode[2].EnginePVTimeText =
         EnginePvTimeText,
         'PV metadata-only rebuild should record engine PV time');
+      RevisionAfterRebuild := Actor.Revision;
+    finally
+      Command.Free;
+    end;
+
+    VariationPvDepth := '8';
+    VariationPvTimeText := '0.40';
+    Command := Actor.CreateRebuildFromInputsCommand(
+      GameTreeHeaderInput('rebuild', 'Event', 'White', 'Black', '*',
+        'W:W31-50:B1-20', False, NullTimeControl),
+      GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
+      GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
+        EnginePvTimeText),
+      GameTreePvInput(False, 0, '', ''),
+      0, 1, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'variation PV metadata-only rebuild command should be accepted');
+      Check(Actor.Revision > RevisionAfterRebuild,
+        'variation PV metadata-only rebuild should increment revision');
+      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPVDepth =
+        VariationPvDepth,
+        'variation PV metadata-only rebuild should record depth');
+      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPVTimeText =
+        VariationPvTimeText,
+        'variation PV metadata-only rebuild should record time');
       RevisionAfterRebuild := Actor.Revision;
     finally
       Command.Free;
