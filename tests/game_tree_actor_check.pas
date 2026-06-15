@@ -533,6 +533,20 @@ begin
         ReleaseCommand.Free;
       end;
 
+      DoneCommand := Actor.CreateSearchDoneCommand(SearchId, '18-23');
+      try
+        DoneCommand.GameTreeId := DoneCommand.GameTreeId + 1;
+        Actor.ExecuteCommand(DoneCommand);
+        Check(not DoneCommand.Accepted,
+          'wrong-tree search-id done should be rejected');
+        Check(Actor.SearchState(Search, State),
+          'wrong-tree search-id done should leave search available');
+        Check(State = gssActive,
+          'wrong-tree search-id done should leave search active');
+      finally
+        DoneCommand.Free;
+      end;
+
       CancelCommand := Actor.CreateCancelSearchCommand(Search);
       try
         Actor.ExecuteCommand(CancelCommand);
