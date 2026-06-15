@@ -4288,7 +4288,7 @@ var
   LMoves: TStringList;
 begin
   Result := False;
-  if (AGame = nil) or (AGame.GameTree = nil) then
+  if AGame = nil then
     Exit;
   if not (AInput.State in [gosStopped, gosGameOver]) then
     Exit;
@@ -4898,7 +4898,7 @@ var
   LErrorText: string;
   LInput: TRunningSnapshotTreeInput;
 begin
-  if (AGame = nil) or (AGame.GameTree = nil) then
+  if AGame = nil then
     Exit;
 
   Actor := ActorForGameTree(AGame.GameTree);
@@ -5067,7 +5067,7 @@ var
       AGame.RememberSnapshotPvSignature(LPvSignature);
   end;
 begin
-  if (AGame = nil) or (AGame.GameTree = nil) then
+  if AGame = nil then
     Exit;
   LInput := RunningSnapshotTreeInput(AGame, AEventName);
   if RunningGameTreeExtendsSnapshot(AGame, LInput) then
@@ -5134,7 +5134,7 @@ var
   LOptions: TGameTreePdnRenderOptions;
 begin
   Result := '';
-  if (AGame = nil) or (AGame.GameTree = nil) then
+  if AGame = nil then
     Exit;
 
   UpdateRunningGameTreeFromSnapshot(AGame, AEventName);
