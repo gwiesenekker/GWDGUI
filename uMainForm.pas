@@ -37,6 +37,7 @@ type
     AnnotationsText: string;
     State: TGameOrchestratorState;
     CurrentSide: TDraughtsSide;
+    PlyCount: Integer;
     PrincipalVariation: string;
     PvScore: string;
     PvDepth: string;
@@ -4398,6 +4399,7 @@ begin
   Result.AnnotationsText := '';
   Result.State := gosWaiting;
   Result.CurrentSide := dsWhite;
+  Result.PlyCount := 0;
   Result.PrincipalVariation := '';
   Result.PvScore := '';
   Result.PvDepth := '';
@@ -4425,6 +4427,7 @@ begin
   Result.AnnotationsText := AGame.Snapshot.MoveAnnotationsText;
   Result.State := AGame.Snapshot.State;
   Result.CurrentSide := AGame.Snapshot.CurrentSide;
+  Result.PlyCount := AGame.Snapshot.PlyCount;
   Result.PrincipalVariation := AGame.Snapshot.PrincipalVariation;
   Result.PvScore := AGame.Snapshot.PvScore;
   Result.PvDepth := AGame.Snapshot.PvSnapshot.Depth;
@@ -7074,7 +7077,7 @@ begin
   end;
   if AGame.Paused and (LInput.State in [gosWaiting, gosRunning]) then
     LCaption := LCaption + ' (paused)';
-  LCaption := LCaption + ' - ' + IntToStr(AGame.Snapshot.PlyCount) + ' plies';
+  LCaption := LCaption + ' - ' + IntToStr(LInput.PlyCount) + ' plies';
   if AGame.FListCaption = LCaption then
     Exit;
   for I := 0 to FGamesListBox.Items.Count - 1 do
