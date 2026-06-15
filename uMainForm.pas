@@ -5464,6 +5464,39 @@ var
       FGameLogSourceShowStdout := AGame.ShowStdout;
     end;
   end;
+
+  function RunningTreeStartingFEN: string;
+  begin
+    Result := Trim(AGame.GameTree.StartingFEN);
+    if Result = '' then
+      Result := LInput.StartingFEN;
+  end;
+
+  function RunningTreeResultText: string;
+  begin
+    Result := Trim(AGame.GameTree.ResultText);
+    if Result = '' then
+      Result := LInput.ResultText;
+  end;
+
+  procedure RunningTreeClockValues(out AWhiteRemainingSeconds,
+    ABlackRemainingSeconds, AWhiteUsedSeconds, ABlackUsedSeconds: Double);
+  begin
+    if AGame.GameTree.HasClockInfo then
+    begin
+      AWhiteRemainingSeconds := AGame.GameTree.WhiteRemainingSeconds;
+      ABlackRemainingSeconds := AGame.GameTree.BlackRemainingSeconds;
+      AWhiteUsedSeconds := AGame.GameTree.WhiteUsedSeconds;
+      ABlackUsedSeconds := AGame.GameTree.BlackUsedSeconds;
+    end
+    else
+    begin
+      AWhiteRemainingSeconds := LInput.WhiteRemainingSeconds;
+      ABlackRemainingSeconds := LInput.BlackRemainingSeconds;
+      AWhiteUsedSeconds := LInput.WhiteUsedSeconds;
+      ABlackUsedSeconds := LInput.BlackUsedSeconds;
+    end;
+  end;
 begin
   if AGame = nil then
   begin
@@ -5520,27 +5553,11 @@ begin
   LEffectiveMovesText := LTextState.EffectiveMovesText;
   LEffectiveAnnotationsText := LTextState.EffectiveAnnotationsText;
   LPvState := RunningDisplayPvState(AGame, LInput);
-  LEffectiveStartingFEN := Trim(AGame.GameTree.StartingFEN);
-  if LEffectiveStartingFEN = '' then
-    LEffectiveStartingFEN := LInput.StartingFEN;
-  LEffectiveResultText := Trim(AGame.GameTree.ResultText);
-  if LEffectiveResultText = '' then
-    LEffectiveResultText := LInput.ResultText;
+  LEffectiveStartingFEN := RunningTreeStartingFEN;
+  LEffectiveResultText := RunningTreeResultText;
   LEffectiveState := StateForTree(AGame.GameTree);
-  if AGame.GameTree.HasClockInfo then
-  begin
-    LWhiteRemainingSeconds := AGame.GameTree.WhiteRemainingSeconds;
-    LBlackRemainingSeconds := AGame.GameTree.BlackRemainingSeconds;
-    LWhiteUsedSeconds := AGame.GameTree.WhiteUsedSeconds;
-    LBlackUsedSeconds := AGame.GameTree.BlackUsedSeconds;
-  end
-  else
-  begin
-    LWhiteRemainingSeconds := LInput.WhiteRemainingSeconds;
-    LBlackRemainingSeconds := LInput.BlackRemainingSeconds;
-    LWhiteUsedSeconds := LInput.WhiteUsedSeconds;
-    LBlackUsedSeconds := LInput.BlackUsedSeconds;
-  end;
+  RunningTreeClockValues(LWhiteRemainingSeconds, LBlackRemainingSeconds,
+    LWhiteUsedSeconds, LBlackUsedSeconds);
 
   LPositionChanged := (FStartingFEN <> LEffectiveStartingFEN) or
     (FDisplayedAnnotationsSignature <> LEffectiveAnnotationsText) or
