@@ -172,10 +172,10 @@ type
     function IsEngineReservationActive: Boolean;
     function IsHumanToMove: Boolean;
     function ReservationSummary: string;
-    function SnapshotHasPlayedMoves: Boolean;
-    function SnapshotLastError: string;
-    function SnapshotResultText: string;
-    function SnapshotState: TGameOrchestratorState;
+    function HasPlayedMoves: Boolean;
+    function LastErrorText: string;
+    function ResultText: string;
+    function State: TGameOrchestratorState;
     procedure AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
     procedure AssignSetupTo(out ASetup: TGameSetup);
     procedure MarkSnapshotStopped(const AReason: string);
@@ -891,24 +891,24 @@ begin
     Result := 'none';
 end;
 
-function TRunningGame.SnapshotHasPlayedMoves: Boolean;
+function TRunningGame.HasPlayedMoves: Boolean;
 begin
   Result := Trim(FSnapshot.MovesPlayedText) <> '';
 end;
 
-function TRunningGame.SnapshotLastError: string;
+function TRunningGame.LastErrorText: string;
 begin
   Result := FSnapshot.LastError;
 end;
 
-function TRunningGame.SnapshotResultText: string;
+function TRunningGame.ResultText: string;
 begin
   Result := FSnapshot.GameResult;
   if Result = '' then
     Result := '*';
 end;
 
-function TRunningGame.SnapshotState: TGameOrchestratorState;
+function TRunningGame.State: TGameOrchestratorState;
 begin
   Result := FSnapshot.State;
 end;

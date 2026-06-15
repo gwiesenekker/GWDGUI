@@ -144,10 +144,10 @@ begin
     (ARow >= AGrid.RowCount) then
     Exit;
 
-  ResultText := AGame.SnapshotResultText;
+  ResultText := AGame.ResultText;
   AGrid.Cells[TournamentColResult, ARow] := ResultText;
-  if AGame.SnapshotState = gosError then
-    AGrid.Cells[TournamentColReason, ARow] := AGame.SnapshotLastError
+  if AGame.State = gosError then
+    AGrid.Cells[TournamentColReason, ARow] := AGame.LastErrorText
   else if ResultText = '*' then
     AGrid.Cells[TournamentColReason, ARow] := 'Unknown result'
   else if ResultText = '1-1' then
@@ -623,7 +623,7 @@ begin
     Exit;
   if not (AGame is TRunningGame) then
     Exit;
-  if not TRunningGame(AGame).SnapshotHasPlayedMoves then
+  if not TRunningGame(AGame).HasPlayedMoves then
     Exit;
   if not (Owner is TMainForm) then
     Exit;
@@ -1387,7 +1387,7 @@ begin
     begin
       if (AGame is TRunningGame) and
         (TRunningGame(AGame).Lifecycle = rglFinished) and
-        (TRunningGame(AGame).SnapshotState in [gosGameOver, gosError]) then
+        (TRunningGame(AGame).State in [gosGameOver, gosError]) then
       begin
         ApplyTournamentGameResultToRow(FGrid, RunningGame.Row,
           TRunningGame(AGame));
@@ -1523,7 +1523,7 @@ begin
     if Game.Lifecycle <> rglFinished then
       Continue;
 
-    if Game.SnapshotState in [gosGameOver, gosError] then
+    if Game.State in [gosGameOver, gosError] then
     begin
       ApplyTournamentGameResultToRow(FGrid, RunningGame.Row, Game);
       AppendTournamentGameToPdn(RunningGame, Game);
