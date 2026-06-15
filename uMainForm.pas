@@ -4723,6 +4723,12 @@ end;
 
 function TMainForm.RunningSnapshotSyncSignature(
   const AInput: TRunningSnapshotTreeInput): string;
+
+  function SecondsSignature(AValue: Double): string;
+  begin
+    Result := FormatFloat('0.000', AValue);
+  end;
+
 begin
   Result :=
     AInput.EventName + #10 +
@@ -4732,40 +4738,42 @@ begin
     AInput.StartingFEN + #10 +
     IntToStr(Ord(AInput.State)) + #10 +
     AInput.MovesText + #10 +
-    AInput.AnnotationsText;
-end;
-
-function TMainForm.RunningSnapshotDisplaySignature(AGame: TRunningGame;
-  const AInput: TRunningSnapshotTreeInput): string;
-
-  function SecondsSignature(AValue: Double): string;
-  begin
-    Result := FormatFloat('0.000', AValue);
-  end;
-
-begin
-  if AGame = nil then
-    Result := 'none'
-  else
-    Result := IntToStr(AGame.Id);
-  Result := Result + #10 +
-    AInput.WhiteName + #10 +
-    AInput.BlackName + #10 +
-    AInput.StartingFEN + #10 +
-    AInput.MovesText + #10 +
     AInput.AnnotationsText + #10 +
-    IntToStr(Ord(AInput.State)) + #10 +
-    AInput.ResultText + #10 +
-    IntToStr(Ord(AInput.CurrentSide)) + #10 +
-    AInput.PrincipalVariation + #10 +
-    AInput.PvScore + #10 +
-    AInput.PvDepth + #10 +
-    AInput.PvTimeText + #10 +
-    IntToStr(AInput.PvBasePly) + #10 +
     SecondsSignature(AInput.WhiteRemainingSeconds) + #10 +
     SecondsSignature(AInput.BlackRemainingSeconds) + #10 +
     SecondsSignature(AInput.WhiteUsedSeconds) + #10 +
     SecondsSignature(AInput.BlackUsedSeconds);
+end;
+
+function TMainForm.RunningSnapshotDisplaySignature(AGame: TRunningGame;
+  const AInput: TRunningSnapshotTreeInput): string;
+var
+  Actor: TGameTreeActor;
+  LRevision: Int64;
+  LShowStdout: Boolean;
+begin
+  LShowStdout := False;
+  if AGame = nil then
+    Result := 'none'
+  else
+  begin
+    Result := IntToStr(AGame.Id);
+    LShowStdout := AGame.ShowStdout;
+  end;
+  LRevision := -1;
+  if (AGame <> nil) and (AGame.GameTree <> nil) then
+  begin
+    Actor := ActorForGameTree(AGame.GameTree);
+    if Actor <> nil then
+      LRevision := Actor.Revision;
+    Result := Result + #10 +
+      'tree=' + IntToStr(AGame.GameTree.GameTreeId) + #10 +
+      'revision=' + IntToStr(LRevision);
+  end;
+  Result := Result + #10 +
+    IntToStr(Ord(AInput.State)) + #10 +
+    IntToStr(AInput.LogLineCount) + #10 +
+    BoolToStr(LShowStdout, True);
 end;
 
 function TMainForm.RunningDisplayTextState(AGame: TRunningGame;
