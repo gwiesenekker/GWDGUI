@@ -1745,13 +1745,18 @@ end;
 function TMainForm.CanAcceptHumanBoardMove: Boolean;
 var
   LGame: TRunningGame;
+  LInput: TRunningSnapshotTreeInput;
 begin
   if FGameBrowsePly >= 0 then
     Exit(False);
 
   LGame := SelectedDisplayedGame;
-  Result := (LGame <> nil) and (LGame.Runner <> nil) and
-    (LGame.Snapshot.State = gosRunning) and LGame.IsHumanToMove;
+  if LGame = nil then
+    Exit(False);
+
+  LInput := RunningSnapshotTreeInput(LGame, '');
+  Result := (LGame.Runner <> nil) and
+    (LInput.State = gosRunning) and LGame.IsHumanToMove;
 end;
 
 function TMainForm.HasLegalDisplayedMove: Boolean;
@@ -1760,9 +1765,14 @@ begin
 end;
 
 function TMainForm.CanStartAutoplayForGame(AGame: TRunningGame): Boolean;
+var
+  LInput: TRunningSnapshotTreeInput;
 begin
-  Result := (AGame = nil) or
-    (not (AGame.Snapshot.State in [gosWaiting, gosRunning]));
+  if AGame = nil then
+    Exit(True);
+
+  LInput := RunningSnapshotTreeInput(AGame, '');
+  Result := not (LInput.State in [gosWaiting, gosRunning]);
 end;
 
 function TMainForm.CanStartAutoplay: Boolean;
@@ -1780,6 +1790,7 @@ end;
 function TMainForm.CanExploreVariation: Boolean;
 var
   LGame: TRunningGame;
+  LInput: TRunningSnapshotTreeInput;
 begin
   Result := False;
   if FGameBrowsePly < 0 then
@@ -1787,8 +1798,11 @@ begin
 
   LGame := SelectedDisplayedGame;
   if LGame <> nil then
+  begin
+    LInput := RunningSnapshotTreeInput(LGame, '');
     Result := (LGame.Lifecycle = rglFinished) or
-      (LGame.Snapshot.State in [gosStopped, gosGameOver])
+      (LInput.State in [gosStopped, gosGameOver]);
+  end
   else
     Result := Trim(StartingFenForTree(ActiveGameTree)) <> '';
 end;
@@ -2359,6 +2373,7 @@ procedure TMainForm.PlayHumanMove(const AMove: string;
 var
   LBoard: TDraughtsBoard;
   LGame: TRunningGame;
+  LInput: TRunningSnapshotTreeInput;
   LGameTree: TGameTree;
   LMove: string;
 begin
@@ -2375,8 +2390,9 @@ begin
   end;
 
   LGame := SelectedDisplayedGame;
-  if (LGame <> nil) and
-    (LGame.Snapshot.State in [gosStopped, gosGameOver]) and
+  if LGame <> nil then
+    LInput := RunningSnapshotTreeInput(LGame, '');
+  if (LGame <> nil) and (LInput.State in [gosStopped, gosGameOver]) and
     (FGameBrowsePly < 0) then
   begin
     LGameTree := ActiveGameTree;
@@ -2395,7 +2411,7 @@ begin
   end;
 
   if (LGame <> nil) and (LGame.Runner <> nil) and
-    (LGame.Snapshot.State = gosRunning) and LGame.IsHumanToMove then
+    (LInput.State = gosRunning) and LGame.IsHumanToMove then
     LGame.Runner.PostHumanMove(LMove);
 end;
 
@@ -3940,10 +3956,14 @@ end;
 function TMainForm.StateForTree(AGameTree: TGameTree): TGameOrchestratorState;
 var
   LGame: TRunningGame;
+  LInput: TRunningSnapshotTreeInput;
 begin
   LGame := GameForTreeRefresh(AGameTree);
   if LGame <> nil then
-    Result := LGame.Snapshot.State
+  begin
+    LInput := RunningSnapshotTreeInput(LGame, '');
+    Result := LInput.State;
+  end
   else
     Result := FGameState;
 end;
@@ -5865,10 +5885,14 @@ end;
 procedure TMainForm.GamesPopupPopup(Sender: TObject);
 var
   LGame: TRunningGame;
+  LInput: TRunningSnapshotTreeInput;
 begin
   LGame := SelectedGame;
   if FShowStdoutMenuItem = nil then
     Exit;
+
+  if LGame <> nil then
+    LInput := RunningSnapshotTreeInput(LGame, '');
 
   FShowStdoutMenuItem.Enabled := LGame <> nil;
   FShowStdoutMenuItem.Checked := (LGame <> nil) and LGame.ShowStdout;
@@ -5876,8 +5900,10 @@ begin
     FReplayGameMenuItem.Enabled := LGame <> nil;
   if FPauseGameMenuItem <> nil then
   begin
-    FPauseGameMenuItem.Enabled := (LGame <> nil) and
-      (LGame.Snapshot.State in [gosWaiting, gosRunning]);
+    if LGame <> nil then
+      FPauseGameMenuItem.Enabled := LInput.State in [gosWaiting, gosRunning]
+    else
+      FPauseGameMenuItem.Enabled := False;
     if (LGame <> nil) and LGame.Paused then
       FPauseGameMenuItem.Caption := 'Resume game'
     else
@@ -6014,11 +6040,13 @@ end;
 procedure TMainForm.PauseGameClick(Sender: TObject);
 var
   LGame: TRunningGame;
+  LInput: TRunningSnapshotTreeInput;
 begin
   LGame := SelectedGame;
   if LGame = nil then
     Exit;
-  if not (LGame.Snapshot.State in [gosWaiting, gosRunning]) then
+  LInput := RunningSnapshotTreeInput(LGame, '');
+  if not (LInput.State in [gosWaiting, gosRunning]) then
     Exit;
 
   LGame.Paused := not LGame.Paused;
@@ -6294,6 +6322,7 @@ var
   EventObject: TObject;
   LGame: TRunningGame;
   LGameTree: TGameTree;
+  LInput: TRunningSnapshotTreeInput;
   PendingSnapshots: array of TPendingRunnerSnapshot;
   ProcessedEvents: Integer;
   RemoveAfterFinish: Boolean;
@@ -6387,8 +6416,9 @@ var
     UpdateRunningGameTreeFromSnapshot(LGame);
     if LGame.FLifecycle = rglStarting then
       LGame.FLifecycle := rglRunning;
+    LInput := RunningSnapshotTreeInput(LGame, '');
     if (LGame.FLifecycle in [rglStopRequested, rglRemoveRequested]) and
-      (LGame.Snapshot.State in [gosWaiting, gosRunning, gosError]) then
+      (LInput.State in [gosWaiting, gosRunning, gosError]) then
       LGame.Snapshot.MarkStopped(LGame.StopReason);
     if not FClosing then
     begin
@@ -7023,11 +7053,11 @@ begin
   if Pos(' vs ', LBaseTitle) = 0 then
     LBaseTitle := LBaseTitle + ' ' + LWhiteName + ' vs ' + LBlackName;
 
-  if AGame.Snapshot.State = gosGameOver then
+  if LInput.State = gosGameOver then
     LCaption := LBaseTitle + ' - ' + LResultText
   else
     LCaption := LBaseTitle + ' - ' +
-      OrchestratorStateToString(AGame.Snapshot.State);
+      OrchestratorStateToString(LInput.State);
   case AGame.Lifecycle of
     rglStarting:
       LCaption := LBaseTitle + ' - ' +
@@ -7042,7 +7072,7 @@ begin
       LCaption := LCaption + ' (' +
         RunningGameLifecycleToString(AGame.Lifecycle) + ')';
   end;
-  if AGame.Paused and (AGame.Snapshot.State in [gosWaiting, gosRunning]) then
+  if AGame.Paused and (LInput.State in [gosWaiting, gosRunning]) then
     LCaption := LCaption + ' (paused)';
   LCaption := LCaption + ' - ' + IntToStr(AGame.Snapshot.PlyCount) + ' plies';
   if AGame.FListCaption = LCaption then
