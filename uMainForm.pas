@@ -464,6 +464,9 @@ type
       AScore, ADepth, ATimeText: string): Boolean;
     procedure RefreshMainPvBrowserFromTree(AGameTree: TGameTree;
       const AStartingFEN: string = '');
+    procedure SetDisplayedTreeTracking(const AAnnotationsSignature,
+      AMovesSignature, ASnapshotSignature: string; AGameTreeId,
+      AGameTreeRevision: Int64);
     procedure SetDisplayedPvCache(const APV, AScore, ADepth,
       ATimeText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer);
     procedure ClearDisplayedPvCache(ABaseBoard: TDraughtsBoard;
@@ -938,9 +941,7 @@ begin
   FGameLogSourceShowStdout := False;
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
-  FDisplayedAnnotationsSignature := '';
-  FDisplayedGameTreeId := 0;
-  FDisplayedGameTreeRevision := -1;
+  SetDisplayedTreeTracking('', '', '', 0, -1);
   FHighlightedGameMovePly := -1;
   FHideMoveAnnotations := False;
   FMoveShowEnginePVMove := False;
@@ -3276,11 +3277,7 @@ begin
   FGameState := gosWaiting;
   FGameResult := '*';
   FStartingFEN := FBoard.StartingFEN;
-  FDisplayedAnnotationsSignature := '';
-  FDisplayedMovesSignature := '';
-  FDisplayedSnapshotSignature := '';
-  FDisplayedGameTreeId := 0;
-  FDisplayedGameTreeRevision := -1;
+  SetDisplayedTreeTracking('', '', '', 0, -1);
   ClearStoredTreeVariations(FGameTree);
   FStandaloneWhitePlayerName := 'White';
   FStandaloneBlackPlayerName := 'Black';
@@ -3459,11 +3456,8 @@ begin
     if Trim(FGameResult) = '' then
     FGameResult := '*';
     FStartingFEN := AGame.StartingFEN;
-    FDisplayedAnnotationsSignature := AGame.MoveAnnotationsText;
-    FDisplayedMovesSignature := AGame.MovesText;
-    FDisplayedSnapshotSignature := '';
-    FDisplayedGameTreeId := 0;
-    FDisplayedGameTreeRevision := -1;
+    SetDisplayedTreeTracking(AGame.MoveAnnotationsText, AGame.MovesText,
+      '', 0, -1);
     LoadTreeVariationsFromLegacyText(FGameTree, AGame.MoveVariationsText,
       AGame.MoveVariationAnnotationsText);
     FStandaloneWhitePlayerName := PlayerNameOrFallback(AGame.WhiteName, 'White');
@@ -4139,6 +4133,17 @@ begin
     LPvScore, LPvDepth, LPvTimeText);
   FPvBrowser.SetData(LPvBaseBoard, LPvBasePly, LStartingFEN, LPvText,
     LPvScore, LPvDepth, LPvTimeText);
+end;
+
+procedure TMainForm.SetDisplayedTreeTracking(const AAnnotationsSignature,
+  AMovesSignature, ASnapshotSignature: string; AGameTreeId,
+  AGameTreeRevision: Int64);
+begin
+  FDisplayedAnnotationsSignature := AAnnotationsSignature;
+  FDisplayedMovesSignature := AMovesSignature;
+  FDisplayedSnapshotSignature := ASnapshotSignature;
+  FDisplayedGameTreeId := AGameTreeId;
+  FDisplayedGameTreeRevision := AGameTreeRevision;
 end;
 
 procedure TMainForm.SetDisplayedPvCache(const APV, AScore, ADepth,
@@ -4933,11 +4938,7 @@ begin
     ClearHumanMoveSelection;
     FGameActive := False;
     FGameResult := '*';
-    FDisplayedAnnotationsSignature := '';
-    FDisplayedMovesSignature := '';
-    FDisplayedSnapshotSignature := '';
-    FDisplayedGameTreeId := 0;
-    FDisplayedGameTreeRevision := -1;
+    SetDisplayedTreeTracking('', '', '', 0, -1);
     ClearStoredTreeVariations(FGameTree);
     FStandaloneWhitePlayerName := 'White';
     FStandaloneBlackPlayerName := 'Black';
@@ -4961,10 +4962,7 @@ begin
     ClearHumanMoveSelection;
     FViewedGameId := AGame.Id;
     FGameBrowsePly := -1;
-    FDisplayedAnnotationsSignature := '';
-    FDisplayedSnapshotSignature := '';
-    FDisplayedGameTreeId := 0;
-    FDisplayedGameTreeRevision := -1;
+    SetDisplayedTreeTracking('', FDisplayedMovesSignature, '', 0, -1);
     ClearStoredTreeVariations(AGame.GameTree);
   end;
 
@@ -6049,10 +6047,7 @@ begin
   ClearHumanMoveSelection;
   FBoard.LoadFromFEN(ASetup.StartingFEN);
   FStartingFEN := ASetup.StartingFEN;
-  FDisplayedAnnotationsSignature := '';
-  FDisplayedMovesSignature := '';
-  FDisplayedGameTreeId := 0;
-  FDisplayedGameTreeRevision := -1;
+  SetDisplayedTreeTracking('', '', '', 0, -1);
   ClearStoredTreeVariations(Result.GameTree);
   FGameBrowsePly := -1;
   FWhiteRemainingSeconds := ASetup.TimeControl.MinutesPerPeriod * 60;
@@ -6063,10 +6058,6 @@ begin
   FGameResult := '*';
   ClearDisplayedPvCache(FBoard, 0);
   FGameActive := True;
-  FDisplayedAnnotationsSignature := '';
-  FDisplayedSnapshotSignature := '';
-  FDisplayedGameTreeId := 0;
-  FDisplayedGameTreeRevision := -1;
   FBoardControl.Board := FBoard;
   UpdateMiniBoardFromBoard(FBoard);
   FGameLogMemo.Clear;
