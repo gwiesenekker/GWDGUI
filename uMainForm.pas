@@ -54,6 +54,16 @@ type
     TimeControl: TTimeControl;
   end;
 
+  TRunningDisplayTextState = record
+    TreeMovesText: string;
+    TreeAnnotationsText: string;
+    EffectiveMovesText: string;
+    EffectiveAnnotationsText: string;
+    SnapshotAnnotationsEmpty: Boolean;
+    TreeMovesMatchSnapshot: Boolean;
+    TreeExtendsSnapshot: Boolean;
+  end;
+
   TRunnerSnapshotGuiMessage = class(TThreadMessage)
   private
     FGameId: Integer;
@@ -467,6 +477,8 @@ type
       const AInput: TRunningSnapshotTreeInput): string;
     function RunningSnapshotDisplaySignature(AGame: TRunningGame;
       const AInput: TRunningSnapshotTreeInput): string;
+    function RunningDisplayTextState(AGame: TRunningGame;
+      const AInput: TRunningSnapshotTreeInput): TRunningDisplayTextState;
     procedure InitializeRunningGameTree(AGame: TRunningGame);
     procedure UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
       const AEventName: string = '');
@@ -4719,6 +4731,31 @@ begin
     SecondsSignature(AInput.BlackUsedSeconds);
 end;
 
+function TMainForm.RunningDisplayTextState(AGame: TRunningGame;
+  const AInput: TRunningSnapshotTreeInput): TRunningDisplayTextState;
+begin
+  Result.TreeMovesText := '';
+  Result.TreeAnnotationsText := '';
+  Result.EffectiveMovesText := AInput.MovesText;
+  Result.EffectiveAnnotationsText := AInput.AnnotationsText;
+  Result.SnapshotAnnotationsEmpty := Trim(AInput.AnnotationsText) = '';
+  Result.TreeMovesMatchSnapshot := False;
+  Result.TreeExtendsSnapshot := False;
+  if (AGame = nil) or (AGame.GameTree = nil) then
+    Exit;
+
+  Result.TreeMovesText := GameTreeMainlineMovesText(AGame.GameTree);
+  Result.TreeAnnotationsText := GameTreeScoreAnnotationsText(AGame.GameTree);
+  Result.TreeMovesMatchSnapshot :=
+    Trim(Result.TreeMovesText) = Trim(AInput.MovesText);
+  Result.TreeExtendsSnapshot := RunningGameTreeExtendsSnapshot(AGame, AInput);
+  if Result.TreeExtendsSnapshot then
+    Result.EffectiveMovesText := Result.TreeMovesText;
+  if Result.SnapshotAnnotationsEmpty and Result.TreeMovesMatchSnapshot and
+    (Trim(Result.TreeAnnotationsText) <> '') then
+    Result.EffectiveAnnotationsText := Result.TreeAnnotationsText;
+end;
+
 procedure TMainForm.InitializeRunningGameTree(AGame: TRunningGame);
 var
   Actor: TGameTreeActor;
@@ -5288,12 +5325,6 @@ var
   LPositionChanged: Boolean;
   LPvChanged: Boolean;
   LSnapshotSignature: string;
-  LSnapshotAnnotationsEmpty: Boolean;
-  LSnapshotAnnotationsText: string;
-  LTreeAnnotationsText: string;
-  LTreeExtendsSnapshot: Boolean;
-  LTreeMovesMatchSnapshot: Boolean;
-  LTreeMovesText: string;
   LEffectiveMovesText: string;
   LEffectivePV: string;
   LEffectivePvBasePly: Integer;
@@ -5308,6 +5339,7 @@ var
   LPvScore: string;
   LPvText: string;
   LPvTimeText: string;
+  LTextState: TRunningDisplayTextState;
 
   procedure UpdateDisplayedGameLog;
   var
@@ -5384,22 +5416,9 @@ begin
   end;
   FDisplayedSnapshotSignature := LSnapshotSignature;
 
-  LTreeMovesText := GameTreeMainlineMovesText(AGame.GameTree);
-  LTreeAnnotationsText := GameTreeScoreAnnotationsText(AGame.GameTree);
-  LSnapshotAnnotationsText := LInput.AnnotationsText;
-  LSnapshotAnnotationsEmpty := Trim(LSnapshotAnnotationsText) = '';
-  LTreeMovesMatchSnapshot :=
-    Trim(LTreeMovesText) = Trim(LInput.MovesText);
-  LTreeExtendsSnapshot := RunningGameTreeExtendsSnapshot(AGame, LInput);
-  if LTreeExtendsSnapshot then
-    LEffectiveMovesText := LTreeMovesText
-  else
-    LEffectiveMovesText := LInput.MovesText;
-  if LSnapshotAnnotationsEmpty and LTreeMovesMatchSnapshot and
-    (Trim(LTreeAnnotationsText) <> '') then
-    LEffectiveAnnotationsText := LTreeAnnotationsText
-  else
-    LEffectiveAnnotationsText := LSnapshotAnnotationsText;
+  LTextState := RunningDisplayTextState(AGame, LInput);
+  LEffectiveMovesText := LTextState.EffectiveMovesText;
+  LEffectiveAnnotationsText := LTextState.EffectiveAnnotationsText;
   LEffectivePV := LInput.PrincipalVariation;
   LEffectivePvBasePly := LInput.PvBasePly;
   if LInput.PvBaseBoard <> nil then
@@ -5462,10 +5481,10 @@ begin
 
   if LInput.Board <> nil then
     UpdateMiniBoardFromBoard(LInput.Board);
-  if LTreeExtendsSnapshot then
+  if LTextState.TreeExtendsSnapshot then
   begin
-    FDisplayedAnnotationsSignature := LTreeAnnotationsText;
-    FDisplayedMovesSignature := LTreeMovesText
+    FDisplayedAnnotationsSignature := LTextState.TreeAnnotationsText;
+    FDisplayedMovesSignature := LTextState.TreeMovesText
   end
   else
   begin
@@ -5477,8 +5496,9 @@ begin
     FGameBrowsePly := -1;
   UpdateBoardFromBrowseState(AGame.GameTree);
   RefreshDisplayedGameTreeViews(AGame.GameTree, False);
-  if LSnapshotAnnotationsEmpty and LTreeMovesMatchSnapshot and
-    (Trim(LTreeAnnotationsText) <> '') then
+  if LTextState.SnapshotAnnotationsEmpty and
+    LTextState.TreeMovesMatchSnapshot and
+    (Trim(LTextState.TreeAnnotationsText) <> '') then
     UpdateScoreHistory(AGame.GameTree);
   UpdateBoardInfo;
 end;
