@@ -936,16 +936,8 @@ begin
     CheckSynchronize(50);
     if GetTickCount64 - LastWarningTick >= RunnerReleaseWarningMs then
     begin
-      if FGameTree <> nil then
-      begin
-        LState := FGameTree.GameState;
-        LPlyCount := FGameTree.MainlineCount;
-      end
-      else
-      begin
-        LState := FSnapshot.State;
-        LPlyCount := FSnapshot.PlyCount;
-      end;
+      LState := FGameTree.GameState;
+      LPlyCount := FGameTree.MainlineCount;
       WarningText := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
         ' [gui] waiting for runner shutdown; game_id=' + IntToStr(FId) +
         '; title=' + FTitle +
@@ -970,11 +962,8 @@ function TRunningGame.IsHumanToMove: Boolean;
 var
   LCurrentSide: TDraughtsSide;
 begin
-  if FGameTree <> nil then
-    LCurrentSide := SideToMoveAfterPly(FGameTree.StartingFEN,
-      FGameTree.MainlineCount)
-  else
-    LCurrentSide := FSnapshot.CurrentSide;
+  LCurrentSide := SideToMoveAfterPly(FGameTree.StartingFEN,
+    FGameTree.MainlineCount);
 
   if LCurrentSide = dsBlack then
     Result := FBlackPlayerKind = pkHuman
@@ -991,10 +980,7 @@ end;
 
 function TRunningGame.HasPlayedMoves: Boolean;
 begin
-  if FGameTree <> nil then
-    Result := FGameTree.MainlineCount > 0
-  else
-    Result := Trim(FSnapshot.MovesPlayedText) <> '';
+  Result := FGameTree.MainlineCount > 0;
 end;
 
 function TRunningGame.InitialClockSeconds: Double;
@@ -1024,10 +1010,7 @@ end;
 
 function TRunningGame.ResultText: string;
 begin
-  if FGameTree <> nil then
-    Result := Trim(FGameTree.ResultText)
-  else
-    Result := FSnapshot.GameResult;
+  Result := Trim(FGameTree.ResultText);
   if Result = '' then
     Result := '*';
 end;
@@ -1051,10 +1034,7 @@ end;
 
 function TRunningGame.State: TGameOrchestratorState;
 begin
-  if FGameTree <> nil then
-    Result := FGameTree.GameState
-  else
-    Result := FSnapshot.State;
+  Result := FGameTree.GameState;
 end;
 
 procedure TRunningGame.AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
