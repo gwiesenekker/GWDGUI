@@ -184,12 +184,14 @@ type
     function IsStopOrRemoveRequested: Boolean;
     function IsTournamentGame: Boolean;
     function ListCaptionMatches(const ACaption: string): Boolean;
+    function BlackNameText: string;
     function LastErrorText: string;
     function ResultText: string;
     function SetupTimeControl: TTimeControl;
     function SnapshotPvSignatureMatches(const ASignature: string): Boolean;
     function SnapshotSyncSignatureMatches(const ASignature: string): Boolean;
     function State: TGameOrchestratorState;
+    function WhiteNameText: string;
     procedure AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
     procedure AssignSetupTo(out ASetup: TGameSetup);
     procedure AddReservationKeysTo(AKeys: TStrings);
@@ -988,6 +990,15 @@ begin
   Result := FListCaption = ACaption;
 end;
 
+function TRunningGame.BlackNameText: string;
+begin
+  Result := Trim(FGameTree.BlackName);
+  if Result = '' then
+    Result := Trim(FBlackDisplayName);
+  if Result = '' then
+    Result := 'Black';
+end;
+
 function TRunningGame.LastErrorText: string;
 begin
   Result := Trim(FGameTree.StatusText);
@@ -1022,6 +1033,15 @@ end;
 function TRunningGame.State: TGameOrchestratorState;
 begin
   Result := FGameTree.GameState;
+end;
+
+function TRunningGame.WhiteNameText: string;
+begin
+  Result := Trim(FGameTree.WhiteName);
+  if Result = '' then
+    Result := Trim(FWhiteDisplayName);
+  if Result = '' then
+    Result := 'White';
 end;
 
 procedure TRunningGame.AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
@@ -6409,10 +6429,8 @@ begin
 
   Game := TPdnGame.Create;
   try
-    Game.WhiteName := PlayerNameOrFallback(Trim(AGame.GameTree.WhiteName),
-      AGame.WhiteDisplayName);
-    Game.BlackName := PlayerNameOrFallback(Trim(AGame.GameTree.BlackName),
-      AGame.BlackDisplayName);
+    Game.WhiteName := AGame.WhiteNameText;
+    Game.BlackName := AGame.BlackNameText;
     Game.EventName := PlayerNameOrFallback(AEventName,
       EventNameForTree(AGame.GameTree));
     Game.ResultText := AGame.ResultText;
@@ -7384,10 +7402,8 @@ begin
   if (AGame = nil) or (FGamesListBox = nil) then
     Exit;
 
-  LWhiteName := PlayerNameOrFallback(Trim(AGame.GameTree.WhiteName),
-    AGame.WhiteDisplayName);
-  LBlackName := PlayerNameOrFallback(Trim(AGame.GameTree.BlackName),
-    AGame.BlackDisplayName);
+  LWhiteName := AGame.WhiteNameText;
+  LBlackName := AGame.BlackNameText;
   LResultText := AGame.ResultText;
   LState := AGame.State;
   if AGame.GameTree <> nil then
