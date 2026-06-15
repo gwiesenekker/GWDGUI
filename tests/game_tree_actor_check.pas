@@ -668,6 +668,80 @@ begin
   end;
 end;
 
+procedure CheckSearchAnswerRejectedAfterTargetRebuild;
+var
+  Actor: TGameTreeActor;
+  DoneCommand: TGameTreeCommand;
+  Moves: TStringList;
+  RebuildCommand: TGameTreeCommand;
+  ResultMove: string;
+  ResultNodeId: Int64;
+  Search: TGameTreeSearchRef;
+  StartCommand: TGameTreeCommand;
+  State: TGameTreeSearchState;
+begin
+  Actor := TGameTreeActor.Create;
+  Moves := TStringList.Create;
+  try
+    Actor.GameTree.BeginRebuild('search-rebuild', 'Event', 'White', 'Black',
+      '*', 'W:W31-50:B1-20');
+    Actor.GameTree.RecordMainlineMove(1, '32-28');
+
+    StartCommand := Actor.CreateStartSearchCommand(
+      Actor.GameTree.MainlineNode[1].NodeId, Search);
+    try
+      Actor.ExecuteCommand(StartCommand);
+      Check(StartCommand.Accepted,
+        'start-search before target rebuild should be accepted');
+      Check(Actor.SearchState(Search, State),
+        'search before target rebuild should exist');
+      Check(State = gssActive,
+        'search before target rebuild should be active');
+    finally
+      StartCommand.Free;
+    end;
+
+    Moves.Add('31-27');
+    RebuildCommand := Actor.CreateRebuildFromInputsCommand(
+      GameTreeHeaderInput('search-rebuild-different', 'Event', 'White',
+        'Black', '*', 'W:W31-50:B1-20', False, DefaultTimeControl),
+      GameTreeMainlineInput(Moves, nil, False, 0, 0, 0, 0),
+      GameTreePvInput(False, 0, '', ''),
+      GameTreePvInput(False, 0, '', ''));
+    try
+      Actor.ExecuteCommand(RebuildCommand);
+      Check(RebuildCommand.Accepted,
+        'rebuild replacing searched target should be accepted');
+      Check(RebuildCommand.TreeChanged,
+        'rebuild replacing searched target should report tree change');
+    finally
+      RebuildCommand.Free;
+    end;
+
+    DoneCommand := Actor.CreateSearchDoneCommand(Search, '18-23');
+    try
+      Actor.ExecuteCommand(DoneCommand);
+      Check(not DoneCommand.Accepted,
+        'search answer for rebuilt-away target should be rejected');
+      Check(Actor.SearchState(Search, State),
+        'failed search should remain queryable');
+      Check(State = gssFailed,
+        'search answer for rebuilt-away target should mark search failed');
+      Check(not Actor.SearchResult(Search, ResultNodeId, ResultMove),
+        'failed search should not expose a result move');
+      Check(Actor.GameTree.MainlineCount = 1,
+        'rejected stale search answer should not append to tree');
+      Check(Actor.GameTree.MainlineNode[1].MoveText = '31-27',
+        'rejected stale search answer should preserve rebuilt mainline');
+    finally
+      DoneCommand.Free;
+    end;
+  finally
+    Moves.Free;
+    Actor.Free;
+  end;
+end;
+
 procedure CheckAnnotatorPvCommand;
 var
   Actor: TGameTreeActor;
@@ -1219,6 +1293,7 @@ begin
   CheckActorCommands;
   CheckQueuedActorCommands;
   CheckSearchLifecycle;
+  CheckSearchAnswerRejectedAfterTargetRebuild;
   CheckAnnotatorPvCommand;
   CheckStoreSearchMoveVariationCommand;
   CheckStoreMoveVariationCommand;
