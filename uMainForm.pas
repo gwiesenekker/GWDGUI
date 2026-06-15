@@ -1998,7 +1998,7 @@ begin
   if LGame = nil then
     Exit(False);
 
-  LState := StateForTree(LGame.GameTree);
+  LState := LGame.State;
   Result := (LGame.Runner <> nil) and
     (LState = gosRunning) and LGame.IsHumanToMove;
 end;
@@ -2016,7 +2016,7 @@ begin
   if AGame = nil then
     Exit(True);
 
-  Result := not (StateForTree(AGame.GameTree) in [gosWaiting, gosRunning]);
+  Result := not (AGame.State in [gosWaiting, gosRunning]);
 end;
 
 function TMainForm.CanStartAutoplay: Boolean;
@@ -2043,7 +2043,7 @@ begin
   if LGame <> nil then
   begin
     Result := (LGame.Lifecycle = rglFinished) or
-      (StateForTree(LGame.GameTree) in [gosStopped, gosGameOver]);
+      (LGame.State in [gosStopped, gosGameOver]);
   end
   else
     Result := Trim(StartingFenForTree(ActiveGameTree)) <> '';
@@ -2709,7 +2709,7 @@ begin
 
   LGame := SelectedDisplayedGame;
   if LGame <> nil then
-    LState := StateForTree(LGame.GameTree)
+    LState := LGame.State
   else
     LState := FGameState;
   if (LGame <> nil) and (LState in [gosStopped, gosGameOver]) and
@@ -4879,7 +4879,7 @@ begin
     'tree=' + IntToStr(AGame.GameTree.GameTreeId) + #10 +
     'revision=' + IntToStr(LRevision);
   Result := Result + #10 +
-    IntToStr(Ord(StateForTree(AGame.GameTree))) + #10 +
+    IntToStr(Ord(AGame.State)) + #10 +
     IntToStr(ALogLineCount) + #10 +
     BoolToStr(AGame.ShowStdout, True);
 end;
@@ -5471,8 +5471,8 @@ begin
   else
     LPvBasePositionKey := '';
   LEffectiveStartingFEN := StartingFenForTree(AGame.GameTree);
-  LEffectiveResultText := ResultForTree(AGame.GameTree);
-  LEffectiveState := StateForTree(AGame.GameTree);
+  LEffectiveResultText := AGame.ResultText;
+  LEffectiveState := AGame.State;
   ClockValuesForTree(AGame.GameTree, LWhiteRemainingSeconds,
     LBlackRemainingSeconds, LWhiteUsedSeconds, LBlackUsedSeconds);
 
@@ -6210,7 +6210,7 @@ begin
     Exit;
 
   if LGame <> nil then
-    LState := StateForTree(LGame.GameTree)
+    LState := LGame.State
   else
     LState := gosWaiting;
 
@@ -6370,7 +6370,7 @@ begin
   LGame := SelectedGame;
   if LGame = nil then
     Exit;
-  if not (StateForTree(LGame.GameTree) in [gosWaiting, gosRunning]) then
+  if not (LGame.State in [gosWaiting, gosRunning]) then
     Exit;
 
   LGame.Paused := not LGame.Paused;
@@ -6415,7 +6415,7 @@ begin
       AGame.BlackDisplayName);
     Game.EventName := PlayerNameOrFallback(AEventName,
       EventNameForTree(AGame.GameTree));
-    Game.ResultText := ResultForTree(AGame.GameTree);
+    Game.ResultText := AGame.ResultText;
     Game.StartingFEN := StartingFenForTree(AGame.GameTree);
     Game.MovesText := GameTreeMainlineMovesText(AGame.GameTree);
     Game.MoveAnnotationsText := GameTreeScoreAnnotationsText(AGame.GameTree);
@@ -7090,7 +7090,7 @@ begin
           PendingText += '; ';
         PendingText += '#' + IntToStr(LGame.Id) + ' ' + LGame.Title +
           ' [lifecycle=' + RunningGameLifecycleToString(LGame.Lifecycle) +
-          ', state=' + OrchestratorStateToString(StateForTree(LGame.GameTree)) +
+          ', state=' + OrchestratorStateToString(LGame.State) +
           ', plies=' + IntToStr(LPlyCount) +
           ', reservations=' + LGame.ReservationSummary + ']';
       end;
@@ -7388,8 +7388,8 @@ begin
     AGame.WhiteDisplayName);
   LBlackName := PlayerNameOrFallback(Trim(AGame.GameTree.BlackName),
     AGame.BlackDisplayName);
-  LResultText := ResultForTree(AGame.GameTree);
-  LState := StateForTree(AGame.GameTree);
+  LResultText := AGame.ResultText;
+  LState := AGame.State;
   if AGame.GameTree <> nil then
     LPlyCount := AGame.GameTree.MainlineCount
   else
