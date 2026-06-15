@@ -5,7 +5,7 @@ unit uScoreHistoryControl;
 interface
 
 uses
-  Classes, Controls, Forms, Graphics, LMessages, SysUtils, uDraughtsBoard,
+  Classes, Controls, Forms, Graphics, LMessages, SysUtils, Types, uDraughtsBoard,
   uPdn, uPreferences;
 
 type
@@ -21,6 +21,8 @@ type
     FStartingSide: TDraughtsSide;
     function BarPenWidth(APlotWidth, ACount: Integer): Integer;
     function ChartBounds(out APlotLeft, APlotRight: Integer): Boolean;
+    function LayoutBounds(out ABarRect, AChartRect: TRect;
+      out ADrawEvaluationBar: Boolean): Boolean;
     procedure DrawDenseMissingScoreMark(AX, AMidY, AHalfHeight: Integer;
       AColor: TColor);
     procedure DrawMissingScoreRect(ALeft, AMidY, AHalfHeight, AWidth: Integer;
@@ -87,7 +89,7 @@ function TryExtractScoreFromAnnotation(const AAnnotation: string;
 implementation
 
 uses
-  Math, Types;
+  Math;
 
 function TryExtractScoreFromAnnotation(const AAnnotation: string;
   out AScore: Double): Boolean;
@@ -164,30 +166,45 @@ end;
 function TScoreHistoryControl.ChartBounds(out APlotLeft,
   APlotRight: Integer): Boolean;
 var
-  ChartLeft: Integer;
-  ChartRight: Integer;
+  BarRect: TRect;
+  ChartRect: TRect;
+  DrawEvaluationBar: Boolean;
 begin
   Result := False;
   APlotLeft := 0;
   APlotRight := 0;
-  if (Width < 80) or (Height < 34) then
-    Exit;
-  if FShowEvaluationBar then
-  begin
-    ChartLeft := 42;
-    ChartRight := Width - 8;
-  end
-  else
-  begin
-    ChartLeft := 8;
-    ChartRight := Width - 8;
-  end;
-  if ChartRight <= ChartLeft + 12 then
+  if not LayoutBounds(BarRect, ChartRect, DrawEvaluationBar) then
     Exit;
 
-  APlotLeft := ChartLeft + 3;
-  APlotRight := ChartRight - 3;
+  APlotLeft := ChartRect.Left + 3;
+  APlotRight := ChartRect.Right - 3;
   Result := APlotRight >= APlotLeft;
+end;
+
+function TScoreHistoryControl.LayoutBounds(out ABarRect, AChartRect: TRect;
+  out ADrawEvaluationBar: Boolean): Boolean;
+begin
+  Result := False;
+  ADrawEvaluationBar := False;
+  ABarRect := Types.Rect(0, 0, 0, 0);
+  AChartRect := Types.Rect(0, 0, 0, 0);
+  if (Width < 40) or (Height < 34) then
+    Exit;
+
+  if FShowEvaluationBar then
+  begin
+    ABarRect := Types.Rect(8, 6, 30, Height - 6);
+    AChartRect := Types.Rect(42, 6, Width - 8, Height - 6);
+    ADrawEvaluationBar := AChartRect.Right > AChartRect.Left + 12;
+  end;
+
+  if not ADrawEvaluationBar then
+  begin
+    ABarRect := Types.Rect(0, 0, 0, 0);
+    AChartRect := Types.Rect(8, 6, Width - 8, Height - 6);
+  end;
+
+  Result := AChartRect.Right > AChartRect.Left + 12;
 end;
 
 procedure TScoreHistoryControl.CMMouseLeave(var Message: TLMessage);
@@ -368,6 +385,7 @@ var
   ChartRect: TRect;
   Count: Integer;
   DenseMode: Boolean;
+  DrawEvaluationBar: Boolean;
   DrawnDenseScore: Boolean;
   HasAnnotatorScore: Boolean;
   HasEngineScore: Boolean;
@@ -402,25 +420,12 @@ begin
   try
     Lines.Text := FAnnotationsText;
 
-    if (Width < 80) or (Height < 34) then
-      Exit;
-
-    if FShowEvaluationBar then
-    begin
-      BarRect := Types.Rect(8, 6, 30, Height - 6);
-      ChartRect := Types.Rect(42, 6, Width - 8, Height - 6);
-    end
-    else
-    begin
-      BarRect := Types.Rect(0, 0, 0, 0);
-      ChartRect := Types.Rect(8, 6, Width - 8, Height - 6);
-    end;
-    if ChartRect.Right <= ChartRect.Left + 12 then
+    if not LayoutBounds(BarRect, ChartRect, DrawEvaluationBar) then
       Exit;
 
     Canvas.Pen.Color := clSilver;
     Canvas.Brush.Style := bsClear;
-    if FShowEvaluationBar then
+    if DrawEvaluationBar then
       Canvas.Rectangle(BarRect);
     Canvas.Rectangle(ChartRect);
     MidY := (ChartRect.Top + ChartRect.Bottom) div 2;
@@ -432,7 +437,7 @@ begin
       HasVisibleScore := TryVisibleAnnotatorScoreInLines(Lines, BarScore);
     if not HasVisibleScore then
       BarScore := 0.0;
-    if FShowEvaluationBar then
+    if DrawEvaluationBar then
     begin
       InnerBarRect := Types.Rect(BarRect.Left + 1, BarRect.Top + 1,
         BarRect.Right, BarRect.Bottom);
