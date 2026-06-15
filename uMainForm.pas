@@ -907,6 +907,8 @@ const
   RunnerReleaseWarningMs = 10000;
 var
   LastWarningTick: QWord;
+  LPlyCount: Integer;
+  LState: TGameOrchestratorState;
   WarningText: string;
 begin
   if FRunner = nil then
@@ -918,12 +920,22 @@ begin
     CheckSynchronize(50);
     if GetTickCount64 - LastWarningTick >= RunnerReleaseWarningMs then
     begin
+      if FGameTree <> nil then
+      begin
+        LState := FGameTree.GameState;
+        LPlyCount := FGameTree.MainlineCount;
+      end
+      else
+      begin
+        LState := FSnapshot.State;
+        LPlyCount := FSnapshot.PlyCount;
+      end;
       WarningText := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
         ' [gui] waiting for runner shutdown; game_id=' + IntToStr(FId) +
         '; title=' + FTitle +
         '; lifecycle=' + RunningGameLifecycleToString(FLifecycle) +
-        '; state=' + OrchestratorStateToString(FSnapshot.State) +
-        '; plies=' + IntToStr(FSnapshot.PlyCount) +
+        '; state=' + OrchestratorStateToString(LState) +
+        '; plies=' + IntToStr(LPlyCount) +
         '; reservations=' + ReservationSummary;
       FSnapshot.LogLines.Add(WarningText);
       WriteLn(WarningText);
