@@ -673,7 +673,9 @@ type
       AGameTree: TGameTree; AApplyResult: Boolean = True): Boolean;
     procedure UpdateBrowseInfo;
     procedure UpdateBoardInfo;
-    procedure UpdateDatabaseSearchPosition(ABoard: TDraughtsBoard);
+    procedure UpdateDatabaseSearchPositionFromTree(AGameTree: TGameTree);
+    function TryGetDisplayedBoardFen(AGameTree: TGameTree;
+      out AFen: string): Boolean;
     procedure UpdateBoardFromBrowseState(AGameTree: TGameTree);
     procedure UpdateBoardHighlights(AGameTree: TGameTree);
     function DisplayedBoardInfo(AGameTree: TGameTree;
@@ -3154,7 +3156,7 @@ begin
   UpdateBoardHighlights(ActiveGameTree);
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
-  UpdateDatabaseSearchPosition(FBoard);
+  UpdateDatabaseSearchPositionFromTree(ActiveGameTree);
 end;
 
 procedure TMainForm.AnalyzerPopupPopup(Sender: TObject);
@@ -5484,7 +5486,7 @@ begin
 
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
-  UpdateDatabaseSearchPosition(ActiveBoard);
+  UpdateDatabaseSearchPositionFromTree(AGameTree);
 end;
 
 procedure TMainForm.ApplyGameBrowsePly(APly: Integer);
@@ -6431,9 +6433,8 @@ end;
 procedure TMainForm.CreateDatabaseClick(Sender: TObject);
 var
   Dialog: TSaveDialog;
-  LBoard: TDraughtsBoard;
+  LFen: string;
 begin
-  LBoard := ActiveBoard;
   Dialog := TSaveDialog.Create(Self);
   try
     Dialog.Title := 'Create database';
@@ -6449,11 +6450,11 @@ begin
       FDatabaseForm.OnGameSelected := @PdnGameSelected;
       FDatabaseForm.ApplyPreferences(FPreferences);
       FDatabaseForm.CreateDatabase(Dialog.FileName);
-      if LBoard <> nil then
-        FDatabaseForm.SetSearchFEN(LBoard.CurrentFEN);
+      if TryGetDisplayedBoardFen(ActiveGameTree, LFen) then
+        FDatabaseForm.SetSearchFEN(LFen);
       FLastDatabaseSearchFEN := '';
       ShowFormCenteredOnOwner(FDatabaseForm, Self);
-      UpdateDatabaseSearchPosition(LBoard);
+      UpdateDatabaseSearchPositionFromTree(ActiveGameTree);
     except
       on E: Exception do
         ShowGuiOkDialog(Self, 'Create database',
@@ -6467,9 +6468,8 @@ end;
 procedure TMainForm.OpenDatabaseClick(Sender: TObject);
 var
   Dialog: TOpenDialog;
-  LBoard: TDraughtsBoard;
+  LFen: string;
 begin
-  LBoard := ActiveBoard;
   Dialog := TOpenDialog.Create(Self);
   try
     Dialog.Title := 'Open database';
@@ -6484,11 +6484,11 @@ begin
       FDatabaseForm.OnGameSelected := @PdnGameSelected;
       FDatabaseForm.ApplyPreferences(FPreferences);
       FDatabaseForm.OpenDatabase(Dialog.FileName);
-      if LBoard <> nil then
-        FDatabaseForm.SetSearchFEN(LBoard.CurrentFEN);
+      if TryGetDisplayedBoardFen(ActiveGameTree, LFen) then
+        FDatabaseForm.SetSearchFEN(LFen);
       FLastDatabaseSearchFEN := '';
       ShowFormCenteredOnOwner(FDatabaseForm, Self);
-      UpdateDatabaseSearchPosition(LBoard);
+      UpdateDatabaseSearchPositionFromTree(ActiveGameTree);
     except
       on E: Exception do
         ShowGuiOkDialog(Self, 'Open database',
@@ -6658,7 +6658,7 @@ begin
   if FSearchPositionInDatabase then
   begin
     FLastDatabaseSearchFEN := '';
-    UpdateDatabaseSearchPosition(ActiveBoard);
+    UpdateDatabaseSearchPositionFromTree(ActiveGameTree);
   end;
 end;
 
@@ -7415,20 +7415,36 @@ begin
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
   UpdateAutoplayControls;
-  UpdateDatabaseSearchPosition(ActiveBoard);
+  UpdateDatabaseSearchPositionFromTree(LGameTree);
 end;
 
-procedure TMainForm.UpdateDatabaseSearchPosition(ABoard: TDraughtsBoard);
+function TMainForm.TryGetDisplayedBoardFen(AGameTree: TGameTree;
+  out AFen: string): Boolean;
+var
+  LBoard: TDraughtsBoard;
+begin
+  Result := False;
+  AFen := '';
+  LBoard := TDraughtsBoard.Create;
+  try
+    if not TryBuildDisplayedBoard(AGameTree, LBoard) then
+      Exit;
+    AFen := LBoard.CurrentFEN;
+    Result := True;
+  finally
+    LBoard.Free;
+  end;
+end;
+
+procedure TMainForm.UpdateDatabaseSearchPositionFromTree(AGameTree: TGameTree);
 var
   LFen: string;
 begin
+  if not TryGetDisplayedBoardFen(AGameTree, LFen) then
+    Exit;
   if (not FSearchPositionInDatabase) or (FDatabaseForm = nil) or
     (not FDatabaseForm.Visible) then
     Exit;
-  if ABoard = nil then
-    Exit;
-
-  LFen := ABoard.CurrentFEN;
   if LFen = FLastDatabaseSearchFEN then
     Exit;
   FLastDatabaseSearchFEN := LFen;
