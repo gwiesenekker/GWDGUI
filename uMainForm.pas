@@ -2995,7 +2995,7 @@ begin
   UpdateBoardHighlights(ActiveGameTree);
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
-  UpdateDatabaseSearchPosition(ActiveBoard);
+  UpdateDatabaseSearchPosition(FBoard);
 end;
 
 procedure TMainForm.AnalyzerPopupPopup(Sender: TObject);
