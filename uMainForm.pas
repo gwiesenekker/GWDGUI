@@ -730,6 +730,22 @@ begin
   end;
 end;
 
+function SideToMoveAfterPly(const AStartingFEN: string;
+  APlyCount: Integer): TDraughtsSide;
+var
+  LStartingSide: TDraughtsSide;
+begin
+  if (Trim(AStartingFEN) <> '') and (UpCase(Trim(AStartingFEN)[1]) = 'B') then
+    LStartingSide := dsBlack
+  else
+    LStartingSide := dsWhite;
+
+  if Odd(APlyCount) then
+    Result := OppositeSide(LStartingSide)
+  else
+    Result := LStartingSide;
+end;
+
 constructor TRunnerSnapshotGuiMessage.Create(AGameId: Integer;
   ASnapshot: TGameRunnerSnapshot);
 begin
@@ -948,8 +964,16 @@ begin
 end;
 
 function TRunningGame.IsHumanToMove: Boolean;
+var
+  LCurrentSide: TDraughtsSide;
 begin
-  if FSnapshot.CurrentSide = dsBlack then
+  if FGameTree <> nil then
+    LCurrentSide := SideToMoveAfterPly(FGameTree.StartingFEN,
+      FGameTree.MainlineCount)
+  else
+    LCurrentSide := FSnapshot.CurrentSide;
+
+  if LCurrentSide = dsBlack then
     Result := FBlackPlayerKind = pkHuman
   else
     Result := FWhitePlayerKind = pkHuman;
