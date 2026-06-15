@@ -118,6 +118,7 @@ type
       ASnapshotEvent: TGameRunnerSnapshotEvent;
       AFinishedEvent: TGameRunnerFinishedEvent);
     destructor Destroy; override;
+    procedure PostGuiLog(const AMessage: string);
     procedure PostHumanMove(const AMove: string);
     procedure PostPause(AValue: Boolean);
     procedure PostShowStdout(AValue: Boolean);
@@ -136,6 +137,7 @@ type
     grcStop,
     grcSetPaused,
     grcSetShowStdout,
+    grcGuiLog,
     grcHumanMove
   );
 
@@ -161,6 +163,7 @@ const
     'stop',
     'set-paused',
     'set-show-stdout',
+    'gui-log',
     'human-move'
   );
 begin
@@ -343,6 +346,15 @@ begin
           ' [runner] command; kind=set-show-stdout; value=' +
           BoolToStr(FShowStdout, True));
       end;
+    grcGuiLog:
+      begin
+        if RunnerCommand.TextValue <> '' then
+        begin
+          AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+            ' [gui] ' + RunnerCommand.TextValue);
+          PublishSnapshot;
+        end;
+      end;
     grcHumanMove:
       begin
         if FHumanTurnStartTick = 0 then
@@ -464,6 +476,11 @@ end;
 procedure TGameRunnerThread.PostStop;
 begin
   PostCommand(TGameRunnerCommand.Create(grcStop));
+end;
+
+procedure TGameRunnerThread.PostGuiLog(const AMessage: string);
+begin
+  PostCommand(TGameRunnerCommand.CreateText(grcGuiLog, AMessage));
 end;
 
 procedure TGameRunnerThread.PostHumanMove(const AMove: string);

@@ -6077,13 +6077,13 @@ begin
 
   LGame.Paused := not LGame.Paused;
   if LGame.Runner <> nil then
+  begin
+    if LGame.Paused then
+      LGame.Runner.PostGuiLog('pause requested')
+    else
+      LGame.Runner.PostGuiLog('resume requested');
     LGame.Runner.PostPause(LGame.Paused);
-  if LGame.Paused then
-    LGame.Snapshot.LogLines.Add(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
-      ' [gui] pause requested')
-  else
-    LGame.Snapshot.LogLines.Add(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
-      ' [gui] resume requested');
+  end;
   UpdateGameListItem(LGame);
   ApplyGameToDisplay(LGame);
 end;
