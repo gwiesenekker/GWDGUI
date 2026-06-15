@@ -6688,7 +6688,6 @@ var
   EventObject: TObject;
   LGame: TRunningGame;
   LGameTree: TGameTree;
-  LInput: TRunningSnapshotTreeInput;
   PendingSnapshots: array of TPendingRunnerSnapshot;
   ProcessedEvents: Integer;
   RemoveAfterFinish: Boolean;
@@ -6782,9 +6781,8 @@ var
     if LGameTree = nil then
       Exit;
     LGame.MarkRunningIfStarting;
-    LInput := RunningSnapshotTreeInput(LGame, '');
     if LGame.IsStopOrRemoveRequested and
-      (LInput.State in [gosWaiting, gosRunning, gosError]) then
+      (StateForTree(LGameTree) in [gosWaiting, gosRunning, gosError]) then
       LGame.MarkSnapshotStopped(LGame.StopReason);
     if not FClosing then
     begin
