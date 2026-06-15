@@ -245,6 +245,7 @@ type
     FAnalyzerPopoutBoardControl: TDraughtsBoardControl;
     FAnalyzerPopup: TPopupMenu;
     FAnalyzerPvBaseBoard: TDraughtsBoard;
+    FAnalyzerPvBaseNodeId: Int64;
     FAnalyzerPvBasePly: Integer;
     FAnalyzerPvBrowser: TPvBrowser;
     FAnalyzerPvMemo: TMemo;
@@ -2518,6 +2519,7 @@ procedure TMainForm.SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
 begin
   if ABoard <> nil then
     FAnalyzerPvBaseBoard.AssignFrom(ABoard);
+  FAnalyzerPvBaseNodeId := 0;
   FAnalyzerPvBasePly := APly;
 end;
 
@@ -2533,6 +2535,7 @@ begin
   if (LNode <> nil) and
     TryBuildTreeBoardAtNode(AGameTree, LNode, FAnalyzerPvBaseBoard) then
   begin
+    FAnalyzerPvBaseNodeId := LNode.NodeId;
     FAnalyzerPvBasePly := LNode.PlyNumber;
     Exit;
   end;
@@ -2540,6 +2543,7 @@ begin
   if (AGameTree <> nil) and (AFallbackBasePly >= 0) and
     TryBuildTreeBoardAtPly(AGameTree, AFallbackBasePly, FAnalyzerPvBaseBoard) then
   begin
+    FAnalyzerPvBaseNodeId := 0;
     FAnalyzerPvBasePly := AFallbackBasePly;
     Exit;
   end;
@@ -5329,10 +5333,14 @@ begin
     if FPvHintSource = phsAnalyzer then
     begin
       LPvBaseBoard := FAnalyzerPvBaseBoard;
-      if FAnalyzerPvBrowser <> nil then
-        LPvText := FAnalyzerPvBrowser.PrincipalVariation
-      else
-        LPvText := '';
+      if not AnnotatorPvForTreeNode(AGameTree, FAnalyzerPvBaseNodeId,
+        LPvText, LPvScore, LPvDepth, LPvTimeText) then
+      begin
+        if FAnalyzerPvBrowser <> nil then
+          LPvText := FAnalyzerPvBrowser.PrincipalVariation
+        else
+          LPvText := '';
+      end;
     end
     else
       VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
