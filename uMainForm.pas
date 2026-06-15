@@ -5075,6 +5075,7 @@ end;
 
 function TMainForm.CanRecordCurrentAnnotatorPV: Boolean;
 var
+  LActiveBoard: TDraughtsBoard;
   LDisplayedPly: Integer;
 begin
   Result := False;
@@ -5091,7 +5092,9 @@ begin
     LDisplayedPly := CurrentMoveCount;
   if FAnalyzerPvBasePly <> LDisplayedPly then
     Exit;
-  if FAnalyzerPvBaseBoard.PositionKey <> ActiveBoard.PositionKey then
+  LActiveBoard := ActiveBoard;
+  if (LActiveBoard = nil) or
+    (FAnalyzerPvBaseBoard.PositionKey <> LActiveBoard.PositionKey) then
     Exit;
 
   Result := True;
@@ -5115,6 +5118,7 @@ end;
 function TMainForm.CurrentGameTreeEnginePvInput(
   AGameTree: TGameTree): TGameTreePvInput;
 var
+  LActiveGameTree: TGameTree;
   LInput: TRunningSnapshotTreeInput;
   LPvBasePly: Integer;
   LPvDepth: string;
@@ -5124,7 +5128,8 @@ var
   LPvTimeText: string;
 begin
   LPvBasePly := 0;
-  if AGameTree = ActiveGameTree then
+  LActiveGameTree := ActiveGameTree;
+  if AGameTree = LActiveGameTree then
     LPvBasePly := FPvBasePly
   else
   begin
@@ -5147,13 +5152,15 @@ end;
 function TMainForm.CurrentGameTreeAnnotatorPvInput(
   AGameTree: TGameTree): TGameTreePvInput;
 var
+  LActiveGameTree: TGameTree;
   LRecordAnnotatorPV: Boolean;
   LAnnotatorPV: string;
   LAnnotatorDepth: string;
   LAnnotatorScore: string;
   LAnnotatorTimeText: string;
 begin
-  LRecordAnnotatorPV := (AGameTree = ActiveGameTree) and
+  LActiveGameTree := ActiveGameTree;
+  LRecordAnnotatorPV := (AGameTree = LActiveGameTree) and
     CanRecordCurrentAnnotatorPV;
   LAnnotatorPV := '';
   LAnnotatorDepth := '';
@@ -5173,6 +5180,7 @@ end;
 
 procedure TMainForm.UpdateGameMoveHighlight;
 var
+  LActiveGameTree: TGameTree;
   I: Integer;
   LHighlightPly: Integer;
 begin
@@ -5180,7 +5188,8 @@ begin
     Exit;
   if Length(FGameMoveStarts) <> Length(FGameMoveLengths) then
   begin
-    RebuildGameMoveLabels(ActiveGameTree);
+    LActiveGameTree := ActiveGameTree;
+    RebuildGameMoveLabels(LActiveGameTree);
     Exit;
   end;
 
