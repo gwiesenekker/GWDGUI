@@ -536,7 +536,6 @@ type
     function BlackNameForTree(AGameTree: TGameTree): string;
     function EventNameForTree(AGameTree: TGameTree): string;
     function ResultForTree(AGameTree: TGameTree): string;
-    function RunningGameTreeExtendsSnapshot(AGame: TRunningGame): Boolean;
     function RunningGameTreeExtendsSnapshot(AGame: TRunningGame;
       const AInput: TRunningSnapshotTreeInput): Boolean;
     function StartingFenForTree(AGameTree: TGameTree): string;
@@ -4315,13 +4314,6 @@ begin
     Result := PlayerNameOrFallback(FGameResult, '*');
 end;
 
-function TMainForm.RunningGameTreeExtendsSnapshot(
-  AGame: TRunningGame): Boolean;
-begin
-  Result := RunningGameTreeExtendsSnapshot(AGame,
-    RunningSnapshotTreeInput(AGame, ''));
-end;
-
 function TMainForm.RunningGameTreeExtendsSnapshot(AGame: TRunningGame;
   const AInput: TRunningSnapshotTreeInput): Boolean;
 var
@@ -5175,11 +5167,11 @@ var
 begin
   if (AGame = nil) or (AGame.GameTree = nil) then
     Exit;
-  if RunningGameTreeExtendsSnapshot(AGame) then
+  LInput := RunningSnapshotTreeInput(AGame, AEventName);
+  if RunningGameTreeExtendsSnapshot(AGame, LInput) then
     Exit;
 
   LGameTree := AGame.GameTree;
-  LInput := RunningSnapshotTreeInput(AGame, AEventName);
   TryRecordSnapshotPV;
   LSyncSignature := RunningSnapshotSyncSignature(LInput);
   if AGame.SnapshotSyncSignatureMatches(LSyncSignature) then
