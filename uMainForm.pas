@@ -964,7 +964,10 @@ end;
 
 function TRunningGame.HasPlayedMoves: Boolean;
 begin
-  Result := Trim(FSnapshot.MovesPlayedText) <> '';
+  if FGameTree <> nil then
+    Result := FGameTree.MainlineCount > 0
+  else
+    Result := Trim(FSnapshot.MovesPlayedText) <> '';
 end;
 
 function TRunningGame.InitialClockSeconds: Double;
@@ -994,7 +997,10 @@ end;
 
 function TRunningGame.ResultText: string;
 begin
-  Result := FSnapshot.GameResult;
+  if FGameTree <> nil then
+    Result := Trim(FGameTree.ResultText)
+  else
+    Result := FSnapshot.GameResult;
   if Result = '' then
     Result := '*';
 end;
@@ -1018,7 +1024,10 @@ end;
 
 function TRunningGame.State: TGameOrchestratorState;
 begin
-  Result := FSnapshot.State;
+  if FGameTree <> nil then
+    Result := FGameTree.GameState
+  else
+    Result := FSnapshot.State;
 end;
 
 procedure TRunningGame.AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
