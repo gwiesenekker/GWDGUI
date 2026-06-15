@@ -45,6 +45,8 @@ type
     PvTimeText: string;
     PvBasePly: Integer;
     PvBaseBoard: TDraughtsBoard;
+    LogLinesText: string;
+    LogLineCount: Integer;
     WhiteRemainingSeconds: Double;
     BlackRemainingSeconds: Double;
     WhiteUsedSeconds: Double;
@@ -4409,6 +4411,8 @@ begin
   Result.PvTimeText := '';
   Result.PvBasePly := 0;
   Result.PvBaseBoard := nil;
+  Result.LogLinesText := '';
+  Result.LogLineCount := 0;
   Result.WhiteRemainingSeconds := 0;
   Result.BlackRemainingSeconds := 0;
   Result.WhiteUsedSeconds := 0;
@@ -4439,6 +4443,8 @@ begin
   Result.PvTimeText := AGame.Snapshot.PvSnapshot.TimeText;
   Result.PvBasePly := AGame.Snapshot.PvBasePly;
   Result.PvBaseBoard := AGame.Snapshot.PvBaseBoard;
+  Result.LogLinesText := AGame.Snapshot.LogLines.Text;
+  Result.LogLineCount := AGame.Snapshot.LogLines.Count;
   Result.WhiteRemainingSeconds := AGame.Snapshot.WhiteRemainingSeconds;
   Result.BlackRemainingSeconds := AGame.Snapshot.BlackRemainingSeconds;
   Result.WhiteUsedSeconds := AGame.Snapshot.WhiteUsedSeconds;
@@ -5112,18 +5118,25 @@ var
   procedure UpdateDisplayedGameLog;
   var
     J: Integer;
+    LLogLines: TStringList;
   begin
     LLogSourceChanged := (FGameLogSourceGameId <> AGame.Id) or
-      (FGameLogSourceLineCount <> AGame.Snapshot.LogLines.Count) or
+      (FGameLogSourceLineCount <> LInput.LogLineCount) or
       (FGameLogSourceShowStdout <> AGame.ShowStdout);
     if LLogSourceChanged then
     begin
       FGameLog.Clear;
-      for J := 0 to AGame.Snapshot.LogLines.Count - 1 do
-        if GameLogLineVisible(AGame.Snapshot.LogLines[J], AGame) then
-          FGameLog.Add(AGame.Snapshot.LogLines[J]);
+      LLogLines := TStringList.Create;
+      try
+        LLogLines.Text := LInput.LogLinesText;
+        for J := 0 to LLogLines.Count - 1 do
+          if GameLogLineVisible(LLogLines[J], AGame) then
+            FGameLog.Add(LLogLines[J]);
+      finally
+        LLogLines.Free;
+      end;
       FGameLogSourceGameId := AGame.Id;
-      FGameLogSourceLineCount := AGame.Snapshot.LogLines.Count;
+      FGameLogSourceLineCount := LInput.LogLineCount;
       FGameLogSourceShowStdout := AGame.ShowStdout;
     end;
   end;
