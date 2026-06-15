@@ -1905,17 +1905,11 @@ end;
 function TMainForm.ExecuteAndApplyGameTreeCommand(AActor: TGameTreeActor;
   AGameTree: TGameTree; ACommand: TGameTreeCommand;
   AFollowVariationBrowse: Boolean; out AErrorText: string): Boolean;
-var
-  LRevisionBefore: Int64;
 begin
-  if AActor <> nil then
-    LRevisionBefore := AActor.Revision
-  else
-    LRevisionBefore := -1;
   Result := ExecuteGameTreeCommand(AActor, ACommand, AErrorText);
   if not Result then
     Exit;
-  if AFollowVariationBrowse or (AActor.Revision <> LRevisionBefore) then
+  if AFollowVariationBrowse or ACommand.TreeChanged then
     ApplyGameTreeCommandResult(AGameTree, ACommand, AFollowVariationBrowse);
 end;
 

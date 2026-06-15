@@ -42,6 +42,8 @@ begin
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'add-mainline command should be accepted');
+      Check(Command.TreeChanged,
+        'add-mainline command should report tree change');
       Check(Command.CreatedNodeId > 0, 'add-mainline command should return node id');
       Node := Actor.GameTree.FindNodeById(Command.CreatedNodeId);
       Check(Node <> nil, 'created node id should resolve');
@@ -57,6 +59,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(not Command.Accepted,
         'wrong game-tree command should be rejected');
+      Check(not Command.TreeChanged,
+        'rejected command should not report tree change');
       Check(Actor.Revision = 1,
         'wrong game-tree command should not increment revision');
     finally
@@ -67,6 +71,8 @@ begin
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'append-mainline command should be accepted');
+      Check(Command.TreeChanged,
+        'append-mainline command should report tree change');
       Check(Command.PlyNumber = 2,
         'append-mainline command should report appended ply');
       Check(Command.NodeId = Command.CreatedNodeId,
@@ -89,6 +95,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'append snapshot move command should be accepted');
+      Check(Command.TreeChanged,
+        'append snapshot move command should report tree change');
       Check(Command.PlyNumber = 3,
         'append snapshot move should report appended ply');
       Node := Actor.GameTree.MainlineNode[3];
@@ -124,6 +132,8 @@ begin
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'store-variation command should be accepted');
+      Check(Command.TreeChanged,
+        'store-variation command should report tree change');
       Check(Command.VariationIndex = 0,
         'first variation should get variation index 0');
       Check(Actor.GameTree.VariationLineCount = 1,
@@ -141,6 +151,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'empty variation update should be accepted');
+      Check(not Command.TreeChanged,
+        'empty variation update should not report tree change');
       Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
         'empty variation update should not clear annotation text');
       Check(Actor.Revision = 4,
@@ -153,6 +165,8 @@ begin
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'clear-variations command should be accepted');
+      Check(Command.TreeChanged,
+        'clear-variations command should report tree change');
       Check(Actor.GameTree.VariationLineCount = 0,
         'clear-variations command should remove stored variations');
       Check(Actor.Revision = 5, 'clear mutation should increment revision');
@@ -165,6 +179,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'empty clear-variations command should be accepted');
+      Check(not Command.TreeChanged,
+        'empty clear-variations command should not report tree change');
       Check(Actor.Revision = 5,
         'empty clear-variations command should not increment revision');
     finally
@@ -197,6 +213,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'rebuild with different signature should be accepted');
+      Check(Command.TreeChanged,
+        'rebuild with different signature should report tree change');
       Check(Actor.GameTree.VariationLineCount = 1,
         'rebuild should preserve stored variation lines');
       VariationNode := Actor.GameTree.FindVariationNode(0, 1);
@@ -218,6 +236,8 @@ begin
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'set-header command should be accepted');
+      Check(Command.TreeChanged,
+        'set-header command should report tree change');
       Check(Actor.GameTree.EventName = 'New Event',
         'set-header command should update event');
       Check(Actor.GameTree.WhiteName = 'Alice',
@@ -238,6 +258,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'duplicate set-header command should be accepted');
+      Check(not Command.TreeChanged,
+        'duplicate set-header command should not report tree change');
       Check(Actor.GameTree.EventName = 'New Event',
         'duplicate set-header command should keep event');
       Check(Actor.Revision = RevisionAfterHeader,
@@ -438,6 +460,8 @@ begin
       try
         Actor.ExecuteCommand(StartCommand);
         Check(StartCommand.Accepted, 'start-search command should be accepted');
+        Check(not StartCommand.TreeChanged,
+          'start-search command should not report tree change');
         SearchId := Search.SearchId;
         Check(Actor.SearchState(SearchId, State), 'search state should exist');
         Check(State = gssActive, 'search should be active');
@@ -483,6 +507,8 @@ begin
         Actor.ExecuteCommand(CancelCommand);
         Check(CancelCommand.Accepted,
           'cancel-search command should be accepted');
+        Check(not CancelCommand.TreeChanged,
+          'cancel-search command should not report tree change');
         Check(Actor.SearchState(SearchId, State), 'cancelled search should exist');
         Check(State = gssCancelled, 'search should be cancelled');
       finally
@@ -506,6 +532,8 @@ begin
         Actor.ExecuteCommand(ReleaseCommand);
         Check(ReleaseCommand.Accepted,
           'cancelled search release should be accepted');
+        Check(not ReleaseCommand.TreeChanged,
+          'search release command should not report tree change');
         Check(not Actor.SearchState(SearchId, State),
           'released cancelled search should be removed');
       finally
@@ -542,6 +570,8 @@ begin
         Actor.ExecuteCommand(DoneCommand);
         Check(DoneCommand.Accepted,
           'done for active search should be accepted');
+        Check(not DoneCommand.TreeChanged,
+          'search-done command should not report tree change');
         Check(Actor.SearchState(SearchId, State), 'done search should exist');
         Check(State = gssDone, 'search should be done');
         Check(Actor.SearchResult(SearchId, ResultNodeId, ResultMove),
@@ -592,6 +622,8 @@ begin
         Actor.ExecuteCommand(ReleaseCommand);
         Check(ReleaseCommand.Accepted,
           'done search release should be accepted');
+        Check(not ReleaseCommand.TreeChanged,
+          'done search release should not report tree change');
         Check(not Actor.SearchState(SearchId, State),
           'released done search should be removed');
       finally
@@ -624,6 +656,8 @@ begin
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'annotator PV command should be accepted');
+      Check(Command.TreeChanged,
+        'annotator PV command should report tree change');
       Check(Node.AnnotatorScore = '0.12',
         'annotator PV command should record score on target node');
       Check(Node.AnnotatorPV = '16-21 37-32',
@@ -643,6 +677,8 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'duplicate annotator PV command should be accepted');
+      Check(not Command.TreeChanged,
+        'duplicate annotator PV command should not report tree change');
       Check(Actor.Revision = RevisionAfterPV,
         'duplicate annotator PV command should not increment revision');
     finally
@@ -656,6 +692,8 @@ begin
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'engine PV command should be accepted');
+      Check(Command.TreeChanged,
+        'engine PV command should report tree change');
       Check(Node.EngineScore = '0.37',
         'engine PV command with empty score should preserve move score');
       Check(Node.EnginePV = '18-23 39-33',
@@ -674,6 +712,8 @@ begin
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'duplicate engine PV command should be accepted');
+      Check(not Command.TreeChanged,
+        'duplicate engine PV command should not report tree change');
       Check(Actor.Revision = RevisionAfterPV,
         'duplicate engine PV command should not increment revision');
     finally

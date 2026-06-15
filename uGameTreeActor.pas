@@ -70,6 +70,7 @@ type
     DisplayAfterPly: Integer;
     BasePly: Integer;
     Accepted: Boolean;
+    TreeChanged: Boolean;
     ErrorText: string;
     CreatedNodeId: Int64;
     ScoreText: string;
@@ -901,6 +902,7 @@ begin
     Exit;
 
   ACommand.Accepted := False;
+  ACommand.TreeChanged := False;
   ACommand.ErrorText := '';
   if ACommand.GameTreeId <> FGameTree.GameTreeId then
   begin
@@ -924,6 +926,7 @@ begin
         ACommand.PlyNumber := Node.PlyNumber;
         ACommand.MoveText := Node.MoveText;
         ACommand.Accepted := True;
+        ACommand.TreeChanged := True;
         InvalidateRebuildSignature := True;
         Inc(FRevision);
       end;
@@ -941,6 +944,7 @@ begin
         ACommand.PlyNumber := Node.PlyNumber;
         ACommand.MoveText := Node.MoveText;
         ACommand.Accepted := True;
+        ACommand.TreeChanged := True;
         InvalidateRebuildSignature := True;
         Inc(FRevision);
       end;
@@ -975,6 +979,7 @@ begin
         RecordGameTreeAnalysis(FGameTree, ACommand.EnginePvInput,
           GameTreePvInput(False, 0, '', ''));
         ACommand.Accepted := True;
+        ACommand.TreeChanged := True;
         InvalidateRebuildSignature := True;
         Inc(FRevision);
       end;
@@ -991,6 +996,7 @@ begin
         ACommand.Accepted := True;
         if Changed then
         begin
+          ACommand.TreeChanged := True;
           InvalidateRebuildSignature := True;
           Inc(FRevision);
         end;
@@ -1092,6 +1098,7 @@ begin
         ACommand.Accepted := True;
         if Changed then
         begin
+          ACommand.TreeChanged := True;
           InvalidateRebuildSignature := True;
           Inc(FRevision);
         end;
@@ -1113,6 +1120,7 @@ begin
         ACommand.Accepted := True;
         if Changed then
         begin
+          ACommand.TreeChanged := True;
           InvalidateRebuildSignature := True;
           Inc(FRevision);
         end;
@@ -1138,6 +1146,7 @@ begin
           Exit;
         if Changed then
         begin
+          ACommand.TreeChanged := True;
           InvalidateRebuildSignature := True;
           Inc(FRevision);
         end;
@@ -1155,6 +1164,7 @@ begin
           Exit;
         if Changed then
         begin
+          ACommand.TreeChanged := True;
           InvalidateRebuildSignature := True;
           Inc(FRevision);
         end;
@@ -1168,6 +1178,7 @@ begin
         end;
         FGameTree.ClearStoredVariations;
         ACommand.Accepted := True;
+        ACommand.TreeChanged := True;
         InvalidateRebuildSignature := True;
         Inc(FRevision);
       end;
@@ -1195,6 +1206,7 @@ begin
               ACommand.ScoreText, ACommand.PvText, ACommand.PvDepthText,
               ACommand.PvTimeText));
         ACommand.Accepted := True;
+        ACommand.TreeChanged := True;
         FLastRebuildSignature := RebuildSignature;
         Inc(FRevision);
       end;
@@ -1244,6 +1256,7 @@ begin
         ACommand.Accepted := True;
         if Changed then
         begin
+          ACommand.TreeChanged := True;
           InvalidateRebuildSignature := True;
           Inc(FRevision);
         end;
