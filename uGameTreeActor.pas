@@ -114,6 +114,7 @@ type
       out ASearch: TGameTreeSearchRecord): Boolean;
     function SearchCommandMatches(ACommand: TGameTreeCommand;
       ASearch: TGameTreeSearchRecord): Boolean;
+    procedure AcceptActorStateChange(ACommand: TGameTreeCommand);
     procedure AcceptTreeMutation(ACommand: TGameTreeCommand;
       var AInvalidateRebuildSignature: Boolean;
       AInvalidateSignature: Boolean = True);
@@ -320,6 +321,14 @@ begin
   Result := (ACommand <> nil) and (ASearch <> nil);
   if Result and (ACommand.NodeId > 0) then
     Result := SameGameTreeSearchRef(ACommand.SearchRef, ASearch.SearchRef);
+end;
+
+procedure TGameTreeActor.AcceptActorStateChange(ACommand: TGameTreeCommand);
+begin
+  if ACommand = nil then
+    Exit;
+  ACommand.Accepted := True;
+  Inc(FRevision);
 end;
 
 procedure TGameTreeActor.AcceptTreeMutation(ACommand: TGameTreeCommand;
@@ -1026,8 +1035,7 @@ begin
         Search.NodeId := ACommand.NodeId;
         Search.State := gssActive;
         FSearches.Add(Search);
-        ACommand.Accepted := True;
-        Inc(FRevision);
+        AcceptActorStateChange(ACommand);
       end;
     gtcCancelSearch:
       begin
@@ -1040,8 +1048,7 @@ begin
         end;
         Search.State := gssCancelled;
         ACommand.SetSearchRef(Search.SearchRef);
-        ACommand.Accepted := True;
-        Inc(FRevision);
+        AcceptActorStateChange(ACommand);
       end;
     gtcSearchDone:
       begin
@@ -1062,8 +1069,7 @@ begin
         Search.State := gssDone;
         Search.ResultMove := Trim(ACommand.MoveText);
         ACommand.SetSearchRef(Search.SearchRef);
-        ACommand.Accepted := True;
-        Inc(FRevision);
+        AcceptActorStateChange(ACommand);
       end;
     gtcReleaseSearch:
       begin
@@ -1080,8 +1086,7 @@ begin
           Reject(ACommand, 'search was not released');
           Exit;
         end;
-        ACommand.Accepted := True;
-        Inc(FRevision);
+        AcceptActorStateChange(ACommand);
       end;
     gtcRecordEnginePV:
       begin
