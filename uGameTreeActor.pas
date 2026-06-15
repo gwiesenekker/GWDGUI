@@ -583,15 +583,21 @@ begin
   AddLine(IntToStr(ACommand.EnginePvInput.BasePly));
   AddLine(ACommand.EnginePvInput.Score);
   AddLine(ACommand.EnginePvInput.PV);
+  AddLine(ACommand.EnginePvInput.Depth);
+  AddLine(ACommand.EnginePvInput.TimeText);
   AddLine(BoolText(ACommand.AnnotatorPvInput.RecordPV));
   AddLine(IntToStr(ACommand.AnnotatorPvInput.BasePly));
   AddLine(ACommand.AnnotatorPvInput.Score);
   AddLine(ACommand.AnnotatorPvInput.PV);
+  AddLine(ACommand.AnnotatorPvInput.Depth);
+  AddLine(ACommand.AnnotatorPvInput.TimeText);
 
   AddLine(IntToStr(ACommand.VariationIndex));
   AddLine(IntToStr(ACommand.PlyNumber));
   AddLine(ACommand.ScoreText);
   AddLine(ACommand.PvText);
+  AddLine(ACommand.PvDepthText);
+  AddLine(ACommand.PvTimeText);
   if ACommand.RebuildVariationLines = nil then
     AddLine('0')
   else

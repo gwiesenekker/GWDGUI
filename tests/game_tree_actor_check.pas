@@ -893,6 +893,8 @@ var
   Actor: TGameTreeActor;
   Annotations: TStringList;
   Command: TGameTreeCommand;
+  EnginePvDepth: string;
+  EnginePvTimeText: string;
   Moves: TStringList;
   NodeId: Int64;
   NullTimeControl: TTimeControl;
@@ -911,7 +913,8 @@ var
       GameTreeHeaderInput('rebuild', 'Event', 'White', 'Black', '*',
         'W:W31-50:B1-20', False, NullTimeControl),
       GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
-      GameTreePvInput(True, 2, '0.10', '37-32', '12', '1.20'),
+      GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
+        EnginePvTimeText),
       GameTreePvInput(False, 0, '', ''),
       0, 1, '0.20', '20-24', '7', '0.33');
     try
@@ -929,6 +932,8 @@ begin
   Annotations := TStringList.Create;
   try
     FillChar(NullTimeControl, SizeOf(NullTimeControl), 0);
+    EnginePvDepth := '12';
+    EnginePvTimeText := '1.20';
     Actor.GameTree.BeginRebuild('rebuild', 'Event', 'White', 'Black', '*',
       'W:W31-50:B1-20');
     Actor.GameTree.RecordMainlineMove(1, '32-28');
@@ -942,7 +947,8 @@ begin
       GameTreeHeaderInput('rebuild', 'Event', 'White', 'Black', '*',
         'W:W31-50:B1-20', False, NullTimeControl),
       GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
-      GameTreePvInput(True, 2, '0.10', '37-32', '12', '1.20'),
+      GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
+        EnginePvTimeText),
       GameTreePvInput(False, 0, '', ''),
       0, 1, '0.20', '20-24', '7', '0.33');
     try
@@ -954,9 +960,9 @@ begin
         'rebuild command should record second move');
       Check(Actor.GameTree.MainlineNode[2].EnginePV = '37-32',
         'rebuild command should record engine PV');
-      Check(Actor.GameTree.MainlineNode[2].EnginePVDepth = '12',
+      Check(Actor.GameTree.MainlineNode[2].EnginePVDepth = EnginePvDepth,
         'rebuild command should record engine PV depth');
-      Check(Actor.GameTree.MainlineNode[2].EnginePVTimeText = '1.20',
+      Check(Actor.GameTree.MainlineNode[2].EnginePVTimeText = EnginePvTimeText,
         'rebuild command should record engine PV time');
       Check(Actor.GameTree.VariationLineCount = 1,
         'rebuild command should preserve stored variation line');
@@ -978,7 +984,8 @@ begin
       GameTreeHeaderInput('rebuild', 'Event', 'White', 'Black', '*',
         'W:W31-50:B1-20', False, NullTimeControl),
       GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
-      GameTreePvInput(True, 2, '0.10', '37-32', '12', '1.20'),
+      GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
+        EnginePvTimeText),
       GameTreePvInput(False, 0, '', ''),
       0, 1, '0.20', '20-24', '7', '0.33');
     try
@@ -986,6 +993,32 @@ begin
       Check(Command.Accepted, 'duplicate rebuild command should be accepted');
       Check(Actor.Revision = RevisionAfterRebuild,
         'duplicate rebuild command should not increment revision');
+    finally
+      Command.Free;
+    end;
+
+    EnginePvDepth := '13';
+    EnginePvTimeText := '1.25';
+    Command := Actor.CreateRebuildFromInputsCommand(
+      GameTreeHeaderInput('rebuild', 'Event', 'White', 'Black', '*',
+        'W:W31-50:B1-20', False, NullTimeControl),
+      GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
+      GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
+        EnginePvTimeText),
+      GameTreePvInput(False, 0, '', ''),
+      0, 1, '0.20', '20-24', '7', '0.33');
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'PV metadata-only rebuild command should be accepted');
+      Check(Actor.Revision > RevisionAfterRebuild,
+        'PV metadata-only rebuild should increment revision');
+      Check(Actor.GameTree.MainlineNode[2].EnginePVDepth = EnginePvDepth,
+        'PV metadata-only rebuild should record engine PV depth');
+      Check(Actor.GameTree.MainlineNode[2].EnginePVTimeText =
+        EnginePvTimeText,
+        'PV metadata-only rebuild should record engine PV time');
+      RevisionAfterRebuild := Actor.Revision;
     finally
       Command.Free;
     end;
