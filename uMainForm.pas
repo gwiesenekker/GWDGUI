@@ -3730,8 +3730,8 @@ procedure TMainForm.CopyBoardFenClick(Sender: TObject);
 var
   LFen: string;
 begin
-  LFen := FBoard.CurrentFEN;
-  Clipboard.AsText := LFen;
+  if TryGetDisplayedBoardFen(ActiveGameTree, LFen) then
+    Clipboard.AsText := LFen;
 end;
 
 procedure TMainForm.SetupPositionAccepted(Sender: TObject; const AFEN: string);
@@ -3745,6 +3745,8 @@ begin
 end;
 
 procedure TMainForm.SetupPositionClick(Sender: TObject);
+var
+  LFen: string;
 begin
   if FPositionSetupForm = nil then
   begin
@@ -3752,7 +3754,9 @@ begin
     FPositionSetupForm.OnAccepted := @SetupPositionAccepted;
     FPositionSetupForm.ApplyPreferences(FPreferences);
   end;
-  FPositionSetupForm.StartSetup(FBoard.CurrentFEN);
+  if not TryGetDisplayedBoardFen(ActiveGameTree, LFen) then
+    LFen := FStartingFEN;
+  FPositionSetupForm.StartSetup(LFen);
   ShowFormCenteredOnOwner(FPositionSetupForm, Self);
 end;
 
