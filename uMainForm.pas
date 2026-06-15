@@ -4712,19 +4712,6 @@ begin
         ABaseBoard := FTreePvBaseBoard;
       Exit(True);
     end;
-
-    APV := FPrincipalVariation;
-    AScore := FPrincipalVariationScore;
-    ADepth := FPrincipalVariationDepth;
-    ATimeText := FPrincipalVariationTimeText;
-    if Trim(APV) <> '' then
-    begin
-      ABasePly := FPvBasePly;
-      if TryBuildTreeBoardAtPly(AGameTree, ABasePly, FTreePvBaseBoard) then
-        ABaseBoard := FTreePvBaseBoard
-      else
-        ABaseBoard := FPvBaseBoard;
-    end;
   end;
 
   Result := Trim(APV) <> '';
