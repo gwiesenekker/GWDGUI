@@ -548,6 +548,8 @@ type
       ABoard: TDraughtsBoard): Boolean;
     function TryBuildTreeBoardAtNode(AGameTree: TGameTree;
       ANode: TGameTreePlyNode; ABoard: TDraughtsBoard): Boolean;
+    function TryBuildDisplayedBoard(AGameTree: TGameTree;
+      ABoard: TDraughtsBoard): Boolean;
     function VisibleMainPvForTree(AGameTree: TGameTree;
       out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV,
       AScore, ADepth, ATimeText: string): Boolean;
@@ -2055,9 +2057,17 @@ end;
 function TMainForm.HasLegalDisplayedMove: Boolean;
 var
   LBoard: TDraughtsBoard;
+  LGameTree: TGameTree;
 begin
-  LBoard := ActiveBoard;
-  Result := (LBoard <> nil) and (LBoard.LegalMoves.Count > 0);
+  Result := False;
+  LGameTree := ActiveGameTree;
+  LBoard := TDraughtsBoard.Create;
+  try
+    Result := TryBuildDisplayedBoard(LGameTree, LBoard) and
+      (LBoard.LegalMoves.Count > 0);
+  finally
+    LBoard.Free;
+  end;
 end;
 
 function TMainForm.CanStartAutoplayForGame(AGame: TRunningGame): Boolean;
@@ -2744,10 +2754,19 @@ var
   LMove: string;
   LState: TGameOrchestratorState;
 begin
-  LBoard := ActiveBoard;
   LMove := NormalizeMoveNotation(AMove);
-  if (LBoard = nil) or (not LBoard.IsLegalMove(LMove)) then
+  LGameTree := ActiveGameTree;
+  if LGameTree = nil then
     Exit;
+
+  LBoard := TDraughtsBoard.Create;
+  try
+    if (not TryBuildDisplayedBoard(LGameTree, LBoard)) or
+      (not LBoard.IsLegalMove(LMove)) then
+      Exit;
+  finally
+    LBoard.Free;
+  end;
 
   ClearHumanMoveSelection;
   if CanExploreVariation then
@@ -2764,9 +2783,6 @@ begin
   if (LGame <> nil) and (LState in [gosStopped, gosGameOver]) and
     (FGameBrowsePly < 0) then
   begin
-    LGameTree := ActiveGameTree;
-    if LGameTree = nil then
-      Exit;
     if ExecuteGameTreeAppendMainlineMove(LGameTree, LMove, ASource) = nil then
       Exit;
     ClearVariationExploration;
@@ -2775,7 +2791,7 @@ begin
     UpdateBoardFromBrowseState(LGameTree);
     UpdateBrowseInfo;
     UpdateBoardInfo;
-    UpdateLegalMoves(LBoard);
+    UpdateLegalMoves(ActiveBoard);
     Exit;
   end;
 
@@ -2814,6 +2830,7 @@ procedure TMainForm.SelectHumanMoveSource(ASourceSquare: Integer);
 var
   I, J: Integer;
   LBoard: TDraughtsBoard;
+  LGameTree: TGameTree;
   LMove: string;
   LTarget: Integer;
   LTargets: TIntArray;
@@ -2824,15 +2841,20 @@ begin
   if (not CanAcceptHumanBoardMove) and (not CanExploreVariation) then
     Exit;
 
-  LBoard := ActiveBoard;
-  if LBoard = nil then
-    Exit;
+  LGameTree := ActiveGameTree;
+  LBoard := TDraughtsBoard.Create;
+  try
+    if not TryBuildDisplayedBoard(LGameTree, LBoard) then
+      Exit;
 
-  for I := 0 to LBoard.LegalMoves.Count - 1 do
-  begin
-    LMove := Trim(LBoard.LegalMoves[I]);
-    if MoveSquareAt(LMove, 1) = ASourceSquare then
-      FHumanMoveChoices.Add(LMove);
+    for I := 0 to LBoard.LegalMoves.Count - 1 do
+    begin
+      LMove := Trim(LBoard.LegalMoves[I]);
+      if MoveSquareAt(LMove, 1) = ASourceSquare then
+        FHumanMoveChoices.Add(LMove);
+    end;
+  finally
+    LBoard.Free;
   end;
 
   if FHumanMoveChoices.Count = 0 then
@@ -3311,17 +3333,31 @@ end;
 procedure TMainForm.AutorandomClick(Sender: TObject);
 var
   LBoard: TDraughtsBoard;
+  LGameTree: TGameTree;
   LMove: string;
 begin
-  LBoard := ActiveBoard;
-  if (LBoard = nil) or (LBoard.LegalMoves.Count = 0) then
-  begin
-    ShowGuiOkDialog(Self, 'Autorandom',
-      'The displayed position has no legal moves.');
-    Exit;
+  LGameTree := ActiveGameTree;
+  LBoard := TDraughtsBoard.Create;
+  try
+    if not TryBuildDisplayedBoard(LGameTree, LBoard) then
+    begin
+      ShowGuiOkDialog(Self, 'Autorandom',
+        'The displayed position has no legal moves.');
+      Exit;
+    end;
+
+    if LBoard.LegalMoves.Count = 0 then
+    begin
+      ShowGuiOkDialog(Self, 'Autorandom',
+        'The displayed position has no legal moves.');
+      Exit;
+    end;
+
+    LMove := LBoard.LegalMoves[Random(LBoard.LegalMoves.Count)];
+  finally
+    LBoard.Free;
   end;
 
-  LMove := LBoard.LegalMoves[Random(LBoard.LegalMoves.Count)];
   PlayHumanMove(LMove, gmsAutorandom);
 end;
 
@@ -4569,6 +4605,22 @@ begin
   finally
     LVariationMoves.Free;
   end;
+end;
+
+function TMainForm.TryBuildDisplayedBoard(AGameTree: TGameTree;
+  ABoard: TDraughtsBoard): Boolean;
+var
+  LNode: TGameTreePlyNode;
+begin
+  Result := False;
+  if (AGameTree = nil) or (ABoard = nil) then
+    Exit;
+
+  LNode := CurrentDisplayedGameTreeNode(AGameTree);
+  if LNode = nil then
+    Exit;
+
+  Result := TryBuildTreeBoardAtNode(AGameTree, LNode, ABoard);
 end;
 
 function TMainForm.VisibleMainPvForTree(AGameTree: TGameTree;
@@ -7176,15 +7228,22 @@ var
   LLineIndex: Integer;
   LMove: string;
   LBoard: TDraughtsBoard;
+  LGameTree: TGameTree;
 begin
-  LBoard := ActiveBoard;
   LLineIndex := FLegalMovesMemo.CaretPos.Y;
   if (LLineIndex < 0) or (LLineIndex >= FLegalMovesMemo.Lines.Count) then
     Exit;
 
   LMove := Trim(FLegalMovesMemo.Lines[LLineIndex]);
-  if not LBoard.IsLegalMove(LMove) then
-    Exit;
+  LGameTree := ActiveGameTree;
+  LBoard := TDraughtsBoard.Create;
+  try
+    if (not TryBuildDisplayedBoard(LGameTree, LBoard)) or
+      (not LBoard.IsLegalMove(LMove)) then
+      Exit;
+  finally
+    LBoard.Free;
+  end;
 
   PlayHumanMove(LMove);
 end;
