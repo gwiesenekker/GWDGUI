@@ -6729,7 +6729,11 @@ var
     LGame.MarkRunningIfStarting;
     if LGame.IsStopOrRemoveRequested and
       (StateForTree(LGameTree) in [gosWaiting, gosRunning, gosError]) then
+    begin
       LGame.MarkSnapshotStopped(LGame.StopReason);
+      UpdateRunningGameTreeFromSnapshot(LGame);
+      LGameTree := LGame.GameTree;
+    end;
     if not FClosing then
     begin
       UpdateGameListItem(LGame);
