@@ -515,8 +515,9 @@ type
     function DisplayedMovesText(AGameTree: TGameTree): string;
     function DisplayedMoveContext(AGameTree: TGameTree;
       out AMovesText: string; out AMoveCount: Integer): Boolean;
-    function DisplayedPositionSignature(const AStartingFEN,
-      AMovesText: string; AGameState: TGameOrchestratorState): string;
+    function DisplayedPositionSignature(AGameTree: TGameTree; ANodeId: Int64;
+      const AStartingFEN, AMovesText: string;
+      AGameState: TGameOrchestratorState): string;
     function DisplayedPositionIsTerminal(ADisplayedMoveCount,
       ATotalMoveCount: Integer; AGameState: TGameOrchestratorState): Boolean;
     function HasDisplayedGameToSave: Boolean;
@@ -3493,6 +3494,7 @@ end;
 procedure TMainForm.RestartAnalyzer(AGameTree: TGameTree);
 var
   LGameTree: TGameTree;
+  LNode: TGameTreePlyNode;
   LSearch: TGameTreeSearchRef;
   LDisplayedMoveCount: Integer;
   LDisplayedMovesText: string;
@@ -3510,6 +3512,9 @@ begin
   if LGameTree = nil then
     Exit;
   LSearch := EmptyGameTreeSearchRef;
+  LNode := CurrentDisplayedGameTreeNode(LGameTree);
+  if LNode = nil then
+    Exit;
 
   LStartingFEN := StartingFenForTree(LGameTree);
   if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
@@ -3518,8 +3523,8 @@ begin
   LTotalMoveCount := LGameTree.MainlineCount;
   LGameState := StateForTree(LGameTree);
 
-  Signature := DisplayedPositionSignature(LStartingFEN, LDisplayedMovesText,
-    LGameState);
+  Signature := DisplayedPositionSignature(LGameTree, LNode.NodeId,
+    LStartingFEN, LDisplayedMovesText, LGameState);
   if Signature = FAnalyzerLastPositionSignature then
     Exit;
   FAnalyzerLastPositionSignature := Signature;
@@ -3544,6 +3549,7 @@ end;
 procedure TMainForm.RestartMctsAnnotator(AGameTree: TGameTree);
 var
   LGameTree: TGameTree;
+  LNode: TGameTreePlyNode;
   LDisplayedMoveCount: Integer;
   LDisplayedMovesText: string;
   LGameState: TGameOrchestratorState;
@@ -3558,6 +3564,9 @@ begin
   LGameTree := AGameTree;
   if LGameTree = nil then
     Exit;
+  LNode := CurrentDisplayedGameTreeNode(LGameTree);
+  if LNode = nil then
+    Exit;
   LStartingFEN := StartingFenForTree(LGameTree);
   if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
     LDisplayedMoveCount) then
@@ -3565,8 +3574,8 @@ begin
   LTotalMoveCount := LGameTree.MainlineCount;
   LGameState := StateForTree(LGameTree);
 
-  Signature := DisplayedPositionSignature(LStartingFEN, LDisplayedMovesText,
-    LGameState);
+  Signature := DisplayedPositionSignature(LGameTree, LNode.NodeId,
+    LStartingFEN, LDisplayedMovesText, LGameState);
   if Signature = FMctsLastPositionSignature then
     Exit;
   FMctsLastPositionSignature := Signature;
@@ -4110,10 +4119,17 @@ begin
   end;
 end;
 
-function TMainForm.DisplayedPositionSignature(const AStartingFEN,
-  AMovesText: string; AGameState: TGameOrchestratorState): string;
+function TMainForm.DisplayedPositionSignature(AGameTree: TGameTree;
+  ANodeId: Int64; const AStartingFEN, AMovesText: string;
+  AGameState: TGameOrchestratorState): string;
+var
+  LGameTreeId: Int64;
 begin
-  Result := AStartingFEN + #10 + AMovesText + #10 +
+  LGameTreeId := 0;
+  if AGameTree <> nil then
+    LGameTreeId := AGameTree.GameTreeId;
+  Result := IntToStr(LGameTreeId) + #10 + IntToStr(ANodeId) + #10 +
+    AStartingFEN + #10 + AMovesText + #10 +
     IntToStr(Ord(AGameState));
 end;
 
