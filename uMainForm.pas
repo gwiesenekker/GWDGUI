@@ -51,6 +51,11 @@ type
     TimeControl: TTimeControl;
   end;
 
+  TRunningSnapshotLogInput = record
+    LogLinesText: string;
+    LogLineCount: Integer;
+  end;
+
   TRunningDisplayTextState = record
     EffectiveMovesText: string;
     EffectiveAnnotationsText: string;
@@ -214,6 +219,7 @@ type
     procedure RequestStop(const AReason: string);
     procedure SnapshotTreeInput(const AEventName: string;
       out AInput: TRunningSnapshotTreeInput);
+    procedure SnapshotLogInput(out AInput: TRunningSnapshotLogInput);
     procedure UpdateListCaption(const ACaption: string);
     property Id: Integer read FId;
     property GameTreeActor: TGameTreeActor read FGameTreeActor;
@@ -1137,6 +1143,12 @@ begin
   AInput.WhiteUsedSeconds := FSnapshot.WhiteUsedSeconds;
   AInput.BlackUsedSeconds := FSnapshot.BlackUsedSeconds;
   AInput.TimeControl := FSetup.TimeControl;
+end;
+
+procedure TRunningGame.SnapshotLogInput(out AInput: TRunningSnapshotLogInput);
+begin
+  AInput.LogLinesText := FSnapshot.LogLines.Text;
+  AInput.LogLineCount := FSnapshot.LogLines.Count;
 end;
 
 procedure TRunningGame.UpdateListCaption(const ACaption: string);
@@ -5481,7 +5493,7 @@ var
   LEffectiveMovesText: string;
   LBlackRemainingSeconds: Double;
   LBlackUsedSeconds: Double;
-  LInput: TRunningSnapshotTreeInput;
+  LLogInput: TRunningSnapshotLogInput;
   LPvState: TRunningDisplayPvState;
   LTextState: TRunningDisplayTextState;
   LWhiteRemainingSeconds: Double;
@@ -5493,14 +5505,14 @@ var
     LLogLines: TStringList;
   begin
     LLogSourceChanged := (FGameLogSourceGameId <> AGame.Id) or
-      (FGameLogSourceLineCount <> LInput.LogLineCount) or
+      (FGameLogSourceLineCount <> LLogInput.LogLineCount) or
       (FGameLogSourceShowStdout <> AGame.ShowStdout);
     if LLogSourceChanged then
     begin
       FGameLog.Clear;
       LLogLines := TStringList.Create;
       try
-        LLogLines.Text := LInput.LogLinesText;
+        LLogLines.Text := LLogInput.LogLinesText;
         for J := 0 to LLogLines.Count - 1 do
           if GameLogLineVisible(LLogLines[J], AGame) then
             FGameLog.Add(LLogLines[J]);
@@ -5508,7 +5520,7 @@ var
         LLogLines.Free;
       end;
       FGameLogSourceGameId := AGame.Id;
-      FGameLogSourceLineCount := LInput.LogLineCount;
+      FGameLogSourceLineCount := LLogInput.LogLineCount;
       FGameLogSourceShowStdout := AGame.ShowStdout;
     end;
   end;
@@ -5545,8 +5557,8 @@ begin
     SetDisplayedTreeTracking('', FDisplayedMovesSignature, '', 0, -1);
   end;
 
-  LInput := RunningSnapshotTreeInput(AGame, '');
-  LRunningSignature := RunningDisplaySignature(AGame, LInput.LogLineCount);
+  AGame.SnapshotLogInput(LLogInput);
+  LRunningSignature := RunningDisplaySignature(AGame, LLogInput.LogLineCount);
   UpdateDisplayedGameLog;
   if FDisplayedRunningSignature = LRunningSignature then
   begin
