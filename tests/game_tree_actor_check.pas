@@ -86,7 +86,8 @@ begin
 
     Command := Actor.CreateAppendMainlineSnapshotMoveCommand(
       GameTreeHeaderInput('snapshot', 'Match', 'Engine A', 'Engine B', '*',
-        'W:W31-50:B1-20', True, DefaultTimeControl),
+        'W:W31-50:B1-20', True, DefaultTimeControl, gosWaiting,
+        'engine warning'),
       '18-23', AnnotationWithScore('', 'engine', '0.37'),
       GameTreeMainlineInput(nil, nil, True, 299.0, 298.0, 1.0, 2.0),
       GameTreePvInput(True, 3, '0.37', '38-33', '8', '0.21'),
@@ -121,6 +122,8 @@ begin
         'snapshot append should update header');
       Check(Actor.GameTree.WhiteName = 'Engine A',
         'snapshot append should update white name');
+      Check(Actor.GameTree.StatusText = 'engine warning',
+        'snapshot append should update status text');
       Check(Actor.GameTree.MainlineNode[3].EnginePV = '38-33',
         'snapshot append should record engine PV');
     finally
@@ -232,7 +235,8 @@ begin
 
     Command := Actor.CreateSetHeaderCommand(
       GameTreeHeaderInput('', 'New Event', 'Alice', 'Bob', '1-0',
-        'W:W31-50:B1-20', False, DefaultTimeControl));
+        'W:W31-50:B1-20', False, DefaultTimeControl, gosWaiting,
+        'manual adjudication'));
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'set-header command should be accepted');
@@ -246,6 +250,8 @@ begin
         'set-header command should update black name');
       Check(Actor.GameTree.ResultText = '1-0',
         'set-header command should update result');
+      Check(Actor.GameTree.StatusText = 'manual adjudication',
+        'set-header command should update status text');
       RevisionAfterHeader := Actor.Revision;
     finally
       Command.Free;
@@ -253,7 +259,8 @@ begin
 
     Command := Actor.CreateSetHeaderCommand(
       GameTreeHeaderInput('', 'New Event', 'Alice', 'Bob', '1-0',
-        'W:W31-50:B1-20', False, DefaultTimeControl));
+        'W:W31-50:B1-20', False, DefaultTimeControl, gosWaiting,
+        'manual adjudication'));
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,

@@ -130,6 +130,7 @@ type
     BlackName: string;
     ResultText: string;
     StartingFEN: string;
+    StatusText: string;
     GameState: TGameOrchestratorState;
     HasTimeControl: Boolean;
     MovesPerPeriod: Integer;
@@ -401,6 +402,7 @@ begin
   BlackName := 'Black';
   ResultText := '*';
   StartingFEN := '';
+  StatusText := '';
   GameState := gosWaiting;
   HasTimeControl := False;
   MovesPerPeriod := 0;

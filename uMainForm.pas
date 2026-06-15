@@ -33,6 +33,7 @@ type
     BlackName: string;
     ResultText: string;
     StartingFEN: string;
+    StatusText: string;
     MovesText: string;
     AnnotationsText: string;
     State: TGameOrchestratorState;
@@ -989,7 +990,9 @@ end;
 
 function TRunningGame.LastErrorText: string;
 begin
-  Result := FSnapshot.LastError;
+  Result := Trim(FGameTree.StatusText);
+  if Result = '' then
+    Result := FSnapshot.LastError;
 end;
 
 function TRunningGame.ResultText: string;
@@ -1095,6 +1098,7 @@ begin
   AInput.ResultText := ValueOrFallback(LSnapshot.GameResult, '*');
   AInput.StartingFEN := ValueOrFallback(LSnapshot.StartingFEN,
     FSetup.StartingFEN);
+  AInput.StatusText := Trim(LSnapshot.LastError);
   AInput.MovesText := LSnapshot.MovesPlayedText;
   AInput.AnnotationsText := LSnapshot.MoveAnnotationsText;
   AInput.State := LSnapshot.State;
@@ -4735,6 +4739,7 @@ var
   LResultText: string;
   LState: TGameOrchestratorState;
   LStartingFEN: string;
+  LStatusText: string;
   LTimeControl: TTimeControl;
   LTreeSignature: string;
   LWhiteName: string;
@@ -4773,16 +4778,21 @@ begin
     LTimeControl := AGame.SetupTimeControl
   else
     FillChar(LTimeControl, SizeOf(LTimeControl), 0);
+  if AGameTree <> nil then
+    LStatusText := AGameTree.StatusText
+  else
+    LStatusText := '';
 
   if AGame <> nil then
     Result := GameTreeHeaderInput(LTreeSignature,
       EventNameForTree(AGameTree), LWhiteName, LBlackName,
-      LResultText, LStartingFEN, LRecordTimeControl, LTimeControl, LState)
+      LResultText, LStartingFEN, LRecordTimeControl, LTimeControl, LState,
+      LStatusText)
   else
     Result := GameTreeHeaderInput(LTreeSignature,
       EventNameForTree(AGameTree), LWhiteName, LBlackName,
       LResultText, LStartingFEN,
-      LRecordTimeControl, LTimeControl, LState);
+      LRecordTimeControl, LTimeControl, LState, LStatusText);
 end;
 
 function TMainForm.RunningSnapshotTreeInput(AGame: TRunningGame;
@@ -4801,7 +4811,8 @@ function TMainForm.RunningSnapshotHeaderInput(
 begin
   Result := GameTreeHeaderInput('running:' + IntToStr(AInput.GameId),
     AInput.EventName, AInput.WhiteName, AInput.BlackName, AInput.ResultText,
-    AInput.StartingFEN, True, AInput.TimeControl, AInput.State);
+    AInput.StartingFEN, True, AInput.TimeControl, AInput.State,
+    AInput.StatusText);
 end;
 
 function TMainForm.RunningSnapshotMainlineInput(
@@ -5811,7 +5822,8 @@ var
     SetGameTreeHeader(Actor,
       GameTreeHeaderInput('', AResolvedEventName, AResolvedWhiteName,
         AResolvedBlackName, AResolvedResultText, AResolvedStartingFEN,
-        False, DefaultTimeControl, StateForTree(AGameTree)), LErrorText);
+        False, DefaultTimeControl, StateForTree(AGameTree),
+        AGameTree.StatusText), LErrorText);
   end;
 begin
   if AGameTree = nil then

@@ -26,6 +26,7 @@ type
     BlackName: string;
     ResultText: string;
     StartingFEN: string;
+    StatusText: string;
     GameState: TGameOrchestratorState;
     RecordTimeControl: Boolean;
     TimeControl: TTimeControl;
@@ -62,7 +63,8 @@ function GameTreePvInput(ARecordPV: Boolean; ABasePly: Integer;
 function GameTreeHeaderInput(const ASignature, AEventName, AWhiteName,
   ABlackName, AResultText, AStartingFEN: string; ARecordTimeControl: Boolean;
   const ATimeControl: TTimeControl;
-  AGameState: TGameOrchestratorState = gosWaiting): TGameTreeHeaderInput;
+  AGameState: TGameOrchestratorState = gosWaiting;
+  const AStatusText: string = ''): TGameTreeHeaderInput;
 function GameTreeMainlineInput(AMoves, AAnnotations: TStrings;
   ARecordClock: Boolean; AWhiteRemainingSeconds, ABlackRemainingSeconds,
   AWhiteUsedSeconds, ABlackUsedSeconds: Double): TGameTreeMainlineInput;
@@ -109,7 +111,8 @@ end;
 function GameTreeHeaderInput(const ASignature, AEventName, AWhiteName,
   ABlackName, AResultText, AStartingFEN: string; ARecordTimeControl: Boolean;
   const ATimeControl: TTimeControl;
-  AGameState: TGameOrchestratorState): TGameTreeHeaderInput;
+  AGameState: TGameOrchestratorState;
+  const AStatusText: string): TGameTreeHeaderInput;
 begin
   Result.Signature := ASignature;
   Result.EventName := AEventName;
@@ -117,6 +120,7 @@ begin
   Result.BlackName := ABlackName;
   Result.ResultText := AResultText;
   Result.StartingFEN := AStartingFEN;
+  Result.StatusText := AStatusText;
   Result.GameState := AGameState;
   Result.RecordTimeControl := ARecordTimeControl;
   Result.TimeControl := ATimeControl;
@@ -168,6 +172,7 @@ begin
   AGameTree.BeginRebuild(AHeader.Signature, AHeader.EventName,
     AHeader.WhiteName, AHeader.BlackName, AHeader.ResultText,
     AHeader.StartingFEN);
+  AGameTree.StatusText := AHeader.StatusText;
   AGameTree.GameState := AHeader.GameState;
   if AHeader.RecordTimeControl then
     AGameTree.RecordTimeControl(AHeader.TimeControl);

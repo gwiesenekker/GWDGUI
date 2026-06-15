@@ -652,6 +652,7 @@ begin
   AddLine(ACommand.HeaderInput.BlackName);
   AddLine(ACommand.HeaderInput.ResultText);
   AddLine(ACommand.HeaderInput.StartingFEN);
+  AddLine(ACommand.HeaderInput.StatusText);
   AddLine(IntToStr(Ord(ACommand.HeaderInput.GameState)));
   AddLine(BoolText(ACommand.HeaderInput.RecordTimeControl));
   AddLine(IntToStr(ACommand.HeaderInput.TimeControl.MovesPerPeriod));
@@ -1036,6 +1037,7 @@ begin
           ACommand.HeaderInput.WhiteName, ACommand.HeaderInput.BlackName,
           ACommand.HeaderInput.ResultText, ACommand.HeaderInput.StartingFEN,
           Changed);
+        FGameTree.StatusText := ACommand.HeaderInput.StatusText;
         FGameTree.GameState := ACommand.HeaderInput.GameState;
         if ACommand.HeaderInput.RecordTimeControl then
           FGameTree.RecordTimeControl(ACommand.HeaderInput.TimeControl);
@@ -1233,6 +1235,11 @@ begin
           ACommand.HeaderInput.WhiteName, ACommand.HeaderInput.BlackName,
           ACommand.HeaderInput.ResultText, ACommand.HeaderInput.StartingFEN,
           Changed);
+        if FGameTree.StatusText <> ACommand.HeaderInput.StatusText then
+        begin
+          FGameTree.StatusText := ACommand.HeaderInput.StatusText;
+          Changed := True;
+        end;
         FGameTree.SetGameState(ACommand.HeaderInput.GameState, StateChanged);
         if StateChanged then
           Changed := True;
