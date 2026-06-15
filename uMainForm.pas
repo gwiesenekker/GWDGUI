@@ -4654,6 +4654,7 @@ function TMainForm.VisibleMainPvForTree(AGameTree: TGameTree;
   out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV, AScore,
   ADepth, ATimeText: string): Boolean;
 var
+  LDisplayedNode: TGameTreePlyNode;
   LGame: TRunningGame;
   LTreeDepth: string;
   LTreePV: string;
@@ -4665,8 +4666,24 @@ begin
   AScore := '';
   ADepth := '';
   ATimeText := '';
-  ABaseBoard := ActiveBoard;
-  ABasePly := CurrentMoveCount;
+  ABaseBoard := FTreePvBaseBoard;
+  ABasePly := 0;
+  LDisplayedNode := CurrentDisplayedGameTreeNode(AGameTree);
+  if LDisplayedNode <> nil then
+  begin
+    ABasePly := LDisplayedNode.PlyNumber;
+    if not TryBuildTreeBoardAtNode(AGameTree, LDisplayedNode,
+      FTreePvBaseBoard) then
+    begin
+      ABasePly := 0;
+      FTreePvBaseBoard.LoadFromFEN(StartingFenForTree(AGameTree));
+    end;
+  end
+  else
+  begin
+    ABasePly := 0;
+    FTreePvBaseBoard.LoadFromFEN(StartingFenForTree(AGameTree));
+  end;
 
   if LGame <> nil then
   begin
