@@ -186,6 +186,7 @@ type
     function ListCaptionMatches(const ACaption: string): Boolean;
     function BlackNameText: string;
     function LastErrorText: string;
+    function MainlineCount: Integer;
     function ResultText: string;
     function SetupTimeControl: TTimeControl;
     function SnapshotPvSignatureMatches(const ASignature: string): Boolean;
@@ -1004,6 +1005,14 @@ begin
   Result := Trim(FGameTree.StatusText);
   if Result = '' then
     Result := FSnapshot.LastError;
+end;
+
+function TRunningGame.MainlineCount: Integer;
+begin
+  if FGameTree <> nil then
+    Result := FGameTree.MainlineCount
+  else
+    Result := 0;
 end;
 
 function TRunningGame.ResultText: string;
@@ -4326,7 +4335,7 @@ begin
   LMoves := TStringList.Create;
   try
     TextToMoveList(AInput.MovesText, LMoves);
-    Result := AGame.GameTree.MainlineCount > LMoves.Count;
+    Result := AGame.MainlineCount > LMoves.Count;
   finally
     LMoves.Free;
   end;
@@ -7100,10 +7109,7 @@ begin
       for I := 0 to FGames.Count - 1 do
       begin
         LGame := TRunningGame(FGames[I]);
-        if LGame.GameTree <> nil then
-          LPlyCount := LGame.GameTree.MainlineCount
-        else
-          LPlyCount := 0;
+        LPlyCount := LGame.MainlineCount;
         if PendingText <> '' then
           PendingText += '; ';
         PendingText += '#' + IntToStr(LGame.Id) + ' ' + LGame.Title +
@@ -7406,10 +7412,7 @@ begin
   LBlackName := AGame.BlackNameText;
   LResultText := AGame.ResultText;
   LState := AGame.State;
-  if AGame.GameTree <> nil then
-    LPlyCount := AGame.GameTree.MainlineCount
-  else
-    LPlyCount := 0;
+  LPlyCount := AGame.MainlineCount;
   LBaseTitle := AGame.Title;
   if Pos(' vs ', LBaseTitle) = 0 then
     LBaseTitle := LBaseTitle + ' ' + LWhiteName + ' vs ' + LBlackName;
