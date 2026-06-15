@@ -435,6 +435,7 @@ type
       ARecordPV: Boolean): TGameTreePvInput;
     function RunningSnapshotSyncSignature(
       const AInput: TRunningSnapshotTreeInput): string;
+    procedure InitializeRunningGameTree(AGame: TRunningGame);
     procedure UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
       const AEventName: string = '');
     function RunningGameTreePdnText(AGame: TRunningGame;
@@ -4488,6 +4489,32 @@ begin
     AInput.AnnotationsText;
 end;
 
+procedure TMainForm.InitializeRunningGameTree(AGame: TRunningGame);
+var
+  Actor: TGameTreeActor;
+  LErrorText: string;
+  LInput: TRunningSnapshotTreeInput;
+begin
+  if (AGame = nil) or (AGame.GameTree = nil) then
+    Exit;
+
+  Actor := ActorForGameTree(AGame.GameTree);
+  if Actor = nil then
+    Exit;
+
+  LInput := RunningSnapshotTreeInput(AGame, '');
+  LInput.State := gosRunning;
+  LInput.WhiteRemainingSeconds := AGame.FSetup.TimeControl.MinutesPerPeriod * 60;
+  LInput.BlackRemainingSeconds := LInput.WhiteRemainingSeconds;
+  LInput.WhiteUsedSeconds := 0;
+  LInput.BlackUsedSeconds := 0;
+  RebuildGameTreeFromInputs(Actor,
+    RunningSnapshotHeaderInput(LInput),
+    RunningSnapshotMainlineInput(LInput, nil, nil, True),
+    GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', ''),
+    -1, 0, '', '', '', '', LErrorText);
+end;
+
 procedure TMainForm.UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
   const AEventName: string);
 var
@@ -6173,7 +6200,6 @@ begin
   FBoard.LoadFromFEN(ASetup.StartingFEN);
   FStartingFEN := ASetup.StartingFEN;
   SetDisplayedTreeTracking('', '', '', 0, -1);
-  ClearStoredTreeVariations(Result.GameTree);
   FGameBrowsePly := -1;
   FWhiteRemainingSeconds := ASetup.TimeControl.MinutesPerPeriod * 60;
   FBlackRemainingSeconds := FWhiteRemainingSeconds;
@@ -6188,7 +6214,7 @@ begin
   FGameLogMemo.Clear;
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
-  UpdateGameTreeFromMoveText(Result, Result.GameTree, '', '');
+  InitializeRunningGameTree(Result);
   UpdateBoardInfo;
 
   LRunner.Start;
