@@ -7099,7 +7099,7 @@ var
   I: Integer;
   LastWarningTick: QWord;
   LGame: TRunningGame;
-  LInput: TRunningSnapshotTreeInput;
+  LPlyCount: Integer;
   PendingText: string;
   WarningText: string;
 begin
@@ -7128,13 +7128,16 @@ begin
       for I := 0 to FGames.Count - 1 do
       begin
         LGame := TRunningGame(FGames[I]);
-        LInput := RunningSnapshotTreeInput(LGame, '');
+        if LGame.GameTree <> nil then
+          LPlyCount := LGame.GameTree.MainlineCount
+        else
+          LPlyCount := 0;
         if PendingText <> '' then
           PendingText += '; ';
         PendingText += '#' + IntToStr(LGame.Id) + ' ' + LGame.Title +
           ' [lifecycle=' + RunningGameLifecycleToString(LGame.Lifecycle) +
-          ', state=' + OrchestratorStateToString(LInput.State) +
-          ', plies=' + IntToStr(LInput.PlyCount) +
+          ', state=' + OrchestratorStateToString(StateForTree(LGame.GameTree)) +
+          ', plies=' + IntToStr(LPlyCount) +
           ', reservations=' + LGame.ReservationSummary + ']';
       end;
       WarningText := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
@@ -7429,7 +7432,9 @@ var
   LBlackName: string;
   LCaption: string;
   LInput: TRunningSnapshotTreeInput;
+  LPlyCount: Integer;
   LResultText: string;
+  LState: TGameOrchestratorState;
   LWhiteName: string;
 begin
   if (AGame = nil) or (FGamesListBox = nil) then
@@ -7442,15 +7447,20 @@ begin
     LInput.BlackName);
   LResultText := PlayerNameOrFallback(Trim(AGame.GameTree.ResultText),
     LInput.ResultText);
+  LState := StateForTree(AGame.GameTree);
+  if AGame.GameTree <> nil then
+    LPlyCount := AGame.GameTree.MainlineCount
+  else
+    LPlyCount := LInput.PlyCount;
   LBaseTitle := AGame.Title;
   if Pos(' vs ', LBaseTitle) = 0 then
     LBaseTitle := LBaseTitle + ' ' + LWhiteName + ' vs ' + LBlackName;
 
-  if LInput.State = gosGameOver then
+  if LState = gosGameOver then
     LCaption := LBaseTitle + ' - ' + LResultText
   else
     LCaption := LBaseTitle + ' - ' +
-      OrchestratorStateToString(LInput.State);
+      OrchestratorStateToString(LState);
   case AGame.Lifecycle of
     rglStarting:
       LCaption := LBaseTitle + ' - ' +
@@ -7465,9 +7475,9 @@ begin
       LCaption := LCaption + ' (' +
         RunningGameLifecycleToString(AGame.Lifecycle) + ')';
   end;
-  if AGame.Paused and (LInput.State in [gosWaiting, gosRunning]) then
+  if AGame.Paused and (LState in [gosWaiting, gosRunning]) then
     LCaption := LCaption + ' (paused)';
-  LCaption := LCaption + ' - ' + IntToStr(LInput.PlyCount) + ' plies';
+  LCaption := LCaption + ' - ' + IntToStr(LPlyCount) + ' plies';
   if AGame.ListCaptionMatches(LCaption) then
     Exit;
   for I := 0 to FGamesListBox.Items.Count - 1 do
