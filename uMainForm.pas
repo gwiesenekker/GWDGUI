@@ -444,8 +444,7 @@ type
       AGameTree: TGameTree; ANodeId: Int64; const AScore,
       APrincipalVariation, ADepth, ATimeText: string;
       out AErrorText: string): Boolean;
-    function ClearGameTreeStoredVariations(AActor: TGameTreeActor;
-      out ATreeChanged: Boolean): Boolean;
+    function ClearGameTreeStoredVariations(AActor: TGameTreeActor): Boolean;
     function StoreGameTreeVariationLine(AActor: TGameTreeActor;
       ADisplayAfterPly, ABasePly: Integer; const AMovesText,
       AAnnotationText: string; ASource: TGameTreeMoveSource;
@@ -2469,21 +2468,19 @@ begin
   end;
 end;
 
-function TMainForm.ClearGameTreeStoredVariations(AActor: TGameTreeActor;
-  out ATreeChanged: Boolean): Boolean;
+function TMainForm.ClearGameTreeStoredVariations(AActor: TGameTreeActor): Boolean;
 var
   Command: TGameTreeCommand;
   LErrorText: string;
 begin
   Result := False;
-  ATreeChanged := False;
   if AActor = nil then
     Exit;
 
   Command := AActor.CreateClearStoredVariationsCommand;
   try
-    Result := ExecuteGameTreeCommand(AActor, Command, LErrorText);
-    ATreeChanged := Result and Command.TreeChanged;
+    Result := ExecuteAndApplyGameTreeCommand(AActor, AActor.GameTree, Command,
+      False, LErrorText);
   finally
     Command.Free;
   end;
@@ -4222,15 +4219,11 @@ end;
 procedure TMainForm.ClearStoredTreeVariations(AGameTree: TGameTree);
 var
   Actor: TGameTreeActor;
-  LTreeChanged: Boolean;
 begin
   SetLength(FVariationHits, 0);
   Actor := ActorForGameTree(AGameTree);
-  LTreeChanged := False;
-  ClearGameTreeStoredVariations(Actor, LTreeChanged);
+  ClearGameTreeStoredVariations(Actor);
   ClearVariationExploration;
-  if LTreeChanged then
-    RefreshDisplayedGameTreeViews(AGameTree, True);
 end;
 
 procedure TMainForm.LoadTreeVariationsFromLegacyText(AGameTree: TGameTree;
