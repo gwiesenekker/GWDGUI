@@ -233,8 +233,11 @@ var
   LPvMove: string;
 begin
   Result := '';
-  if (APrevious = nil) or (APlayedMove = nil) or AOptions.HideAnnotations or
-    (not AOptions.ShowAnnotatorScore) or (Trim(APrevious.AnnotatorScore) = '') then
+  if (APrevious = nil) or (APlayedMove = nil) then
+    Exit;
+  if AOptions.HideAnnotations or (not AOptions.ShowAnnotatorScore) then
+    Exit;
+  if Trim(APrevious.AnnotatorScore) = '' then
     Exit;
   if Trim(APlayedMove.AnnotatorScore) <> '' then
     Exit;
@@ -279,10 +282,12 @@ var
   LSide: TDraughtsSide;
 begin
   Result := '';
-  if (APrevious = nil) or (APlayedMove = nil) or
-    (not NodeIsAnnotatorAlternative(APrevious, APlayedMove)) or
-    ((not AOptions.ShowAnnotatorPVMove) and
-    (not AOptions.ShowAnnotatorFullPV)) then
+  if (APrevious = nil) or (APlayedMove = nil) then
+    Exit;
+  if not NodeIsAnnotatorAlternative(APrevious, APlayedMove) then
+    Exit;
+  if (not AOptions.ShowAnnotatorPVMove) and
+    (not AOptions.ShowAnnotatorFullPV) then
     Exit;
 
   LMoves := TStringList.Create;
@@ -437,17 +442,19 @@ begin
     Exit;
 
   LContinuation := FindContinuationChild(ANode);
-  if NodeIsAnnotatorAlternative(APreviousPosition, ANode) and
-    (not AOptions.ShowAnnotatorFullPV) then
-    LContinuation := nil;
+  if APreviousPosition <> nil then
+    if NodeIsAnnotatorAlternative(APreviousPosition, ANode) and
+      (not AOptions.ShowAnnotatorFullPV) then
+      LContinuation := nil;
 
   Result := NodeMoveCaption(ANode, True, ACompact) +
     NodeAnnotation(ANode, AOptions);
-  if NodeIsAnnotatorAlternative(APreviousPosition, ANode) and
-    AOptions.ShowAnnotatorScore and (not AOptions.HideAnnotations) and
-    (Trim(APreviousPosition.AnnotatorScore) <> '') and
-    (Trim(ANode.AnnotatorScore) = '') then
-    Result += ' {A: ' + Trim(APreviousPosition.AnnotatorScore) + '}';
+  if APreviousPosition <> nil then
+    if NodeIsAnnotatorAlternative(APreviousPosition, ANode) and
+      AOptions.ShowAnnotatorScore and (not AOptions.HideAnnotations) and
+      (Trim(APreviousPosition.AnnotatorScore) <> '') and
+      (Trim(ANode.AnnotatorScore) = '') then
+      Result += ' {A: ' + Trim(APreviousPosition.AnnotatorScore) + '}';
 
   ParseVariationKey(ANode.VariationKey, LBasePlyNumber, LDisplayAfterPly,
     LVariationIndex, LVariationPlyNumber);

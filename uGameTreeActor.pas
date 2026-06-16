@@ -1075,6 +1075,12 @@ begin
       LStoredMoves.Free;
     end;
   end;
+  if FGameTree.FindVariationNode(ACommand.VariationIndex,
+    ACommand.PlyNumber) = nil then
+  begin
+    Reject(ACommand, 'variation node was not materialized');
+    Exit;
+  end;
   if (not LNodeWasMaterialized) and
     (FGameTree.FindVariationNode(ACommand.VariationIndex,
       ACommand.PlyNumber) <> nil) then
