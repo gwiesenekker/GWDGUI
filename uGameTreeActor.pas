@@ -911,6 +911,8 @@ var
   LMoveText: string;
   LMovesText: string;
   LNodeWasMaterialized: Boolean;
+  LAnnotationText: string;
+  LForceNewVariation: Boolean;
   LVariationIndex: Integer;
   LVariationMoves: TStringList;
   LVariationPly: Integer;
@@ -934,6 +936,8 @@ begin
   LDisplayAfterPly := LBasePly;
   LVariationIndex := -1;
   LVariationPly := 0;
+  LAnnotationText := '';
+  LForceNewVariation := False;
   if Trim(ANode.VariationKey) <> '' then
   begin
     if not FGameTree.ParseVariationKey(ANode.VariationKey, LBasePly,
@@ -972,10 +976,16 @@ begin
   else
   begin
     LMovesText := LMoveText;
+    if ACommand.MoveSource in [gmsAutorandom, gmsAutoplay] then
+    begin
+      LAnnotationText := 'AP';
+      LForceNewVariation := True;
+    end;
   end;
 
   ACommand.VariationIndex := FGameTree.StoreVariationLine(
-    LDisplayAfterPly, LBasePly, LMovesText, '', AChanged);
+    LDisplayAfterPly, LBasePly, LMovesText, LAnnotationText,
+    LForceNewVariation, AChanged);
   if ACommand.VariationIndex < 0 then
   begin
     Reject(ACommand, 'variation line was not stored');

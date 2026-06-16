@@ -1058,6 +1058,8 @@ begin
         'root search variation should have base ply 0');
       Check(Actor.GameTree.VariationLine[0].MovesText = '31-26',
         'root search variation should store result move');
+      Check(Actor.GameTree.VariationLine[0].AnnotationText = 'AP',
+        'root search variation should store AP annotation');
       RevisionAfterStore := Actor.Revision;
     finally
       StoreCommand.Free;
@@ -1069,10 +1071,14 @@ begin
       Actor.ExecuteCommand(StoreCommand);
       Check(StoreCommand.Accepted,
         'duplicate root search variation store should be accepted');
-      Check(not StoreCommand.TreeChanged,
-        'duplicate root search variation store should not report tree change');
-      Check(Actor.Revision = RevisionAfterStore,
-        'duplicate root search variation store should not increment revision');
+      Check(StoreCommand.TreeChanged,
+        'duplicate root search variation should create a fresh branch');
+      Check(StoreCommand.VariationIndex = 1,
+        'duplicate root search variation should create second variation');
+      Check(Actor.GameTree.VariationLine[1].MovesText = '31-26',
+        'duplicate root search variation should store same move');
+      Check(Actor.Revision > RevisionAfterStore,
+        'duplicate root search variation should increment revision');
     finally
       StoreCommand.Free;
     end;
@@ -1152,6 +1158,8 @@ begin
         'direct move variation should create first variation');
       Check(Actor.GameTree.VariationLine[0].MovesText = '18-23',
         'direct move variation should store move');
+      Check(Actor.GameTree.VariationLine[0].AnnotationText = 'AP',
+        'autorandom variation should store AP annotation');
       Check(Command.DisplayAfterPly = MainlineNode.PlyNumber,
         'direct move variation should be displayed after selected node');
       Check(Actor.GameTree.VariationLine[0].DisplayAfterPly =
@@ -1164,6 +1172,8 @@ begin
         'direct move variation node should be child of selected node');
       Check(VariationNode.MoveText = '18-23',
         'direct move variation node should contain stored move');
+      Check(VariationNode.CommentText = 'AP',
+        'direct move variation node should contain AP comment');
       RevisionAfterStore := Actor.Revision;
     finally
       Command.Free;
@@ -1175,10 +1185,16 @@ begin
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'duplicate direct move variation command should be accepted');
-      Check(not Command.TreeChanged,
-        'duplicate direct move variation should not report tree change');
-      Check(Actor.Revision = RevisionAfterStore,
-        'duplicate direct move variation should not increment revision');
+      Check(Command.TreeChanged,
+        'duplicate autorandom variation should create a fresh branch');
+      Check(Command.VariationIndex = 1,
+        'duplicate autorandom variation should create second variation');
+      Check(Actor.GameTree.VariationLine[1].MovesText = '18-23',
+        'duplicate autorandom variation should store same first move');
+      Check(Actor.GameTree.FindVariationNode(1, 1) <> nil,
+        'duplicate autorandom variation should create visible second node');
+      Check(Actor.Revision > RevisionAfterStore,
+        'duplicate autorandom variation should increment revision');
     finally
       Command.Free;
     end;

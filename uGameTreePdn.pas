@@ -145,8 +145,14 @@ begin
     Exit;
   if AOptions.HideAnnotations then
     Exit;
+  if Trim(ANode.CommentText) <> '' then
+    Result := Trim(ANode.CommentText);
   if AOptions.ShowEngineScore and (Trim(ANode.EngineScore) <> '') then
-    Result := 'E: ' + Trim(ANode.EngineScore);
+  begin
+    if Result <> '' then
+      Result += '; ';
+    Result += 'E: ' + Trim(ANode.EngineScore);
+  end;
   if AOptions.ShowEngineFullPV and (Trim(ANode.EnginePV) <> '') then
   begin
     if Result <> '' then

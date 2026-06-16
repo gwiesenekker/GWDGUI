@@ -28,6 +28,7 @@ type
     AnnotatorPV: string;
     AnnotatorPVDepth: string;
     AnnotatorPVTimeText: string;
+    CommentText: string;
     VariationKey: string;
     HasClockInfo: Boolean;
     WhiteRemainingSeconds: Double;
@@ -216,6 +217,9 @@ type
       const AMovesText, AAnnotationText: string): Integer; overload;
     function StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
       const AMovesText, AAnnotationText: string;
+      out AChanged: Boolean): Integer; overload;
+    function StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
+      const AMovesText, AAnnotationText: string; AForceNew: Boolean;
       out AChanged: Boolean): Integer; overload;
     property Root: TGameTreePlyNode read FRoot;
     property GameTreeId: Int64 read FGameTreeId;
@@ -436,6 +440,7 @@ begin
   ANode.AnnotatorPV := '';
   ANode.AnnotatorPVDepth := '';
   ANode.AnnotatorPVTimeText := '';
+  ANode.CommentText := '';
   ANode.HasClockInfo := False;
   ANode.WhiteRemainingSeconds := 0;
   ANode.BlackRemainingSeconds := 0;
@@ -621,6 +626,9 @@ begin
     ANode.EngineScore := LEngineScore;
   if LAnnotatorScore <> '' then
     ANode.AnnotatorScore := LAnnotatorScore;
+  if (LEngineScore = '') and (LAnnotatorScore = '') and
+    (Trim(AAnnotationText) <> '') then
+    ANode.CommentText := Trim(AAnnotationText);
 end;
 
 function TGameTree.RecordMainlineMove(APlyNumber: Integer;
@@ -990,6 +998,14 @@ end;
 function TGameTree.StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
   const AMovesText, AAnnotationText: string;
   out AChanged: Boolean): Integer;
+begin
+  Result := StoreVariationLine(ADisplayAfterPly, ABasePly, AMovesText,
+    AAnnotationText, False, AChanged);
+end;
+
+function TGameTree.StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
+  const AMovesText, AAnnotationText: string; AForceNew: Boolean;
+  out AChanged: Boolean): Integer;
 var
   NewAnnotationText: string;
   NewMovesText: string;
@@ -1001,7 +1017,10 @@ begin
     Exit;
 
   NewMovesText := Trim(AMovesText);
-  Result := FindStoredVariation(ADisplayAfterPly, ABasePly, AMovesText);
+  if AForceNew then
+    Result := -1
+  else
+    Result := FindStoredVariation(ADisplayAfterPly, ABasePly, AMovesText);
   if Result < 0 then
   begin
     VariationEntry := TGameTreeVariationLine.Create;

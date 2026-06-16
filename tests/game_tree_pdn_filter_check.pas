@@ -368,11 +368,43 @@ begin
   end;
 end;
 
+procedure CheckPlainVariationAnnotationRenders;
+var
+  GameTree: TGameTree;
+  Moves: TStringList;
+  Options: TGameTreePdnRenderOptions;
+  Text: string;
+  VariationIndex: Integer;
+begin
+  GameTree := TGameTree.Create;
+  Moves := TStringList.Create;
+  try
+    GameTree.BeginRebuild('plain-variation-annotation', 'Event', 'White',
+      'Black', '*', 'W:W31-50:B1-20');
+    GameTree.RecordMainlineMove(1, '32-28');
+
+    VariationIndex := GameTree.StoreVariationLine(1, 1, '18-23', 'AP');
+    TextToMoveList('18-23', Moves);
+    RecordGameTreeVariationLine(GameTree,
+      GameTreeVariationLineInput(GameTree.VariationLine[VariationIndex],
+      VariationIndex, Moves, nil));
+
+    Options := DefaultGameTreePdnRenderOptions;
+    Text := RenderWithOptions(GameTree, Options);
+    CheckContains(Text, '(1...18-23 {AP})',
+      'plain variation annotation should render as comment');
+  finally
+    Moves.Free;
+    GameTree.Free;
+  end;
+end;
+
 begin
   CheckGameTreeIds;
   CheckStableRebuildNodeIds;
   CheckRebuildPreservesCopiedScoreAnnotations;
   CheckPdnDisplayFilters;
   CheckSamePlyVariationsDoNotOverwrite;
+  CheckPlainVariationAnnotationRenders;
   Writeln('OK');
 end.

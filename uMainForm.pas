@@ -5928,6 +5928,7 @@ var
         AText += 'es=' + ANode.EngineScore + '|';
       if AOptions.ShowAnnotatorScore then
         AText += 'as=' + ANode.AnnotatorScore + '|';
+      AText += 'ct=' + ANode.CommentText + '|';
       if AOptions.ShowClocks and ANode.HasClockInfo then
         AText += 'clk=' + FormatFloat('0.000', ANode.WhiteRemainingSeconds) +
           ',' + FormatFloat('0.000', ANode.BlackRemainingSeconds) + ',' +
