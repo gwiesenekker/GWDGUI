@@ -6501,10 +6501,8 @@ begin
   finally
     LBoard.Free;
   end;
-  UpdateBoardFromBrowseState(Result.GameTree);
   FBoardControl.Board := FBoard;
-  UpdateMiniBoardFromBoard(FBoard);
-  UpdateBoardInfo;
+  RefreshDisplayFromGameTree(Result.GameTree, True);
 
   LRunner.Start;
 end;
@@ -6779,7 +6777,7 @@ begin
             begin
               UpdateGameListItem(LGame);
               if SelectedGame = LGame then
-                RefreshDisplayedGameTreeViews(LGame.GameTree, False);
+                RefreshDisplayFromGameTree(LGame.GameTree, False);
             end;
           end;
         end;
@@ -7171,7 +7169,6 @@ begin
     FFenEdit.Text := LInfo.StartingFEN;
 
   UpdateBoardHighlights(LGameTree);
-  RefreshDisplayedGameTreeViews(LGameTree, False);
 
   UpdateLegalMovesFromTree(LGameTree);
   RestartAnalyzer(LGameTree);
