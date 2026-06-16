@@ -15,3 +15,5 @@ Current checks:
 - `board_regression_check.pas`
 - `pdn_regression_check.pas`
 - `game_tree_pdn_filter_check.pas`
+- `game_tree_actor_check.pas`
+- `source_audit_check.sh`
