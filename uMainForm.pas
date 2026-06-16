@@ -5291,7 +5291,6 @@ var
   LEffectiveResultText: string;
   LEffectiveStartingFEN: string;
   LEffectiveState: TGameOrchestratorState;
-  LMoveCount: Integer;
   LBoard: TDraughtsBoard;
   LPositionChanged: Boolean;
   LPvChanged: Boolean;
@@ -5433,15 +5432,7 @@ begin
     Exit;
   end;
 
-  FDisplayedAnnotationsSignature := LEffectiveAnnotationsText;
-  FDisplayedMovesSignature := LEffectiveMovesText;
-  LMoveCount := CurrentMoveCount;
-  if FGameBrowsePly > LMoveCount then
-    FGameBrowsePly := -1;
-  UpdateBoardFromBrowseState(AGame.GameTree);
-  UpdateMiniBoardFromBoard(FBoard);
-  RefreshDisplayedGameTreeViews(AGame.GameTree, False);
-  UpdateBoardInfo;
+  RefreshDisplayFromGameTree(AGame.GameTree, False);
 end;
 
 procedure TMainForm.MiniBoardDblClick(Sender: TObject);
