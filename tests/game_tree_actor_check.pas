@@ -462,6 +462,67 @@ begin
   end;
 end;
 
+procedure CheckQueuedSearchAnswerRejectedAfterTargetMutation;
+var
+  Actor: TGameTreeActor;
+  Command: TGameTreeCommand;
+  ResultMove: string;
+  ResultNodeId: Int64;
+  Search: TGameTreeSearchRef;
+  State: TGameTreeSearchState;
+begin
+  Actor := TGameTreeActor.Create;
+  try
+    Actor.GameTree.BeginRebuild('queued-search-target', 'Event', 'White',
+      'Black', '*', 'W:W31-50:B1-20');
+
+    Command := Actor.CreateAddMainlineMoveCommand(1, '32-28', gmsHuman);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'queued target setup move should be accepted');
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateStartSearchCommand(
+      Actor.GameTree.MainlineNode[1].NodeId, Search);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'queued target setup search should be accepted');
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateRebuildFromInputsCommand(
+      GameTreeHeaderInput('queued-search-target-rebuild', 'Event', 'White',
+        'Black', '*', 'W:W31-50:B1-20', False, DefaultTimeControl),
+      GameTreeMainlineInput(nil, nil, False, 0, 0, 0, 0),
+      GameTreePvInput(False, 0, '', ''),
+      GameTreePvInput(False, 0, '', ''));
+    Check(Actor.PostCommand(Command),
+      'queued target rebuild should post');
+    Command := nil;
+
+    Command := Actor.CreateSearchDoneCommand(Search, '18-23');
+    Check(Actor.PostCommand(Command),
+      'queued late search answer should post');
+    Command := nil;
+
+    Check(Actor.ProcessCommands = 2,
+      'queued target rebuild and late answer should process');
+    Check(Actor.SearchState(Search, State),
+      'queued target rebuild should leave search queryable');
+    Check(State = gssFailed,
+      'queued target rebuild should fail active search');
+    Check(not Actor.SearchResult(Search, ResultNodeId, ResultMove),
+      'queued late answer should not create a search result');
+  finally
+    Actor.Free;
+  end;
+end;
+
 procedure CheckSearchLifecycle;
 var
   Actor: TGameTreeActor;
@@ -1324,6 +1385,7 @@ end;
 begin
   CheckActorCommands;
   CheckQueuedActorCommands;
+  CheckQueuedSearchAnswerRejectedAfterTargetMutation;
   CheckSearchLifecycle;
   CheckSearchAnswerRejectedAfterTargetRebuild;
   CheckAnnotatorPvCommand;
