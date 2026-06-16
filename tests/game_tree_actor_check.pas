@@ -1077,23 +1077,23 @@ begin
       gmsAutoplay);
     try
       Actor.ExecuteCommand(StoreCommand);
-      Check(StoreCommand.Accepted,
-        'duplicate root search variation store should be accepted');
-      Check(StoreCommand.TreeChanged,
-        'duplicate root search variation should create a fresh branch');
-      Check(StoreCommand.VariationIndex = 1,
-        'duplicate root search variation should create second variation');
-      Check(Actor.GameTree.VariationLine[1].MovesText = '31-26',
-        'duplicate root search variation should store same move');
-      Check(Actor.Revision > RevisionAfterStore,
-        'duplicate root search variation should increment revision');
+	      Check(StoreCommand.Accepted,
+	        'duplicate root search variation store should be accepted');
+	      Check(not StoreCommand.TreeChanged,
+	        'duplicate root search variation should reuse unchanged AP branch');
+	      Check(StoreCommand.VariationIndex = 0,
+	        'duplicate root search variation should reuse existing AP variation');
+	      Check(Actor.GameTree.VariationLineCount = 1,
+	        'duplicate root search variation should not create AP sibling');
+	      Check(Actor.Revision = RevisionAfterStore,
+	        'duplicate root search variation should not increment revision');
     finally
       StoreCommand.Free;
     end;
 
     MainlineNode := Actor.GameTree.RecordMainlineMove(1, '32-28');
-    VariationIndex := Actor.GameTree.StoreVariationLine(1, 1,
-      '18-23 37-32', '');
+	    VariationIndex := Actor.GameTree.StoreVariationLine(1, 1,
+	      '18-23 37-32', 'AP');
     VariationNode := Actor.GameTree.RecordVariationMove(MainlineNode, 1, 1,
       VariationIndex, 1, '18-23');
     Check(VariationNode <> nil, 'variation node should exist for search');
@@ -1190,19 +1190,21 @@ begin
     end;
 
     Command := Actor.CreateStoreMoveVariationCommand(MainlineNode.NodeId,
-      '18-23', gmsAutorandom);
+      '20-24', gmsAutorandom);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
-        'duplicate direct move variation command should be accepted');
+        'second autorandom variation command should be accepted');
       Check(Command.TreeChanged,
-        'duplicate autorandom variation should create a fresh branch');
-      Check(Command.VariationIndex = 1,
-        'duplicate autorandom variation should create second variation');
-      Check(Actor.GameTree.VariationLine[1].MovesText = '18-23',
-        'duplicate autorandom variation should store same first move');
-      Check(Actor.GameTree.FindVariationNode(1, 1) <> nil,
-        'duplicate autorandom variation should create visible second node');
+        'second autorandom variation should replace AP branch');
+      Check(Command.VariationIndex = 0,
+        'second autorandom variation should reuse existing AP variation');
+      Check(Actor.GameTree.VariationLineCount = 1,
+        'second autorandom variation should not create AP sibling');
+      Check(Actor.GameTree.VariationLine[0].MovesText = '20-24',
+        'second autorandom variation should replace AP move');
+      Check(Actor.GameTree.FindVariationNode(0, 1).MoveText = '20-24',
+        'second autorandom variation should replace visible AP node');
       Check(Actor.Revision > RevisionAfterStore,
         'duplicate autorandom variation should increment revision');
     finally
@@ -1210,23 +1212,58 @@ begin
     end;
 
     VariationIndex := 0;
-    VariationNode := Actor.GameTree.RecordVariationMove(MainlineNode, 1, 1,
-      VariationIndex, 1, '18-23');
-    Check(VariationNode <> nil, 'variation node should exist for direct append');
+    VariationNode := Actor.GameTree.FindVariationNode(VariationIndex, 1);
+    Check(VariationNode <> nil, 'AP variation node should exist for append');
 
     Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
-      '20-24', gmsHuman);
+      '14-20', gmsAutorandom);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
-        'direct move from variation node should be accepted');
+        'autorandom move from AP variation node should be accepted');
       Check(Command.TreeChanged,
-        'direct move from variation node should report tree change');
+        'autorandom move from AP variation node should report tree change');
       Check(Actor.GameTree.VariationLine[VariationIndex].MovesText =
-        '18-23 20-24',
-        'direct move from variation node should append to variation line');
+        '20-24 14-20',
+        'autorandom should append to AP variation at last move');
       Check(Actor.GameTree.FindVariationNode(VariationIndex, 2) <> nil,
-        'direct move from variation node should create appended variation node');
+        'autorandom append should create second AP variation node');
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
+      '10-14', gmsAutorandom);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'autorandom move from AP variation interior should be accepted');
+      Check(Command.TreeChanged,
+        'autorandom move from AP variation interior should report tree change');
+      Check(Actor.GameTree.VariationLine[VariationIndex].MovesText =
+        '20-24 10-14',
+        'autorandom should truncate AP variation tail before appending');
+      Check(Actor.GameTree.FindVariationNode(VariationIndex, 2).MoveText =
+        '10-14',
+        'autorandom truncate should replace second AP variation node');
+    finally
+      Command.Free;
+    end;
+
+    VariationIndex := Actor.GameTree.StoreVariationLine(1, 1, '18-23', '');
+    VariationNode := Actor.GameTree.RecordVariationMove(MainlineNode, 1, 1,
+      VariationIndex, 1, '18-23');
+    Check(VariationNode <> nil, 'non-AP variation node should exist');
+
+    Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
+      '14-20', gmsAutorandom);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(not Command.Accepted,
+        'autorandom move from non-AP variation should be rejected');
+      Check(Actor.GameTree.VariationLine[VariationIndex].MovesText =
+        '18-23',
+        'rejected non-AP autorandom should not alter variation line');
     finally
       Command.Free;
     end;

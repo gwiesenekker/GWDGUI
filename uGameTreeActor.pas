@@ -931,6 +931,7 @@ var
   LMovesText: string;
   LNodeWasMaterialized: Boolean;
   LAnnotationText: string;
+  LExistingApIndex: Integer;
   LForceNewVariation: Boolean;
   LOriginText: string;
   LVariationIndex: Integer;
@@ -957,6 +958,7 @@ begin
   LVariationIndex := -1;
   LVariationPly := 0;
   LAnnotationText := '';
+  LExistingApIndex := -1;
   LForceNewVariation := False;
   LOriginText := MoveSourceOriginText(ACommand.MoveSource);
   if Trim(ANode.VariationKey) <> '' then
@@ -971,6 +973,12 @@ begin
     if VariationLine = nil then
     begin
       Reject(ACommand, 'variation line not found');
+      Exit;
+    end;
+    if (ACommand.MoveSource in [gmsAutorandom, gmsAutoplay]) and
+      (not SameText(Trim(VariationLine.AnnotationText), 'AP')) then
+    begin
+      Reject(ACommand, 'generated moves can only extend AP variations');
       Exit;
     end;
 
@@ -1001,12 +1009,38 @@ begin
     begin
       LAnnotationText := 'AP';
       LForceNewVariation := True;
+      for I := 0 to FGameTree.VariationLineCount - 1 do
+      begin
+        VariationLine := FGameTree.VariationLine[I];
+          if (VariationLine <> nil) and
+            (VariationLine.DisplayAfterPly = LDisplayAfterPly) and
+            (VariationLine.BasePly = LBasePly) and
+            SameText(Trim(VariationLine.AnnotationText), 'AP') then
+          begin
+            LExistingApIndex := I;
+          Break;
+        end;
+      end;
     end;
   end;
 
-  ACommand.VariationIndex := FGameTree.StoreVariationLine(
-    LDisplayAfterPly, LBasePly, LMovesText, LAnnotationText,
-    LForceNewVariation, AChanged);
+  if LExistingApIndex >= 0 then
+  begin
+    VariationLine := FGameTree.VariationLine[LExistingApIndex];
+    ACommand.VariationIndex := LExistingApIndex;
+    AChanged := (VariationLine.DisplayAfterPly <> LDisplayAfterPly) or
+      (VariationLine.BasePly <> LBasePly) or
+      (Trim(VariationLine.MovesText) <> Trim(LMovesText)) or
+      (Trim(VariationLine.AnnotationText) <> LAnnotationText);
+    VariationLine.DisplayAfterPly := LDisplayAfterPly;
+    VariationLine.BasePly := LBasePly;
+    VariationLine.MovesText := Trim(LMovesText);
+    VariationLine.AnnotationText := LAnnotationText;
+  end
+  else
+    ACommand.VariationIndex := FGameTree.StoreVariationLine(
+      LDisplayAfterPly, LBasePly, LMovesText, LAnnotationText,
+      LForceNewVariation, AChanged);
   if ACommand.VariationIndex < 0 then
   begin
     Reject(ACommand, 'variation line was not stored');
