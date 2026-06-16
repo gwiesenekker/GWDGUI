@@ -10,6 +10,15 @@ uses
   uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreeSearchRef, uPdn,
   uGameOrchestrator;
 
+type
+  TQueuedCommandObserver = class
+  public
+    AcceptedCount: Integer;
+    RejectedCount: Integer;
+    TreeChangedCount: Integer;
+    procedure Observe(ACommand: TGameTreeCommand);
+  end;
+
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
   if not ACondition then
@@ -17,6 +26,18 @@ begin
     Writeln('FAIL: ', AMessage);
     Halt(1);
   end;
+end;
+
+procedure TQueuedCommandObserver.Observe(ACommand: TGameTreeCommand);
+begin
+  if ACommand = nil then
+    Exit;
+  if ACommand.Accepted then
+    Inc(AcceptedCount)
+  else
+    Inc(RejectedCount);
+  if ACommand.TreeChanged then
+    Inc(TreeChangedCount);
 end;
 
 procedure CheckActorCommands;
@@ -390,12 +411,14 @@ procedure CheckQueuedActorCommands;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
+  Observer: TQueuedCommandObserver;
   ResultMove: string;
   ResultNodeId: Int64;
   Search: TGameTreeSearchRef;
   State: TGameTreeSearchState;
 begin
   Actor := TGameTreeActor.Create;
+  Observer := TQueuedCommandObserver.Create;
   try
     Actor.GameTree.BeginRebuild('queue', 'Event', 'White', 'Black', '*',
       'W:W31-50:B1-20');
@@ -457,7 +480,26 @@ begin
       'queued search-done should keep searched node id');
     Check(ResultMove = '18-23',
       'queued search-done should keep move text');
+
+    Command := Actor.CreateAppendMainlineMoveCommand('37-31', gmsHuman);
+    Check(Actor.PostCommand(Command),
+      'observed queued append command should post');
+    Command := nil;
+    Command := Actor.CreateAppendMainlineMoveCommand('41-37', gmsHuman);
+    Command.GameTreeId := Command.GameTreeId + 1;
+    Check(Actor.PostCommand(Command),
+      'observed rejected queued append command should post');
+    Command := nil;
+    Check(Actor.ProcessCommands(@Observer.Observe) = 2,
+      'observed queued commands should process');
+    Check(Observer.AcceptedCount = 1,
+      'queued observer should see accepted command');
+    Check(Observer.RejectedCount = 1,
+      'queued observer should see rejected command');
+    Check(Observer.TreeChangedCount = 1,
+      'queued observer should see tree-changing command');
   finally
+    Observer.Free;
     Actor.Free;
   end;
 end;

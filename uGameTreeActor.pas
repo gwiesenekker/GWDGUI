@@ -42,6 +42,8 @@ type
     gssFailed
   );
 
+  TGameTreeCommand = class;
+
   TGameTreeSearchRecord = class
   public
     SearchId: Int64;
@@ -51,6 +53,8 @@ type
     ResultMove: string;
     function SearchRef: TGameTreeSearchRef;
   end;
+
+  TGameTreeCommandCallback = procedure(ACommand: TGameTreeCommand) of object;
 
   TGameTreeCommand = class(TThreadMessage)
   public
@@ -190,7 +194,8 @@ type
 
     procedure ExecuteCommand(ACommand: TGameTreeCommand);
     function PostCommand(ACommand: TGameTreeCommand): Boolean;
-    function ProcessCommands: Integer;
+    function ProcessCommands: Integer; overload;
+    function ProcessCommands(AAfterExecute: TGameTreeCommandCallback): Integer; overload;
     function SearchResult(ASearchId: Int64; out ANodeId: Int64;
       out AMoveText: string): Boolean; overload;
     function SearchResult(const ASearch: TGameTreeSearchRef;
@@ -1318,6 +1323,12 @@ begin
 end;
 
 function TGameTreeActor.ProcessCommands: Integer;
+begin
+  Result := ProcessCommands(nil);
+end;
+
+function TGameTreeActor.ProcessCommands(AAfterExecute: TGameTreeCommandCallback
+  ): Integer;
 var
   CommandObject: TObject;
 begin
@@ -1326,7 +1337,11 @@ begin
   begin
     try
       if CommandObject is TGameTreeCommand then
+      begin
         ExecuteCommand(TGameTreeCommand(CommandObject));
+        if Assigned(AAfterExecute) then
+          AAfterExecute(TGameTreeCommand(CommandObject));
+      end;
       Inc(Result);
     finally
       CommandObject.Free;
