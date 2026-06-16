@@ -660,6 +660,8 @@ type
       AGameTree: TGameTree; AApplyResult: Boolean = True): Boolean;
     procedure UpdateBrowseInfo;
     procedure UpdateBoardInfo;
+    procedure RefreshDisplayFromGameTree(AGameTree: TGameTree;
+      AForceViews: Boolean);
     procedure UpdateDatabaseSearchPositionFromTree(AGameTree: TGameTree);
     function TryGetDisplayedBoardFen(AGameTree: TGameTree;
       out AFen: string): Boolean;
@@ -2615,11 +2617,9 @@ begin
     FGameBrowsePly := ACommand.BasePly;
     FVariationIndex := ACommand.VariationIndex;
     FVariationBrowsePly := ACommand.PlyNumber;
-    UpdateBoardFromBrowseState(AGameTree);
-    UpdateBrowseInfo;
   end;
 
-  RefreshDisplayedGameTreeViews(AGameTree, True);
+  RefreshDisplayFromGameTree(AGameTree, True);
 end;
 
 function TMainForm.RebuildStandaloneGameTreeFromImport(AGameTree: TGameTree;
@@ -2721,11 +2721,7 @@ begin
       Exit;
     ClearVariationExploration;
     FGameBrowsePly := LNode.PlyNumber;
-    FGameResult := '*';
-    UpdateBoardFromBrowseState(LGameTree);
-    UpdateBrowseInfo;
-    UpdateBoardInfo;
-    UpdateLegalMovesFromTree(LGameTree);
+    RefreshDisplayFromGameTree(LGameTree, True);
     Exit;
   end;
 
@@ -7188,6 +7184,45 @@ begin
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
   UpdateDatabaseSearchPositionFromTree(LGameTree);
+end;
+
+procedure TMainForm.RefreshDisplayFromGameTree(AGameTree: TGameTree;
+  AForceViews: Boolean);
+var
+  LAnnotationsText: string;
+  LGame: TRunningGame;
+  LMainlineCount: Integer;
+  LMovesText: string;
+begin
+  if (AGameTree = nil) or (AGameTree <> ActiveGameTree) then
+    Exit;
+
+  LGame := SelectedDisplayedGame;
+  LMainlineCount := AGameTree.MainlineCount;
+  if FGameBrowsePly > LMainlineCount then
+    FGameBrowsePly := -1;
+  if FVariationIndex >= 0 then
+  begin
+    if TreeVariationLineByIndex(FVariationIndex, AGameTree) = nil then
+      ClearVariationExploration
+    else if FVariationBrowsePly > CurrentVariationMoveCount(AGameTree) then
+      FVariationBrowsePly := CurrentVariationMoveCount(AGameTree);
+  end;
+
+  LMovesText := GameTreeMainlineMovesText(AGameTree);
+  LAnnotationsText := GameTreeScoreAnnotationsText(AGameTree);
+  FDisplayedMovesSignature := LMovesText;
+  FDisplayedAnnotationsSignature := LAnnotationsText;
+  FStartingFEN := StartingFenForTree(AGameTree);
+  FGameResult := ResultForTree(AGameTree);
+  FGameState := StateForTree(AGameTree);
+
+  UpdateBoardFromBrowseState(AGameTree);
+  UpdateMiniBoardFromBoard(FBoard);
+  RefreshDisplayedGameTreeViews(AGameTree, AForceViews);
+  UpdateBoardInfo;
+  if LGame <> nil then
+    UpdateGameListItem(LGame);
 end;
 
 function TMainForm.TryGetDisplayedBoardFen(AGameTree: TGameTree;
