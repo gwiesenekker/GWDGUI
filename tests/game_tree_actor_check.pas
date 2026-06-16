@@ -1044,6 +1044,43 @@ begin
     finally
       Command.Free;
     end;
+
+    Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
+      '14-19', gmsHuman);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'move variation command from variation node should be accepted');
+      Check(Command.TreeChanged,
+        'move variation command from variation node should report tree change');
+      Check(Command.VariationIndex = 0,
+        'move variation command should extend existing variation');
+      Check(Actor.GameTree.VariationLine[0].MovesText = '18-23 14-19',
+        'move variation command should append after selected variation node');
+      Check(Actor.GameTree.FindVariationNode(0, 2) <> nil,
+        'extended move variation should materialize second variation node');
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
+      '20-24', gmsHuman);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted,
+        'move variation replacement from variation node should be accepted');
+      Check(Command.TreeChanged,
+        'move variation replacement should report tree change');
+      Check(Actor.GameTree.VariationLine[0].MovesText = '18-23 20-24',
+        'move variation replacement should clear tail after selected node');
+      VariationNode := Actor.GameTree.FindVariationNode(0, 2);
+      Check(VariationNode <> nil,
+        'replacement move variation should materialize replacement node');
+      Check(VariationNode.MoveText = '20-24',
+        'replacement variation node should contain replacement move');
+    finally
+      Command.Free;
+    end;
   finally
     Actor.Free;
   end;
