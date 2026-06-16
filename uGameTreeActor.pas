@@ -109,6 +109,7 @@ type
       ): TGameTreeSearchRecord; overload;
     function NextCommandId: Int64;
     function NextSearchId: Int64;
+    function MarkMissingTargetSearchesFailed: Boolean;
     function RemoveSearch(ASearchId: Int64): Boolean;
     function ResolveSearchCommand(ACommand: TGameTreeCommand;
       out ASearch: TGameTreeSearchRecord): Boolean;
@@ -304,6 +305,24 @@ begin
   Result := FNextSearchId;
 end;
 
+function TGameTreeActor.MarkMissingTargetSearchesFailed: Boolean;
+var
+  I: Integer;
+  Search: TGameTreeSearchRecord;
+begin
+  Result := False;
+  for I := 0 to FSearches.Count - 1 do
+  begin
+    Search := TGameTreeSearchRecord(FSearches[I]);
+    if (Search = nil) or (Search.State <> gssActive) then
+      Continue;
+    if FGameTree.FindNodeById(Search.NodeId) <> nil then
+      Continue;
+    Search.State := gssFailed;
+    Result := True;
+  end;
+end;
+
 function TGameTreeActor.RemoveSearch(ASearchId: Int64): Boolean;
 var
   I: Integer;
@@ -346,6 +365,7 @@ begin
   ACommand.TreeChanged := True;
   if AInvalidateSignature then
     AInvalidateRebuildSignature := True;
+  MarkMissingTargetSearchesFailed;
   Inc(FRevision);
 end;
 

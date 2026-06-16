@@ -729,6 +729,10 @@ begin
         'rebuild replacing searched target should be accepted');
       Check(RebuildCommand.TreeChanged,
         'rebuild replacing searched target should report tree change');
+      Check(Actor.SearchState(Search, State),
+        'rebuild replacing searched target should leave search queryable');
+      Check(State = gssFailed,
+        'rebuild replacing searched target should fail active search');
     finally
       RebuildCommand.Free;
     end;
