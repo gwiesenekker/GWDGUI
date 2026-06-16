@@ -4924,8 +4924,10 @@ var
   var
     I: Integer;
     IsLastMove: Boolean;
+    MutatedTree: Boolean;
   begin
     Result := False;
+    MutatedTree := False;
     if not SnapshotExtendsCurrentTree then
       Exit;
     Actor := ActorForGameTree(LGameTree);
@@ -4942,13 +4944,19 @@ var
         RunningSnapshotPvInput(LInput, IsLastMove),
         gmsEngineMatch);
       try
-        if not ExecuteAndApplyGameTreeCommand(Actor, LGameTree, Command, False,
-          LErrorText) then
+        if not ExecuteGameTreeCommand(Actor, Command, LErrorText) then
+        begin
+          if MutatedTree then
+            RefreshDisplayFromGameTree(LGameTree, True);
           Exit;
+        end;
+        MutatedTree := MutatedTree or Command.TreeChanged;
       finally
         Command.Free;
       end;
     end;
+    if MutatedTree then
+      RefreshDisplayFromGameTree(LGameTree, True);
     Result := True;
   end;
 
