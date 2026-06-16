@@ -5181,7 +5181,8 @@ var
         RunningSnapshotPvInput(LInput, IsLastMove),
         gmsEngineMatch);
       try
-        if not ExecuteGameTreeCommand(Actor, Command, LErrorText) then
+        if not ExecuteAndApplyGameTreeCommand(Actor, LGameTree, Command, False,
+          LErrorText) then
           Exit;
       finally
         Command.Free;
