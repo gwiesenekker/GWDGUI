@@ -163,10 +163,6 @@ end;
 procedure TGameSetupForm.ApplyPreferences(const APreferences: TGuiPreferences);
 begin
   FDefaultTimeControl := DefaultTimeControl;
-  FDefaultTimeControl.MinutesPerPeriod := APreferences.DefaultGameMinutes;
-  FDefaultTimeControl.MovesPerPeriod := APreferences.DefaultGameMoves;
-  FDefaultTimeControl.IncrementSeconds :=
-    APreferences.DefaultGameIncrementSeconds;
   if FMinutesEdit <> nil then
     FMinutesEdit.Text := FormatFloat('0.###',
       FDefaultTimeControl.MinutesPerPeriod);

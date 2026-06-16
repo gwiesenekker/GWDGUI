@@ -383,7 +383,7 @@ begin
       'Black', '*', 'W:W31-50:B1-20');
     GameTree.RecordMainlineMove(1, '32-28');
 
-    VariationIndex := GameTree.StoreVariationLine(1, 1, '18-23', 'AP');
+    VariationIndex := GameTree.StoreVariationLine(1, 1, '18-23', 'note');
     TextToMoveList('18-23', Moves);
     RecordGameTreeVariationLine(GameTree,
       GameTreeVariationLineInput(GameTree.VariationLine[VariationIndex],
@@ -391,7 +391,7 @@ begin
 
     Options := DefaultGameTreePdnRenderOptions;
     Text := RenderWithOptions(GameTree, Options);
-    CheckContains(Text, '(1...18-23 {AP})',
+    CheckContains(Text, '(1...18-23 {note})',
       'plain variation annotation should render as comment');
   finally
     Moves.Free;

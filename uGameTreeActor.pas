@@ -12,8 +12,6 @@ type
   TGameTreeMoveSource = (
     gmsUnknown,
     gmsHuman,
-    gmsAutorandom,
-    gmsAutoplay,
     gmsEngineMatch
   );
 
@@ -28,7 +26,6 @@ type
     gtcReleaseSearch,
     gtcRecordEnginePV,
     gtcRecordAnnotatorPV,
-    gtcStoreSearchMoveVariation,
     gtcStoreMoveVariation,
     gtcClearStoredVariations,
     gtcRebuildFromInputs,
@@ -165,11 +162,6 @@ type
     function CreateRecordAnnotatorPVCommand(ANodeId: Int64; const AScore,
       APV: string; const ADepth: string = '';
       const ATimeText: string = ''): TGameTreeCommand;
-    function CreateStoreSearchMoveVariationCommand(ASearchId: Int64;
-      ASource: TGameTreeMoveSource): TGameTreeCommand; overload;
-    function CreateStoreSearchMoveVariationCommand(
-      const ASearch: TGameTreeSearchRef;
-      ASource: TGameTreeMoveSource): TGameTreeCommand; overload;
     function CreateStoreMoveVariationCommand(ANodeId: Int64;
       const AMoveText: string; ASource: TGameTreeMoveSource): TGameTreeCommand;
     function CreateClearStoredVariationsCommand: TGameTreeCommand;
@@ -233,7 +225,6 @@ const
     'game-tree-release-search',
     'game-tree-record-engine-pv',
     'game-tree-record-annotator-pv',
-    'game-tree-store-search-move-variation',
     'game-tree-store-move-variation',
     'game-tree-clear-stored-variations',
     'game-tree-rebuild-from-inputs',
@@ -552,22 +543,6 @@ begin
     ADepth, ATimeText);
 end;
 
-function TGameTreeActor.CreateStoreSearchMoveVariationCommand(
-  ASearchId: Int64; ASource: TGameTreeMoveSource): TGameTreeCommand;
-begin
-  Result := CreateCommand(gtcStoreSearchMoveVariation);
-  Result.SearchId := ASearchId;
-  Result.MoveSource := ASource;
-end;
-
-function TGameTreeActor.CreateStoreSearchMoveVariationCommand(
-  const ASearch: TGameTreeSearchRef;
-  ASource: TGameTreeMoveSource): TGameTreeCommand;
-begin
-  Result := CreateStoreSearchMoveVariationCommand(ASearch.SearchId, ASource);
-  Result.SetSearchRef(ASearch);
-end;
-
 function TGameTreeActor.CreateStoreMoveVariationCommand(ANodeId: Int64;
   const AMoveText: string; ASource: TGameTreeMoveSource): TGameTreeCommand;
 begin
@@ -635,10 +610,8 @@ function TGameTreeActor.MoveSourceOriginText(
   ASource: TGameTreeMoveSource): string;
 begin
   case ASource of
-    gmsHuman, gmsAutorandom:
+    gmsHuman:
       Result := 'Human';
-    gmsAutoplay:
-      Result := 'Annotator';
     gmsEngineMatch:
       Result := 'Engine';
   else
@@ -931,8 +904,6 @@ var
   LMovesText: string;
   LNodeWasMaterialized: Boolean;
   LAnnotationText: string;
-  LExistingApIndex: Integer;
-  LForceNewVariation: Boolean;
   LOriginText: string;
   LVariationIndex: Integer;
   LVariationMoves: TStringList;
@@ -958,8 +929,6 @@ begin
   LVariationIndex := -1;
   LVariationPly := 0;
   LAnnotationText := '';
-  LExistingApIndex := -1;
-  LForceNewVariation := False;
   LOriginText := MoveSourceOriginText(ACommand.MoveSource);
   if Trim(ANode.VariationKey) <> '' then
   begin
@@ -975,13 +944,6 @@ begin
       Reject(ACommand, 'variation line not found');
       Exit;
     end;
-    if (ACommand.MoveSource in [gmsAutorandom, gmsAutoplay]) and
-      (not SameText(Trim(VariationLine.AnnotationText), 'AP')) then
-    begin
-      Reject(ACommand, 'generated moves can only extend AP variations');
-      Exit;
-    end;
-
     LVariationMoves := TStringList.Create;
     try
       ExtractStrings([' ', #9, #10, #13], [],
@@ -1005,42 +967,10 @@ begin
   else
   begin
     LMovesText := LMoveText;
-    if ACommand.MoveSource in [gmsAutorandom, gmsAutoplay] then
-    begin
-      LAnnotationText := 'AP';
-      LForceNewVariation := True;
-      for I := 0 to FGameTree.VariationLineCount - 1 do
-      begin
-        VariationLine := FGameTree.VariationLine[I];
-          if (VariationLine <> nil) and
-            (VariationLine.DisplayAfterPly = LDisplayAfterPly) and
-            (VariationLine.BasePly = LBasePly) and
-            SameText(Trim(VariationLine.AnnotationText), 'AP') then
-          begin
-            LExistingApIndex := I;
-          Break;
-        end;
-      end;
-    end;
   end;
 
-  if LExistingApIndex >= 0 then
-  begin
-    VariationLine := FGameTree.VariationLine[LExistingApIndex];
-    ACommand.VariationIndex := LExistingApIndex;
-    AChanged := (VariationLine.DisplayAfterPly <> LDisplayAfterPly) or
-      (VariationLine.BasePly <> LBasePly) or
-      (Trim(VariationLine.MovesText) <> Trim(LMovesText)) or
-      (Trim(VariationLine.AnnotationText) <> LAnnotationText);
-    VariationLine.DisplayAfterPly := LDisplayAfterPly;
-    VariationLine.BasePly := LBasePly;
-    VariationLine.MovesText := Trim(LMovesText);
-    VariationLine.AnnotationText := LAnnotationText;
-  end
-  else
-    ACommand.VariationIndex := FGameTree.StoreVariationLine(
-      LDisplayAfterPly, LBasePly, LMovesText, LAnnotationText,
-      LForceNewVariation, AChanged);
+  ACommand.VariationIndex := FGameTree.StoreVariationLine(
+    LDisplayAfterPly, LBasePly, LMovesText, LAnnotationText, AChanged);
   if ACommand.VariationIndex < 0 then
   begin
     Reject(ACommand, 'variation line was not stored');
@@ -1297,25 +1227,6 @@ begin
     gtcRecordAnnotatorPV:
       begin
         ExecuteRecordPVCommand(ACommand, InvalidateRebuildSignature, False);
-      end;
-    gtcStoreSearchMoveVariation:
-      begin
-        if not ResolveSearchCommand(ACommand, Search) then
-          Exit;
-        if Search.State <> gssDone then
-        begin
-          Reject(ACommand, 'search is not done');
-          Exit;
-        end;
-        Node := FGameTree.FindNodeById(Search.NodeId);
-        if Node = nil then
-        begin
-          Reject(ACommand, 'search target node no longer exists');
-          Exit;
-        end;
-
-        ExecuteStoreMoveVariationCommand(ACommand, Node, Search.ResultMove,
-          InvalidateRebuildSignature);
       end;
     gtcStoreMoveVariation:
       begin

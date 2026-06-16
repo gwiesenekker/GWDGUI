@@ -15,9 +15,6 @@ type
   TPreferencesForm = class(TForm)
   private
     FColorDialog: TColorDialog;
-    FDefaultGameIncrementEdit: TEdit;
-    FDefaultGameMinutesEdit: TEdit;
-    FDefaultGameMovesEdit: TEdit;
     FEvaluationMaxEdit: TEdit;
     FEvaluationScaleGroup: TRadioGroup;
     FOnAccepted: TPreferencesAcceptedEvent;
@@ -135,47 +132,6 @@ begin
   FEvaluationScaleGroup.Items.Add('Linear');
   FEvaluationScaleGroup.Items.Add('Logarithmic');
 
-  LTab := TTabSheet.Create(Self);
-  LTab.PageControl := LPageControl;
-  LTab.Caption := 'Game';
-
-  LGroup := TGroupBox.Create(Self);
-  LGroup.Parent := LTab;
-  LGroup.Align := alTop;
-  LGroup.Height := 144;
-  LGroup.BorderSpacing.Around := 8;
-  LGroup.Caption := 'Default time control';
-
-  with TLabel.Create(Self) do
-  begin
-    Parent := LGroup;
-    SetBounds(12, 32, 220, 22);
-    Caption := 'Minutes per period';
-  end;
-  FDefaultGameMinutesEdit := TEdit.Create(Self);
-  FDefaultGameMinutesEdit.Parent := LGroup;
-  FDefaultGameMinutesEdit.SetBounds(250, 28, 80, 24);
-
-  with TLabel.Create(Self) do
-  begin
-    Parent := LGroup;
-    SetBounds(12, 66, 220, 22);
-    Caption := 'Moves per period';
-  end;
-  FDefaultGameMovesEdit := TEdit.Create(Self);
-  FDefaultGameMovesEdit.Parent := LGroup;
-  FDefaultGameMovesEdit.SetBounds(250, 62, 80, 24);
-
-  with TLabel.Create(Self) do
-  begin
-    Parent := LGroup;
-    SetBounds(12, 100, 220, 22);
-    Caption := 'Increment seconds';
-  end;
-  FDefaultGameIncrementEdit := TEdit.Create(Self);
-  FDefaultGameIncrementEdit.Parent := LGroup;
-  FDefaultGameIncrementEdit.SetBounds(250, 96, 80, 24);
-
   LDefaultsButton := TButton.Create(Self);
   LDefaultsButton.Parent := LButtonPanel;
   LDefaultsButton.Align := alLeft;
@@ -268,14 +224,6 @@ begin
   if FEvaluationMaxEdit <> nil then
     FEvaluationMaxEdit.Text := FormatFloat('0.###',
       FPreferences.EvaluationMaxScore);
-  if FDefaultGameMinutesEdit <> nil then
-    FDefaultGameMinutesEdit.Text := FormatFloat('0.###',
-      FPreferences.DefaultGameMinutes);
-  if FDefaultGameMovesEdit <> nil then
-    FDefaultGameMovesEdit.Text := IntToStr(FPreferences.DefaultGameMoves);
-  if FDefaultGameIncrementEdit <> nil then
-    FDefaultGameIncrementEdit.Text := FormatFloat('0.###',
-      FPreferences.DefaultGameIncrementSeconds);
   if FEvaluationScaleGroup <> nil then
   begin
     if FPreferences.EvaluationScale = ssLinear then
@@ -307,14 +255,6 @@ begin
   if FEvaluationMaxEdit <> nil then
     FEvaluationMaxEdit.Text := FormatFloat('0.###',
       FPreferences.EvaluationMaxScore);
-  if FDefaultGameMinutesEdit <> nil then
-    FDefaultGameMinutesEdit.Text := FormatFloat('0.###',
-      FPreferences.DefaultGameMinutes);
-  if FDefaultGameMovesEdit <> nil then
-    FDefaultGameMovesEdit.Text := IntToStr(FPreferences.DefaultGameMoves);
-  if FDefaultGameIncrementEdit <> nil then
-    FDefaultGameIncrementEdit.Text := FormatFloat('0.###',
-      FPreferences.DefaultGameIncrementSeconds);
   if FEvaluationScaleGroup <> nil then
     FEvaluationScaleGroup.ItemIndex := 1;
   UpdateSwatches;
@@ -322,23 +262,8 @@ end;
 
 procedure TPreferencesForm.ApplyClick(Sender: TObject);
 var
-  IncrementSeconds: Double;
   MaxScore: Double;
-  Minutes: Double;
-  Moves: Integer;
 begin
-  if (FDefaultGameMinutesEdit <> nil) and
-    TryStrToFloat(Trim(FDefaultGameMinutesEdit.Text), Minutes) and
-    (Minutes > 0.0) then
-    FPreferences.DefaultGameMinutes := Minutes;
-  if (FDefaultGameMovesEdit <> nil) and
-    TryStrToInt(Trim(FDefaultGameMovesEdit.Text), Moves) and
-    (Moves > 0) then
-    FPreferences.DefaultGameMoves := Moves;
-  if (FDefaultGameIncrementEdit <> nil) and
-    TryStrToFloat(Trim(FDefaultGameIncrementEdit.Text), IncrementSeconds) and
-    (IncrementSeconds >= 0.0) then
-    FPreferences.DefaultGameIncrementSeconds := IncrementSeconds;
   if (FEvaluationMaxEdit <> nil) and
     TryStrToFloat(Trim(FEvaluationMaxEdit.Text), MaxScore) and
     (MaxScore > 0.0) then

@@ -152,7 +152,7 @@ begin
     end;
 
     Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23',
-      'annotator=0.22', gmsAutorandom);
+      'annotator=0.22', gmsHuman);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'store-variation command should be accepted');
@@ -165,14 +165,14 @@ begin
       Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
         'variation should store annotation text on game tree');
       Check(Actor.GameTree.VariationLine[0].OriginText = 'Human',
-        'autorandom variation should store human origin');
+        'human variation should store human origin');
       Check(Actor.Revision = 4, 'fourth mutation should increment revision');
     finally
       Command.Free;
     end;
 
     Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23', '',
-      gmsAutorandom);
+      gmsHuman);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
@@ -214,7 +214,7 @@ begin
     end;
 
     Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23',
-      'annotator=0.22', gmsAutorandom);
+      'annotator=0.22', gmsHuman);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
@@ -1001,150 +1001,11 @@ begin
   end;
 end;
 
-procedure CheckStoreSearchMoveVariationCommand;
-var
-  Actor: TGameTreeActor;
-  DoneCommand: TGameTreeCommand;
-  MainlineNode: TGameTreePlyNode;
-  Search: TGameTreeSearchRef;
-  StartCommand: TGameTreeCommand;
-  StoreCommand: TGameTreeCommand;
-  RevisionAfterStore: Int64;
-  VariationIndex: Integer;
-  VariationNode: TGameTreePlyNode;
-begin
-  Actor := TGameTreeActor.Create;
-  try
-    Actor.GameTree.BeginRebuild('store-search', 'Event', 'White', 'Black', '*',
-      'W:W31-50:B1-20');
-
-    StartCommand := Actor.CreateStartSearchCommand(Actor.GameTree.Root.NodeId,
-      Search);
-    try
-      Actor.ExecuteCommand(StartCommand);
-      Check(StartCommand.Accepted, 'root search should start');
-    finally
-      StartCommand.Free;
-    end;
-
-    DoneCommand := Actor.CreateSearchDoneCommand(Search, '31-26');
-    try
-      Actor.ExecuteCommand(DoneCommand);
-      Check(DoneCommand.Accepted, 'root search done should be accepted');
-    finally
-      DoneCommand.Free;
-    end;
-
-    StoreCommand := Actor.CreateStoreSearchMoveVariationCommand(Search,
-      gmsAutoplay);
-    try
-      StoreCommand.NodeId := StoreCommand.NodeId + 1;
-      Actor.ExecuteCommand(StoreCommand);
-      Check(not StoreCommand.Accepted,
-        'store search variation with mismatched ref should be rejected');
-      Check(not StoreCommand.TreeChanged,
-        'mismatched store should not report tree change');
-      Check(Actor.GameTree.VariationLineCount = 0,
-        'mismatched store should not add a variation');
-    finally
-      StoreCommand.Free;
-    end;
-
-    StoreCommand := Actor.CreateStoreSearchMoveVariationCommand(Search,
-      gmsAutoplay);
-    try
-      Actor.ExecuteCommand(StoreCommand);
-      Check(StoreCommand.Accepted,
-        'root search result should store as variation');
-      Check(StoreCommand.TreeChanged,
-        'root search result store should report tree change');
-      Check(StoreCommand.VariationIndex = 0,
-        'root search result should create first variation');
-      Check(Actor.GameTree.VariationLine[0].BasePly = 0,
-        'root search variation should have base ply 0');
-      Check(Actor.GameTree.VariationLine[0].MovesText = '31-26',
-        'root search variation should store result move');
-      Check(Actor.GameTree.VariationLine[0].AnnotationText = 'AP',
-        'root search variation should store AP annotation');
-      Check(Actor.GameTree.VariationLine[0].OriginText = 'Annotator',
-        'autoplay variation should store annotator origin');
-      RevisionAfterStore := Actor.Revision;
-    finally
-      StoreCommand.Free;
-    end;
-
-    StoreCommand := Actor.CreateStoreSearchMoveVariationCommand(Search,
-      gmsAutoplay);
-    try
-      Actor.ExecuteCommand(StoreCommand);
-	      Check(StoreCommand.Accepted,
-	        'duplicate root search variation store should be accepted');
-	      Check(not StoreCommand.TreeChanged,
-	        'duplicate root search variation should reuse unchanged AP branch');
-	      Check(StoreCommand.VariationIndex = 0,
-	        'duplicate root search variation should reuse existing AP variation');
-	      Check(Actor.GameTree.VariationLineCount = 1,
-	        'duplicate root search variation should not create AP sibling');
-	      Check(Actor.Revision = RevisionAfterStore,
-	        'duplicate root search variation should not increment revision');
-    finally
-      StoreCommand.Free;
-    end;
-
-    MainlineNode := Actor.GameTree.RecordMainlineMove(1, '32-28');
-	    VariationIndex := Actor.GameTree.StoreVariationLine(1, 1,
-	      '18-23 37-32', 'AP');
-    VariationNode := Actor.GameTree.RecordVariationMove(MainlineNode, 1, 1,
-      VariationIndex, 1, '18-23');
-    Check(VariationNode <> nil, 'variation node should exist for search');
-
-    StartCommand := Actor.CreateStartSearchCommand(VariationNode.NodeId,
-      Search);
-    try
-      Actor.ExecuteCommand(StartCommand);
-      Check(StartCommand.Accepted, 'variation search should start');
-    finally
-      StartCommand.Free;
-    end;
-
-    DoneCommand := Actor.CreateSearchDoneCommand(Search, '20-24');
-    try
-      Actor.ExecuteCommand(DoneCommand);
-      Check(DoneCommand.Accepted, 'variation search done should be accepted');
-    finally
-      DoneCommand.Free;
-    end;
-
-    StoreCommand := Actor.CreateStoreSearchMoveVariationCommand(Search,
-      gmsAutoplay);
-    try
-      Actor.ExecuteCommand(StoreCommand);
-      Check(StoreCommand.Accepted,
-        'variation search result should store as variation');
-      Check(StoreCommand.TreeChanged,
-        'variation search result store should report tree change');
-      Check(StoreCommand.VariationIndex = VariationIndex,
-        'variation search should update the same variation line');
-      Check(Actor.GameTree.VariationLine[VariationIndex].MovesText =
-        '18-23 20-24',
-        'variation search should append after searched variation prefix');
-      Check(StoreCommand.PlyNumber = 2,
-        'variation search command should report resulting variation ply');
-    finally
-      StoreCommand.Free;
-    end;
-  finally
-    Actor.Free;
-  end;
-end;
-
 procedure CheckStoreMoveVariationCommand;
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
   MainlineNode: TGameTreePlyNode;
-  RevisionAfterStore: Int64;
-  VariationIndex: Integer;
   VariationNode: TGameTreePlyNode;
 begin
   Actor := TGameTreeActor.Create;
@@ -1155,7 +1016,7 @@ begin
     Actor.GameTree.RecordMainlineMove(2, '19-23');
 
     Command := Actor.CreateStoreMoveVariationCommand(MainlineNode.NodeId,
-      '18-23', gmsAutorandom);
+      '18-23', gmsHuman);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
@@ -1166,10 +1027,8 @@ begin
         'direct move variation should create first variation');
       Check(Actor.GameTree.VariationLine[0].MovesText = '18-23',
         'direct move variation should store move');
-      Check(Actor.GameTree.VariationLine[0].AnnotationText = 'AP',
-        'autorandom variation should store AP annotation');
       Check(Actor.GameTree.VariationLine[0].OriginText = 'Human',
-        'autorandom variation should store human origin');
+        'move variation should store human origin');
       Check(Command.DisplayAfterPly = MainlineNode.PlyNumber,
         'direct move variation should be displayed after selected node');
       Check(Actor.GameTree.VariationLine[0].DisplayAfterPly =
@@ -1182,88 +1041,6 @@ begin
         'direct move variation node should be child of selected node');
       Check(VariationNode.MoveText = '18-23',
         'direct move variation node should contain stored move');
-      Check(VariationNode.CommentText = 'AP',
-        'direct move variation node should contain AP comment');
-      RevisionAfterStore := Actor.Revision;
-    finally
-      Command.Free;
-    end;
-
-    Command := Actor.CreateStoreMoveVariationCommand(MainlineNode.NodeId,
-      '20-24', gmsAutorandom);
-    try
-      Actor.ExecuteCommand(Command);
-      Check(Command.Accepted,
-        'second autorandom variation command should be accepted');
-      Check(Command.TreeChanged,
-        'second autorandom variation should replace AP branch');
-      Check(Command.VariationIndex = 0,
-        'second autorandom variation should reuse existing AP variation');
-      Check(Actor.GameTree.VariationLineCount = 1,
-        'second autorandom variation should not create AP sibling');
-      Check(Actor.GameTree.VariationLine[0].MovesText = '20-24',
-        'second autorandom variation should replace AP move');
-      Check(Actor.GameTree.FindVariationNode(0, 1).MoveText = '20-24',
-        'second autorandom variation should replace visible AP node');
-      Check(Actor.Revision > RevisionAfterStore,
-        'duplicate autorandom variation should increment revision');
-    finally
-      Command.Free;
-    end;
-
-    VariationIndex := 0;
-    VariationNode := Actor.GameTree.FindVariationNode(VariationIndex, 1);
-    Check(VariationNode <> nil, 'AP variation node should exist for append');
-
-    Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
-      '14-20', gmsAutorandom);
-    try
-      Actor.ExecuteCommand(Command);
-      Check(Command.Accepted,
-        'autorandom move from AP variation node should be accepted');
-      Check(Command.TreeChanged,
-        'autorandom move from AP variation node should report tree change');
-      Check(Actor.GameTree.VariationLine[VariationIndex].MovesText =
-        '20-24 14-20',
-        'autorandom should append to AP variation at last move');
-      Check(Actor.GameTree.FindVariationNode(VariationIndex, 2) <> nil,
-        'autorandom append should create second AP variation node');
-    finally
-      Command.Free;
-    end;
-
-    Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
-      '10-14', gmsAutorandom);
-    try
-      Actor.ExecuteCommand(Command);
-      Check(Command.Accepted,
-        'autorandom move from AP variation interior should be accepted');
-      Check(Command.TreeChanged,
-        'autorandom move from AP variation interior should report tree change');
-      Check(Actor.GameTree.VariationLine[VariationIndex].MovesText =
-        '20-24 10-14',
-        'autorandom should truncate AP variation tail before appending');
-      Check(Actor.GameTree.FindVariationNode(VariationIndex, 2).MoveText =
-        '10-14',
-        'autorandom truncate should replace second AP variation node');
-    finally
-      Command.Free;
-    end;
-
-    VariationIndex := Actor.GameTree.StoreVariationLine(1, 1, '18-23', '');
-    VariationNode := Actor.GameTree.RecordVariationMove(MainlineNode, 1, 1,
-      VariationIndex, 1, '18-23');
-    Check(VariationNode <> nil, 'non-AP variation node should exist');
-
-    Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
-      '14-20', gmsAutorandom);
-    try
-      Actor.ExecuteCommand(Command);
-      Check(not Command.Accepted,
-        'autorandom move from non-AP variation should be rejected');
-      Check(Actor.GameTree.VariationLine[VariationIndex].MovesText =
-        '18-23',
-        'rejected non-AP autorandom should not alter variation line');
     finally
       Command.Free;
     end;
@@ -1517,7 +1294,6 @@ begin
   CheckSearchLifecycle;
   CheckSearchAnswerRejectedAfterTargetRebuild;
   CheckAnnotatorPvCommand;
-  CheckStoreSearchMoveVariationCommand;
   CheckStoreMoveVariationCommand;
   CheckRebuildFromInputsCommand;
   Writeln('OK');

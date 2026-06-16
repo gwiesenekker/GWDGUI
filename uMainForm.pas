@@ -243,10 +243,6 @@ type
     FAnalyzerPvMemo: TMemo;
     FAnalyzerRunner: TAnalyzerRunnerThread;
     FAnalyzerSearch: TGameTreeSearchRef;
-    FAutorandomButton: TButton;
-    FAutoplayButton: TButton;
-    FAutoplaySecondsEdit: TEdit;
-    FAutoplayThinkSeconds: Double;
     FBoard: TDraughtsBoard;
     FBoardControl: TDraughtsBoardControl;
     FBoardFlipped: Boolean;
@@ -382,10 +378,6 @@ type
     procedure AnalyzerPvBoardChanged(Sender: TObject);
     procedure AnalyzerPopupPopup(Sender: TObject);
     procedure AnalyzerSnapshot(Sender: TObject; ASnapshot: TPvSnapshot);
-    procedure AutoplayClick(Sender: TObject);
-    procedure AutorandomClick(Sender: TObject);
-    function ReadAutoplaySecondsFromToolbar: Boolean;
-    procedure UpdateAutoplayControls;
     function RecordAnalyzerSnapshotInGameTree(ASnapshot: TPvSnapshot): TGameTree;
     function PublishAnalyzerSnapshotToGameTree(ASnapshot: TPvSnapshot
       ): TGameTree;
@@ -432,9 +424,6 @@ type
       const ASearch: TGameTreeSearchRef): Boolean;
     function ReleaseRejectedSearchIfFinished(AActor: TGameTreeActor;
       const ASearch: TGameTreeSearchRef): Boolean;
-    function StoreSearchMoveVariation(AActor: TGameTreeActor;
-      const ASearch: TGameTreeSearchRef; ASource: TGameTreeMoveSource;
-      out AErrorText: string): Boolean;
     function StoreMoveVariation(AActor: TGameTreeActor; AGameTree: TGameTree;
       ANodeId: Int64; const AMove: string; ASource: TGameTreeMoveSource;
       out AErrorText: string): Boolean;
@@ -496,8 +485,6 @@ type
     function CanExploreVariation: Boolean;
     function CanAcceptHumanBoardMove: Boolean;
     function HasLegalDisplayedMove: Boolean;
-    function CanStartAutoplayForGame(AGame: TRunningGame): Boolean;
-    function CanStartAutoplay: Boolean;
     procedure ClearHumanMoveSelection;
     procedure ClearStoredTreeVariations(AGameTree: TGameTree);
     procedure ClearVariationExploration;
@@ -1202,7 +1189,6 @@ var
   LMenuItem: TMenuItem;
   LLogSplitter: TSplitter;
   LEnginesButton: TButton;
-  LAutoplayLabel: TLabel;
   LGameHeaderPanel: TPanel;
   LPvBoardPanel: TPanel;
   LPvLabel: TLabel;
@@ -1285,7 +1271,6 @@ begin
   FMoveShowAnnotatorScore := True;
   FMoveShowClocks := False;
   FMoveShowEngineScore := True;
-  FAutoplayThinkSeconds := 1.0;
   FSearchPositionInDatabase := True;
   FPvHintSource := phsMain;
   FViewedGameId := -1;
@@ -1343,43 +1328,6 @@ begin
   LToolbar.ParentColor := True;
   LToolbar.BorderSpacing.Around := 6;
 
-  { With alLeft on this widgetset, later-created buttons are placed further
-    left, so create these in reverse visual order. }
-  FAutoplayButton := TButton.Create(Self);
-  FAutoplayButton.Parent := LToolbar;
-  FAutoplayButton.Align := alLeft;
-  FAutoplayButton.Width := 86;
-  FAutoplayButton.BorderSpacing.Left := 6;
-  FAutoplayButton.Caption := 'Autoplay';
-  FAutoplayButton.OnClick := @AutoplayClick;
-
-  FAutorandomButton := TButton.Create(Self);
-  FAutorandomButton.Parent := LToolbar;
-  FAutorandomButton.Align := alLeft;
-  FAutorandomButton.Width := 96;
-  FAutorandomButton.BorderSpacing.Left := 6;
-  FAutorandomButton.Caption := 'Autorandom';
-  FAutorandomButton.OnClick := @AutorandomClick;
-
-  FAutoplaySecondsEdit := TEdit.Create(Self);
-  FAutoplaySecondsEdit.Parent := LToolbar;
-  FAutoplaySecondsEdit.Align := alLeft;
-  FAutoplaySecondsEdit.Width := 54;
-  FAutoplaySecondsEdit.BorderSpacing.Left := 4;
-  FAutoplaySecondsEdit.Text := FloatToStr(FAutoplayThinkSeconds);
-  FAutoplaySecondsEdit.Hint := 'Seconds per autoplay move';
-  FAutoplaySecondsEdit.ShowHint := True;
-
-  LAutoplayLabel := TLabel.Create(Self);
-  LAutoplayLabel.Parent := LToolbar;
-  LAutoplayLabel.Align := alLeft;
-  LAutoplayLabel.Width := 58;
-  LAutoplayLabel.BorderSpacing.Left := 14;
-  LAutoplayLabel.Caption := 'Seconds';
-  LAutoplayLabel.Layout := tlCenter;
-  LAutoplayLabel.ParentColor := True;
-  LAutoplayLabel.Transparent := True;
-
   LTournamentButton := TButton.Create(Self);
   LTournamentButton.Parent := LToolbar;
   LTournamentButton.Align := alLeft;
@@ -1402,8 +1350,6 @@ begin
   LEnginesButton.Width := 120;
   LEnginesButton.Caption := 'Engines...';
   LEnginesButton.OnClick := @EnginesClick;
-  UpdateAutoplayControls;
-
   LBottomPanel := TPanel.Create(Self);
   LBottomPanel.Parent := Self;
   LBottomPanel.Align := alBottom;
@@ -2065,28 +2011,6 @@ begin
   end;
 end;
 
-function TMainForm.CanStartAutoplayForGame(AGame: TRunningGame): Boolean;
-begin
-  if AGame = nil then
-    Exit(True);
-
-  Result := not (AGame.State in [gosWaiting, gosRunning]);
-end;
-
-function TMainForm.CanStartAutoplay: Boolean;
-var
-  LGame: TRunningGame;
-begin
-  Result := False;
-  if FAnalyzerRunner = nil then
-    Exit;
-  if not HasLegalDisplayedMove then
-    Exit;
-
-  LGame := SelectedDisplayedGame;
-  Result := CanStartAutoplayForGame(LGame);
-end;
-
 function TMainForm.CanExploreVariation: Boolean;
 var
   LGame: TRunningGame;
@@ -2277,8 +2201,7 @@ begin
   if (Actor = nil) or (Actor.GameTree = nil) then
     Exit;
 
-  FollowVariationBrowse := ACommand.CommandKind in [gtcStoreSearchMoveVariation,
-    gtcStoreMoveVariation];
+  FollowVariationBrowse := ACommand.CommandKind = gtcStoreMoveVariation;
   if FollowVariationBrowse or ACommand.TreeChanged then
     ApplyGameTreeCommandResult(Actor.GameTree, ACommand, FollowVariationBrowse);
 end;
@@ -2410,31 +2333,6 @@ begin
   if AActor.SearchState(ASearch, LSearchState) and
     (LSearchState in [gssCancelled, gssFailed]) then
     Result := ReleaseGameTreeSearch(AActor, ASearch);
-end;
-
-function TMainForm.StoreSearchMoveVariation(AActor: TGameTreeActor;
-  const ASearch: TGameTreeSearchRef; ASource: TGameTreeMoveSource;
-  out AErrorText: string): Boolean;
-var
-  Command: TGameTreeCommand;
-  LGameTree: TGameTree;
-begin
-  Result := False;
-  AErrorText := '';
-  if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
-  begin
-    AErrorText := 'invalid search';
-    Exit;
-  end;
-
-  LGameTree := AActor.GameTree;
-  Command := AActor.CreateStoreSearchMoveVariationCommand(ASearch, ASource);
-  try
-    Result := ExecuteAndApplyGameTreeCommand(AActor, LGameTree, Command,
-      True, AErrorText);
-  finally
-    Command.Free;
-  end;
 end;
 
 function TMainForm.StoreMoveVariation(AActor: TGameTreeActor;
@@ -2711,8 +2609,8 @@ begin
 
   LActiveGameTree := ActiveGameTree;
   if AFollowVariationBrowse and (AGameTree = LActiveGameTree) and
-    (ACommand.CommandKind in [gtcStoreSearchMoveVariation,
-      gtcStoreMoveVariation]) and (ACommand.VariationIndex >= 0) then
+    (ACommand.CommandKind = gtcStoreMoveVariation) and
+    (ACommand.VariationIndex >= 0) then
   begin
     FGameBrowsePly := ACommand.BasePly;
     FVariationIndex := ACommand.VariationIndex;
@@ -2858,8 +2756,8 @@ begin
   if (LNode = nil) or (Actor = nil) then
     Exit;
 
-  if (not StoreMoveVariation(Actor, LGameTree, LNode.NodeId, LMove, ASource,
-    LErrorText)) and (ASource in [gmsAutorandom, gmsAutoplay]) then
+  if not StoreMoveVariation(Actor, LGameTree, LNode.NodeId, LMove, ASource,
+    LErrorText) then
     ShowGuiOkDialog(Self, 'Variation move', LErrorText);
 end;
 
@@ -3015,10 +2913,6 @@ begin
     if FAnalyzerMemo <> nil then
       FAnalyzerMemo.Lines.Add('Annotator move accepted; move=' +
         Trim(AMoveText));
-    if (not StoreSearchMoveVariation(Actor, ASearch, gmsAutoplay,
-      LErrorText)) and (FAnalyzerMemo <> nil) then
-      FAnalyzerMemo.Lines.Add('Autoplay move was not recorded; reason=' +
-        LErrorText);
     ReleaseGameTreeSearch(Actor, ASearch);
     if AnalyzerSearchMatches(ASearch) then
       ClearAnalyzerSearchTracking;
@@ -3205,7 +3099,6 @@ begin
   FAnalyzerOpenMenuItem.Clear;
   FAnalyzerOpenMenuItem.Enabled := FAnalyzerRunner = nil;
   FAnalyzerCloseMenuItem.Enabled := FAnalyzerRunner <> nil;
-  UpdateAutoplayControls;
 
   if FAnalyzerRunner <> nil then
     Exit;
@@ -3244,173 +3137,6 @@ begin
   end;
 end;
 
-function TMainForm.ReadAutoplaySecondsFromToolbar: Boolean;
-var
-  LText: string;
-  LValue: Double;
-begin
-  Result := True;
-  if FAutoplaySecondsEdit = nil then
-    Exit;
-  LText := Trim(FAutoplaySecondsEdit.Text);
-  if (not TryStrToFloat(LText, LValue)) or (LValue <= 0) then
-  begin
-    Result := False;
-    ShowGuiOkDialog(Self, 'Autoplay',
-      'Enter a positive number of seconds for autoplay.');
-    Exit;
-  end;
-  FAutoplayThinkSeconds := LValue;
-end;
-
-procedure TMainForm.UpdateAutoplayControls;
-begin
-  if FAutoplayButton <> nil then
-  begin
-    FAutoplayButton.Caption := 'Autoplay';
-    FAutoplayButton.Enabled := CanStartAutoplay;
-  end;
-  if FAutoplaySecondsEdit <> nil then
-  begin
-    FAutoplaySecondsEdit.Enabled := True;
-    if not FAutoplaySecondsEdit.Focused then
-      FAutoplaySecondsEdit.Text := FloatToStr(FAutoplayThinkSeconds);
-  end;
-  if FAutorandomButton <> nil then
-    FAutorandomButton.Enabled := HasLegalDisplayedMove;
-end;
-
-procedure TMainForm.AutoplayClick(Sender: TObject);
-var
-  LBaseBoard: TDraughtsBoard;
-  LDisplayedMoveCount: Integer;
-  LDisplayedMovesText: string;
-  LErrorText: string;
-  LGameTree: TGameTree;
-  LNode: TGameTreePlyNode;
-  LSearch: TGameTreeSearchRef;
-  LStartingFEN: string;
-begin
-  if not ReadAutoplaySecondsFromToolbar then
-  begin
-    UpdateAutoplayControls;
-    Exit;
-  end;
-
-  ApplyGameMoveMemoCaretBrowse;
-
-  if not CanStartAutoplay then
-  begin
-    if FAnalyzerMemo <> nil then
-      FAnalyzerMemo.Lines.Add('Autoplay rejected; unavailable position');
-    UpdateAutoplayControls;
-    Exit;
-  end;
-
-  if FAnalyzerRunner = nil then
-  begin
-    ShowGuiOkDialog(Self, 'Autoplay',
-      'Open an annotator before using autoplay.');
-    UpdateAutoplayControls;
-    Exit;
-  end;
-
-  if not HasLegalDisplayedMove then
-  begin
-    ShowGuiOkDialog(Self, 'Autoplay',
-      'The displayed position has no legal moves.');
-    UpdateAutoplayControls;
-    Exit;
-  end;
-
-  LGameTree := ActiveGameTree;
-  if LGameTree = nil then
-  begin
-    UpdateAutoplayControls;
-    Exit;
-  end;
-  LNode := CurrentDisplayedGameTreeNode(LGameTree);
-  if LNode = nil then
-  begin
-    UpdateAutoplayControls;
-    Exit;
-  end;
-  LBaseBoard := TDraughtsBoard.Create;
-  try
-    if not TryBuildDisplayedBoard(LGameTree, LBaseBoard) then
-    begin
-      UpdateAutoplayControls;
-      Exit;
-    end;
-
-    LStartingFEN := StartingFenForTree(LGameTree);
-    if not DisplayedMoveContext(LGameTree, LDisplayedMovesText,
-      LDisplayedMoveCount) then
-    begin
-      UpdateAutoplayControls;
-      Exit;
-    end;
-
-    CancelAnalyzerSearch;
-    if not TryStartGameTreeSearchForDisplayedNode(LGameTree, LSearch,
-      LErrorText) then
-    begin
-      if FAnalyzerMemo <> nil then
-        FAnalyzerMemo.Lines.Add('Autoplay rejected; reason=' + LErrorText);
-      UpdateAutoplayControls;
-      Exit;
-    end;
-
-    TrackAnalyzerSearch(LSearch);
-    InvalidateAnalyzerPositionSignature;
-    SetAnalyzerPvBaseFromTree(LGameTree, LNode.NodeId, LDisplayedMoveCount,
-      LBaseBoard);
-
-    if FAnalyzerMemo <> nil then
-      FAnalyzerMemo.Lines.Add(Format('Autoplay thinking; time=%.3g seconds',
-        [FAutoplayThinkSeconds]));
-    FAnalyzerRunner.PostThinkOnce(LStartingFEN, LDisplayedMovesText,
-      FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, FAutoplayThinkSeconds,
-      LSearch);
-    UpdateAutoplayControls;
-  finally
-    LBaseBoard.Free;
-  end;
-end;
-
-procedure TMainForm.AutorandomClick(Sender: TObject);
-var
-  LBoard: TDraughtsBoard;
-  LGameTree: TGameTree;
-  LMove: string;
-begin
-  ApplyGameMoveMemoCaretBrowse;
-
-  LGameTree := ActiveGameTree;
-  LBoard := TDraughtsBoard.Create;
-  try
-    if not TryBuildDisplayedBoard(LGameTree, LBoard) then
-    begin
-      ShowGuiOkDialog(Self, 'Autorandom',
-        'The displayed position has no legal moves.');
-      Exit;
-    end;
-
-    if LBoard.LegalMoves.Count = 0 then
-    begin
-      ShowGuiOkDialog(Self, 'Autorandom',
-        'The displayed position has no legal moves.');
-      Exit;
-    end;
-
-    LMove := LBoard.LegalMoves[Random(LBoard.LegalMoves.Count)];
-  finally
-    LBoard.Free;
-  end;
-
-  PlayHumanMove(LMove, gmsAutorandom);
-end;
-
 procedure TMainForm.OpenAnalyzerClick(Sender: TObject);
 var
   Engine: TExternalEngineDefinition;
@@ -3446,7 +3172,6 @@ begin
     FAnalyzerRunner := TAnalyzerRunnerThread.Create(Engine, @AnalyzerLog,
       @AnalyzerSnapshot, @AnalyzerFinished, armAnalyze, @AnalyzerMove);
     FAnalyzerRunner.Start;
-    UpdateAutoplayControls;
     RestartAnalyzer(ActiveGameTree);
   finally
     Engines.Free;
@@ -3455,7 +3180,6 @@ end;
 
 procedure TMainForm.CloseAnalyzerClick(Sender: TObject);
 begin
-  UpdateAutoplayControls;
   CancelAnalyzerSearch;
   if FAnalyzerRunner <> nil then
   begin
@@ -5643,7 +5367,6 @@ begin
       if FBoardControl <> nil then
         FBoardControl.Invalidate;
     end;
-    UpdateAutoplayControls;
     Exit;
   end;
   FDisplayedRunningSignature := LRunningSignature;
@@ -5702,7 +5425,6 @@ begin
       if FBoardControl <> nil then
         FBoardControl.Invalidate;
     end;
-    UpdateAutoplayControls;
     Exit;
   end;
 
@@ -7040,7 +6762,6 @@ begin
             FreeAndNil(FAnalyzerRunner);
           FAnalyzerEngineKey := '';
           InvalidateAnalyzerPositionSignature;
-          UpdateAutoplayControls;
         end
         else if EventObject is TMctsFinishedGuiMessage then
         begin
@@ -7062,7 +6783,7 @@ begin
             begin
               UpdateGameListItem(LGame);
               if SelectedGame = LGame then
-                UpdateAutoplayControls;
+                RefreshDisplayedGameTreeViews(LGame.GameTree, False);
             end;
           end;
         end;
@@ -7466,7 +7187,6 @@ begin
   HighlightGameMoveTextSelection(False, LGameTree);
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
-  UpdateAutoplayControls;
   UpdateDatabaseSearchPositionFromTree(LGameTree);
 end;
 
