@@ -399,6 +399,41 @@ begin
   end;
 end;
 
+procedure CheckFullPdnExportIncludesVariations;
+var
+  GameTree: TGameTree;
+  Moves: TStringList;
+  Options: TGameTreePdnRenderOptions;
+  Text: string;
+  VariationIndex: Integer;
+begin
+  GameTree := TGameTree.Create;
+  Moves := TStringList.Create;
+  try
+    GameTree.BeginRebuild('full-pdn-variations', 'Export Event', 'White',
+      'Black', '*', 'W:W31-50:B1-20');
+    GameTree.RecordMainlineMove(1, '32-28');
+    GameTree.RecordMainlineMove(2, '16-21');
+
+    VariationIndex := GameTree.StoreVariationLine(1, 1, '18-23',
+      'annotator=0.10');
+    TextToMoveList('18-23', Moves);
+    RecordGameTreeVariationLine(GameTree,
+      GameTreeVariationLineInput(GameTree.VariationLine[VariationIndex],
+      VariationIndex, Moves, nil));
+
+    Options := DefaultGameTreePdnRenderOptions;
+    Text := GameTreeToPdnTextEx(GameTree, Options);
+    CheckContains(Text, '[Event "Export Event"]',
+      'full PDN export should include header');
+    CheckContains(Text, '(1... 18-23 {A: 0.10})',
+      'full PDN export should include stored variation');
+  finally
+    Moves.Free;
+    GameTree.Free;
+  end;
+end;
+
 begin
   CheckGameTreeIds;
   CheckStableRebuildNodeIds;
@@ -406,5 +441,6 @@ begin
   CheckPdnDisplayFilters;
   CheckSamePlyVariationsDoNotOverwrite;
   CheckPlainVariationAnnotationRenders;
+  CheckFullPdnExportIncludesVariations;
   Writeln('OK');
 end.
