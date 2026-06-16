@@ -2705,6 +2705,7 @@ procedure TMainForm.ApplyGameTreeCommandResult(AGameTree: TGameTree;
   ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean);
 var
   LActiveGameTree: TGameTree;
+  LFollowNode: TGameTreePlyNode;
 begin
   if (AGameTree = nil) or (ACommand = nil) or (not ACommand.Accepted) then
     Exit;
@@ -2714,11 +2715,16 @@ begin
     (ACommand.CommandKind in [gtcStoreSearchMoveVariation,
       gtcStoreMoveVariation]) and (ACommand.VariationIndex >= 0) then
   begin
-    FGameBrowsePly := ACommand.BasePly;
-    FVariationIndex := ACommand.VariationIndex;
-    FVariationBrowsePly := ACommand.PlyNumber;
-    UpdateBoardFromBrowseState(AGameTree);
-    UpdateBrowseInfo;
+    LFollowNode := AGameTree.FindVariationNode(ACommand.VariationIndex,
+      ACommand.PlyNumber);
+    if LFollowNode <> nil then
+    begin
+      FGameBrowsePly := ACommand.BasePly;
+      FVariationIndex := ACommand.VariationIndex;
+      FVariationBrowsePly := ACommand.PlyNumber;
+      UpdateBoardFromBrowseState(AGameTree);
+      UpdateBrowseInfo;
+    end;
   end;
 
   RefreshDisplayedGameTreeViews(AGameTree, True);
@@ -4109,7 +4115,8 @@ begin
   begin
     Result := AGameTree.FindVariationNode(FVariationIndex,
       FVariationBrowsePly);
-    Exit;
+    if Result <> nil then
+      Exit;
   end;
 
   if FGameBrowsePly < 0 then
