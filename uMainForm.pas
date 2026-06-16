@@ -2078,6 +2078,8 @@ var
   LGame: TRunningGame;
 begin
   Result := False;
+  if FAnalyzerRunner = nil then
+    Exit;
   if not HasLegalDisplayedMove then
     Exit;
 
@@ -3379,6 +3381,8 @@ var
   LGameTree: TGameTree;
   LMove: string;
 begin
+  ApplyGameMoveMemoCaretBrowse;
+
   LGameTree := ActiveGameTree;
   LBoard := TDraughtsBoard.Create;
   try
