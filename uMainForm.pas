@@ -418,6 +418,8 @@ type
     function ExecuteAndApplyGameTreeCommand(AActor: TGameTreeActor;
       AGameTree: TGameTree; ACommand: TGameTreeCommand;
       AFollowVariationBrowse: Boolean; out AErrorText: string): Boolean;
+    procedure HandleQueuedGameTreeCommandResult(ACommand: TGameTreeCommand);
+    function ProcessQueuedGameTreeCommands: Integer;
     function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
       out ASearch: TGameTreeSearchRef; out AErrorText: string): Boolean;
     function AnalyzerSearchMatches(const ASearch: TGameTreeSearchRef): Boolean;
@@ -2259,6 +2261,45 @@ begin
     Exit;
   if AFollowVariationBrowse or ACommand.TreeChanged then
     ApplyGameTreeCommandResult(AGameTree, ACommand, AFollowVariationBrowse);
+end;
+
+procedure TMainForm.HandleQueuedGameTreeCommandResult(ACommand: TGameTreeCommand);
+var
+  Actor: TGameTreeActor;
+  FollowVariationBrowse: Boolean;
+begin
+  if (ACommand = nil) or (not ACommand.Accepted) then
+    Exit;
+
+  Actor := ActorForGameTreeId(ACommand.GameTreeId);
+  if (Actor = nil) or (Actor.GameTree = nil) then
+    Exit;
+
+  FollowVariationBrowse := ACommand.CommandKind in [gtcStoreSearchMoveVariation,
+    gtcStoreMoveVariation];
+  if FollowVariationBrowse or ACommand.TreeChanged then
+    ApplyGameTreeCommandResult(Actor.GameTree, ACommand, FollowVariationBrowse);
+end;
+
+function TMainForm.ProcessQueuedGameTreeCommands: Integer;
+var
+  I: Integer;
+  LGame: TRunningGame;
+begin
+  Result := 0;
+  if FClosing then
+    Exit;
+
+  if FGameTreeActor <> nil then
+    Inc(Result, FGameTreeActor.ProcessCommands(@HandleQueuedGameTreeCommandResult));
+
+  for I := 0 to FGames.Count - 1 do
+  begin
+    LGame := TRunningGame(FGames[I]);
+    if (LGame <> nil) and (LGame.GameTreeActor <> nil) then
+      Inc(Result, LGame.GameTreeActor.ProcessCommands(
+        @HandleQueuedGameTreeCommandResult));
+  end;
 end;
 
 function TMainForm.TryStartGameTreeSearchForDisplayedNode(
@@ -6927,6 +6968,7 @@ begin
   if FGuiEventQueue = nil then
     Exit;
 
+  ProcessQueuedGameTreeCommands;
   DrainAllEvents := Sender = nil;
   ProcessedEvents := 0;
   try
@@ -7001,9 +7043,11 @@ begin
     end;
     FlushPendingAnalyzerSnapshots;
     FlushPendingRunnerSnapshots;
+    ProcessQueuedGameTreeCommands;
   finally
     FlushPendingAnalyzerSnapshots;
     FlushPendingRunnerSnapshots;
+    ProcessQueuedGameTreeCommands;
   end;
 end;
 
