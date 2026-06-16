@@ -3553,12 +3553,11 @@ begin
     FGameLogSourceGameId := -1;
     FGameLogSourceLineCount := -1;
     FGameLogSourceShowStdout := False;
-    RebuildStandaloneGameTreeFromImport(FGameTree, FStandaloneEventName,
+    if not RebuildStandaloneGameTreeFromImport(FGameTree, FStandaloneEventName,
       FStandaloneWhitePlayerName, FStandaloneBlackPlayerName, FGameResult,
-      FStartingFEN, '', '');
-    UpdateBoardFromBrowseState(FGameTree);
-    UpdateMiniBoardFromBoard(FBoard);
-    UpdateBoardInfo;
+      FStartingFEN, '', '') then
+      Exit;
+    RefreshDisplayFromGameTree(FGameTree, True);
   finally
     LBoard.Free;
   end;
@@ -3730,9 +3729,13 @@ begin
     FStandaloneBlackPlayerName := PlayerNameOrFallback(AGame.BlackName, 'Black');
     FStandaloneEventName := PlayerNameOrFallback(AGame.EventName, '?');
     FGameBrowsePly := 0;
-    RebuildStandaloneGameTreeFromImport(FGameTree, FStandaloneEventName,
+    if not RebuildStandaloneGameTreeFromImport(FGameTree, FStandaloneEventName,
       FStandaloneWhitePlayerName, FStandaloneBlackPlayerName, FGameResult,
-      FStartingFEN, AGame.MovesText, AGame.MoveAnnotationsText);
+      FStartingFEN, AGame.MovesText, AGame.MoveAnnotationsText) then
+    begin
+      ShowGuiOkDialog(Self, 'Open PDN', 'Could not load the PDN game tree.');
+      Exit;
+    end;
     LoadTreeVariationsFromLegacyText(FGameTree, AGame.MoveVariationsText,
       AGame.MoveVariationAnnotationsText);
     ClearDisplayedPvCache(LBoard, CurrentMoveCount);
@@ -3747,9 +3750,7 @@ begin
     FGameLogSourceGameId := -1;
     FGameLogSourceLineCount := -1;
     FGameLogSourceShowStdout := False;
-    UpdateBoardFromBrowseState(FGameTree);
-    UpdateMiniBoardFromBoard(FBoard);
-    UpdateBoardInfo;
+    RefreshDisplayFromGameTree(FGameTree, True);
   finally
     LMoves.Free;
     LBoard.Free;
@@ -4030,7 +4031,7 @@ begin
             LStoredAny := True;
       end;
     if LStoredAny then
-      RefreshDisplayedGameTreeViews(AGameTree, True);
+      RefreshDisplayFromGameTree(AGameTree, True);
   finally
     AnnotationLines.Free;
     Lines.Free;
