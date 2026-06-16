@@ -658,7 +658,6 @@ type
     function StoreTreeVariation(ADisplayAfterPly, ABasePly: Integer;
       const AMovesText, AAnnotationText: string;
       AGameTree: TGameTree; AApplyResult: Boolean = True): Boolean;
-    procedure UpdateBrowseInfo;
     procedure UpdateBoardInfo;
     procedure RefreshDisplayFromGameTree(AGameTree: TGameTree;
       AForceViews: Boolean);
@@ -3803,8 +3802,7 @@ begin
     LMoves.Free;
   end;
 
-  UpdateBoardFromBrowseState(LGameTree);
-  UpdateBrowseInfo;
+  RefreshDisplayFromGameTree(LGameTree, False);
 end;
 
 function TMainForm.CurrentMoveCount: Integer;
@@ -5266,8 +5264,7 @@ begin
     FGameBrowsePly := 0
   else
     FGameBrowsePly := APly;
-  UpdateBoardFromBrowseState(ActiveGameTree);
-  UpdateBrowseInfo;
+  RefreshDisplayFromGameTree(ActiveGameTree, False);
 end;
 
 procedure TMainForm.ExitGameBrowseMode;
@@ -5280,8 +5277,7 @@ begin
   end;
   ClearVariationExploration;
   FGameBrowsePly := -1;
-  UpdateBoardFromBrowseState(ActiveGameTree);
-  UpdateBrowseInfo;
+  RefreshDisplayFromGameTree(ActiveGameTree, False);
 end;
 
 procedure TMainForm.ApplyGameToDisplay(AGame: TRunningGame);
@@ -7059,24 +7055,6 @@ begin
   end;
 
   PlayHumanMove(LMove);
-end;
-
-procedure TMainForm.UpdateBrowseInfo;
-var
-  LGameTree: TGameTree;
-begin
-  LGameTree := ActiveGameTree;
-  UpdateBoardHighlights(LGameTree);
-
-  UpdateGameMoveHighlight;
-  HighlightGameMoveTextSelection(False, LGameTree);
-  UpdateLegalMovesFromTree(LGameTree);
-  RestartAnalyzer(LGameTree);
-  RestartMctsAnnotator(LGameTree);
-  UpdateScoreHistory(LGameTree);
-  RefreshMainPvBrowserFromTree(LGameTree);
-  if FBoardControl <> nil then
-    FBoardControl.Invalidate;
 end;
 
 procedure TMainForm.UpdateClockLabels(AGameTree: TGameTree; const AWhiteName,
