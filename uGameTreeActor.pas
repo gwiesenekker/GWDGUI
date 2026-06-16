@@ -913,6 +913,8 @@ var
   LVariationIndex: Integer;
   LVariationMoves: TStringList;
   LVariationPly: Integer;
+  LStoredLine: TGameTreeVariationLine;
+  LStoredMoves: TStringList;
   VariationLine: TGameTreeVariationLine;
 begin
   Result := False;
@@ -984,6 +986,22 @@ begin
   ACommand.PlyNumber := LVariationPly + 1;
   ACommand.MoveText := LMovesText;
   ACommand.Accepted := True;
+  if AChanged then
+  begin
+    LStoredLine := FGameTree.VariationLine[ACommand.VariationIndex];
+    if LStoredLine <> nil then
+    begin
+      LStoredMoves := TStringList.Create;
+      try
+        TextToMoveList(LStoredLine.MovesText, LStoredMoves);
+        RecordGameTreeVariationLine(FGameTree,
+          GameTreeVariationLineInput(LStoredLine, ACommand.VariationIndex,
+            LStoredMoves, nil));
+      finally
+        LStoredMoves.Free;
+      end;
+    end;
+  end;
   Result := True;
 end;
 

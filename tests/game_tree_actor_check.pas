@@ -1157,6 +1157,13 @@ begin
       Check(Actor.GameTree.VariationLine[0].DisplayAfterPly =
         MainlineNode.PlyNumber,
         'direct move variation line should be attached to selected node');
+      VariationNode := Actor.GameTree.FindVariationNode(0, 1);
+      Check(VariationNode <> nil,
+        'direct move variation should create visible variation node');
+      Check(VariationNode.Parent = MainlineNode,
+        'direct move variation node should be child of selected node');
+      Check(VariationNode.MoveText = '18-23',
+        'direct move variation node should contain stored move');
       RevisionAfterStore := Actor.Revision;
     finally
       Command.Free;
@@ -1192,6 +1199,8 @@ begin
       Check(Actor.GameTree.VariationLine[VariationIndex].MovesText =
         '18-23 20-24',
         'direct move from variation node should append to variation line');
+      Check(Actor.GameTree.FindVariationNode(VariationIndex, 2) <> nil,
+        'direct move from variation node should create appended variation node');
     finally
       Command.Free;
     end;
