@@ -2383,7 +2383,6 @@ function TMainForm.ReleaseGameTreeSearch(AActor: TGameTreeActor;
   const ASearch: TGameTreeSearchRef): Boolean;
 var
   Command: TGameTreeCommand;
-  LErrorText: string;
 begin
   Result := False;
   if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
@@ -2391,7 +2390,8 @@ begin
 
   Command := AActor.CreateReleaseSearchCommand(ASearch);
   try
-    Result := ExecuteGameTreeCommand(AActor, Command, LErrorText);
+    Result := AActor.PostCommand(Command);
+    Command := nil;
   finally
     Command.Free;
   end;
