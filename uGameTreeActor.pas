@@ -968,8 +968,6 @@ begin
   end
   else
   begin
-    if ANode.PlyNumber < FGameTree.MainlineCount then
-      LDisplayAfterPly := ANode.PlyNumber + 1;
     LMovesText := LMoveText;
   end;
 

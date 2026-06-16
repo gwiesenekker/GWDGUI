@@ -1138,6 +1138,7 @@ begin
     Actor.GameTree.BeginRebuild('store-move', 'Event', 'White', 'Black', '*',
       'W:W31-50:B1-20');
     MainlineNode := Actor.GameTree.RecordMainlineMove(1, '32-28');
+    Actor.GameTree.RecordMainlineMove(2, '19-23');
 
     Command := Actor.CreateStoreMoveVariationCommand(MainlineNode.NodeId,
       '18-23', gmsAutorandom);
@@ -1151,6 +1152,11 @@ begin
         'direct move variation should create first variation');
       Check(Actor.GameTree.VariationLine[0].MovesText = '18-23',
         'direct move variation should store move');
+      Check(Command.DisplayAfterPly = MainlineNode.PlyNumber,
+        'direct move variation should be displayed after selected node');
+      Check(Actor.GameTree.VariationLine[0].DisplayAfterPly =
+        MainlineNode.PlyNumber,
+        'direct move variation line should be attached to selected node');
       RevisionAfterStore := Actor.Revision;
     finally
       Command.Free;
