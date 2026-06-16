@@ -6337,7 +6337,6 @@ end;
 procedure TMainForm.AppendRunningGameToPdn(AGame: TRunningGame;
   const AFileName, AEventName: string);
 var
-  Game: TPdnGame;
   LPdnText: string;
 begin
   if (AGame = nil) or (Trim(AFileName) = '') then
@@ -6345,25 +6344,7 @@ begin
 
   LPdnText := RunningGameTreePdnText(AGame, AEventName);
   if Trim(LPdnText) <> '' then
-  begin
     AppendPdnTextToFile(AFileName, LPdnText);
-    Exit;
-  end;
-
-  Game := TPdnGame.Create;
-  try
-    Game.WhiteName := AGame.WhiteNameText;
-    Game.BlackName := AGame.BlackNameText;
-    Game.EventName := PlayerNameOrFallback(AEventName,
-      EventNameForTree(AGame.GameTree));
-    Game.ResultText := AGame.ResultText;
-    Game.StartingFEN := StartingFenForTree(AGame.GameTree);
-    Game.MovesText := GameTreeMainlineMovesText(AGame.GameTree);
-    Game.MoveAnnotationsText := GameTreeScoreAnnotationsText(AGame.GameTree);
-    AppendPdnGameToFile(AFileName, Game);
-  finally
-    Game.Free;
-  end;
 end;
 
 function TMainForm.SaveCurrentGameWithDialog: Boolean;
