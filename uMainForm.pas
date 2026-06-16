@@ -1869,7 +1869,7 @@ begin
   FBoardControl.PopupMenu := LBoardPopup;
 
   ApplyPreferences;
-  UpdateBoardInfo;
+  RefreshDisplayFromGameTree(FGameTree, True);
 end;
 
 destructor TMainForm.Destroy;
