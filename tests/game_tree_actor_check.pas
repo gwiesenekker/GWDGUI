@@ -1045,6 +1045,7 @@ begin
       Command.Free;
     end;
 
+    Actor.GameTree.VariationLine[0].MovesText := '20-24';
     Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
       '14-19', gmsHuman);
     try
@@ -1056,7 +1057,7 @@ begin
       Check(Command.VariationIndex = 0,
         'move variation command should extend existing variation');
       Check(Actor.GameTree.VariationLine[0].MovesText = '18-23 14-19',
-        'move variation command should append after selected variation node');
+        'move variation command should append from materialized variation node');
       Check(Actor.GameTree.FindVariationNode(0, 2) <> nil,
         'extended move variation should materialize second variation node');
     finally

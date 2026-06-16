@@ -963,8 +963,13 @@ begin
     LMovesText := LMoveText;
   end;
 
-  ACommand.VariationIndex := FGameTree.StoreVariationLine(
-    LDisplayAfterPly, LBasePly, LMovesText, LAnnotationText, AChanged);
+  if LVariationIndex >= 0 then
+    ACommand.VariationIndex := FGameTree.StoreVariationLineAtIndex(
+      LVariationIndex, LDisplayAfterPly, LBasePly, LMovesText,
+      LAnnotationText, AChanged)
+  else
+    ACommand.VariationIndex := FGameTree.StoreVariationLine(
+      LDisplayAfterPly, LBasePly, LMovesText, LAnnotationText, AChanged);
   if ACommand.VariationIndex < 0 then
   begin
     Reject(ACommand, 'variation line was not stored');

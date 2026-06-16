@@ -222,6 +222,9 @@ type
     function StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
       const AMovesText, AAnnotationText: string; AForceNew: Boolean;
       out AChanged: Boolean): Integer; overload;
+    function StoreVariationLineAtIndex(AVariationIndex, ADisplayAfterPly,
+      ABasePly: Integer; const AMovesText, AAnnotationText: string;
+      out AChanged: Boolean): Integer;
     property Root: TGameTreePlyNode read FRoot;
     property GameTreeId: Int64 read FGameTreeId;
     property MainlineNode[APlyNumber: Integer]: TGameTreePlyNode
@@ -1045,6 +1048,42 @@ begin
   VariationEntry.BasePly := ABasePly;
   VariationEntry.MovesText := NewMovesText;
   VariationEntry.AnnotationText := NewAnnotationText;
+end;
+
+function TGameTree.StoreVariationLineAtIndex(AVariationIndex,
+  ADisplayAfterPly, ABasePly: Integer; const AMovesText,
+  AAnnotationText: string; out AChanged: Boolean): Integer;
+var
+  NewAnnotationText: string;
+  NewMovesText: string;
+  VariationEntry: TGameTreeVariationLine;
+begin
+  Result := -1;
+  AChanged := False;
+  if (AVariationIndex < 0) or (AVariationIndex >= FVariationLines.Count) or
+    (ADisplayAfterPly < 0) or (ABasePly < 0) then
+    Exit;
+
+  VariationEntry := TGameTreeVariationLine(FVariationLines[AVariationIndex]);
+  if VariationEntry = nil then
+    Exit;
+
+  NewMovesText := Trim(AMovesText);
+  NewAnnotationText := Trim(VariationEntry.AnnotationText);
+  if (Trim(AAnnotationText) <> '') or (NewAnnotationText = '') then
+    NewAnnotationText := Trim(AAnnotationText);
+
+  if (VariationEntry.DisplayAfterPly <> ADisplayAfterPly) or
+    (VariationEntry.BasePly <> ABasePly) or
+    (Trim(VariationEntry.MovesText) <> NewMovesText) or
+    (Trim(VariationEntry.AnnotationText) <> NewAnnotationText) then
+    AChanged := True;
+
+  VariationEntry.DisplayAfterPly := ADisplayAfterPly;
+  VariationEntry.BasePly := ABasePly;
+  VariationEntry.MovesText := NewMovesText;
+  VariationEntry.AnnotationText := NewAnnotationText;
+  Result := AVariationIndex;
 end;
 
 function TGameTree.GetStoredValue(AList: TStringList; APlyNumber: Integer): string;
