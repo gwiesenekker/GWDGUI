@@ -910,6 +910,7 @@ var
   LDisplayAfterPly: Integer;
   LMoveText: string;
   LMovesText: string;
+  LNodeWasMaterialized: Boolean;
   LVariationIndex: Integer;
   LVariationMoves: TStringList;
   LVariationPly: Integer;
@@ -986,22 +987,25 @@ begin
   ACommand.PlyNumber := LVariationPly + 1;
   ACommand.MoveText := LMovesText;
   ACommand.Accepted := True;
-  if AChanged then
+  LNodeWasMaterialized := FGameTree.FindVariationNode(ACommand.VariationIndex,
+    ACommand.PlyNumber) <> nil;
+  LStoredLine := FGameTree.VariationLine[ACommand.VariationIndex];
+  if LStoredLine <> nil then
   begin
-    LStoredLine := FGameTree.VariationLine[ACommand.VariationIndex];
-    if LStoredLine <> nil then
-    begin
-      LStoredMoves := TStringList.Create;
-      try
-        TextToMoveList(LStoredLine.MovesText, LStoredMoves);
-        RecordGameTreeVariationLine(FGameTree,
-          GameTreeVariationLineInput(LStoredLine, ACommand.VariationIndex,
-            LStoredMoves, nil));
-      finally
-        LStoredMoves.Free;
-      end;
+    LStoredMoves := TStringList.Create;
+    try
+      TextToMoveList(LStoredLine.MovesText, LStoredMoves);
+      RecordGameTreeVariationLine(FGameTree,
+        GameTreeVariationLineInput(LStoredLine, ACommand.VariationIndex,
+          LStoredMoves, nil));
+    finally
+      LStoredMoves.Free;
     end;
   end;
+  if (not LNodeWasMaterialized) and
+    (FGameTree.FindVariationNode(ACommand.VariationIndex,
+      ACommand.PlyNumber) <> nil) then
+    AChanged := True;
   Result := True;
 end;
 

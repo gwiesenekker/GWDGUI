@@ -5480,6 +5480,7 @@ var
   LGameMoves: TStringList;
   LLimit: Integer;
   LPly: Integer;
+  LVariationNode: TGameTreePlyNode;
   VariationLine: TGameTreeVariationLine;
   LVariationMoves: TStringList;
 begin
@@ -5506,7 +5507,12 @@ begin
       if LLimit > LVariationMoves.Count then
         LLimit := LVariationMoves.Count;
       for I := 0 to LLimit - 1 do
-        FBoard.PlayMove(LVariationMoves[I], True, False);
+      begin
+        LVariationNode := AGameTree.FindVariationNode(FVariationIndex, I + 1);
+        if LVariationNode = nil then
+          Break;
+        FBoard.PlayMove(LVariationNode.MoveText, True, False);
+      end;
     end;
   finally
     LVariationMoves.Free;
