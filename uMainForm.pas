@@ -6487,16 +6487,8 @@ begin
   FGamesListBox.ItemIndex := FGamesListBox.Items.Count - 1;
 
   ClearHumanMoveSelection;
-  FStartingFEN := ASetup.StartingFEN;
   SetDisplayedTreeTracking('', '', '', 0, -1);
   FGameBrowsePly := -1;
-  FWhiteRemainingSeconds := ASetup.TimeControl.MinutesPerPeriod * 60;
-  FBlackRemainingSeconds := FWhiteRemainingSeconds;
-  FWhiteUsedSeconds := 0;
-  FBlackUsedSeconds := 0;
-  FGameState := gosRunning;
-  FGameResult := '*';
-  FGameActive := True;
   FGameLogMemo.Clear;
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
@@ -6509,6 +6501,7 @@ begin
     LBoard.Free;
   end;
   FBoardControl.Board := FBoard;
+  FGameActive := True;
   RefreshDisplayFromGameTree(Result.GameTree, True);
 
   LRunner.Start;
@@ -7175,10 +7168,14 @@ end;
 procedure TMainForm.RefreshDisplayFromGameTree(AGameTree: TGameTree;
   AForceViews: Boolean);
 var
+  LBlackRemainingSeconds: Double;
+  LBlackUsedSeconds: Double;
   LAnnotationsText: string;
   LGame: TRunningGame;
   LMainlineCount: Integer;
   LMovesText: string;
+  LWhiteRemainingSeconds: Double;
+  LWhiteUsedSeconds: Double;
 begin
   if (AGameTree = nil) or (AGameTree <> ActiveGameTree) then
     Exit;
@@ -7202,6 +7199,12 @@ begin
   FStartingFEN := StartingFenForTree(AGameTree);
   FGameResult := ResultForTree(AGameTree);
   FGameState := StateForTree(AGameTree);
+  ClockValuesForTree(AGameTree, LWhiteRemainingSeconds,
+    LBlackRemainingSeconds, LWhiteUsedSeconds, LBlackUsedSeconds);
+  FWhiteRemainingSeconds := LWhiteRemainingSeconds;
+  FBlackRemainingSeconds := LBlackRemainingSeconds;
+  FWhiteUsedSeconds := LWhiteUsedSeconds;
+  FBlackUsedSeconds := LBlackUsedSeconds;
 
   UpdateBoardFromBrowseState(AGameTree);
   UpdateMiniBoardFromBoard(FBoard);
