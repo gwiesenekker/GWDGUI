@@ -2786,6 +2786,7 @@ var
   LGame: TRunningGame;
   LGameTree: TGameTree;
   LMove: string;
+  LNode: TGameTreePlyNode;
   LState: TGameOrchestratorState;
 begin
   LMove := NormalizeMoveNotation(AMove);
@@ -2817,10 +2818,11 @@ begin
   if (LGame <> nil) and (LState in [gosStopped, gosGameOver]) and
     (FGameBrowsePly < 0) then
   begin
-    if ExecuteGameTreeAppendMainlineMove(LGameTree, LMove, ASource) = nil then
+    LNode := ExecuteGameTreeAppendMainlineMove(LGameTree, LMove, ASource);
+    if LNode = nil then
       Exit;
     ClearVariationExploration;
-    FGameBrowsePly := -1;
+    FGameBrowsePly := LNode.PlyNumber;
     FGameResult := '*';
     UpdateBoardFromBrowseState(LGameTree);
     UpdateBrowseInfo;
