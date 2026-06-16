@@ -7288,15 +7288,16 @@ begin
   if Actor <> nil then
     LRevision := Actor.Revision;
 
-  if (not AForce) and (FDisplayedGameTreeId = LGameTreeId) and
-    (FDisplayedGameTreeRevision = LRevision) then
-    Exit;
-
+  UpdateScoreHistory(AGameTree);
   LOptions := CurrentFilteredGameTreePdnOptions;
   LLabelSignature := GameTreeMoveLabelsSignature(AGameTree, LOptions);
   if FDisplayedMoveLabelsSignature <> LLabelSignature then
     RebuildGameMoveLabels(AGameTree);
-  UpdateScoreHistory(AGameTree);
+  if (not AForce) and (FDisplayedGameTreeId = LGameTreeId) and
+    (FDisplayedGameTreeRevision = LRevision) and
+    (FDisplayedMoveLabelsSignature = LLabelSignature) then
+    Exit;
+
   RefreshVisibleGameTreeView(AGameTree);
   FDisplayedGameTreeId := LGameTreeId;
   FDisplayedGameTreeRevision := LRevision;
