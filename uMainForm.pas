@@ -551,6 +551,7 @@ type
       ATimeText, ABasePositionKey: string; ABasePly: Integer): Boolean;
     procedure SetDisplayedPvCache(const APV, AScore, ADepth,
       ATimeText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer);
+    function UpdateDisplayedPvCacheFromTree(AGameTree: TGameTree): Boolean;
     procedure ClearDisplayedPvCache(ABaseBoard: TDraughtsBoard;
       ABasePly: Integer);
     function FormatClock(ASeconds: Double): string;
@@ -4581,6 +4582,36 @@ begin
   FPvBasePly := ABasePly;
 end;
 
+function TMainForm.UpdateDisplayedPvCacheFromTree(
+  AGameTree: TGameTree): Boolean;
+var
+  LPvBaseBoard: TDraughtsBoard;
+  LPvBasePly: Integer;
+  LPvBasePositionKey: string;
+  LPvDepth: string;
+  LPvScore: string;
+  LPvText: string;
+  LPvTimeText: string;
+begin
+  LPvBaseBoard := nil;
+  LPvBasePly := 0;
+  LPvText := '';
+  LPvScore := '';
+  LPvDepth := '';
+  LPvTimeText := '';
+  if VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
+    LPvScore, LPvDepth, LPvTimeText) and (LPvBaseBoard <> nil) then
+    LPvBasePositionKey := LPvBaseBoard.PositionKey
+  else
+    LPvBasePositionKey := '';
+
+  Result := not DisplayedPvCacheMatches(LPvText, LPvScore, LPvDepth,
+    LPvTimeText, LPvBasePositionKey, LPvBasePly);
+  if Result then
+    SetDisplayedPvCache(LPvText, LPvScore, LPvDepth, LPvTimeText,
+      LPvBaseBoard, LPvBasePly);
+end;
+
 procedure TMainForm.ClearDisplayedPvCache(ABaseBoard: TDraughtsBoard;
   ABasePly: Integer);
 begin
@@ -5306,13 +5337,6 @@ var
   LBlackRemainingSeconds: Double;
   LBlackUsedSeconds: Double;
   LLogInput: TRunningSnapshotLogInput;
-  LPvBaseBoard: TDraughtsBoard;
-  LPvBasePly: Integer;
-  LPvBasePositionKey: string;
-  LPvDepth: string;
-  LPvScore: string;
-  LPvText: string;
-  LPvTimeText: string;
   LWhiteRemainingSeconds: Double;
   LWhiteUsedSeconds: Double;
 
@@ -5384,18 +5408,6 @@ begin
 
   LEffectiveMovesText := GameTreeMainlineMovesText(AGame.GameTree);
   LEffectiveAnnotationsText := GameTreeScoreAnnotationsText(AGame.GameTree);
-  LPvBaseBoard := nil;
-  LPvBasePly := 0;
-  LPvText := '';
-  LPvScore := '';
-  LPvDepth := '';
-  LPvTimeText := '';
-  if VisibleMainPvForTree(AGame.GameTree, LPvBaseBoard, LPvBasePly,
-    LPvText, LPvScore, LPvDepth, LPvTimeText) and
-    (LPvBaseBoard <> nil) then
-    LPvBasePositionKey := LPvBaseBoard.PositionKey
-  else
-    LPvBasePositionKey := '';
   LEffectiveStartingFEN := StartingFenForTree(AGame.GameTree);
   LEffectiveResultText := ResultForTree(AGame.GameTree);
   LEffectiveState := StateForTree(AGame.GameTree);
@@ -5407,8 +5419,7 @@ begin
     (FDisplayedMovesSignature <> LEffectiveMovesText) or
     (FGameState <> LEffectiveState) or
     (FGameResult <> LEffectiveResultText);
-  LPvChanged := not DisplayedPvCacheMatches(LPvText, LPvScore, LPvDepth,
-    LPvTimeText, LPvBasePositionKey, LPvBasePly);
+  LPvChanged := UpdateDisplayedPvCacheFromTree(AGame.GameTree);
   if FDisplayedMovesSignature <> LEffectiveMovesText then
   begin
     ClearHumanMoveSelection;
@@ -5417,8 +5428,6 @@ begin
   FStartingFEN := LEffectiveStartingFEN;
   FGameState := LEffectiveState;
   FGameResult := LEffectiveResultText;
-  SetDisplayedPvCache(LPvText, LPvScore, LPvDepth, LPvTimeText,
-    LPvBaseBoard, LPvBasePly);
   FWhiteRemainingSeconds := LWhiteRemainingSeconds;
   FBlackRemainingSeconds := LBlackRemainingSeconds;
   FWhiteUsedSeconds := LWhiteUsedSeconds;
@@ -7205,6 +7214,7 @@ begin
   FBlackRemainingSeconds := LBlackRemainingSeconds;
   FWhiteUsedSeconds := LWhiteUsedSeconds;
   FBlackUsedSeconds := LBlackUsedSeconds;
+  UpdateDisplayedPvCacheFromTree(AGameTree);
 
   UpdateBoardFromBrowseState(AGameTree);
   UpdateMiniBoardFromBoard(FBoard);
