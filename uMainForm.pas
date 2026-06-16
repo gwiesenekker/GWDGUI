@@ -5353,7 +5353,7 @@ begin
     ClearHumanMoveSelection;
     FViewedGameId := AGame.Id;
     FGameBrowsePly := -1;
-    SetDisplayedTreeTracking('', FDisplayedMovesSignature, '', 0, -1);
+    SetDisplayedTreeTracking('', '', '', 0, -1);
   end;
 
   AGame.SnapshotLogInput(LLogInput);
