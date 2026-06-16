@@ -164,6 +164,8 @@ begin
         'variation should be stored on game tree');
       Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
         'variation should store annotation text on game tree');
+      Check(Actor.GameTree.VariationLine[0].OriginText = 'Human',
+        'autorandom variation should store human origin');
       Check(Actor.Revision = 4, 'fourth mutation should increment revision');
     finally
       Command.Free;
@@ -221,6 +223,8 @@ begin
         'setup variation should be stored before rebuild');
       Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
         'setup variation should store annotation text before rebuild');
+      Check(Actor.GameTree.VariationLine[0].OriginText = 'Human',
+        'setup variation should store origin before rebuild');
     finally
       Command.Free;
     end;
@@ -248,6 +252,8 @@ begin
         'recreated variation node should contain stored move');
       Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
         'rebuild should preserve stored variation annotation text');
+      Check(Actor.GameTree.VariationLine[0].OriginText = 'Human',
+        'rebuild should preserve stored variation origin');
       Check(VariationNode.AnnotatorScore = '0.22',
         'recreated variation node should preserve stored annotation');
     finally
@@ -1060,6 +1066,8 @@ begin
         'root search variation should store result move');
       Check(Actor.GameTree.VariationLine[0].AnnotationText = 'AP',
         'root search variation should store AP annotation');
+      Check(Actor.GameTree.VariationLine[0].OriginText = 'Annotator',
+        'autoplay variation should store annotator origin');
       RevisionAfterStore := Actor.Revision;
     finally
       StoreCommand.Free;
@@ -1160,6 +1168,8 @@ begin
         'direct move variation should store move');
       Check(Actor.GameTree.VariationLine[0].AnnotationText = 'AP',
         'autorandom variation should store AP annotation');
+      Check(Actor.GameTree.VariationLine[0].OriginText = 'Human',
+        'autorandom variation should store human origin');
       Check(Command.DisplayAfterPly = MainlineNode.PlyNumber,
         'direct move variation should be displayed after selected node');
       Check(Actor.GameTree.VariationLine[0].DisplayAfterPly =

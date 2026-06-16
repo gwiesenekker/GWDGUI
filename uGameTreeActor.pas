@@ -103,6 +103,7 @@ type
       const AMainline: TGameTreeMainlineInput; AIncludeMoves: Boolean);
     procedure CopyStoredVariationsToCommand(ACommand: TGameTreeCommand);
     function CommandRebuildSignature(ACommand: TGameTreeCommand): string;
+    function MoveSourceOriginText(ASource: TGameTreeMoveSource): string;
     procedure ClearRebuildSignature;
     function CreateCommand(AKind: TGameTreeActorCommandKind): TGameTreeCommand;
     function CreateRecordPVCommand(AKind: TGameTreeActorCommandKind;
@@ -625,7 +626,23 @@ begin
     TargetLine.DisplayAfterPly := SourceLine.DisplayAfterPly;
     TargetLine.MovesText := SourceLine.MovesText;
     TargetLine.AnnotationText := SourceLine.AnnotationText;
+    TargetLine.OriginText := SourceLine.OriginText;
     ACommand.RebuildVariationLines.Add(TargetLine);
+  end;
+end;
+
+function TGameTreeActor.MoveSourceOriginText(
+  ASource: TGameTreeMoveSource): string;
+begin
+  case ASource of
+    gmsHuman, gmsAutorandom:
+      Result := 'Human';
+    gmsAutoplay:
+      Result := 'Annotator';
+    gmsEngineMatch:
+      Result := 'Engine';
+  else
+    Result := '';
   end;
 end;
 
@@ -729,6 +746,7 @@ begin
       AddLine(IntToStr(Line.BasePly));
       AddLine(Line.MovesText);
       AddLine(Line.AnnotationText);
+      AddLine(Line.OriginText);
     end;
   end;
 end;
@@ -891,6 +909,7 @@ begin
       VariationLine := FGameTree.VariationLine[StoredVariationIndex];
       if VariationLine = nil then
         Continue;
+      VariationLine.OriginText := StoredLine.OriginText;
 
       RecordGameTreeVariationLine(FGameTree,
         GameTreeVariationLineInput(VariationLine, StoredVariationIndex,
@@ -913,6 +932,7 @@ var
   LNodeWasMaterialized: Boolean;
   LAnnotationText: string;
   LForceNewVariation: Boolean;
+  LOriginText: string;
   LVariationIndex: Integer;
   LVariationMoves: TStringList;
   LVariationPly: Integer;
@@ -938,6 +958,7 @@ begin
   LVariationPly := 0;
   LAnnotationText := '';
   LForceNewVariation := False;
+  LOriginText := MoveSourceOriginText(ACommand.MoveSource);
   if Trim(ANode.VariationKey) <> '' then
   begin
     if not FGameTree.ParseVariationKey(ANode.VariationKey, LBasePly,
@@ -991,6 +1012,14 @@ begin
     Reject(ACommand, 'variation line was not stored');
     Exit;
   end;
+  if (FGameTree.VariationLine[ACommand.VariationIndex] <> nil) and
+    (LOriginText <> '') and
+    (Trim(FGameTree.VariationLine[ACommand.VariationIndex].OriginText) <>
+      LOriginText) then
+  begin
+    FGameTree.VariationLine[ACommand.VariationIndex].OriginText := LOriginText;
+    AChanged := True;
+  end;
   ACommand.NodeId := ANode.NodeId;
   ACommand.BasePly := LBasePly;
   ACommand.DisplayAfterPly := LDisplayAfterPly;
@@ -1024,6 +1053,7 @@ var
   Changed: Boolean;
   InvalidateRebuildSignature: Boolean;
   Node: TGameTreePlyNode;
+  OriginText: string;
   RebuildSignature: string;
   Search: TGameTreeSearchRecord;
   ClockChanged: Boolean;
@@ -1129,6 +1159,16 @@ begin
         begin
           Reject(ACommand, 'variation line was not stored');
           Exit;
+        end;
+        OriginText := MoveSourceOriginText(ACommand.MoveSource);
+        if (FGameTree.VariationLine[ACommand.VariationIndex] <> nil) and
+          (OriginText <> '') and
+          (Trim(FGameTree.VariationLine[ACommand.VariationIndex].OriginText) <>
+            OriginText) then
+        begin
+          FGameTree.VariationLine[ACommand.VariationIndex].OriginText :=
+            OriginText;
+          Changed := True;
         end;
         ACommand.Accepted := True;
         if Changed then

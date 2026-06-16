@@ -5962,7 +5962,8 @@ begin
     Result += IntToStr(AGameTree.VariationLine[I].DisplayAfterPly) + ':' +
       IntToStr(AGameTree.VariationLine[I].BasePly) + ':' +
       AGameTree.VariationLine[I].MovesText + ':' +
-      AGameTree.VariationLine[I].AnnotationText + '|';
+      AGameTree.VariationLine[I].AnnotationText + ':' +
+      AGameTree.VariationLine[I].OriginText + '|';
   AppendNode(Result, AGameTree.Root);
 end;
 

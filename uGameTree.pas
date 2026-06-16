@@ -48,6 +48,7 @@ type
     DisplayAfterPly: Integer;
     MovesText: string;
     AnnotationText: string;
+    OriginText: string;
   end;
 
   TGameTreeClockState = class
