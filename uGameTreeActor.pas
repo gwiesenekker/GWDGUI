@@ -906,7 +906,7 @@ var
   LAnnotationText: string;
   LOriginText: string;
   LVariationIndex: Integer;
-  LVariationMoves: TStringList;
+  LVariationNode: TGameTreePlyNode;
   LVariationPly: Integer;
   LStoredLine: TGameTreeVariationLine;
   LStoredMoves: TStringList;
@@ -944,25 +944,19 @@ begin
       Reject(ACommand, 'variation line not found');
       Exit;
     end;
-    LVariationMoves := TStringList.Create;
-    try
-      ExtractStrings([' ', #9, #10, #13], [],
-        PChar(Trim(VariationLine.MovesText)), LVariationMoves);
-      if LVariationPly > LVariationMoves.Count then
-        LVariationPly := LVariationMoves.Count;
-      LMovesText := '';
-      for I := 0 to LVariationPly - 1 do
-      begin
-        if LMovesText <> '' then
-          LMovesText += ' ';
-        LMovesText += LVariationMoves[I];
-      end;
+    LMovesText := '';
+    for I := 1 to LVariationPly do
+    begin
+      LVariationNode := FGameTree.FindVariationNode(LVariationIndex, I);
+      if LVariationNode = nil then
+        Break;
       if LMovesText <> '' then
         LMovesText += ' ';
-      LMovesText += LMoveText;
-    finally
-      LVariationMoves.Free;
+      LMovesText += LVariationNode.MoveText;
     end;
+    if LMovesText <> '' then
+      LMovesText += ' ';
+    LMovesText += LMoveText;
   end
   else
   begin
