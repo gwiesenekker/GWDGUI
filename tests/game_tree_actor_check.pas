@@ -481,6 +481,14 @@ begin
     Check(ResultMove = '18-23',
       'queued search-done should keep move text');
 
+    Command := Actor.CreateReleaseSearchCommand(Search);
+    Check(Actor.PostCommand(Command), 'queued release-search should post');
+    Command := nil;
+    Check(Actor.ProcessCommands = 1,
+      'queued release-search should process');
+    Check(not Actor.SearchState(Search, State),
+      'queued release-search should remove done search');
+
     Command := Actor.CreateAppendMainlineMoveCommand('37-31', gmsHuman);
     Check(Actor.PostCommand(Command),
       'observed queued append command should post');
