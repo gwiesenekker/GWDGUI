@@ -32,3 +32,5 @@ run_check() {
 for check in "${CHECKS[@]}"; do
   run_check "$check"
 done
+
+bash "$ROOT_DIR/tests/source_audit_check.sh"
