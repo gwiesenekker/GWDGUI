@@ -2856,8 +2856,9 @@ begin
   if (LNode = nil) or (Actor = nil) then
     Exit;
 
-  StoreMoveVariation(Actor, LGameTree, LNode.NodeId, LMove, ASource,
-    LErrorText);
+  if (not StoreMoveVariation(Actor, LGameTree, LNode.NodeId, LMove, ASource,
+    LErrorText)) and (ASource in [gmsAutorandom, gmsAutoplay]) then
+    ShowGuiOkDialog(Self, 'Variation move', LErrorText);
 end;
 
 procedure TMainForm.SelectHumanMoveSource(ASourceSquare: Integer);
@@ -6078,15 +6079,33 @@ var
   LGameTree: TGameTree;
   LFirstMoveStart: Integer;
   LPos: Integer;
+  LSelEnd: Integer;
+  LSelStart: Integer;
+
+  function SelectionHitsRange(AStart, ALength: Integer): Boolean;
+  var
+    LRangeEnd: Integer;
+  begin
+    Result := False;
+    if ALength <= 0 then
+      Exit;
+    LRangeEnd := AStart + ALength;
+    if LSelEnd > LSelStart then
+      Result := (LSelStart < LRangeEnd) and (LSelEnd > AStart)
+    else
+      Result := (LSelStart >= AStart) and (LSelStart <= LRangeEnd);
+  end;
 begin
   Result := False;
   if FGameMoveMemo = nil then
     Exit;
   LGameTree := ActiveGameTree;
-  LPos := FGameMoveMemo.SelStart;
+  LSelStart := FGameMoveMemo.SelStart;
+  LSelEnd := LSelStart + FGameMoveMemo.SelLength;
+  LPos := LSelStart;
   for I := 0 to High(FVariationHits) do
-    if (LPos >= FVariationHits[I].Start) and
-      (LPos <= FVariationHits[I].Start + FVariationHits[I].Length) then
+    if SelectionHitsRange(FVariationHits[I].Start,
+      FVariationHits[I].Length) then
     begin
       ApplyVariationBrowsePly(FVariationHits[I].VariationIndex,
         FVariationHits[I].VariationPly, LGameTree);
@@ -6096,8 +6115,7 @@ begin
     end;
 
   for I := 0 to High(FGameMoveStarts) do
-    if (LPos >= FGameMoveStarts[I]) and
-      (LPos <= FGameMoveStarts[I] + FGameMoveLengths[I]) then
+    if SelectionHitsRange(FGameMoveStarts[I], FGameMoveLengths[I]) then
     begin
       ApplyGameBrowsePly(I + 1);
       HighlightGameMoveTextSelection(True, LGameTree);
