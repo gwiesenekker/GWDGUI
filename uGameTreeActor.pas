@@ -938,6 +938,12 @@ begin
       Reject(ACommand, 'invalid variation key');
       Exit;
     end;
+    if (LVariationIndex < 0) or
+      (LVariationIndex >= FGameTree.VariationLineCount) then
+    begin
+      Reject(ACommand, 'variation index out of range');
+      Exit;
+    end;
     VariationLine := FGameTree.VariationLine[LVariationIndex];
     if VariationLine = nil then
     begin

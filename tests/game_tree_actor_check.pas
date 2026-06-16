@@ -1082,6 +1082,19 @@ begin
     finally
       Command.Free;
     end;
+
+    VariationNode.VariationKey := '1:1:99:2';
+    Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
+      '14-19', gmsHuman);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(not Command.Accepted,
+        'move variation command should reject out-of-range variation index');
+      Check(not Command.TreeChanged,
+        'rejected out-of-range variation command should not mutate tree');
+    finally
+      Command.Free;
+    end;
   finally
     Actor.Free;
   end;
