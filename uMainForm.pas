@@ -3525,16 +3525,21 @@ end;
 procedure TMainForm.LoadStandaloneFen(const AFEN: string);
 var
   LBoard: TDraughtsBoard;
+  LStartingFEN: string;
 begin
   ClearHumanMoveSelection;
   LBoard := TDraughtsBoard.Create;
   try
     LBoard.LoadFromFEN(AFEN);
+    LStartingFEN := LBoard.StartingFEN;
 
+    if not RebuildStandaloneGameTreeFromImport(FGameTree, '?', 'White',
+      'Black', '*', LStartingFEN, '', '') then
+      Exit;
     FGameActive := False;
     FGameState := gosWaiting;
     FGameResult := '*';
-    FStartingFEN := LBoard.StartingFEN;
+    FStartingFEN := LStartingFEN;
     SetDisplayedTreeTracking('', '', '', 0, -1);
     FStandaloneWhitePlayerName := 'White';
     FStandaloneBlackPlayerName := 'Black';
@@ -3552,10 +3557,6 @@ begin
     FGameLogSourceGameId := -1;
     FGameLogSourceLineCount := -1;
     FGameLogSourceShowStdout := False;
-    if not RebuildStandaloneGameTreeFromImport(FGameTree, FStandaloneEventName,
-      FStandaloneWhitePlayerName, FStandaloneBlackPlayerName, FGameResult,
-      FStartingFEN, '', '') then
-      Exit;
     RefreshDisplayFromGameTree(FGameTree, True);
   finally
     LBoard.Free;
@@ -3694,7 +3695,12 @@ procedure TMainForm.LoadPdnGameToDisplay(AGame: TPdnGame);
 var
   I: Integer;
   LBoard: TDraughtsBoard;
+  LEventName: string;
   LMoves: TStringList;
+  LResultText: string;
+  LStartingFEN: string;
+  LWhiteName: string;
+  LBlackName: string;
 begin
   if AGame = nil then
     Exit;
@@ -3717,24 +3723,29 @@ begin
         end;
       end;
 
-    FGameActive := False;
-    FGameState := gosWaiting;
-    FGameResult := AGame.ResultText;
-    if Trim(FGameResult) = '' then
-      FGameResult := '*';
-    FStartingFEN := AGame.StartingFEN;
-    SetDisplayedTreeTracking('', '', '', 0, -1);
-    FStandaloneWhitePlayerName := PlayerNameOrFallback(AGame.WhiteName, 'White');
-    FStandaloneBlackPlayerName := PlayerNameOrFallback(AGame.BlackName, 'Black');
-    FStandaloneEventName := PlayerNameOrFallback(AGame.EventName, '?');
-    FGameBrowsePly := 0;
-    if not RebuildStandaloneGameTreeFromImport(FGameTree, FStandaloneEventName,
-      FStandaloneWhitePlayerName, FStandaloneBlackPlayerName, FGameResult,
-      FStartingFEN, AGame.MovesText, AGame.MoveAnnotationsText) then
+    LResultText := AGame.ResultText;
+    if Trim(LResultText) = '' then
+      LResultText := '*';
+    LStartingFEN := AGame.StartingFEN;
+    LWhiteName := PlayerNameOrFallback(AGame.WhiteName, 'White');
+    LBlackName := PlayerNameOrFallback(AGame.BlackName, 'Black');
+    LEventName := PlayerNameOrFallback(AGame.EventName, '?');
+    if not RebuildStandaloneGameTreeFromImport(FGameTree, LEventName,
+      LWhiteName, LBlackName, LResultText, LStartingFEN, AGame.MovesText,
+      AGame.MoveAnnotationsText) then
     begin
       ShowGuiOkDialog(Self, 'Open PDN', 'Could not load the PDN game tree.');
       Exit;
     end;
+    FGameActive := False;
+    FGameState := gosWaiting;
+    FGameResult := LResultText;
+    FStartingFEN := LStartingFEN;
+    SetDisplayedTreeTracking('', '', '', 0, -1);
+    FStandaloneWhitePlayerName := LWhiteName;
+    FStandaloneBlackPlayerName := LBlackName;
+    FStandaloneEventName := LEventName;
+    FGameBrowsePly := 0;
     LoadTreeVariationsFromLegacyText(FGameTree, AGame.MoveVariationsText,
       AGame.MoveVariationAnnotationsText);
     ClearDisplayedPvCache(LBoard, CurrentMoveCount);
