@@ -108,6 +108,7 @@ type
     procedure CreateEngines;
     function CreateSnapshot: TGameRunnerSnapshot;
     procedure PublishSnapshot;
+    procedure PublishSnapshotIfDue;
     procedure PublishFinished;
     procedure RequestStopFromRunner(const AReason: string);
     procedure RuntimeLog(Sender: TObject; const AMessage: string);
@@ -373,6 +374,10 @@ begin
         FHumanTurnStartTick := 0;
         AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
           ' [runner] command; kind=human-move; move=' + RunnerCommand.TextValue);
+        if (FOrchestrator.State = gosRunning) and
+          (CurrentPlayerKind = pkHuman) then
+          FHumanTurnStartTick := GetTickCount64;
+        PublishSnapshot;
       end;
   end;
 end;
@@ -572,6 +577,8 @@ end;
 
 function TGameRunnerThread.CreateSnapshot: TGameRunnerSnapshot;
 var
+  LElapsedSeconds: Double;
+  LNowTick: QWord;
   LPvDepth: string;
   LPvScore: string;
   LPvTimeText: string;
@@ -619,6 +626,28 @@ begin
   Result.FBlackRemainingSeconds := FOrchestrator.RemainingSeconds[dsBlack];
   Result.FWhiteUsedSeconds := FOrchestrator.UsedSeconds[dsWhite];
   Result.FBlackUsedSeconds := FOrchestrator.UsedSeconds[dsBlack];
+  if (Result.FState = gosRunning) and (not FPaused) and
+    (FHumanTurnStartTick > 0) and (CurrentPlayerKind = pkHuman) then
+  begin
+    LNowTick := GetTickCount64;
+    LElapsedSeconds := (LNowTick - FHumanTurnStartTick) / 1000;
+    if Result.FCurrentSide = dsWhite then
+    begin
+      Result.FWhiteUsedSeconds := Result.FWhiteUsedSeconds + LElapsedSeconds;
+      Result.FWhiteRemainingSeconds := Result.FWhiteRemainingSeconds -
+        LElapsedSeconds;
+      if Result.FWhiteRemainingSeconds < 0 then
+        Result.FWhiteRemainingSeconds := 0;
+    end
+    else
+    begin
+      Result.FBlackUsedSeconds := Result.FBlackUsedSeconds + LElapsedSeconds;
+      Result.FBlackRemainingSeconds := Result.FBlackRemainingSeconds -
+        LElapsedSeconds;
+      if Result.FBlackRemainingSeconds < 0 then
+        Result.FBlackRemainingSeconds := 0;
+    end;
+  end;
   Result.FWhitePlayerName := PlayerDisplayName(FSetup.WhitePlayer,
     FWhiteEngine);
   Result.FBlackPlayerName := PlayerDisplayName(FSetup.BlackPlayer,
@@ -672,19 +701,10 @@ begin
   end;
 end;
 
-procedure TGameRunnerThread.PublishFinished;
-begin
-  if Assigned(FOnFinished) then
-    FOnFinished(Self);
-end;
-
-procedure TGameRunnerThread.RuntimeLog(Sender: TObject; const AMessage: string);
+procedure TGameRunnerThread.PublishSnapshotIfDue;
 var
   LNowTick: QWord;
 begin
-  if (not FShowStdout) and (Pos('stdout;', LowerCase(AMessage)) > 0) then
-    Exit;
-  AddGameLog(AMessage);
   LNowTick := GetTickCount64;
   if (FLastLogSnapshotTick = 0) or
     (LNowTick - FLastLogSnapshotTick >= RunnerLogSnapshotIntervalMs) then
@@ -692,6 +712,20 @@ begin
     FLastLogSnapshotTick := LNowTick;
     PublishSnapshot;
   end;
+end;
+
+procedure TGameRunnerThread.PublishFinished;
+begin
+  if Assigned(FOnFinished) then
+    FOnFinished(Self);
+end;
+
+procedure TGameRunnerThread.RuntimeLog(Sender: TObject; const AMessage: string);
+begin
+  if (not FShowStdout) and (Pos('stdout;', LowerCase(AMessage)) > 0) then
+    Exit;
+  AddGameLog(AMessage);
+  PublishSnapshotIfDue;
 end;
 
 procedure TGameRunnerThread.Execute;
@@ -756,6 +790,7 @@ begin
             if (FOrchestrator.State <> gosRunning) or
               (CurrentPlayerKind <> pkHuman) then
               Break;
+            PublishSnapshotIfDue;
             Sleep(100);
           end;
         end;

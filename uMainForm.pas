@@ -247,8 +247,6 @@ type
     FBoardControl: TDraughtsBoardControl;
     FBoardFlipped: Boolean;
     FBlackClockLabel: TLabel;
-    FBlackRemainingSeconds: Double;
-    FBlackUsedSeconds: Double;
     FClosing: Boolean;
     FDatabaseForm: TDatabaseForm;
     FEnginesDialog: TEnginesDialog;
@@ -357,8 +355,6 @@ type
     FVariationBrowsePly: Integer;
     FWhiteClockLabel: TLabel;
     FWhitePlayerEdit: TEdit;
-    FWhiteRemainingSeconds: Double;
-    FWhiteUsedSeconds: Double;
     function ActiveGameTree: TGameTree;
     procedure ApplyBoardFlipped;
     procedure ApplyBoardTheme(AControl: TDraughtsBoardControl;
@@ -1996,7 +1992,8 @@ begin
 
   LState := LGame.State;
   Result := (LGame.Runner <> nil) and
-    (LState = gosRunning) and LGame.IsHumanToMove;
+    ((LState = gosRunning) or (LGame.Lifecycle = rglStarting)) and
+    LGame.IsHumanToMove;
 end;
 
 function TMainForm.HasLegalDisplayedMove: Boolean;
@@ -2714,7 +2711,7 @@ begin
   if LGame <> nil then
     LState := LGame.State
   else
-    LState := FGameState;
+    LState := StateForTree(LGameTree);
   if (LGame <> nil) and (LState in [gosStopped, gosGameOver]) and
     (FGameBrowsePly < 0) then
   begin
@@ -2728,7 +2725,8 @@ begin
   end;
 
   if (LGame <> nil) and (LGame.Runner <> nil) and
-    (LState = gosRunning) and LGame.IsHumanToMove then
+    ((LState = gosRunning) or (LGame.Lifecycle = rglStarting)) and
+    LGame.IsHumanToMove then
     LGame.Runner.PostHumanMove(LMove);
 end;
 
@@ -3520,7 +3518,7 @@ begin
     FPositionSetupForm.ApplyPreferences(FPreferences);
   end;
   if not TryGetDisplayedBoardFen(ActiveGameTree, LFen) then
-    LFen := FStartingFEN;
+    LFen := StartingFenForTree(ActiveGameTree);
   FPositionSetupForm.StartSetup(LFen);
   ShowFormCenteredOnOwner(FPositionSetupForm, Self);
 end;
@@ -4152,7 +4150,10 @@ begin
   if AGameTree <> nil then
     Result := Trim(AGameTree.StartingFEN);
   if Result = '' then
-    Result := FStartingFEN;
+  begin
+    if FBoard <> nil then
+      Result := FBoard.StartingFEN;
+  end;
 end;
 
 function TMainForm.StateForTree(AGameTree: TGameTree): TGameOrchestratorState;
@@ -4160,7 +4161,7 @@ begin
   if AGameTree <> nil then
     Result := AGameTree.GameState
   else
-    Result := FGameState;
+    Result := gosWaiting;
 end;
 
 function TMainForm.ResultForTree(AGameTree: TGameTree): string;
@@ -4169,7 +4170,7 @@ begin
   if AGameTree <> nil then
     Result := Trim(AGameTree.ResultText);
   if Result = '' then
-    Result := PlayerNameOrFallback(FGameResult, '*');
+    Result := '*';
 end;
 
 function TMainForm.RunningGameTreeExtendsSnapshot(AGame: TRunningGame;
@@ -4235,10 +4236,10 @@ begin
   end
   else
   begin
-    AWhiteRemainingSeconds := FWhiteRemainingSeconds;
-    ABlackRemainingSeconds := FBlackRemainingSeconds;
-    AWhiteUsedSeconds := FWhiteUsedSeconds;
-    ABlackUsedSeconds := FBlackUsedSeconds;
+    AWhiteRemainingSeconds := 0;
+    ABlackRemainingSeconds := 0;
+    AWhiteUsedSeconds := 0;
+    ABlackUsedSeconds := 0;
   end;
 end;
 
@@ -5304,11 +5305,7 @@ var
   LPvChanged: Boolean;
   LRunningSignature: string;
   LEffectiveMovesText: string;
-  LBlackRemainingSeconds: Double;
-  LBlackUsedSeconds: Double;
   LLogInput: TRunningSnapshotLogInput;
-  LWhiteRemainingSeconds: Double;
-  LWhiteUsedSeconds: Double;
 
   procedure UpdateDisplayedGameLog;
   var
@@ -5381,8 +5378,6 @@ begin
   LEffectiveStartingFEN := StartingFenForTree(AGame.GameTree);
   LEffectiveResultText := ResultForTree(AGame.GameTree);
   LEffectiveState := StateForTree(AGame.GameTree);
-  ClockValuesForTree(AGame.GameTree, LWhiteRemainingSeconds,
-    LBlackRemainingSeconds, LWhiteUsedSeconds, LBlackUsedSeconds);
 
   LPositionChanged := (FStartingFEN <> LEffectiveStartingFEN) or
     (FDisplayedAnnotationsSignature <> LEffectiveAnnotationsText) or
@@ -5398,10 +5393,6 @@ begin
   FStartingFEN := LEffectiveStartingFEN;
   FGameState := LEffectiveState;
   FGameResult := LEffectiveResultText;
-  FWhiteRemainingSeconds := LWhiteRemainingSeconds;
-  FBlackRemainingSeconds := LBlackRemainingSeconds;
-  FWhiteUsedSeconds := LWhiteUsedSeconds;
-  FBlackUsedSeconds := LBlackUsedSeconds;
   FGameActive := True;
   if not LPositionChanged then
   begin
@@ -7128,14 +7119,10 @@ end;
 procedure TMainForm.RefreshDisplayFromGameTree(AGameTree: TGameTree;
   AForceViews: Boolean);
 var
-  LBlackRemainingSeconds: Double;
-  LBlackUsedSeconds: Double;
   LAnnotationsText: string;
   LGame: TRunningGame;
   LMainlineCount: Integer;
   LMovesText: string;
-  LWhiteRemainingSeconds: Double;
-  LWhiteUsedSeconds: Double;
 begin
   if (AGameTree = nil) or (AGameTree <> ActiveGameTree) then
     Exit;
@@ -7159,12 +7146,6 @@ begin
   FStartingFEN := StartingFenForTree(AGameTree);
   FGameResult := ResultForTree(AGameTree);
   FGameState := StateForTree(AGameTree);
-  ClockValuesForTree(AGameTree, LWhiteRemainingSeconds,
-    LBlackRemainingSeconds, LWhiteUsedSeconds, LBlackUsedSeconds);
-  FWhiteRemainingSeconds := LWhiteRemainingSeconds;
-  FBlackRemainingSeconds := LBlackRemainingSeconds;
-  FWhiteUsedSeconds := LWhiteUsedSeconds;
-  FBlackUsedSeconds := LBlackUsedSeconds;
   UpdateDisplayedPvCacheFromTree(AGameTree);
 
   UpdateBoardFromBrowseState(AGameTree);

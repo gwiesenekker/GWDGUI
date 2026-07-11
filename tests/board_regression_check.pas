@@ -86,6 +86,20 @@ begin
   end;
 end;
 
+procedure CheckInitialHumanMoveIsLegal;
+var
+  Board: TDraughtsBoard;
+begin
+  Board := TDraughtsBoard.Create;
+  try
+    Board.LoadFromFEN('W:W31-50:B1-20');
+    Check(Board.IsLegalMove('33-28'),
+      'expected 33-28 to be legal from the initial position');
+  finally
+    Board.Free;
+  end;
+end;
+
 procedure CheckCapturedPiecesCanBeInAnyOrder;
 var
   Board: TDraughtsBoard;
@@ -209,6 +223,7 @@ end;
 begin
   CheckMoveNormalization;
   CheckDxpMoveConversion;
+  CheckInitialHumanMoveIsLegal;
   CheckReplayAcceptsZeroPaddedMove;
   CheckCapturedPiecesCanBeInAnyOrder;
   CheckSingleCaptureMayOmitCapturedSquare;
