@@ -495,7 +495,7 @@ begin
     raise EInvalidOperation.Create('Cannot play a move unless the orchestrator is running');
 
   LSide := FBoard.SideToMove;
-  if FBoard.LegalMoves.Count = 0 then
+  if FBoard.LegalMoveCount = 0 then
   begin
     if LSide = dsWhite then
       FinishGame('0-2', 'terminal position; no legal moves for white')

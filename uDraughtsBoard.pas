@@ -12,6 +12,10 @@ type
   TDraughtsPieceKind = (pkEmpty, pkWhiteMan, pkBlackMan, pkWhiteKing, pkBlackKing);
   TDraughtsSide = (dsWhite, dsBlack);
 
+const
+  DefaultStartingFEN = 'W:W31-50:B1-20';
+
+type
   TDraughtsBoardArray = array[1..50] of TDraughtsPieceKind;
   TCapturedSet = array[1..50] of Boolean;
 
@@ -23,6 +27,10 @@ type
     FMovesPlayed: TStringList;
     FLegalMoves: TStringList;
     FMaxCaptureCount: Integer;
+    function GetLegalMove(AIndex: Integer): string;
+    function GetLegalMoveCount: Integer;
+    function GetMovePlayed(AIndex: Integer): string;
+    function GetMovesPlayedCount: Integer;
     function GetSquare(Index: Integer): TDraughtsPieceKind;
     procedure SetSquare(Index: Integer; Value: TDraughtsPieceKind);
     procedure AddLegalMove(const ANotation: string; ACaptureCount: Integer);
@@ -53,13 +61,18 @@ type
     function MoveIsReversible(const AMove: string): Boolean;
     function CurrentFEN: string;
     function MovesPlayedText: string;
+    function LegalMovesText: string;
     function PositionKey: string;
+    procedure CopyLegalMovesTo(ATarget: TStrings);
+    procedure CopyMovesPlayedTo(ATarget: TStrings);
 
     property Squares[Index: Integer]: TDraughtsPieceKind read GetSquare write SetSquare; default;
     property SideToMove: TDraughtsSide read FSideToMove write FSideToMove;
     property StartingFEN: string read FStartingFEN write LoadFromFEN;
-    property MovesPlayed: TStringList read FMovesPlayed;
-    property LegalMoves: TStringList read FLegalMoves;
+    property MovesPlayed[AIndex: Integer]: string read GetMovePlayed;
+    property MovesPlayedCount: Integer read GetMovesPlayedCount;
+    property LegalMoves[AIndex: Integer]: string read GetLegalMove;
+    property LegalMoveCount: Integer read GetLegalMoveCount;
   end;
 
 function SquareToRowCol(ASquare: Integer; out ARow, ACol: Integer): Boolean;
@@ -71,7 +84,6 @@ function NormalizeMoveNotation(const AMove: string): string;
 implementation
 
 const
-  DefaultStartingFEN = 'W:W31-50:B1-20';
   DiagonalDeltas: array[0..3, 0..1] of Integer = (
     (-1, -1), (-1, 1), (1, -1), (1, 1)
   );
@@ -336,6 +348,26 @@ begin
   FLegalMoves.Free;
   FMovesPlayed.Free;
   inherited Destroy;
+end;
+
+function TDraughtsBoard.GetLegalMove(AIndex: Integer): string;
+begin
+  Result := FLegalMoves[AIndex];
+end;
+
+function TDraughtsBoard.GetLegalMoveCount: Integer;
+begin
+  Result := FLegalMoves.Count;
+end;
+
+function TDraughtsBoard.GetMovePlayed(AIndex: Integer): string;
+begin
+  Result := FMovesPlayed[AIndex];
+end;
+
+function TDraughtsBoard.GetMovesPlayedCount: Integer;
+begin
+  Result := FMovesPlayed.Count;
 end;
 
 procedure TDraughtsBoard.AssignFrom(ASource: TDraughtsBoard);
@@ -877,6 +909,23 @@ function TDraughtsBoard.MovesPlayedText: string;
 begin
   Result := FMovesPlayed.Text;
   Result := Trim(StringReplace(Result, LineEnding, ' ', [rfReplaceAll]));
+end;
+
+function TDraughtsBoard.LegalMovesText: string;
+begin
+  Result := FLegalMoves.Text;
+end;
+
+procedure TDraughtsBoard.CopyLegalMovesTo(ATarget: TStrings);
+begin
+  if ATarget <> nil then
+    ATarget.AddStrings(FLegalMoves);
+end;
+
+procedure TDraughtsBoard.CopyMovesPlayedTo(ATarget: TStrings);
+begin
+  if ATarget <> nil then
+    ATarget.AddStrings(FMovesPlayed);
 end;
 
 function TDraughtsBoard.CurrentFEN: string;

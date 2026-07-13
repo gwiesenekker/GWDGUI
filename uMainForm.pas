@@ -644,6 +644,7 @@ type
     procedure CloseMctsClick(Sender: TObject);
     procedure ClearMctsStatsGrid;
     procedure ToggleBoardFlipped;
+    procedure TournamentSelectGame(Sender: TObject; AGame: TObject);
     procedure TournamentStartGame(Sender: TObject; const ASetup: TGameSetup;
       const ATitlePrefix: string; out AGame: TObject);
     function TreeVariationLineByIndex(AIndex: Integer;
@@ -2006,7 +2007,7 @@ begin
   LBoard := TDraughtsBoard.Create;
   try
     Result := TryBuildDisplayedBoard(LGameTree, LBoard) and
-      (LBoard.LegalMoves.Count > 0);
+      (LBoard.LegalMoveCount > 0);
   finally
     LBoard.Free;
   end;
@@ -2778,7 +2779,7 @@ begin
     if not TryBuildDisplayedBoard(LGameTree, LBoard) then
       Exit;
 
-    for I := 0 to LBoard.LegalMoves.Count - 1 do
+    for I := 0 to LBoard.LegalMoveCount - 1 do
     begin
       LMove := Trim(LBoard.LegalMoves[I]);
       if MoveSquareAt(LMove, 1) = ASourceSquare then
@@ -4149,11 +4150,6 @@ begin
   Result := '';
   if AGameTree <> nil then
     Result := Trim(AGameTree.StartingFEN);
-  if Result = '' then
-  begin
-    if FBoard <> nil then
-      Result := FBoard.StartingFEN;
-  end;
 end;
 
 function TMainForm.StateForTree(AGameTree: TGameTree): TGameOrchestratorState;
@@ -6767,9 +6763,27 @@ begin
   if FTournamentDialog = nil then
   begin
     FTournamentDialog := TTournamentDialog.Create(Self);
+    FTournamentDialog.OnSelectGame := @TournamentSelectGame;
     FTournamentDialog.OnStartGame := @TournamentStartGame;
   end;
   ShowFormCenteredOnOwner(FTournamentDialog, Self);
+end;
+
+procedure TMainForm.TournamentSelectGame(Sender: TObject; AGame: TObject);
+var
+  LIndex: Integer;
+  LRunningGame: TRunningGame;
+begin
+  if not (AGame is TRunningGame) then
+    Exit;
+
+  LRunningGame := TRunningGame(AGame);
+  LIndex := FGamesListBox.Items.IndexOfObject(LRunningGame);
+  if LIndex < 0 then
+    Exit;
+
+  FGamesListBox.ItemIndex := LIndex;
+  ApplyGameToDisplay(LRunningGame);
 end;
 
 procedure TMainForm.TournamentStartGame(Sender: TObject; const ASetup: TGameSetup;
@@ -7359,10 +7373,10 @@ begin
   try
     LHasBoard := TryBuildDisplayedBoard(AGameTree, LBoard);
     FLegalMovesMemo.Clear;
-    if (not LHasBoard) or (LBoard.LegalMoves.Count = 0) then
+    if (not LHasBoard) or (LBoard.LegalMoveCount = 0) then
       FLegalMovesMemo.Lines.Add('(none)')
     else
-      FLegalMovesMemo.Lines.AddStrings(LBoard.LegalMoves);
+      LBoard.CopyLegalMovesTo(FLegalMovesMemo.Lines);
   finally
     FLegalMovesMemo.Lines.EndUpdate;
     LBoard.Free;

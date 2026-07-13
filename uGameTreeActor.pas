@@ -121,6 +121,7 @@ type
     procedure AcceptTreeMutation(ACommand: TGameTreeCommand;
       var AInvalidateRebuildSignature: Boolean;
       AInvalidateSignature: Boolean = True);
+    function ApplyHeaderInput(const AHeader: TGameTreeHeaderInput): Boolean;
     procedure ExecuteRecordPVCommand(ACommand: TGameTreeCommand;
       var AInvalidateRebuildSignature: Boolean;
       ARecordEnginePV: Boolean);
@@ -366,6 +367,20 @@ begin
   Inc(FRevision);
 end;
 
+function TGameTreeActor.ApplyHeaderInput(
+  const AHeader: TGameTreeHeaderInput): Boolean;
+var
+  Changed: Boolean;
+  FieldChanged: Boolean;
+begin
+  FGameTree.SetHeader(AHeader.EventName, AHeader.WhiteName, AHeader.BlackName,
+    AHeader.ResultText, AHeader.StartingFEN, Changed);
+  FGameTree.SetStatusText(AHeader.StatusText, FieldChanged);
+  Changed := Changed or FieldChanged;
+  FGameTree.SetGameState(AHeader.GameState, FieldChanged);
+  Result := Changed or FieldChanged;
+end;
+
 procedure TGameTreeActor.ExecuteRecordPVCommand(ACommand: TGameTreeCommand;
   var AInvalidateRebuildSignature: Boolean; ARecordEnginePV: Boolean);
 var
@@ -596,12 +611,9 @@ begin
     if SourceLine = nil then
       Continue;
 
-    TargetLine := TGameTreeVariationLine.Create;
-    TargetLine.BasePly := SourceLine.BasePly;
-    TargetLine.DisplayAfterPly := SourceLine.DisplayAfterPly;
-    TargetLine.MovesText := SourceLine.MovesText;
-    TargetLine.AnnotationText := SourceLine.AnnotationText;
-    TargetLine.OriginText := SourceLine.OriginText;
+    TargetLine := TGameTreeVariationLine.Create(SourceLine.DisplayAfterPly,
+      SourceLine.BasePly, SourceLine.MovesText, SourceLine.AnnotationText,
+      SourceLine.OriginText);
     ACommand.RebuildVariationLines.Add(TargetLine);
   end;
 end;
@@ -853,6 +865,7 @@ end;
 procedure TGameTreeActor.RebuildStoredVariations(ACommand: TGameTreeCommand);
 var
   I: Integer;
+  OriginChanged: Boolean;
   StoredLine: TGameTreeVariationLine;
   StoredVariationIndex: Integer;
   VariationLine: TGameTreeVariationLine;
@@ -882,7 +895,8 @@ begin
       VariationLine := FGameTree.VariationLine[StoredVariationIndex];
       if VariationLine = nil then
         Continue;
-      VariationLine.OriginText := StoredLine.OriginText;
+      FGameTree.SetVariationLineOrigin(StoredVariationIndex,
+        StoredLine.OriginText, OriginChanged);
 
       RecordGameTreeVariationLine(FGameTree,
         GameTreeVariationLineInput(VariationLine, StoredVariationIndex,
@@ -904,6 +918,7 @@ var
   LMovesText: string;
   LNodeWasMaterialized: Boolean;
   LAnnotationText: string;
+  LOriginChanged: Boolean;
   LOriginText: string;
   LVariationIndex: Integer;
   LVariationNode: TGameTreePlyNode;
@@ -982,12 +997,11 @@ begin
     Exit;
   end;
   if (FGameTree.VariationLine[ACommand.VariationIndex] <> nil) and
-    (LOriginText <> '') and
-    (Trim(FGameTree.VariationLine[ACommand.VariationIndex].OriginText) <>
-      LOriginText) then
+    (LOriginText <> '') then
   begin
-    FGameTree.VariationLine[ACommand.VariationIndex].OriginText := LOriginText;
-    AChanged := True;
+    FGameTree.SetVariationLineOrigin(ACommand.VariationIndex, LOriginText,
+      LOriginChanged);
+    AChanged := AChanged or LOriginChanged;
   end;
   ACommand.NodeId := ANode.NodeId;
   ACommand.BasePly := LBasePly;
@@ -1028,11 +1042,11 @@ var
   Changed: Boolean;
   InvalidateRebuildSignature: Boolean;
   Node: TGameTreePlyNode;
+  OriginChanged: Boolean;
   OriginText: string;
   RebuildSignature: string;
   Search: TGameTreeSearchRecord;
   ClockChanged: Boolean;
-  StateChanged: Boolean;
   TimeControlChanged: Boolean;
 
   function HeaderIncrementModeText: string;
@@ -1093,12 +1107,7 @@ begin
       end;
     gtcAppendMainlineSnapshotMove:
       begin
-        FGameTree.SetHeader(ACommand.HeaderInput.EventName,
-          ACommand.HeaderInput.WhiteName, ACommand.HeaderInput.BlackName,
-          ACommand.HeaderInput.ResultText, ACommand.HeaderInput.StartingFEN,
-          Changed);
-        FGameTree.StatusText := ACommand.HeaderInput.StatusText;
-        FGameTree.GameState := ACommand.HeaderInput.GameState;
+        Changed := ApplyHeaderInput(ACommand.HeaderInput);
         if ACommand.HeaderInput.RecordTimeControl then
           FGameTree.RecordTimeControl(ACommand.HeaderInput.TimeControl);
         Node := FGameTree.RecordMainlineMove(FGameTree.MainlineCount + 1,
@@ -1141,9 +1150,9 @@ begin
           (Trim(FGameTree.VariationLine[ACommand.VariationIndex].OriginText) <>
             OriginText) then
         begin
-          FGameTree.VariationLine[ACommand.VariationIndex].OriginText :=
-            OriginText;
-          Changed := True;
+          FGameTree.SetVariationLineOrigin(ACommand.VariationIndex,
+            OriginText, OriginChanged);
+          Changed := Changed or OriginChanged;
         end;
         ACommand.Accepted := True;
         if Changed then
@@ -1282,18 +1291,7 @@ begin
       end;
     gtcSetHeader:
       begin
-        FGameTree.SetHeader(ACommand.HeaderInput.EventName,
-          ACommand.HeaderInput.WhiteName, ACommand.HeaderInput.BlackName,
-          ACommand.HeaderInput.ResultText, ACommand.HeaderInput.StartingFEN,
-          Changed);
-        if FGameTree.StatusText <> ACommand.HeaderInput.StatusText then
-        begin
-          FGameTree.StatusText := ACommand.HeaderInput.StatusText;
-          Changed := True;
-        end;
-        FGameTree.SetGameState(ACommand.HeaderInput.GameState, StateChanged);
-        if StateChanged then
-          Changed := True;
+        Changed := ApplyHeaderInput(ACommand.HeaderInput);
         if ACommand.HeaderInput.RecordTimeControl then
         begin
           TimeControlChanged := (not FGameTree.HasTimeControl) or

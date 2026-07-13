@@ -442,7 +442,7 @@ begin
       raise EInvalidOperation.Create('Illegal move: ' + NormalizeMoveNotation(LMove) +
         LineEnding + 'Ply: ' + IntToStr(Points + 1) +
         LineEnding + 'Position: ' + FBoard.CurrentFEN +
-        LineEnding + 'Legal moves:' + LineEnding + FBoard.LegalMoves.Text);
+        LineEnding + 'Legal moves:' + LineEnding + FBoard.LegalMovesText);
     FMoves[Points] := LLegalMove;
     FBoard.PlayMove(LLegalMove, False, False);
   end;

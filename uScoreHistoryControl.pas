@@ -34,6 +34,7 @@ type
       AColor: TColor);
     function MappedScore(AScore: Double): Double;
     function ScoreY(AScore: Double; AMidY, AHalfHeight: Integer): Integer;
+    function WhitePerspectiveScoreText(AScore: Double): string;
     function MoveCount: Integer;
     function PlyLabel(APly: Integer): string;
     function PlyAtX(AX: Integer; out APly: Integer): Boolean;
@@ -295,6 +296,15 @@ begin
     Result := AMidY + Distance;
 end;
 
+function TScoreHistoryControl.WhitePerspectiveScoreText(
+  AScore: Double): string;
+begin
+  if AScore > 0.0 then
+    Result := '+' + FormatFloat('0.###', AScore)
+  else
+    Result := FormatFloat('0.###', AScore);
+end;
+
 function TScoreHistoryControl.MoveCount: Integer;
 var
   Lines: TStringList;
@@ -454,9 +464,10 @@ begin
       SplitY := Max(InnerBarRect.Top, Min(InnerBarRect.Bottom, SplitY));
       Canvas.Pen.Style := psClear;
       Canvas.Brush.Style := bsSolid;
-      Canvas.Brush.Color := clWhite;
-      Canvas.Rectangle(InnerBarRect);
       Canvas.Brush.Color := clBlack;
+      Canvas.Rectangle(InnerBarRect.Left, InnerBarRect.Top,
+        InnerBarRect.Right, SplitY);
+      Canvas.Brush.Color := clWhite;
       Canvas.Rectangle(InnerBarRect.Left, SplitY, InnerBarRect.Right,
         InnerBarRect.Bottom);
       Canvas.Pen.Style := psSolid;
@@ -664,8 +675,8 @@ end;
 
 function TScoreHistoryControl.ScoreHintForPly(APly: Integer): string;
 var
-  AnnotatorScoreText: string;
-  EngineScoreText: string;
+  AnnotatorScore: Double;
+  EngineScore: Double;
   HasAnnotatorScore: Boolean;
   HasEngineScore: Boolean;
   Lines: TStringList;
@@ -673,10 +684,10 @@ begin
   Lines := TStringList.Create;
   try
     Lines.Text := FAnnotationsText;
-    HasEngineScore := TryAnnotationScoreTextInLines(Lines, APly, 'engine',
-      EngineScoreText);
-    HasAnnotatorScore := TryAnnotationScoreTextInLines(Lines, APly,
-      'annotator', AnnotatorScoreText);
+    HasEngineScore := TryAnnotationScoreInLines(Lines, APly, 'engine',
+      EngineScore);
+    HasAnnotatorScore := TryAnnotationScoreInLines(Lines, APly,
+      'annotator', AnnotatorScore);
   finally
     Lines.Free;
   end;
@@ -689,12 +700,12 @@ begin
   end;
 
   if HasEngineScore then
-    Result += 'E: ' + EngineScoreText
+    Result += 'E: ' + WhitePerspectiveScoreText(EngineScore)
   else
     Result += 'E: no score';
   Result += '; ';
   if HasAnnotatorScore then
-    Result += 'A: ' + AnnotatorScoreText
+    Result += 'A: ' + WhitePerspectiveScoreText(AnnotatorScore)
   else
     Result += 'A: no score';
 end;

@@ -183,7 +183,7 @@ begin
   Board := TDraughtsBoard.Create;
   try
     Board.LoadFromFEN('B:W17,23,27,28,32,35,37,38:B16,31');
-    Check(Board.LegalMoves.Count = 2,
+    Check(Board.LegalMoveCount = 2,
       'equivalent generated captures should be deduplicated');
     Check(Board.TryGetLegalMove('31x31', LegalMove),
       'equivalent generated capture aliases should not be ambiguous');

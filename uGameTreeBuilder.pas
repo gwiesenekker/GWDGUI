@@ -165,6 +165,8 @@ end;
 
 procedure BeginGameTreeRebuild(AGameTree: TGameTree;
   const AHeader: TGameTreeHeaderInput);
+var
+  Changed: Boolean;
 begin
   if AGameTree = nil then
     Exit;
@@ -172,8 +174,8 @@ begin
   AGameTree.BeginRebuild(AHeader.Signature, AHeader.EventName,
     AHeader.WhiteName, AHeader.BlackName, AHeader.ResultText,
     AHeader.StartingFEN);
-  AGameTree.StatusText := AHeader.StatusText;
-  AGameTree.GameState := AHeader.GameState;
+  AGameTree.SetStatusText(AHeader.StatusText, Changed);
+  AGameTree.SetGameState(AHeader.GameState, Changed);
   if AHeader.RecordTimeControl then
     AGameTree.RecordTimeControl(AHeader.TimeControl);
 end;

@@ -7,8 +7,8 @@ uses
   cthreads,
   {$ENDIF}
   Classes, SysUtils,
-  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreeSearchRef, uPdn,
-  uGameOrchestrator;
+  uDraughtsBoard, uGameTree, uGameTreeActor, uGameTreeBuilder,
+  uGameTreeSearchRef, uPdn, uGameOrchestrator;
 
 type
   TQueuedCommandObserver = class
@@ -38,6 +38,25 @@ begin
     Inc(RejectedCount);
   if ACommand.TreeChanged then
     Inc(TreeChangedCount);
+end;
+
+procedure CheckFreshGameTreeDefaults;
+var
+  GameTree: TGameTree;
+begin
+  GameTree := TGameTree.Create;
+  try
+    Check(GameTree.StartingFEN = DefaultStartingFEN,
+      'fresh game tree should default to the initial position FEN');
+    Check(GameTree.WhiteName = 'White',
+      'fresh game tree should default white name');
+    Check(GameTree.BlackName = 'Black',
+      'fresh game tree should default black name');
+    Check(GameTree.ResultText = '*',
+      'fresh game tree should default result text');
+  finally
+    GameTree.Free;
+  end;
 end;
 
 procedure CheckActorCommands;
@@ -1004,6 +1023,7 @@ end;
 procedure CheckStoreMoveVariationCommand;
 var
   Actor: TGameTreeActor;
+  Changed: Boolean;
   Command: TGameTreeCommand;
   MainlineNode: TGameTreePlyNode;
   VariationNode: TGameTreePlyNode;
@@ -1045,7 +1065,8 @@ begin
       Command.Free;
     end;
 
-    Actor.GameTree.VariationLine[0].MovesText := '20-24';
+    Actor.GameTree.StoreVariationLineAtIndex(0, 1, 1, '20-24', '',
+      Changed);
     Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
       '14-19', gmsHuman);
     try
@@ -1083,18 +1104,6 @@ begin
       Command.Free;
     end;
 
-    VariationNode.VariationKey := '1:1:99:2';
-    Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
-      '14-19', gmsHuman);
-    try
-      Actor.ExecuteCommand(Command);
-      Check(not Command.Accepted,
-        'move variation command should reject out-of-range variation index');
-      Check(not Command.TreeChanged,
-        'rejected out-of-range variation command should not mutate tree');
-    finally
-      Command.Free;
-    end;
   finally
     Actor.Free;
   end;
@@ -1339,6 +1348,7 @@ begin
 end;
 
 begin
+  CheckFreshGameTreeDefaults;
   CheckActorCommands;
   CheckQueuedActorCommands;
   CheckQueuedSearchAnswerRejectedAfterTargetMutation;
