@@ -78,6 +78,9 @@ begin
   if AModelNode.AnnotatorPV <> '' then
     ATreeView.Items.AddChild(ATreeParent, 'Annotator PV: ' +
       AModelNode.AnnotatorPV);
+  if AModelNode.AutoPlayPV <> '' then
+    ATreeView.Items.AddChild(ATreeParent, 'Auto Play PV: ' +
+      AModelNode.AutoPlayPV);
 end;
 
 procedure AddChildren(ATreeView: TTreeView; ATreeParent: TTreeNode;

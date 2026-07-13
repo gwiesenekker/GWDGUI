@@ -967,7 +967,10 @@ procedure THubEngine.DoStartAnalyzing;
 begin
   DoStopSearch;
   SendLine(BuildHubPositionCommand);
-  SendLine('level time=1000');
+  if FLevelCommand <> '' then
+    SendLine(FLevelCommand)
+  else
+    SendLine('level time=1000');
   DiscardDoneLinesBeforeNewSearch('before go analyze');
   SendLine('go analyze');
   ChangeState(esThinking, 'analysis started');

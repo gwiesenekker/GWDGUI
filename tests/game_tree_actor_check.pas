@@ -1347,6 +1347,48 @@ begin
   end;
 end;
 
+procedure CheckAutoPlayPvCommand;
+var
+  Actor: TGameTreeActor;
+  Command: TGameTreeCommand;
+  Node: TGameTreePlyNode;
+begin
+  Actor := TGameTreeActor.Create;
+  try
+    Actor.GameTree.BeginRebuild('auto-play', 'Event', 'White', 'Black', '*',
+      'W:W31-50:B1-20');
+    Node := Actor.GameTree.Root;
+
+    Command := Actor.CreateRecordAutoPlayPVCommand(Node.NodeId, '32-28');
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'Auto Play PV should be accepted');
+      Check(Command.TreeChanged, 'Auto Play PV should change tree');
+      Check(Node.AutoPlayPV = '32-28',
+        'Auto Play PV should be stored on its analysis node');
+      Check(Node.ChildCount = 0,
+        'Auto Play PV should not create structural move nodes');
+    finally
+      Command.Free;
+    end;
+
+    Command := Actor.CreateRecordAutoPlayPVCommand(Node.NodeId,
+      '32-28 19-23');
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'Auto Play PV extension should be accepted');
+      Check(Node.AutoPlayPV = '32-28 19-23',
+        'Auto Play PV extension should replace the analysis value');
+      Check(Node.ChildCount = 0,
+        'Auto Play PV extension should not create structural move nodes');
+    finally
+      Command.Free;
+    end;
+  finally
+    Actor.Free;
+  end;
+end;
+
 begin
   CheckFreshGameTreeDefaults;
   CheckActorCommands;
@@ -1356,6 +1398,7 @@ begin
   CheckSearchAnswerRejectedAfterTargetRebuild;
   CheckAnnotatorPvCommand;
   CheckStoreMoveVariationCommand;
+  CheckAutoPlayPvCommand;
   CheckRebuildFromInputsCommand;
   Writeln('OK');
 end.

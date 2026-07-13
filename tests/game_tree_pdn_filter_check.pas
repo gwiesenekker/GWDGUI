@@ -3,8 +3,8 @@ program game_tree_pdn_filter_check;
 {$mode objfpc}{$H+}
 
 uses
-  Classes, SysUtils, uGameOrchestrator, uGameTree, uGameTreeBuilder,
-  uGameTreePdn;
+  Classes, SysUtils, uDraughtsBoard, uGameOrchestrator, uGameTree, uGameTreeBuilder,
+  uGameTreePdn, uGameTreeSearchRef, uPvSnapshot;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -82,6 +82,30 @@ begin
   finally
     GameTreeB.Free;
     GameTreeA.Free;
+  end;
+end;
+
+procedure CheckTransientPvSnapshot;
+var
+  Board: TDraughtsBoard;
+  CopySnapshot: TPvSnapshot;
+  Snapshot: TPvSnapshot;
+begin
+  Board := TDraughtsBoard.Create;
+  Snapshot := TPvSnapshot.Create;
+  CopySnapshot := TPvSnapshot.Create;
+  try
+    Snapshot.SetDataWithSearch(Board, 0, '32-28', '0.10', '8', '',
+      EmptyGameTreeSearchRef, False, True);
+    Check(Snapshot.Transient,
+      'PV snapshot should retain transient analysis state');
+    CopySnapshot.AssignFrom(Snapshot);
+    Check(CopySnapshot.Transient,
+      'copied PV snapshot should retain transient analysis state');
+  finally
+    CopySnapshot.Free;
+    Snapshot.Free;
+    Board.Free;
   end;
 end;
 
@@ -217,8 +241,14 @@ end;
 
 procedure CheckPdnDisplayFilters;
 var
+  Changed: Boolean;
   GameTree: TGameTree;
+  I: Integer;
   Options: TGameTreePdnRenderOptions;
+  RenderResult: TGameTreePdnRenderResult;
+  SawBlackBase: Boolean;
+  SawBlackMove: Boolean;
+  SawEngineMove: Boolean;
   Text: string;
 begin
   GameTree := TGameTree.Create;
@@ -227,47 +257,106 @@ begin
       'W:W31-50:B1-20');
     GameTree.RecordMainlineMove(1, '32-28');
     GameTree.RecordMainlineMove(2, '16-21');
-    GameTree.RecordEnginePV(1, '0.12', '16-21 37-32');
+    GameTree.RecordEnginePV(1, '0.12', '18-23 37-32');
     GameTree.RecordAnnotatorPV(0, '0.50', '34-30 20-25');
     GameTree.RecordAnnotatorPV(1, '0.11', '16-21 37-32');
+    Check(GameTree.RecordAutoPlayPVForNodeId(
+      GameTree.MainlineNode[1].NodeId, '17-22 37-32', Changed),
+      'Auto Play PV should be recorded');
     GameTree.RecordClockState(1, 299.0, 300.0, 1.0, 0.0);
 
     Options := DefaultGameTreePdnRenderOptions;
     Text := RenderWithOptions(GameTree, Options);
     CheckContains(Text, 'E: 0.12', 'engine score should be shown');
-    CheckContains(Text, 'E PV: 16-21 37-32', 'engine full PV should be shown');
+    CheckContains(Text, '(1...18-23 2.37-32)',
+      'engine full PV should be shown as a variation');
     CheckContains(Text, 'A: 0.11', 'annotator score should be shown');
     CheckContains(Text, 'clk:', 'clocks should be shown');
     CheckContains(Text, '(1.34-30 {A: 0.50} 20-25)',
       'annotator full PV should be shown');
+    CheckContains(Text, '(1...16-21 2.37-32)',
+      'annotator PV should always be a numbered variation');
+    CheckContains(Text,
+      '(1...18-23 2.37-32) (1...16-21 2.37-32)',
+      'engine and annotator PVs should render as adjacent variations');
+    CheckContains(Text,
+      '(1...16-21 2.37-32) (1...17-22 2.37-32)',
+      'Auto Play PV should render next to the annotator PV');
+    CheckNotContains(Text, 'E PV:',
+      'engine PV should not be rendered as a comment');
+    CheckNotContains(Text, 'A PV:',
+      'annotator PV should not be rendered as a comment');
+
+    RenderGameTreeMovesToPdn(GameTree, Options, RenderResult);
+    Check(Length(RenderResult.VariationStarts) =
+      Length(RenderResult.VariationBasePlies),
+      'variation hits should include a base ply');
+    Check(Length(RenderResult.VariationStarts) =
+      Length(RenderResult.VariationMovesTexts),
+      'variation hits should include browse moves');
+    SawBlackBase := False;
+    SawBlackMove := False;
+    SawEngineMove := False;
+    for I := 0 to High(RenderResult.VariationStarts) do
+    begin
+      if (RenderResult.VariationBasePlies[I] = 1) and
+        (RenderResult.VariationMovesTexts[I] = '18-23 37-32') and
+        (RenderResult.VariationPlies[I] = 1) then
+        SawEngineMove := Copy(RenderResult.Text,
+          RenderResult.VariationStarts[I] + 1,
+          RenderResult.VariationLengths[I]) = '18-23';
+      if (RenderResult.VariationBasePlies[I] = 1) and
+        (RenderResult.VariationMovesTexts[I] = '16-21 37-32') then
+      begin
+        if RenderResult.VariationPlies[I] = 0 then
+        begin
+          SawBlackBase := True;
+          CheckContains(Copy(RenderResult.Text,
+            RenderResult.VariationStarts[I] + 1,
+            RenderResult.VariationLengths[I]), '(1...',
+            'caret range before first variation move should cover its prefix');
+        end
+        else if RenderResult.VariationPlies[I] = 1 then
+        begin
+          SawBlackMove := True;
+          Check(Copy(RenderResult.Text, RenderResult.VariationStarts[I] + 1,
+            RenderResult.VariationLengths[I]) = '16-21',
+            'variation move hit should cover the move text');
+        end;
+      end;
+    end;
+    Check(SawEngineMove, 'engine variation first move should be browsable');
+    Check(SawBlackBase, 'black variation should expose its base position');
+    Check(SawBlackMove, 'black variation first move should be browsable');
 
     Options.ShowEngineScore := False;
     Text := RenderWithOptions(GameTree, Options);
     CheckNotContains(Text, 'E: 0.12', 'engine score toggle should hide score');
-    CheckContains(Text, 'E PV: 16-21 37-32',
+    CheckContains(Text, '(1...18-23 2.37-32)',
       'engine score toggle should not hide engine full PV');
     Options.ShowEngineScore := True;
 
     Options.ShowEngineFullPV := False;
     Text := RenderWithOptions(GameTree, Options);
-    CheckContains(Text, 'E PV: 16-21',
+    CheckContains(Text, '(1...18-23)',
       'engine full PV toggle should fall back to engine PV move');
-    CheckNotContains(Text, 'E PV: 16-21 37-32',
+    CheckNotContains(Text, '(1...18-23 2.37-32)',
       'engine full PV toggle should hide engine PV tail');
     Options.ShowEngineFullPV := True;
 
     Options.ShowEnginePVMove := False;
     Text := RenderWithOptions(GameTree, Options);
     CheckContains(Text, 'E: 0.12', 'engine PV move toggle should not hide score');
-    CheckContains(Text, 'E PV: 16-21 37-32',
+    CheckContains(Text, '(1...18-23 2.37-32)',
       'engine PV move toggle should not hide engine full PV');
-    CheckContains(Text, 'A PV:', 'engine PV move toggle should not hide annotator PV move');
+    CheckContains(Text, '(1...16-21 2.37-32)',
+      'engine PV move toggle should not hide annotator variation');
     Options.ShowEnginePVMove := True;
 
     Options.ShowEngineFullPV := False;
     Options.ShowEnginePVMove := False;
     Text := RenderWithOptions(GameTree, Options);
-    CheckNotContains(Text, 'E PV:',
+    CheckNotContains(Text, '(1...18-23',
       'engine PV toggles should hide engine PV completely');
     Options.ShowEnginePVMove := True;
     Options.ShowEngineFullPV := True;
@@ -296,8 +385,8 @@ begin
     Text := RenderWithOptions(GameTree, Options);
     CheckContains(Text, '(1.34-30 {A: 0.50} 20-25)',
       'annotator PV move toggle should not hide annotator full PV variation');
-    CheckContains(Text, 'A PV: 16-21 37-32',
-      'annotator PV move toggle should not hide annotator full PV annotation');
+    CheckContains(Text, '(1...16-21 2.37-32)',
+      'annotator PV move toggle should not hide annotator full variation');
     Options.ShowAnnotatorPVMove := True;
 
     Options.ShowAnnotatorFullPV := False;
@@ -305,8 +394,8 @@ begin
     Text := RenderWithOptions(GameTree, Options);
     CheckNotContains(Text, '(1.34-30',
       'annotator PV toggles should hide annotator PV variation');
-    CheckNotContains(Text, 'A PV:',
-      'annotator PV toggles should hide annotator PV annotation');
+    CheckNotContains(Text, '(1...16-21',
+      'annotator PV toggles should hide the second annotator variation');
     Options.ShowAnnotatorPVMove := True;
     Options.ShowAnnotatorFullPV := True;
 
@@ -364,6 +453,28 @@ begin
       'second same-ply variation should be rendered');
   finally
     Moves.Free;
+    GameTree.Free;
+  end;
+end;
+
+procedure CheckAnnotatorVariationStartingSide;
+var
+  GameTree: TGameTree;
+  Options: TGameTreePdnRenderOptions;
+  Text: string;
+begin
+  GameTree := TGameTree.Create;
+  try
+    GameTree.BeginRebuild('black-start', 'Event', 'White', 'Black', '*',
+      'B:W31-50:B1-20');
+    GameTree.RecordAnnotatorPV(0, '0.25', '16-21');
+    Options := DefaultGameTreePdnRenderOptions;
+    Text := RenderWithOptions(GameTree, Options);
+    CheckContains(Text, '(1...16-21 {A: 0.25})',
+      'black-to-move annotator PV should start with move-number ellipsis');
+    CheckNotContains(Text, 'A PV:',
+      'black-to-move annotator PV should not be a comment');
+  finally
     GameTree.Free;
   end;
 end;
@@ -435,10 +546,12 @@ begin
 end;
 
 begin
+  CheckTransientPvSnapshot;
   CheckGameTreeIds;
   CheckStableRebuildNodeIds;
   CheckRebuildPreservesCopiedScoreAnnotations;
   CheckPdnDisplayFilters;
+  CheckAnnotatorVariationStartingSide;
   CheckSamePlyVariationsDoNotOverwrite;
   CheckPlainVariationAnnotationRenders;
   CheckFullPdnExportIncludesVariations;

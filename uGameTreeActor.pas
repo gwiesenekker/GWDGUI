@@ -26,6 +26,7 @@ type
     gtcReleaseSearch,
     gtcRecordEnginePV,
     gtcRecordAnnotatorPV,
+    gtcRecordAutoPlayPV,
     gtcStoreMoveVariation,
     gtcClearStoredVariations,
     gtcRebuildFromInputs,
@@ -163,6 +164,8 @@ type
     function CreateRecordAnnotatorPVCommand(ANodeId: Int64; const AScore,
       APV: string; const ADepth: string = '';
       const ATimeText: string = ''): TGameTreeCommand;
+    function CreateRecordAutoPlayPVCommand(ANodeId: Int64;
+      const APV: string): TGameTreeCommand;
     function CreateStoreMoveVariationCommand(ANodeId: Int64;
       const AMoveText: string; ASource: TGameTreeMoveSource): TGameTreeCommand;
     function CreateClearStoredVariationsCommand: TGameTreeCommand;
@@ -226,6 +229,7 @@ const
     'game-tree-release-search',
     'game-tree-record-engine-pv',
     'game-tree-record-annotator-pv',
+    'game-tree-record-auto-play-pv',
     'game-tree-store-move-variation',
     'game-tree-clear-stored-variations',
     'game-tree-rebuild-from-inputs',
@@ -548,6 +552,14 @@ function TGameTreeActor.CreateRecordAnnotatorPVCommand(ANodeId: Int64;
 begin
   Result := CreateRecordPVCommand(gtcRecordAnnotatorPV, ANodeId, AScore, APV,
     ADepth, ATimeText);
+end;
+
+function TGameTreeActor.CreateRecordAutoPlayPVCommand(ANodeId: Int64;
+  const APV: string): TGameTreeCommand;
+begin
+  Result := CreateCommand(gtcRecordAutoPlayPV);
+  Result.NodeId := ANodeId;
+  Result.PvText := Trim(APV);
 end;
 
 function TGameTreeActor.CreateRecordEnginePVCommand(ANodeId: Int64;
@@ -1241,6 +1253,18 @@ begin
     gtcRecordAnnotatorPV:
       begin
         ExecuteRecordPVCommand(ACommand, InvalidateRebuildSignature, False);
+      end;
+    gtcRecordAutoPlayPV:
+      begin
+        if not FGameTree.RecordAutoPlayPVForNodeId(ACommand.NodeId,
+          ACommand.PvText, Changed) then
+        begin
+          Reject(ACommand, 'Auto Play PV target node does not exist');
+          Exit;
+        end;
+        ACommand.Accepted := True;
+        if Changed then
+          AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
       end;
     gtcStoreMoveVariation:
       begin

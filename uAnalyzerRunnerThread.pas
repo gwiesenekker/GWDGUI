@@ -29,6 +29,7 @@ type
     FLastPollTick: QWord;
     FLastPublishedPv: string;
     FPvGameTreeOnly: Boolean;
+    FPvTransient: Boolean;
     FPvSearch: TGameTreeSearchRef;
     FOnFinished: TAnalyzerRunnerFinishedEvent;
     FOnLog: TAnalyzerRunnerLogEvent;
@@ -58,10 +59,11 @@ type
 
     procedure PostAnalyze(const AStartingFEN, AMovesText: string;
       ABaseBoard: TDraughtsBoard; ABasePly: Integer; ATerminal: Boolean;
-      const ASearch: TGameTreeSearchRef);
+      const ASearch: TGameTreeSearchRef; ATransient: Boolean = False;
+      AAnalyzeSeconds: Double = 1000);
     procedure PostThinkOnce(const AStartingFEN, AMovesText: string;
       ABaseBoard: TDraughtsBoard; ABasePly: Integer; AThinkSeconds: Double;
-      const ASearch: TGameTreeSearchRef);
+      const ASearch: TGameTreeSearchRef; ATransient: Boolean = False);
     procedure PostStopSearch;
     procedure PostShutdown;
   end;
@@ -89,6 +91,7 @@ type
     FStartingFEN: string;
     FTerminal: Boolean;
     FThinkSeconds: Double;
+    FTransient: Boolean;
   public
     constructor Create(ACommandKind: TAnalyzerCommandKind); reintroduce;
     destructor Destroy; override;
@@ -100,6 +103,7 @@ type
     property StartingFEN: string read FStartingFEN write FStartingFEN;
     property Terminal: Boolean read FTerminal write FTerminal;
     property ThinkSeconds: Double read FThinkSeconds write FThinkSeconds;
+    property Transient: Boolean read FTransient write FTransient;
   end;
 
 constructor TAnalyzerCommand.Create(ACommandKind: TAnalyzerCommandKind);
@@ -192,7 +196,7 @@ begin
   try
     Snapshot.SetDataWithSearch(FPvBaseBoard, FPvBasePly,
       FEngine.PrincipalVariation, FEngine.LastScore, FEngine.LastDepth,
-      FEngine.LastTimeText, FPvSearch, FPvGameTreeOnly);
+      FEngine.LastTimeText, FPvSearch, FPvGameTreeOnly, FPvTransient);
     FLastPublishedPv := FEngine.PrincipalVariation;
   finally
     FPvLock.Release;
@@ -218,6 +222,7 @@ begin
     FPvBasePly := Command.BasePly;
     FPvSearch := Command.Search;
     FPvGameTreeOnly := AGameTreeOnly;
+    FPvTransient := Command.Transient;
     FLastPublishedPv := '';
   finally
     FPvLock.Release;
@@ -256,7 +261,10 @@ begin
           if FRunMode = armMcts then
             FEngine.StartMcts
           else
+          begin
+            FEngine.SetClockInfo(1, Command.ThinkSeconds, 0);
             FEngine.StartAnalyzing;
+          end;
         finally
           Moves.Free;
         end;
@@ -309,10 +317,7 @@ begin
   if ACommand = nil then
     Exit;
   if (FCommandQueue = nil) or (not FCommandQueue.TryPost(ACommand)) then
-  begin
-    if FCommandQueue = nil then
-      ACommand.Free;
-  end;
+    ACommand.Free;
 end;
 
 procedure TAnalyzerRunnerThread.Execute;
@@ -375,7 +380,8 @@ end;
 
 procedure TAnalyzerRunnerThread.PostAnalyze(const AStartingFEN, AMovesText: string;
   ABaseBoard: TDraughtsBoard; ABasePly: Integer; ATerminal: Boolean;
-  const ASearch: TGameTreeSearchRef);
+  const ASearch: TGameTreeSearchRef; ATransient: Boolean;
+  AAnalyzeSeconds: Double);
 var
   Command: TAnalyzerCommand;
 begin
@@ -385,6 +391,8 @@ begin
   Command.BasePly := ABasePly;
   Command.Terminal := ATerminal;
   Command.Search := ASearch;
+  Command.Transient := ATransient;
+  Command.ThinkSeconds := AAnalyzeSeconds;
   if ABaseBoard <> nil then
     Command.BaseBoard.AssignFrom(ABaseBoard);
   PostCommand(Command);
@@ -392,7 +400,8 @@ end;
 
 procedure TAnalyzerRunnerThread.PostThinkOnce(const AStartingFEN,
   AMovesText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer;
-  AThinkSeconds: Double; const ASearch: TGameTreeSearchRef);
+  AThinkSeconds: Double; const ASearch: TGameTreeSearchRef;
+  ATransient: Boolean);
 var
   Command: TAnalyzerCommand;
 begin
@@ -402,6 +411,7 @@ begin
   Command.BasePly := ABasePly;
   Command.ThinkSeconds := AThinkSeconds;
   Command.Search := ASearch;
+  Command.Transient := ATransient;
   if ABaseBoard <> nil then
     Command.BaseBoard.AssignFrom(ABaseBoard);
   PostCommand(Command);

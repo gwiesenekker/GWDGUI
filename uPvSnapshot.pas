@@ -20,6 +20,7 @@ type
     FSearchId: Int64;
     FScore: string;
     FTimeText: string;
+    FTransient: Boolean;
   public
     constructor Create;
     destructor Destroy; override;
@@ -33,7 +34,7 @@ type
     procedure SetDataWithSearch(ABaseBoard: TDraughtsBoard;
       ABasePly: Integer; const APv, AScore, ADepth: string;
       const ATimeText: string; const ASearch: TGameTreeSearchRef;
-      AGameTreeOnly: Boolean);
+      AGameTreeOnly: Boolean; ATransient: Boolean = False);
 
     property BaseBoard: TDraughtsBoard read FBaseBoard;
     property BasePly: Integer read FBasePly;
@@ -45,6 +46,7 @@ type
     property SearchId: Int64 read FSearchId;
     property Score: string read FScore;
     property TimeText: string read FTimeText;
+    property Transient: Boolean read FTransient;
   end;
 
 implementation
@@ -68,7 +70,8 @@ begin
     Exit;
   SetDataWithSearch(ASource.BaseBoard, ASource.BasePly,
     ASource.PrincipalVariation, ASource.Score, ASource.Depth,
-    ASource.TimeText, ASource.SearchRef, ASource.GameTreeOnly);
+    ASource.TimeText, ASource.SearchRef, ASource.GameTreeOnly,
+    ASource.Transient);
 end;
 
 function TPvSnapshot.SearchRef: TGameTreeSearchRef;
@@ -88,7 +91,7 @@ end;
 procedure TPvSnapshot.SetDataWithSearch(ABaseBoard: TDraughtsBoard;
   ABasePly: Integer; const APv, AScore, ADepth: string;
   const ATimeText: string; const ASearch: TGameTreeSearchRef;
-  AGameTreeOnly: Boolean);
+  AGameTreeOnly: Boolean; ATransient: Boolean);
 begin
   if ABaseBoard <> nil then
     FBaseBoard.AssignFrom(ABaseBoard);
@@ -97,6 +100,7 @@ begin
   FSearchId := ASearch.SearchId;
   FNodeId := ASearch.NodeId;
   FGameTreeOnly := AGameTreeOnly;
+  FTransient := ATransient;
   FPrincipalVariation := Trim(APv);
   FScore := Trim(AScore);
   FDepth := Trim(ADepth);

@@ -9,6 +9,7 @@ uses
 
 type
   TGameTreePdnIntArray = array of Integer;
+  TGameTreePdnStringArray = array of string;
 
   TGameTreePdnRenderOptions = record
     HideAnnotations: Boolean;
@@ -29,6 +30,8 @@ type
     VariationLengths: TGameTreePdnIntArray;
     VariationIndexes: TGameTreePdnIntArray;
     VariationPlies: TGameTreePdnIntArray;
+    VariationBasePlies: TGameTreePdnIntArray;
+    VariationMovesTexts: TGameTreePdnStringArray;
   end;
 
 function DefaultGameTreePdnRenderOptions: TGameTreePdnRenderOptions;
@@ -138,7 +141,6 @@ function NodeAnnotation(ANode: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions): string;
 var
   LClockText: string;
-  LPvMove: string;
 begin
   Result := '';
   if ANode = nil then
@@ -152,38 +154,6 @@ begin
     if Result <> '' then
       Result += '; ';
     Result += 'E: ' + Trim(ANode.EngineScore);
-  end;
-  if AOptions.ShowEngineFullPV and (Trim(ANode.EnginePV) <> '') then
-  begin
-    if Result <> '' then
-      Result += '; ';
-    Result += 'E PV: ' + Trim(ANode.EnginePV);
-  end
-  else if AOptions.ShowEnginePVMove and (Trim(ANode.EnginePV) <> '') then
-  begin
-    LPvMove := FirstPvMove(ANode.EnginePV);
-    if LPvMove <> '' then
-    begin
-      if Result <> '' then
-        Result += '; ';
-      Result += 'E PV: ' + LPvMove;
-    end;
-  end;
-  if AOptions.ShowAnnotatorFullPV and (Trim(ANode.AnnotatorPV) <> '') then
-  begin
-    if Result <> '' then
-      Result += '; ';
-    Result += 'A PV: ' + Trim(ANode.AnnotatorPV);
-  end
-  else if AOptions.ShowAnnotatorPVMove and (Trim(ANode.AnnotatorPV) <> '') then
-  begin
-    LPvMove := FirstPvMove(ANode.AnnotatorPV);
-    if LPvMove <> '' then
-    begin
-      if Result <> '' then
-        Result += '; ';
-      Result += 'A PV: ' + LPvMove;
-    end;
   end;
   if AOptions.ShowAnnotatorScore and (Trim(ANode.AnnotatorScore) <> '') then
   begin
@@ -229,8 +199,6 @@ end;
 
 function PreviousPositionAnnotation(APrevious, APlayedMove: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions): string;
-var
-  LPvMove: string;
 begin
   Result := '';
   if (APrevious = nil) or (APlayedMove = nil) then
@@ -242,12 +210,7 @@ begin
   if Trim(APlayedMove.AnnotatorScore) <> '' then
     Exit;
   if Trim(APrevious.AnnotatorPV) <> '' then
-  begin
-    LPvMove := FirstPvMove(APrevious.AnnotatorPV);
-    if (LPvMove <> '') and
-      (not SameText(LPvMove, NormalizeMoveNotation(APlayedMove.MoveText))) then
-      Exit;
-  end;
+    Exit;
   Result := ' {A: ' + Trim(APrevious.AnnotatorScore) + '}';
 end;
 
@@ -271,51 +234,78 @@ begin
   Result += AMoveText;
 end;
 
-function RenderAnnotatorVariation(APrevious, APlayedMove: TGameTreePlyNode;
-  const AOptions: TGameTreePdnRenderOptions; ACompact: Boolean): string;
+procedure AddInt(var AValues: TGameTreePdnIntArray; AValue: Integer); forward;
+procedure AddString(var AValues: TGameTreePdnStringArray;
+  const AValue: string); forward;
+
+function RenderAnalysisVariation(ABaseNode: TGameTreePlyNode;
+  const APv, AScore, AScorePrefix: string; AShowFullPv, AShowScore: Boolean;
+  const AOptions: TGameTreePdnRenderOptions; ACompact: Boolean;
+  var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer): string;
 var
   I: Integer;
   LLimit: Integer;
+  LMoveStart: Integer;
   LMoves: TStringList;
   LPlyNumber: Integer;
   LSegment: string;
+  LSegmentOffset: Integer;
   LSide: TDraughtsSide;
 begin
   Result := '';
-  if (APrevious = nil) or (APlayedMove = nil) then
-    Exit;
-  if not NodeIsAnnotatorAlternative(APrevious, APlayedMove) then
-    Exit;
-  if (not AOptions.ShowAnnotatorPVMove) and
-    (not AOptions.ShowAnnotatorFullPV) then
+  if (ABaseNode = nil) or (Trim(APv) = '') then
     Exit;
 
   LMoves := TStringList.Create;
   try
-    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(APrevious.AnnotatorPV)),
+    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(APv)),
       LMoves);
     if LMoves.Count = 0 then
       Exit;
     LLimit := 1;
-    if AOptions.ShowAnnotatorFullPV then
+    if AShowFullPv then
       LLimit := LMoves.Count;
-    LSide := APlayedMove.SideToMove;
+    LSide := SideForNextPly(ABaseNode.SideToMove);
+    if ABaseNode.PlyNumber = 0 then
+      LSide := ABaseNode.SideToMove;
     for I := 0 to LLimit - 1 do
     begin
-      LPlyNumber := APrevious.PlyNumber + I + 1;
+      LPlyNumber := ABaseNode.PlyNumber + I + 1;
       LSegment := PlyMoveCaption(LPlyNumber, LSide, LMoves[I], I = 0,
         ACompact);
-      if (I = 0) and AOptions.ShowAnnotatorScore and
+      if (I = 0) and (ABaseNode.PlyNumber = 0) and
+        AShowScore and
         (not AOptions.HideAnnotations) and
-        (Trim(APrevious.AnnotatorScore) <> '') then
-        LSegment += ' {A: ' + Trim(APrevious.AnnotatorScore) + '}';
+        (Trim(AScore) <> '') then
+        LSegment += ' {' + AScorePrefix + ': ' + Trim(AScore) + '}';
       if Result <> '' then
         Result += ' ';
+      LSegmentOffset := Length(Result);
       Result += LSegment;
+      LMoveStart := Pos(LMoves[I], LSegment);
+      if LMoveStart > 0 then
+      begin
+        AddInt(ARenderResult.VariationStarts,
+          ABaseOffset + 1 + LSegmentOffset + LMoveStart - 1);
+        AddInt(ARenderResult.VariationLengths, Length(LMoves[I]));
+        AddInt(ARenderResult.VariationIndexes, -1);
+        AddInt(ARenderResult.VariationPlies, I + 1);
+        AddInt(ARenderResult.VariationBasePlies, ABaseNode.PlyNumber);
+        AddString(ARenderResult.VariationMovesTexts, Trim(APv));
+      end;
       LSide := SideForNextPly(LSide);
     end;
     if Result <> '' then
+    begin
       Result := '(' + Result + ')';
+      AddInt(ARenderResult.VariationStarts, ABaseOffset);
+      AddInt(ARenderResult.VariationLengths,
+        Pos(LMoves[0], Result) - 1);
+      AddInt(ARenderResult.VariationIndexes, -1);
+      AddInt(ARenderResult.VariationPlies, 0);
+      AddInt(ARenderResult.VariationBasePlies, ABaseNode.PlyNumber);
+      AddString(ARenderResult.VariationMovesTexts, Trim(APv));
+    end;
   finally
     LMoves.Free;
   end;
@@ -373,6 +363,16 @@ begin
   AValues[LIndex] := AValue;
 end;
 
+procedure AddString(var AValues: TGameTreePdnStringArray;
+  const AValue: string);
+var
+  LIndex: Integer;
+begin
+  LIndex := Length(AValues);
+  SetLength(AValues, LIndex + 1);
+  AValues[LIndex] := AValue;
+end;
+
 procedure ClearRenderResult(out ARenderResult: TGameTreePdnRenderResult);
 begin
   ARenderResult.Text := '';
@@ -382,6 +382,8 @@ begin
   SetLength(ARenderResult.VariationLengths, 0);
   SetLength(ARenderResult.VariationIndexes, 0);
   SetLength(ARenderResult.VariationPlies, 0);
+  SetLength(ARenderResult.VariationBasePlies, 0);
+  SetLength(ARenderResult.VariationMovesTexts, 0);
 end;
 
 function RenderVariationLine(ANode, APreviousPosition: TGameTreePlyNode;
@@ -393,9 +395,13 @@ function RenderChildVariations(ANode, AContinuation: TGameTreePlyNode;
   var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer): string;
 var
   I: Integer;
+  LBasePlyNumber: Integer;
   LChild: TGameTreePlyNode;
+  LDisplayAfterPly: Integer;
   LLineOffset: Integer;
   LText: string;
+  LVariationIndex: Integer;
+  LVariationPlyNumber: Integer;
 begin
   Result := '';
   if ANode = nil then
@@ -419,6 +425,17 @@ begin
       ARenderResult, LLineOffset);
     if LText = '' then
       Continue;
+    ParseVariationKey(LChild.VariationKey, LBasePlyNumber,
+      LDisplayAfterPly, LVariationIndex, LVariationPlyNumber);
+    if LVariationIndex >= 0 then
+    begin
+      AddInt(ARenderResult.VariationStarts, LLineOffset - 1);
+      AddInt(ARenderResult.VariationLengths, Pos(LChild.MoveText, LText));
+      AddInt(ARenderResult.VariationIndexes, LVariationIndex);
+      AddInt(ARenderResult.VariationPlies, 0);
+      AddInt(ARenderResult.VariationBasePlies, LBasePlyNumber);
+      AddString(ARenderResult.VariationMovesTexts, '');
+    end;
     if Result <> '' then
       Result += ' ';
     Result += '(' + LText + ')';
@@ -467,6 +484,8 @@ begin
       AddInt(ARenderResult.VariationLengths, Length(ANode.MoveText));
       AddInt(ARenderResult.VariationIndexes, LVariationIndex);
       AddInt(ARenderResult.VariationPlies, LVariationPlyNumber);
+      AddInt(ARenderResult.VariationBasePlies, LBasePlyNumber);
+      AddString(ARenderResult.VariationMovesTexts, '');
     end;
   end;
 
@@ -494,9 +513,33 @@ var
   LPreviousPosition: TGameTreePlyNode;
   LResultText: string;
   LSegment: string;
-  LVirtualVariation: string;
+  LRootVariationRendered: Boolean;
+
+  procedure AppendAnalysisVariation(ABaseNode: TGameTreePlyNode;
+    const APv, AScore, AScorePrefix: string; AShowMove, AShowFull,
+    AShowScore: Boolean);
+  var
+    LBaseOffset: Integer;
+    LVariationText: string;
+  begin
+    if (not AShowMove) and (not AShowFull) then
+      Exit;
+    if Result = '' then
+      LBaseOffset := 0
+    else
+      LBaseOffset := Length(Result) + 1;
+    LVariationText := RenderAnalysisVariation(ABaseNode, APv, AScore,
+      AScorePrefix, AShowFull, AShowScore, AOptions, ACompact,
+      ARenderResult, LBaseOffset);
+    if LVariationText = '' then
+      Exit;
+    if Result <> '' then
+      Result += ' ';
+    Result += LVariationText;
+  end;
 begin
   Result := '';
+  LRootVariationRendered := False;
   if (AGameTree = nil) or (AGameTree.Root = nil) then
     Exit;
 
@@ -526,10 +569,38 @@ begin
       ARenderResult, Length(Result) + 1);
     if LNested <> '' then
       Result += ' ' + LNested;
-    LVirtualVariation := RenderAnnotatorVariation(LPreviousPosition, LChild,
-      AOptions, ACompact);
-    if LVirtualVariation <> '' then
-      Result += ' ' + LVirtualVariation;
+    if (not LRootVariationRendered) and (LPreviousPosition = AGameTree.Root) then
+    begin
+      AppendAnalysisVariation(AGameTree.Root, AGameTree.Root.EnginePV,
+        AGameTree.Root.EngineScore, 'E', AOptions.ShowEnginePVMove,
+        AOptions.ShowEngineFullPV, AOptions.ShowEngineScore);
+      AppendAnalysisVariation(AGameTree.Root, AGameTree.Root.AnnotatorPV,
+        AGameTree.Root.AnnotatorScore, 'A', AOptions.ShowAnnotatorPVMove,
+        AOptions.ShowAnnotatorFullPV, AOptions.ShowAnnotatorScore);
+      AppendAnalysisVariation(AGameTree.Root, AGameTree.Root.AutoPlayPV,
+        '', '', True, True, False);
+      LRootVariationRendered := True;
+    end;
+    AppendAnalysisVariation(LChild, LChild.EnginePV, LChild.EngineScore, 'E',
+      AOptions.ShowEnginePVMove, AOptions.ShowEngineFullPV,
+      AOptions.ShowEngineScore);
+    AppendAnalysisVariation(LChild, LChild.AnnotatorPV, LChild.AnnotatorScore,
+      'A', AOptions.ShowAnnotatorPVMove, AOptions.ShowAnnotatorFullPV,
+      AOptions.ShowAnnotatorScore);
+    AppendAnalysisVariation(LChild, LChild.AutoPlayPV, '', '', True, True,
+      False);
+  end;
+
+  if not LRootVariationRendered then
+  begin
+    AppendAnalysisVariation(AGameTree.Root, AGameTree.Root.EnginePV,
+      AGameTree.Root.EngineScore, 'E', AOptions.ShowEnginePVMove,
+      AOptions.ShowEngineFullPV, AOptions.ShowEngineScore);
+    AppendAnalysisVariation(AGameTree.Root, AGameTree.Root.AnnotatorPV,
+      AGameTree.Root.AnnotatorScore, 'A', AOptions.ShowAnnotatorPVMove,
+      AOptions.ShowAnnotatorFullPV, AOptions.ShowAnnotatorScore);
+    AppendAnalysisVariation(AGameTree.Root, AGameTree.Root.AutoPlayPV,
+      '', '', True, True, False);
   end;
 
   LResultText := PdnExportResult(AResultText);
