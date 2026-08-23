@@ -79,7 +79,6 @@ type
     FOnFinished: TGameRunnerFinishedEvent;
     FOnSnapshot: TGameRunnerSnapshotEvent;
     FOrchestrator: TGameOrchestrator;
-    FPaused: Boolean;
     FLastLogSnapshotTick: QWord;
     FLogRevision: QWord;
     FLastPrincipalVariation: string;
@@ -121,7 +120,6 @@ type
     destructor Destroy; override;
     procedure PostGuiLog(const AMessage: string);
     procedure PostHumanMove(const AMove: string);
-    procedure PostPause(AValue: Boolean);
     procedure PostShowStdout(AValue: Boolean);
     procedure PostStop;
     property GameId: Integer read FGameId;
@@ -136,7 +134,6 @@ const
 type
   TGameRunnerCommandKind = (
     grcStop,
-    grcSetPaused,
     grcSetShowStdout,
     grcGuiLog,
     grcHumanMove
@@ -162,7 +159,6 @@ constructor TGameRunnerCommand.Create(ACommandKind: TGameRunnerCommandKind;
 const
   CommandNames: array[TGameRunnerCommandKind] of string = (
     'stop',
-    'set-paused',
     'set-show-stdout',
     'gui-log',
     'human-move'
@@ -327,19 +323,6 @@ begin
   case RunnerCommand.CommandKind of
     grcStop:
       RequestStopFromRunner('command');
-    grcSetPaused:
-      begin
-        if FPaused <> RunnerCommand.BoolValue then
-        begin
-          FPaused := RunnerCommand.BoolValue;
-          if FPaused then
-            AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
-              ' [runner] command; kind=pause')
-          else
-            AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
-              ' [runner] command; kind=resume');
-        end;
-      end;
     grcSetShowStdout:
       begin
         FShowStdout := RunnerCommand.BoolValue;
@@ -493,11 +476,6 @@ begin
   PostCommand(TGameRunnerCommand.CreateText(grcHumanMove, AMove));
 end;
 
-procedure TGameRunnerThread.PostPause(AValue: Boolean);
-begin
-  PostCommand(TGameRunnerCommand.Create(grcSetPaused, AValue));
-end;
-
 procedure TGameRunnerThread.PostShowStdout(AValue: Boolean);
 begin
   PostCommand(TGameRunnerCommand.Create(grcSetShowStdout, AValue));
@@ -626,7 +604,7 @@ begin
   Result.FBlackRemainingSeconds := FOrchestrator.RemainingSeconds[dsBlack];
   Result.FWhiteUsedSeconds := FOrchestrator.UsedSeconds[dsWhite];
   Result.FBlackUsedSeconds := FOrchestrator.UsedSeconds[dsBlack];
-  if (Result.FState = gosRunning) and (not FPaused) and
+  if (Result.FState = gosRunning) and
     (FHumanTurnStartTick > 0) and (CurrentPlayerKind = pkHuman) then
   begin
     LNowTick := GetTickCount64;
@@ -747,25 +725,6 @@ begin
         DrainCommands;
         if Terminated then
           Break;
-
-        if FPaused then
-        begin
-          AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
-            ' [runner] paused');
-          PublishSnapshot;
-          while (not Terminated) and (FOrchestrator.State = gosRunning) and FPaused do
-          begin
-            DrainCommands;
-            Sleep(100);
-          end;
-          if (not Terminated) and (FOrchestrator.State = gosRunning) then
-          begin
-            AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
-              ' [runner] resumed');
-            PublishSnapshot;
-          end;
-          Continue;
-        end;
 
         if CurrentPlayerKind = pkRegistered then
         begin

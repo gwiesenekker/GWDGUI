@@ -150,7 +150,6 @@ type
     FBlackPlayerKind: TPlayerKind;
     FGameTreeActor: TGameTreeActor;
     FGameTree: TGameTree;
-    FPaused: Boolean;
     FReservationKeys: TStringList;
     FReleasingRunner: Boolean;
     FRunner: TGameRunnerThread;
@@ -216,7 +215,6 @@ type
     property GameTreeActor: TGameTreeActor read FGameTreeActor;
     property GameTree: TGameTree read FGameTree;
     property Lifecycle: TRunningGameLifecycle read FLifecycle;
-    property Paused: Boolean read FPaused write FPaused;
     property Runner: TGameRunnerThread read FRunner;
     property ShowStdout: Boolean read FShowStdout write FShowStdout;
     property StopReason: string read FStopReason;
@@ -327,7 +325,6 @@ type
     FHintFromAnalyzerMenuItem: TMenuItem;
     FHintFromMainMenuItem: TMenuItem;
     FPvHintSource: TPvHintSource;
-    FPauseGameMenuItem: TMenuItem;
     FPopoutBoard: TDraughtsBoard;
     FPopoutBoardControl: TDraughtsBoardControl;
     FPositionSetupForm: TPositionSetupForm;
@@ -628,7 +625,6 @@ type
     procedure EnginesClick(Sender: TObject);
     procedure ExitGameBrowseMode;
     procedure OpenPdnClick(Sender: TObject);
-    procedure PauseGameClick(Sender: TObject);
     procedure PasteFenClick(Sender: TObject);
     procedure PdnGameSelected(Sender: TObject; AGame: TPdnGame);
     function PlayerNameOrFallback(const AName, AFallback: string): string;
@@ -1129,7 +1125,6 @@ procedure TRunningGame.RequestStop(const AReason: string);
 begin
   if FRunner <> nil then
     FRunner.PostStop;
-  FPaused := False;
   if not (FLifecycle in [rglFinished, rglRemoveRequested]) then
     FLifecycle := rglStopRequested;
   FStopReason := AReason;
@@ -1612,10 +1607,6 @@ begin
   FShowStdoutMenuItem.AutoCheck := False;
   FShowStdoutMenuItem.OnClick := @ShowStdoutClick;
   LGamesPopup.Items.Add(FShowStdoutMenuItem);
-  FPauseGameMenuItem := TMenuItem.Create(Self);
-  FPauseGameMenuItem.Caption := 'Pause game';
-  FPauseGameMenuItem.OnClick := @PauseGameClick;
-  LGamesPopup.Items.Add(FPauseGameMenuItem);
   FStopGameMenuItem := TMenuItem.Create(Self);
   FStopGameMenuItem.Caption := 'Stop game';
   FStopGameMenuItem.OnClick := @StopSelectedGame;
@@ -1766,7 +1757,7 @@ begin
   LMenuItem.Caption := '-';
   LGameMovePopup.Items.Add(LMenuItem);
   FShowGameTreeMenuItem := TMenuItem.Create(Self);
-  FShowGameTreeMenuItem.Caption := 'Show tree';
+  FShowGameTreeMenuItem.Caption := 'Show game tree';
   FShowGameTreeMenuItem.OnClick := @ShowGameTreeClick;
   LGameMovePopup.Items.Add(FShowGameTreeMenuItem);
   FGameMoveMemo.PopupMenu := LGameMovePopup;
@@ -6579,7 +6570,11 @@ begin
   if (Key = VK_ESCAPE) and (Shift = []) then
   begin
     if FAutoPlayActive then
-      StopAutoPlay
+    begin
+      StopAutoPlay;
+      if Trim(FVariationBrowseMoves) <> '' then
+        HighlightGameMoveTextSelection(True, ActiveGameTree);
+    end
     else
       ExitGameBrowseMode;
     Key := 0;
@@ -6604,32 +6599,15 @@ end;
 procedure TMainForm.GamesPopupPopup(Sender: TObject);
 var
   LGame: TRunningGame;
-  LState: TGameOrchestratorState;
 begin
   LGame := SelectedGame;
   if FShowStdoutMenuItem = nil then
     Exit;
 
-  if LGame <> nil then
-    LState := LGame.State
-  else
-    LState := gosWaiting;
-
   FShowStdoutMenuItem.Enabled := LGame <> nil;
   FShowStdoutMenuItem.Checked := (LGame <> nil) and LGame.ShowStdout;
   if FReplayGameMenuItem <> nil then
     FReplayGameMenuItem.Enabled := LGame <> nil;
-  if FPauseGameMenuItem <> nil then
-  begin
-    if LGame <> nil then
-      FPauseGameMenuItem.Enabled := LState in [gosWaiting, gosRunning]
-    else
-      FPauseGameMenuItem.Enabled := False;
-    if (LGame <> nil) and LGame.Paused then
-      FPauseGameMenuItem.Caption := 'Resume game'
-    else
-      FPauseGameMenuItem.Caption := 'Pause game';
-  end;
   if FStopGameMenuItem <> nil then
     FStopGameMenuItem.Enabled := (LGame <> nil) and
       (LGame.Lifecycle <> rglFinished);
@@ -6760,29 +6738,6 @@ begin
   finally
     Dialog.Free;
   end;
-end;
-
-procedure TMainForm.PauseGameClick(Sender: TObject);
-var
-  LGame: TRunningGame;
-begin
-  LGame := SelectedGame;
-  if LGame = nil then
-    Exit;
-  if not (LGame.State in [gosWaiting, gosRunning]) then
-    Exit;
-
-  LGame.Paused := not LGame.Paused;
-  if LGame.Runner <> nil then
-  begin
-    if LGame.Paused then
-      LGame.Runner.PostGuiLog('pause requested')
-    else
-      LGame.Runner.PostGuiLog('resume requested');
-    LGame.Runner.PostPause(LGame.Paused);
-  end;
-  UpdateGameListItem(LGame);
-  ApplyGameToDisplay(LGame);
 end;
 
 procedure TMainForm.PdnGameSelected(Sender: TObject; AGame: TPdnGame);
@@ -7886,8 +7841,6 @@ begin
       LCaption := LCaption + ' (' +
         RunningGameLifecycleToString(AGame.Lifecycle) + ')';
   end;
-  if AGame.Paused and (LState in [gosWaiting, gosRunning]) then
-    LCaption := LCaption + ' (paused)';
   LCaption := LCaption + ' - ' + IntToStr(LPlyCount) + ' plies';
   if AGame.ListCaptionMatches(LCaption) then
     Exit;
