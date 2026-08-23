@@ -7,9 +7,11 @@ interface
 uses
   Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
   Grids, Math, Menus, StdCtrls, SysUtils, uBoardControl, uDraughtsBoard,
-  uGameDatabase, uGuiDialogs, uPositionSetupForm, uPreferences;
+  uGameDatabase, uGuiDialogs, uPdn, uPositionSetupForm, uPreferences;
 
 type
+  TDatabaseGameSelectedEvent = procedure(Sender: TObject; AGame: TPdnGame) of object;
+
   TDatabaseForm = class(TForm)
   private
     FBoard: TDraughtsBoard;
@@ -28,7 +30,9 @@ type
     FImportProgressForm: TForm;
     FImportProgressLabel: TLabel;
     FImportStartTick: QWord;
+    FOnGameSelected: TDatabaseGameSelectedEvent;
     FPreferences: TGuiPreferences;
+    FPlayerFilterEdit: TEdit;
     FResults: TList;
     FResultsGrid: TStringGrid;
     FRowLimitEdit: TEdit;
@@ -42,6 +46,7 @@ type
     procedure ClearObjectList(AList: TList);
     function CurrentGameFilterDescription: string;
     procedure FormCloseHandler(Sender: TObject; var CloseAction: TCloseAction);
+    procedure GamesGridDblClick(Sender: TObject);
     procedure GamesGridMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     function GameDisplayLimit: Integer;
@@ -49,8 +54,11 @@ type
       ADuplicates, AErrors: Integer; var ACancel: Boolean);
     procedure ImportProgressCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure ImportPdnClick(Sender: TObject);
+    procedure OptimizePositionSearchClick(Sender: TObject);
+    procedure PopulateGamesGridFromList(const AStatusText: string);
     procedure PopulateGamesGrid;
     procedure PopulateResultsGrid;
+    procedure PerformSearch(AAllowProcessMessages: Boolean);
     procedure SearchClick(Sender: TObject);
     procedure SetFenClick(Sender: TObject);
     procedure SetGameFilterControlsEnabled(AEnabled: Boolean);
@@ -65,13 +73,31 @@ type
     procedure ApplyPreferences(const APreferences: TGuiPreferences);
     procedure CreateDatabase(const AFileName: string);
     procedure OpenDatabase(const AFileName: string);
+    procedure SearchCurrentPosition;
     procedure SetSearchFEN(const AFEN: string);
+    property OnGameSelected: TDatabaseGameSelectedEvent read FOnGameSelected
+      write FOnGameSelected;
   end;
 
 implementation
 
 const
-  DefaultDatabaseGridGameLimit = 5000;
+  DefaultDatabaseGridGameLimit = 100;
+
+function FormatImportDuration(ASeconds: Double): string;
+var
+  Seconds: Int64;
+begin
+  if ASeconds < 0 then
+    ASeconds := 0;
+  Seconds := Round(ASeconds);
+  if Seconds < 60 then
+    Result := IntToStr(Seconds) + 's'
+  else if Seconds < 3600 then
+    Result := Format('%dm %02ds', [Seconds div 60, Seconds mod 60])
+  else
+    Result := Format('%dh %02dm', [Seconds div 3600, (Seconds mod 3600) div 60]);
+end;
 
 constructor TDatabaseForm.Create(AOwner: TComponent);
 var
@@ -159,24 +185,34 @@ begin
 
   LFilterLabel := TLabel.Create(Self);
   LFilterLabel.Parent := LFilterPanel;
-  LFilterLabel.SetBounds(416, 7, 70, 22);
+  LFilterLabel.SetBounds(416, 7, 42, 22);
+  LFilterLabel.Caption := 'Player';
+  LFilterLabel.Layout := tlCenter;
+
+  FPlayerFilterEdit := TEdit.Create(Self);
+  FPlayerFilterEdit.Parent := LFilterPanel;
+  FPlayerFilterEdit.SetBounds(462, 4, 100, 26);
+
+  LFilterLabel := TLabel.Create(Self);
+  LFilterLabel.Parent := LFilterPanel;
+  LFilterLabel.SetBounds(570, 7, 70, 22);
   LFilterLabel.Caption := 'Show first';
   LFilterLabel.Layout := tlCenter;
 
   FRowLimitEdit := TEdit.Create(Self);
   FRowLimitEdit.Parent := LFilterPanel;
-  FRowLimitEdit.SetBounds(490, 4, 60, 26);
+  FRowLimitEdit.SetBounds(644, 4, 60, 26);
   FRowLimitEdit.Text := IntToStr(DefaultDatabaseGridGameLimit);
 
   LFilterLabel := TLabel.Create(Self);
   LFilterLabel.Parent := LFilterPanel;
-  LFilterLabel.SetBounds(554, 7, 32, 22);
+  LFilterLabel.SetBounds(708, 7, 32, 22);
   LFilterLabel.Caption := 'rows';
   LFilterLabel.Layout := tlCenter;
 
   FApplyFilterButton := TButton.Create(Self);
   FApplyFilterButton.Parent := LFilterPanel;
-  FApplyFilterButton.SetBounds(590, 3, 86, 28);
+  FApplyFilterButton.SetBounds(744, 3, 86, 28);
   FApplyFilterButton.Caption := 'Apply filter';
   FApplyFilterButton.OnClick := @ApplyFilterClick;
 
@@ -189,6 +225,7 @@ begin
   FGamesGrid.RowCount := 2;
   FGamesGrid.Options := FGamesGrid.Options + [goRowSelect] -
     [goEditing, goRangeSelect];
+  FGamesGrid.OnDblClick := @GamesGridDblClick;
   FGamesGrid.OnMouseDown := @GamesGridMouseDown;
   FGamesGrid.Cells[0, 0] := '#';
   FGamesGrid.Cells[1, 0] := 'White';
@@ -283,6 +320,10 @@ begin
   LMenuItem.Caption := 'Import PDN...';
   LMenuItem.OnClick := @ImportPdnClick;
   LBoardPopup.Items.Add(LMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := 'Rebuild position summary...';
+  LMenuItem.OnClick := @OptimizePositionSearchClick;
+  LBoardPopup.Items.Add(LMenuItem);
   PopupMenu := LBoardPopup;
 end;
 
@@ -334,7 +375,11 @@ procedure TDatabaseForm.ImportProgress(ABytesRead, ATotalBytes: Int64;
   AImported, ADuplicates, AErrors: Integer; var ACancel: Boolean);
 var
   ElapsedSeconds: Double;
+  EtaText: string;
   Percent: Integer;
+  RemainingSeconds: Double;
+  SpeedBytesPerSecond: Double;
+  SpeedMbPerMinute: Double;
 begin
   ACancel := FImportCancel;
   if FImportProgressForm = nil then
@@ -348,10 +393,23 @@ begin
   FImportProgressBar.Position := Percent;
 
   ElapsedSeconds := (GetTickCount64 - FImportStartTick) / 1000;
+  if (ElapsedSeconds > 0.5) and (ABytesRead > 0) and (ATotalBytes > ABytesRead) then
+  begin
+    SpeedBytesPerSecond := ABytesRead / ElapsedSeconds;
+    RemainingSeconds := (ATotalBytes - ABytesRead) / SpeedBytesPerSecond;
+    EtaText := FormatImportDuration(RemainingSeconds);
+  end
+  else
+  begin
+    SpeedBytesPerSecond := 0;
+    EtaText := 'calculating';
+  end;
+  SpeedMbPerMinute := SpeedBytesPerSecond * 60 / 1048576;
   FImportProgressLabel.Caption :=
-    Format('Games %d, errors %d, dups %d, %.1f/%.1f MB, %.1f s',
+    Format('Games %d, errors %d, dups %d, %.1f/%.1f MB, %.1f MB/min, elapsed %s, ETA %s',
       [AImported, AErrors, ADuplicates, ABytesRead / 1048576,
-      ATotalBytes / 1048576, ElapsedSeconds]);
+      ATotalBytes / 1048576, SpeedMbPerMinute,
+      FormatImportDuration(ElapsedSeconds), EtaText]);
   Application.ProcessMessages;
   ACancel := FImportCancel;
 end;
@@ -416,6 +474,7 @@ begin
   AddPart(Result, 'white', FWhiteFilterEdit.Text);
   AddPart(Result, 'black', FBlackFilterEdit.Text);
   AddPart(Result, 'event', FEventFilterEdit.Text);
+  AddPart(Result, 'player', FPlayerFilterEdit.Text);
   if Result = '' then
     Result := 'none';
 end;
@@ -425,6 +484,7 @@ begin
   FWhiteFilterEdit.Enabled := AEnabled;
   FBlackFilterEdit.Enabled := AEnabled;
   FEventFilterEdit.Enabled := AEnabled;
+  FPlayerFilterEdit.Enabled := AEnabled;
   FRowLimitEdit.Enabled := AEnabled;
   FApplyFilterButton.Enabled := AEnabled;
   FGamesGrid.Enabled := AEnabled;
@@ -458,15 +518,27 @@ end;
 
 procedure TDatabaseForm.PopulateGamesGrid;
 var
-  Info: TDatabaseGameInfo;
   Limit: Integer;
-  Row: Integer;
   TotalMatches: Integer;
 begin
   Limit := GameDisplayLimit;
   FDatabase.LoadGames(FGameInfos, Limit, FWhiteFilterEdit.Text,
-    FBlackFilterEdit.Text, FEventFilterEdit.Text, FGameSortColumn,
-    FGameSortDescending, TotalMatches);
+    FBlackFilterEdit.Text, FEventFilterEdit.Text, FPlayerFilterEdit.Text,
+    FGameSortColumn, FGameSortDescending, TotalMatches);
+  if TotalMatches > FGameInfos.Count then
+    PopulateGamesGridFromList(IntToStr(TotalMatches) +
+      ' game(s) found for filter: ' + CurrentGameFilterDescription +
+      '; showing first ' + IntToStr(FGameInfos.Count))
+  else
+    PopulateGamesGridFromList(IntToStr(TotalMatches) +
+      ' game(s) found for filter: ' + CurrentGameFilterDescription);
+end;
+
+procedure TDatabaseForm.PopulateGamesGridFromList(const AStatusText: string);
+var
+  Info: TDatabaseGameInfo;
+  Row: Integer;
+begin
   UpdateGamesGridHeaders;
   if FGameInfos.Count = 0 then
     FGamesGrid.RowCount := 2
@@ -493,13 +565,7 @@ begin
     FGamesGrid.Cells[5, Row] := Info.StartingFEN;
     FGamesGrid.Cells[6, Row] := IntToStr(Info.PlyCount);
   end;
-  if TotalMatches > FGameInfos.Count then
-    FStatusLabel.Caption := IntToStr(TotalMatches) +
-      ' game(s) found for filter: ' + CurrentGameFilterDescription +
-      '; showing first ' + IntToStr(FGameInfos.Count)
-  else
-    FStatusLabel.Caption := IntToStr(TotalMatches) +
-      ' game(s) found for filter: ' + CurrentGameFilterDescription;
+  FStatusLabel.Caption := AStatusText;
 end;
 
 procedure TDatabaseForm.ApplyFilterClick(Sender: TObject);
@@ -556,6 +622,32 @@ begin
   ApplyFilterClick(Sender);
 end;
 
+procedure TDatabaseForm.GamesGridDblClick(Sender: TObject);
+var
+  Game: TPdnGame;
+  Info: TDatabaseGameInfo;
+  Row: Integer;
+begin
+  Row := FGamesGrid.Row;
+  if (Row <= 0) or (Row > FGameInfos.Count) then
+    Exit;
+
+  Info := TDatabaseGameInfo(FGameInfos[Row - 1]);
+  try
+    Game := FDatabase.LoadGameById(Info.Id);
+    try
+      if Assigned(FOnGameSelected) then
+        FOnGameSelected(Self, Game);
+    finally
+      Game.Free;
+    end;
+  except
+    on E: Exception do
+      ShowGuiOkDialog(Self, 'Database game',
+        'Could not load game: ' + E.Message);
+  end;
+end;
+
 procedure TDatabaseForm.PopulateResultsGrid;
 var
   Item: TDatabaseSearchResult;
@@ -601,20 +693,60 @@ begin
   end;
 end;
 
-procedure TDatabaseForm.SearchClick(Sender: TObject);
+procedure TDatabaseForm.PerformSearch(AAllowProcessMessages: Boolean);
+var
+  ContinuationGameCount: Integer;
+  I: Integer;
+  Limit: Integer;
+  ProbeCount: Integer;
+  TotalGames: Integer;
 begin
   if FSearchButton <> nil then
     FSearchButton.Enabled := False;
   FStatusLabel.Caption := 'Searching...';
   Screen.Cursor := crHourGlass;
-  Application.ProcessMessages;
+  if AAllowProcessMessages then
+    Application.ProcessMessages;
   try
     try
       UpdateBoardFromFen;
       FDatabase.SearchPosition(FBoard.PositionKey, FBoard.SideToMove, FResults);
+      Limit := GameDisplayLimit;
       PopulateResultsGrid;
-      FStatusLabel.Caption := IntToStr(FResults.Count) +
-        ' continuation(s) found for ' + FBoard.CurrentFEN;
+      ContinuationGameCount := 0;
+      for I := 0 to FResults.Count - 1 do
+        Inc(ContinuationGameCount, TDatabaseSearchResult(FResults[I]).GameCount);
+      if ContinuationGameCount > Limit then
+      begin
+        ClearObjectList(FGameInfos);
+        PopulateGamesGridFromList(IntToStr(FResults.Count) +
+          ' continuation(s); ' + IntToStr(ContinuationGameCount) +
+          ' game(s) contain ' + FBoard.CurrentFEN +
+          '; game list skipped')
+      end
+      else if FDatabase.GamesForPositionExceedLimit(FBoard.PositionKey,
+        FBoard.SideToMove, Limit, ProbeCount) then
+      begin
+        ClearObjectList(FGameInfos);
+        PopulateGamesGridFromList(IntToStr(FResults.Count) +
+          ' continuation(s); at least ' + IntToStr(ProbeCount) +
+          ' game(s) contain ' + FBoard.CurrentFEN +
+          '; game list skipped')
+      end
+      else
+      begin
+        FDatabase.LoadGamesForPosition(FBoard.PositionKey, FBoard.SideToMove,
+          FGameInfos, Limit, TotalGames);
+        if TotalGames > FGameInfos.Count then
+          PopulateGamesGridFromList(IntToStr(FResults.Count) +
+            ' continuation(s), ' + IntToStr(TotalGames) +
+            ' game(s) containing ' + FBoard.CurrentFEN +
+            '; showing first ' + IntToStr(FGameInfos.Count))
+        else
+          PopulateGamesGridFromList(IntToStr(FResults.Count) +
+            ' continuation(s), ' + IntToStr(TotalGames) +
+            ' game(s) containing ' + FBoard.CurrentFEN);
+      end;
     except
       on E: Exception do
       begin
@@ -627,6 +759,16 @@ begin
     if FSearchButton <> nil then
       FSearchButton.Enabled := True;
   end;
+end;
+
+procedure TDatabaseForm.SearchClick(Sender: TObject);
+begin
+  PerformSearch(True);
+end;
+
+procedure TDatabaseForm.SearchCurrentPosition;
+begin
+  PerformSearch(False);
 end;
 
 procedure TDatabaseForm.BoardPasteFenClick(Sender: TObject);
@@ -682,24 +824,24 @@ begin
         FImportProgressForm.Caption := 'Import PDN';
         FImportProgressForm.Position := poDesigned;
         FImportProgressForm.BorderStyle := bsDialog;
-        FImportProgressForm.Width := 520;
+        FImportProgressForm.Width := 720;
         FImportProgressForm.Height := 140;
         FImportProgressForm.OnCloseQuery := @ImportProgressCloseQuery;
 
         FImportProgressLabel := TLabel.Create(FImportProgressForm);
         FImportProgressLabel.Parent := FImportProgressForm;
-        FImportProgressLabel.SetBounds(12, 12, 488, 24);
+        FImportProgressLabel.SetBounds(12, 12, 688, 24);
         FImportProgressLabel.Caption := 'Preparing import...';
 
         FImportProgressBar := TProgressBar.Create(FImportProgressForm);
         FImportProgressBar.Parent := FImportProgressForm;
-        FImportProgressBar.SetBounds(12, 42, 488, 22);
+        FImportProgressBar.SetBounds(12, 42, 688, 22);
         FImportProgressBar.Min := 0;
         FImportProgressBar.Max := 1000;
 
         LButton := TButton.Create(FImportProgressForm);
         LButton.Parent := FImportProgressForm;
-        LButton.SetBounds(410, 78, 90, 30);
+        LButton.SetBounds(610, 78, 90, 30);
         LButton.Caption := 'Stop';
         LButton.OnClick := @StopImportClick;
 
@@ -729,6 +871,39 @@ begin
     end;
   finally
     Dialog.Free;
+  end;
+end;
+
+procedure TDatabaseForm.OptimizePositionSearchClick(Sender: TObject);
+var
+  ElapsedSeconds: Double;
+  StartTick: QWord;
+begin
+  if ShowGuiConfirmationDialog(Self, 'Rebuild position summary',
+    'Rebuild the continuation summary used for position search?' + LineEnding +
+    'This is normally only needed as a repair action.',
+    'Rebuild', 'Cancel', mrCancel) <> mrYes then
+    Exit;
+
+  StartTick := GetTickCount64;
+  FStatusLabel.Caption := 'Rebuilding position summary...';
+  Screen.Cursor := crHourGlass;
+  Application.ProcessMessages;
+  try
+    try
+      FDatabase.RebuildContinuationSummary;
+      ElapsedSeconds := (GetTickCount64 - StartTick) / 1000;
+      FStatusLabel.Caption := 'Position summary rebuilt in ' +
+        FormatFloat('0.0', ElapsedSeconds) + ' seconds';
+    except
+      on E: Exception do
+      begin
+        FStatusLabel.Caption := 'Position summary rebuild failed';
+        ShowGuiOkDialog(Self, 'Rebuild position summary', E.Message);
+      end;
+    end;
+  finally
+    Screen.Cursor := crDefault;
   end;
 end;
 

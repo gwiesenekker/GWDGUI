@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, LCLType, StdCtrls, SysUtils, uBoardControl, uDraughtsBoard,
-  uPvSnapshot;
+  uGameTreeBuilder, uPvSnapshot;
 
 type
   TIntArray = array of Integer;
@@ -102,14 +102,6 @@ begin
     Result := IntToStr(LMoveNumber) + '...' + AMove
   else
     Result := AMove;
-end;
-
-procedure TextToMoveList(const AMovesText: string; AMoves: TStrings);
-begin
-  if AMoves = nil then
-    Exit;
-  AMoves.Clear;
-  ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(AMovesText)), AMoves);
 end;
 
 constructor TPvBrowser.Create(ABoard: TDraughtsBoard;

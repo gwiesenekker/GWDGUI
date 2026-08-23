@@ -24,12 +24,15 @@ type
     FWorker: TThread;
     FWorkerQueue: TThreadMessageQueue;
     FWorkerThreadId: TThreadID;
+    FWorkerThreadIdValid: Boolean;
     function BuildHubPositionCommand: string;
     function DoLaunchAndInit: Boolean;
+    procedure DiscardDoneLinesBeforeNewSearch(const AReason: string);
     procedure DoRequestStop;
     procedure DoSetClockInfo(AMovesRemaining: Integer; ARemainingSeconds,
       ATotalUsedSeconds: Double);
     procedure DoStartAnalyzing;
+    procedure DoStartMcts;
     procedure DoStopSearch;
     procedure DoStop;
     procedure DoPollOutput;
@@ -46,8 +49,12 @@ type
     function QueueStringCommand(ACommand: TObject): string;
     procedure SendHubParams;
     procedure SendLine(const ALine: string);
+    function TakeReceivedLine(const APrefix: string; out ALine: string): Boolean;
+    function WaitForDoneMove(ATimeoutMs: Integer; out AMove: string): Boolean;
     procedure WaitForWorkerCommand(ACommand: TThreadMessage;
       ACompleted: TSimpleEvent; const AErrorText: string);
+    function DrainDoneLinesAfterStop(AQuietMs: Integer): Integer;
+    procedure WaitForSearchStopped;
     function WaitForLine(const APrefix: string; ATimeoutMs: Integer;
       out ALine: string): Boolean;
   protected
@@ -56,7 +63,8 @@ type
     constructor Create(AEngine: TExternalEngineDefinition); reintroduce;
     destructor Destroy; override;
     procedure BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
-      AGameMinutes: Double; AGameMoves: Integer); override;
+      AGameMinutes: Double; AGameMoves: Integer;
+      AIncrementSeconds: Double = 0.0); override;
     function LaunchAndInit: Boolean;
     function ReceiveMessage(const AMessage: string): string; override;
     procedure RequestStop; override;
@@ -64,6 +72,7 @@ type
       ATotalUsedSeconds: Double); override;
     procedure SetGamePosition(const AStartingFEN: string; AMoves: TStrings); override;
     procedure StartAnalyzing;
+    procedure StartMcts;
     function StartThinking: string; override;
     procedure PollOutput;
     procedure StopSearch;
@@ -84,6 +93,7 @@ type
     hwcSetClockInfo,
     hwcStartThinking,
     hwcStartAnalyzing,
+    hwcStartMcts,
     hwcPollOutput,
     hwcProcessData,
     hwcStopSearch,
@@ -208,6 +218,7 @@ const
     'hub-set-clock-info',
     'hub-start-thinking',
     'hub-start-analyzing',
+    'hub-start-mcts',
     'hub-poll-output',
     'hub-process-data',
     'hub-stop-search',
@@ -247,7 +258,8 @@ var
   HubCommand: THubWorkerCommand;
   AutoFreeCommand: Boolean;
 begin
-  FOwner.FWorkerThreadId := System.ThreadID;
+  FOwner.FWorkerThreadId := System.GetCurrentThreadId;
+  FOwner.FWorkerThreadIdValid := True;
   try
     while (not Terminated) and FQueue.WaitPop(CommandObject) do
     begin
@@ -266,7 +278,7 @@ begin
         HubCommand.Free;
     end;
   finally
-    FOwner.FWorkerThreadId := 0;
+    FOwner.FWorkerThreadIdValid := False;
   end;
 end;
 
@@ -542,6 +554,8 @@ begin
       HubCommand.StringResult := inherited StartThinking;
     hwcStartAnalyzing:
       DoStartAnalyzing;
+    hwcStartMcts:
+      DoStartMcts;
     hwcPollOutput:
       DoPollOutput;
     hwcProcessData:
@@ -555,7 +569,8 @@ end;
 
 function THubEngine.IsWorkerThread: Boolean;
 begin
-  Result := (FWorkerThreadId <> 0) and (System.ThreadID = FWorkerThreadId);
+  Result := FWorkerThreadIdValid and
+    (System.GetCurrentThreadId = FWorkerThreadId);
 end;
 
 procedure THubEngine.SendLine(const ALine: string);
@@ -582,7 +597,6 @@ end;
 function THubEngine.WaitForLine(const APrefix: string; ATimeoutMs: Integer;
   out ALine: string): Boolean;
 var
-  I: Integer;
   StartTick: QWord;
 begin
   Result := False;
@@ -597,19 +611,8 @@ begin
     end;
     if FProcess.NeedsPolling then
       FProcess.ReadAvailable;
-    FLineLock.Acquire;
-    try
-      for I := 0 to FReceivedLines.Count - 1 do
-        if (APrefix = '') or (CompareText(Copy(FReceivedLines[I], 1,
-          Length(APrefix)), APrefix) = 0) then
-        begin
-          ALine := FReceivedLines[I];
-          FReceivedLines.Delete(I);
-          Exit(True);
-        end;
-    finally
-      FLineLock.Release;
-    end;
+    if TakeReceivedLine(APrefix, ALine) then
+      Exit(True);
     if not FProcess.HasProcess then
     begin
       FLastWaitFailure := 'process missing';
@@ -629,18 +632,138 @@ begin
     IntToStr(ATimeoutMs));
 end;
 
+function THubEngine.TakeReceivedLine(const APrefix: string; out ALine: string
+  ): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  ALine := '';
+  FLineLock.Acquire;
+  try
+    for I := 0 to FReceivedLines.Count - 1 do
+      if (APrefix = '') or (CompareText(Copy(FReceivedLines[I], 1,
+        Length(APrefix)), APrefix) = 0) then
+      begin
+        ALine := FReceivedLines[I];
+        FReceivedLines.Delete(I);
+        Exit(True);
+      end;
+  finally
+    FLineLock.Release;
+  end;
+end;
+
+procedure THubEngine.DiscardDoneLinesBeforeNewSearch(const AReason: string);
+var
+  Count: Integer;
+  Line: string;
+begin
+  if FProcess.NeedsPolling then
+    FProcess.ReadAvailable;
+
+  Count := 0;
+  while TakeReceivedLine('done', Line) do
+    Inc(Count);
+
+  if Count > 0 then
+    Log('discarded pre-search done lines; count=' + IntToStr(Count) +
+      '; reason=' + AReason);
+end;
+
+function THubEngine.WaitForDoneMove(ATimeoutMs: Integer;
+  out AMove: string): Boolean;
+var
+  ElapsedMs: QWord;
+  Line: string;
+  MoveText: string;
+  RemainingMs: Integer;
+  StartTick: QWord;
+begin
+  Result := False;
+  AMove := '';
+  StartTick := GetTickCount64;
+  repeat
+    ElapsedMs := GetTickCount64 - StartTick;
+    if ElapsedMs >= QWord(ATimeoutMs) then
+      Break;
+    RemainingMs := ATimeoutMs - Integer(ElapsedMs);
+    if not WaitForLine('done', RemainingMs, Line) then
+      Exit(False);
+
+    MoveText := ExtractDoneMove(Line);
+    if MoveText <> '' then
+    begin
+      AMove := MoveText;
+      Exit(True);
+    end;
+
+    Log('ignored done without move while waiting for think result; line=' +
+      Line);
+  until False;
+
+  FLastWaitFailure := 'timeout';
+  Log('wait timeout; expected=done move; timeout_ms=' + IntToStr(ATimeoutMs));
+end;
+
+function THubEngine.DrainDoneLinesAfterStop(AQuietMs: Integer): Integer;
+var
+  Line: string;
+  QuietStart: QWord;
+  SawLine: Boolean;
+begin
+  Result := 0;
+  QuietStart := GetTickCount64;
+  repeat
+    if FProcess.NeedsPolling then
+      FProcess.ReadAvailable;
+
+    SawLine := False;
+    while TakeReceivedLine('done', Line) do
+    begin
+      Inc(Result);
+      SawLine := True;
+    end;
+
+    if SawLine then
+      QuietStart := GetTickCount64
+    else
+      Sleep(25);
+  until GetTickCount64 - QuietStart >= QWord(AQuietMs);
+end;
+
+procedure THubEngine.WaitForSearchStopped;
+var
+  ExtraDoneCount: Integer;
+  Line: string;
+begin
+  if WaitForLine('done', 2000, Line) then
+  begin
+    Log('search stop acknowledged; line=' + Line);
+    ExtraDoneCount := DrainDoneLinesAfterStop(100);
+    if ExtraDoneCount > 0 then
+      Log('discarded post-stop done lines; count=' + IntToStr(ExtraDoneCount));
+  end
+  else
+    Log('search stop acknowledgement not received; reason=' +
+      FLastWaitFailure);
+end;
+
 function THubEngine.DoLaunchAndInit: Boolean;
 var
   Args: TStringList;
   InitLines: TStringList;
   I: Integer;
+  LaunchArguments: string;
   Line: string;
 begin
   Result := False;
   Args := TStringList.Create;
   InitLines := TStringList.Create;
   try
-    SplitLaunchArguments(ExpandEnginePlaceholders(FEngine.Arguments, FEngine), Args);
+    LaunchArguments := EngineParamValue(FParams,
+      EngineLaunchArgumentParamName(eekHub), FEngine.Arguments);
+    SplitLaunchArguments(ExpandEnginePlaceholders(LaunchArguments, FEngine), Args);
     FEngine.IniFileName := EngineParamValue(FParams, 'gui-ini-file',
       FEngine.IniFileName);
     FEngine.IniContent := EngineParamValue(FParams, 'gui-ini-content',
@@ -805,40 +928,62 @@ begin
 end;
 
 function THubEngine.DoStartThinking: string;
-var
-  Line: string;
 begin
   SendLine(BuildHubPositionCommand);
   if FLevelCommand <> '' then
     SendLine(FLevelCommand);
+  DiscardDoneLinesBeforeNewSearch('before go think');
   SendLine('go think');
   ChangeState(esWaitingForDone, 'search started; waiting for done');
-  if WaitForLine('done', 60000, Line) then
-    Result := ExtractDoneMove(Line)
-  else
+
+  if not WaitForDoneMove(60000, Result) then
   begin
-    ChangeState(esError, 'waiting for done failed; reason=' + FLastWaitFailure);
+    ChangeState(esError, 'waiting for done move failed; reason=' +
+      FLastWaitFailure);
     Result := '';
   end;
 end;
 
 procedure THubEngine.DoStopSearch;
+var
+  SearchWasActive: Boolean;
 begin
+  SearchWasActive := CurrentState in [esThinking, esWaitingForDone, esStopping];
   try
     SendLine('stop');
+    if SearchWasActive and (CurrentState <> esStopping) then
+      ChangeState(esStopping, 'stop sent; waiting for done');
+    if SearchWasActive then
+      WaitForSearchStopped;
   except
     on E: Exception do
       Log('stop search command failed; message=' + E.Message);
   end;
+  if SearchWasActive and (CurrentState <> esError) then
+    ChangeState(esReady, 'search stopped');
 end;
 
 procedure THubEngine.DoStartAnalyzing;
 begin
   DoStopSearch;
   SendLine(BuildHubPositionCommand);
-  SendLine('level time=1000');
+  if FLevelCommand <> '' then
+    SendLine(FLevelCommand)
+  else
+    SendLine('level time=1000');
+  DiscardDoneLinesBeforeNewSearch('before go analyze');
   SendLine('go analyze');
   ChangeState(esThinking, 'analysis started');
+end;
+
+procedure THubEngine.DoStartMcts;
+begin
+  DoStopSearch;
+  SendLine(BuildHubPositionCommand);
+  SendLine('level time=1000');
+  DiscardDoneLinesBeforeNewSearch('before go mcts');
+  SendLine('go mcts');
+  ChangeState(esThinking, 'MCTS started');
 end;
 
 procedure THubEngine.DoPollOutput;
@@ -856,7 +1001,7 @@ begin
 end;
 
 procedure THubEngine.BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
-  AGameMinutes: Double; AGameMoves: Integer);
+  AGameMinutes: Double; AGameMoves: Integer; AIncrementSeconds: Double);
 var
   Command: THubWorkerCommand;
 begin
@@ -904,6 +1049,11 @@ end;
 procedure THubEngine.StartAnalyzing;
 begin
   QueueProcedureCommand(THubWorkerCommand.Create(hwcStartAnalyzing));
+end;
+
+procedure THubEngine.StartMcts;
+begin
+  QueueProcedureCommand(THubWorkerCommand.Create(hwcStartMcts));
 end;
 
 procedure THubEngine.PollOutput;

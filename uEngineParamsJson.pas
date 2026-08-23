@@ -20,6 +20,7 @@ procedure AddOrUpdateParam(var AParams: TEngineParamArray; const AName,
   AType, AValue: string; AKeepExistingValue: Boolean);
 function EngineParamValue(const AParams: TEngineParamArray; const AName,
   ADefault: string): string;
+function EngineLaunchArgumentParamName(AKind: TExternalEngineKind): string;
 function EngineParamsFileName(const AEngineFileName: string): string;
 function EngineParamShouldSendToHub(const AName: string): Boolean;
 function ExtractHubArgument(const ALine, AName: string): string;
@@ -159,6 +160,14 @@ begin
     Result := ADefault;
 end;
 
+function EngineLaunchArgumentParamName(AKind: TExternalEngineKind): string;
+begin
+  if AKind = eekDxp then
+    Result := 'gui-dxp-launch-arguments'
+  else
+    Result := 'gui-hub-launch-argument';
+end;
+
 function EngineParamsFileName(const AEngineFileName: string): string;
 begin
   if AEngineFileName = '' then
@@ -275,15 +284,30 @@ begin
   AddOrUpdateParam(AParams, 'gui-engine-type', 'string', ProtocolText, False);
   if AEngine <> nil then
   begin
-    AddOrUpdateParam(AParams, 'gui-hub-id', 'string', AEngine.HubId, False);
-    AddOrUpdateParam(AParams, 'gui-hub-launch-argument', 'string',
-      AEngine.Arguments, False);
-    AddOrUpdateParam(AParams, 'gui-dxp-id', 'string', AEngine.DxpId, False);
-    AddOrUpdateParam(AParams, 'gui-dxp-ip', 'string', AEngine.DxpHost, False);
-    AddOrUpdateParam(AParams, 'gui-dxp-socket', 'int',
-      IntToStr(AEngine.DxpPort), False);
-    AddOrUpdateParam(AParams, 'gui-dxp-launch-arguments', 'string',
-      AEngine.Arguments, False);
+    if AEngine.Kind = eekHub then
+    begin
+      AddOrUpdateParam(AParams, 'gui-hub-id', 'string', AEngine.HubId, False);
+      AddOrUpdateParam(AParams, 'gui-hub-launch-argument', 'string',
+        AEngine.Arguments, True);
+      AddOrUpdateParam(AParams, 'gui-dxp-id', 'string', '', True);
+      AddOrUpdateParam(AParams, 'gui-dxp-ip', 'string', AEngine.DxpHost, True);
+      AddOrUpdateParam(AParams, 'gui-dxp-socket', 'int',
+        IntToStr(AEngine.DxpPort), True);
+      AddOrUpdateParam(AParams, 'gui-dxp-launch-arguments', 'string', '', True);
+    end
+    else
+    begin
+      AddOrUpdateParam(AParams, 'gui-hub-id', 'string', '', True);
+      AddOrUpdateParam(AParams, 'gui-hub-launch-argument', 'string', '', True);
+      AddOrUpdateParam(AParams, 'gui-dxp-id', 'string', AEngine.DxpId, False);
+      AddOrUpdateParam(AParams, 'gui-dxp-ip', 'string', AEngine.DxpHost, False);
+      AddOrUpdateParam(AParams, 'gui-dxp-socket', 'int',
+        IntToStr(AEngine.DxpPort), False);
+      AddOrUpdateParam(AParams, 'gui-dxp-launch-arguments', 'string',
+        AEngine.Arguments, True);
+    end;
+    AddOrUpdateParam(AParams, 'gui-dxp-supports-fischer', 'bool',
+      'false', True);
   end
   else
   begin
@@ -292,9 +316,12 @@ begin
     AddOrUpdateParam(AParams, 'gui-dxp-id', 'string', '', False);
     AddOrUpdateParam(AParams, 'gui-dxp-ip', 'string', '127.0.0.1', False);
     AddOrUpdateParam(AParams, 'gui-dxp-socket', 'int', '27531', False);
+    AddOrUpdateParam(AParams, 'gui-dxp-supports-fischer', 'bool',
+      'false', True);
     AddOrUpdateParam(AParams, 'gui-dxp-launch-arguments', 'string', '', False);
   end;
-  AddOrUpdateParam(AParams, 'gui-dxp-role', 'string', RoleText, False);
+  AddOrUpdateParam(AParams, 'gui-dxp-role', 'string', RoleText,
+    (AEngine <> nil) and (AEngine.Kind <> eekDxp));
   AddOrUpdateParam(AParams, 'gui-ini-file', 'string', '', True);
   AddOrUpdateParam(AParams, 'gui-send-starting-position', 'bool', 'true', True);
   AddOrUpdateParam(AParams, 'gui-single-captures-include-captured-square',
@@ -426,7 +453,7 @@ begin
     else
       AddOrUpdateParam(Params, 'gui-dxp-role', 'string', 'listen', False);
     AddOrUpdateParam(Params, 'gui-dxp-launch-arguments', 'string',
-      AEngine.Arguments, False);
+      AEngine.Arguments, True);
   end
   else
   begin
@@ -434,7 +461,7 @@ begin
     AddOrUpdateParam(Params, 'gui-engine-type', 'string', 'hub', False);
     AddOrUpdateParam(Params, 'gui-hub-id', 'string', AEngine.HubId, False);
     AddOrUpdateParam(Params, 'gui-hub-launch-argument', 'string',
-      AEngine.Arguments, False);
+      AEngine.Arguments, True);
     AddOrUpdateParam(Params, 'gui-hub-init', 'string', AEngine.InitText, False);
   end;
 

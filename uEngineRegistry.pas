@@ -384,7 +384,6 @@ begin
   Result.Add('hub_id', AEngine.HubId);
   Result.Add('dxp_id', AEngine.DxpId);
   Result.Add('kind', LowerCase(AEngine.KindText));
-  Result.Add('arguments', AEngine.Arguments);
   Result.Add('init', AEngine.InitText);
   Result.Add('dxp_host', AEngine.DxpHost);
   Result.Add('dxp_port', AEngine.DxpPort);

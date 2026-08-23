@@ -6,11 +6,18 @@ interface
 
 uses
   Classes, SyncObjs, SysUtils,
-  uDraughtsBoard, uEngineBase, uEngineRegistry, uHubEngine, uPvSnapshot,
-  uThreadMessageQueue;
+  uDraughtsBoard, uEngineBase, uEngineRegistry, uGameTreeSearchRef,
+  uHubEngine, uPvSnapshot, uThreadMessageQueue;
 
 type
+  TAnalyzerRunMode = (
+    armAnalyze,
+    armMcts
+  );
+
   TAnalyzerRunnerLogEvent = procedure(Sender: TObject; const AMessage: string) of object;
+  TAnalyzerRunnerMoveEvent = procedure(Sender: TObject;
+    const ASearch: TGameTreeSearchRef; const AMoveText: string) of object;
   TAnalyzerRunnerSnapshotEvent = procedure(Sender: TObject; ASnapshot: TPvSnapshot) of object;
   TAnalyzerRunnerFinishedEvent = procedure(Sender: TObject) of object;
 
@@ -21,13 +28,20 @@ type
     FEngineDefinition: TExternalEngineDefinition;
     FLastPollTick: QWord;
     FLastPublishedPv: string;
+    FPvGameTreeOnly: Boolean;
+    FPvTransient: Boolean;
+    FPvSearch: TGameTreeSearchRef;
     FOnFinished: TAnalyzerRunnerFinishedEvent;
     FOnLog: TAnalyzerRunnerLogEvent;
+    FOnMove: TAnalyzerRunnerMoveEvent;
     FOnSnapshot: TAnalyzerRunnerSnapshotEvent;
+    FRunMode: TAnalyzerRunMode;
     FPvBaseBoard: TDraughtsBoard;
     FPvBasePly: Integer;
     FPvLock: TCriticalSection;
+    procedure ApplyPvContext(ACommand: TObject; AGameTreeOnly: Boolean);
     procedure DrainCommands;
+    function DisplayName: string;
     procedure HandleCommand(ACommand: TObject);
     procedure PublishSnapshot;
     procedure RuntimeLog(Sender: TObject; const AMessage: string);
@@ -38,11 +52,18 @@ type
     constructor Create(AEngineDefinition: TExternalEngineDefinition;
       ALogEvent: TAnalyzerRunnerLogEvent;
       ASnapshotEvent: TAnalyzerRunnerSnapshotEvent;
-      AFinishedEvent: TAnalyzerRunnerFinishedEvent);
+      AFinishedEvent: TAnalyzerRunnerFinishedEvent;
+      ARunMode: TAnalyzerRunMode = armAnalyze;
+      AMoveEvent: TAnalyzerRunnerMoveEvent = nil);
     destructor Destroy; override;
 
     procedure PostAnalyze(const AStartingFEN, AMovesText: string;
-      ABaseBoard: TDraughtsBoard; ABasePly: Integer; ATerminal: Boolean);
+      ABaseBoard: TDraughtsBoard; ABasePly: Integer; ATerminal: Boolean;
+      const ASearch: TGameTreeSearchRef; ATransient: Boolean = False;
+      AAnalyzeSeconds: Double = 1000);
+    procedure PostThinkOnce(const AStartingFEN, AMovesText: string;
+      ABaseBoard: TDraughtsBoard; ABasePly: Integer; AThinkSeconds: Double;
+      const ASearch: TGameTreeSearchRef; ATransient: Boolean = False);
     procedure PostStopSearch;
     procedure PostShutdown;
   end;
@@ -55,6 +76,7 @@ const
 type
   TAnalyzerCommandKind = (
     accAnalyze,
+    accThinkOnce,
     accStopSearch,
     accShutdown
   );
@@ -65,8 +87,11 @@ type
     FBasePly: Integer;
     FCommandKind: TAnalyzerCommandKind;
     FMovesText: string;
+    FSearch: TGameTreeSearchRef;
     FStartingFEN: string;
     FTerminal: Boolean;
+    FThinkSeconds: Double;
+    FTransient: Boolean;
   public
     constructor Create(ACommandKind: TAnalyzerCommandKind); reintroduce;
     destructor Destroy; override;
@@ -74,14 +99,18 @@ type
     property BasePly: Integer read FBasePly write FBasePly;
     property CommandKind: TAnalyzerCommandKind read FCommandKind;
     property MovesText: string read FMovesText write FMovesText;
+    property Search: TGameTreeSearchRef read FSearch write FSearch;
     property StartingFEN: string read FStartingFEN write FStartingFEN;
     property Terminal: Boolean read FTerminal write FTerminal;
+    property ThinkSeconds: Double read FThinkSeconds write FThinkSeconds;
+    property Transient: Boolean read FTransient write FTransient;
   end;
 
 constructor TAnalyzerCommand.Create(ACommandKind: TAnalyzerCommandKind);
 const
   CommandNames: array[TAnalyzerCommandKind] of string = (
     'analyzer-analyze',
+    'analyzer-think-once',
     'analyzer-stop-search',
     'analyzer-shutdown'
   );
@@ -99,7 +128,8 @@ end;
 
 constructor TAnalyzerRunnerThread.Create(AEngineDefinition: TExternalEngineDefinition;
   ALogEvent: TAnalyzerRunnerLogEvent; ASnapshotEvent: TAnalyzerRunnerSnapshotEvent;
-  AFinishedEvent: TAnalyzerRunnerFinishedEvent);
+  AFinishedEvent: TAnalyzerRunnerFinishedEvent; ARunMode: TAnalyzerRunMode;
+  AMoveEvent: TAnalyzerRunnerMoveEvent);
 begin
   inherited Create(True);
   FreeOnTerminate := False;
@@ -111,6 +141,8 @@ begin
   FOnLog := ALogEvent;
   FOnSnapshot := ASnapshotEvent;
   FOnFinished := AFinishedEvent;
+  FOnMove := AMoveEvent;
+  FRunMode := ARunMode;
 end;
 
 destructor TAnalyzerRunnerThread.Destroy;
@@ -123,6 +155,14 @@ begin
   FCommandQueue.Free;
   FEngineDefinition.Free;
   inherited Destroy;
+end;
+
+function TAnalyzerRunnerThread.DisplayName: string;
+begin
+  if FRunMode = armMcts then
+    Result := 'MCTS annotator'
+  else
+    Result := 'Annotator';
 end;
 
 procedure TAnalyzerRunnerThread.RuntimeLog(Sender: TObject; const AMessage: string);
@@ -154,8 +194,9 @@ begin
   Snapshot := TPvSnapshot.Create;
   FPvLock.Acquire;
   try
-    Snapshot.SetData(FPvBaseBoard, FPvBasePly, FEngine.PrincipalVariation,
-      FEngine.LastScore, FEngine.LastDepth, FEngine.LastTimeText);
+    Snapshot.SetDataWithSearch(FPvBaseBoard, FPvBasePly,
+      FEngine.PrincipalVariation, FEngine.LastScore, FEngine.LastDepth,
+      FEngine.LastTimeText, FPvSearch, FPvGameTreeOnly, FPvTransient);
     FLastPublishedPv := FEngine.PrincipalVariation;
   finally
     FPvLock.Release;
@@ -166,9 +207,32 @@ begin
     Snapshot.Free;
 end;
 
+procedure TAnalyzerRunnerThread.ApplyPvContext(ACommand: TObject;
+  AGameTreeOnly: Boolean);
+var
+  Command: TAnalyzerCommand;
+begin
+  if not (ACommand is TAnalyzerCommand) then
+    Exit;
+  Command := TAnalyzerCommand(ACommand);
+
+  FPvLock.Acquire;
+  try
+    FPvBaseBoard.AssignFrom(Command.BaseBoard);
+    FPvBasePly := Command.BasePly;
+    FPvSearch := Command.Search;
+    FPvGameTreeOnly := AGameTreeOnly;
+    FPvTransient := Command.Transient;
+    FLastPublishedPv := '';
+  finally
+    FPvLock.Release;
+  end;
+end;
+
 procedure TAnalyzerRunnerThread.HandleCommand(ACommand: TObject);
 var
   Command: TAnalyzerCommand;
+  MoveText: string;
   Moves: TStringList;
 begin
   if not (ACommand is TAnalyzerCommand) then
@@ -177,14 +241,7 @@ begin
   case Command.CommandKind of
     accAnalyze:
       begin
-        FPvLock.Acquire;
-        try
-          FPvBaseBoard.AssignFrom(Command.BaseBoard);
-          FPvBasePly := Command.BasePly;
-          FLastPublishedPv := '';
-        finally
-          FPvLock.Release;
-        end;
+        ApplyPvContext(Command, False);
         if FEngine = nil then
           Exit;
         if Command.Terminal then
@@ -192,22 +249,50 @@ begin
           FEngine.StopSearch;
           PublishSnapshot;
           if Assigned(FOnLog) then
-            FOnLog(Self, 'Annotator idle; terminal position');
+            FOnLog(Self, DisplayName + ' idle; terminal position');
           Exit;
         end;
         Moves := TStringList.Create;
         try
           ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(Command.MovesText)),
             Moves);
+          FEngine.StopSearch;
           FEngine.SetGamePosition(Command.StartingFEN, Moves);
-          FEngine.StartAnalyzing;
+          if FRunMode = armMcts then
+            FEngine.StartMcts
+          else
+          begin
+            FEngine.SetClockInfo(1, Command.ThinkSeconds, 0);
+            FEngine.StartAnalyzing;
+          end;
         finally
           Moves.Free;
         end;
       end;
+    accThinkOnce:
+      begin
+        ApplyPvContext(Command, True);
+        if FEngine = nil then
+          Exit;
+        Moves := TStringList.Create;
+        try
+          ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(Command.MovesText)),
+            Moves);
+          FEngine.StopSearch;
+          FEngine.SetGamePosition(Command.StartingFEN, Moves);
+          FEngine.SetClockInfo(1, Command.ThinkSeconds, 0);
+          MoveText := Trim(FEngine.StartThinking);
+        finally
+          Moves.Free;
+        end;
+        if (MoveText <> '') and Assigned(FOnMove) then
+          FOnMove(Self, Command.Search, MoveText);
+      end;
     accStopSearch:
-      if FEngine <> nil then
-        FEngine.StopSearch;
+      begin
+        if FEngine <> nil then
+          FEngine.StopSearch;
+      end;
     accShutdown:
       Terminate;
   end;
@@ -232,10 +317,7 @@ begin
   if ACommand = nil then
     Exit;
   if (FCommandQueue = nil) or (not FCommandQueue.TryPost(ACommand)) then
-  begin
-    if FCommandQueue = nil then
-      ACommand.Free;
-  end;
+    ACommand.Free;
 end;
 
 procedure TAnalyzerRunnerThread.Execute;
@@ -247,15 +329,16 @@ begin
     FEngine := THubEngine.Create(FEngineDefinition);
     FEngine.OnLog := @RuntimeLog;
     if Assigned(FOnLog) then
-      FOnLog(Self, 'Opening Annotator: ' + EnginePickerDisplayName(FEngineDefinition, 0));
+      FOnLog(Self, 'Opening ' + DisplayName + ': ' +
+        EnginePickerDisplayName(FEngineDefinition, 0));
     if not FEngine.LaunchAndInit then
     begin
       if Assigned(FOnLog) then
-        FOnLog(Self, 'Annotator launch failed');
+        FOnLog(Self, DisplayName + ' launch failed');
       Exit;
     end;
     if Assigned(FOnLog) then
-      FOnLog(Self, 'Annotator ready');
+      FOnLog(Self, DisplayName + ' ready');
 
     while not Terminated do
     begin
@@ -289,14 +372,16 @@ begin
       FEngine := nil;
     end;
     if Assigned(FOnLog) then
-      FOnLog(Self, 'Annotator closed');
+      FOnLog(Self, DisplayName + ' closed');
     if Assigned(FOnFinished) then
       FOnFinished(Self);
   end;
 end;
 
 procedure TAnalyzerRunnerThread.PostAnalyze(const AStartingFEN, AMovesText: string;
-  ABaseBoard: TDraughtsBoard; ABasePly: Integer; ATerminal: Boolean);
+  ABaseBoard: TDraughtsBoard; ABasePly: Integer; ATerminal: Boolean;
+  const ASearch: TGameTreeSearchRef; ATransient: Boolean;
+  AAnalyzeSeconds: Double);
 var
   Command: TAnalyzerCommand;
 begin
@@ -305,6 +390,28 @@ begin
   Command.MovesText := AMovesText;
   Command.BasePly := ABasePly;
   Command.Terminal := ATerminal;
+  Command.Search := ASearch;
+  Command.Transient := ATransient;
+  Command.ThinkSeconds := AAnalyzeSeconds;
+  if ABaseBoard <> nil then
+    Command.BaseBoard.AssignFrom(ABaseBoard);
+  PostCommand(Command);
+end;
+
+procedure TAnalyzerRunnerThread.PostThinkOnce(const AStartingFEN,
+  AMovesText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer;
+  AThinkSeconds: Double; const ASearch: TGameTreeSearchRef;
+  ATransient: Boolean);
+var
+  Command: TAnalyzerCommand;
+begin
+  Command := TAnalyzerCommand.Create(accThinkOnce);
+  Command.StartingFEN := AStartingFEN;
+  Command.MovesText := AMovesText;
+  Command.BasePly := ABasePly;
+  Command.ThinkSeconds := AThinkSeconds;
+  Command.Search := ASearch;
+  Command.Transient := ATransient;
   if ABaseBoard <> nil then
     Command.BaseBoard.AssignFrom(ABaseBoard);
   PostCommand(Command);

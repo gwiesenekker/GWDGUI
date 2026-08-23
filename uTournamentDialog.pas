@@ -11,6 +11,7 @@ uses
 type
   TTournamentRunningGame = class
   public
+    Active: Boolean;
     GameId: Integer;
     PdnSaved: Boolean;
     Row: Integer;
@@ -18,6 +19,7 @@ type
 
   TTournamentStartGameEvent = procedure(Sender: TObject; const ASetup: TGameSetup;
     const ATitlePrefix: string; out AGame: TObject) of object;
+  TTournamentSelectGameEvent = procedure(Sender: TObject; AGame: TObject) of object;
 
   TTournamentDialog = class(TForm)
   private
@@ -37,6 +39,7 @@ type
     FLastGameStartTick: QWord;
     FMinutesEdit: TEdit;
     FMovesEdit: TEdit;
+    FOnSelectGame: TTournamentSelectGameEvent;
     FOnStartGame: TTournamentStartGameEvent;
     FPdnWriteLock: TCriticalSection;
     FRoundRobinGroup: TRadioGroup;
@@ -55,6 +58,7 @@ type
       AGame: TObject);
     procedure ClearPairingsClick(Sender: TObject);
     procedure ClearStaleRunningReasons;
+    procedure ClearTournamentGameRefs;
     procedure CollectPairingRows(AWhiteEngines, ABlackEngines,
       AResults: TStrings);
     procedure CollectRoundRows(ARounds: TStrings);
@@ -64,7 +68,9 @@ type
     function DisplayNameForEngine(AEngine: TExternalEngineDefinition): string;
     function EngineByDisplayName(const AName: string): TExternalEngineDefinition;
     function EngineKeyForName(const AName: string): string;
+    function ActiveRunningGameCount: Integer;
     function FindNextUnplayedRow: Integer;
+    function FindTournamentGameByRow(ARow: Integer): TTournamentRunningGame;
     function GameSetupForRow(ARow: Integer; out ASetup: TGameSetup): Boolean;
     function HasNonByeResults: Boolean;
     function MaxConcurrentGames: Integer;
@@ -102,6 +108,7 @@ type
     function HasTournamentData: Boolean;
     function IsRunning: Boolean;
     function SaveTournamentWithDialog: Boolean;
+    property OnSelectGame: TTournamentSelectGameEvent read FOnSelectGame write FOnSelectGame;
     property OnStartGame: TTournamentStartGameEvent read FOnStartGame write FOnStartGame;
   end;
 
@@ -144,12 +151,10 @@ begin
     (ARow >= AGrid.RowCount) then
     Exit;
 
-  ResultText := AGame.Snapshot.GameResult;
-  if ResultText = '' then
-    ResultText := '*';
+  ResultText := AGame.ResultText;
   AGrid.Cells[TournamentColResult, ARow] := ResultText;
-  if AGame.Snapshot.State = gosError then
-    AGrid.Cells[TournamentColReason, ARow] := AGame.Snapshot.LastError
+  if AGame.State = gosError then
+    AGrid.Cells[TournamentColReason, ARow] := AGame.LastErrorText
   else if ResultText = '*' then
     AGrid.Cells[TournamentColReason, ARow] := 'Unknown result'
   else if ResultText = '1-1' then
@@ -475,7 +480,7 @@ end;
 
 function TTournamentDialog.IsRunning: Boolean;
 begin
-  Result := FRunning or ((FRunningGames <> nil) and (FRunningGames.Count > 0));
+  Result := FRunning or (ActiveRunningGameCount > 0);
 end;
 
 function TTournamentDialog.SaveTournamentWithDialog: Boolean;
@@ -518,6 +523,17 @@ begin
   FBlackEngines.Free;
   FWhiteEngines.Free;
   inherited Destroy;
+end;
+
+procedure TTournamentDialog.ClearTournamentGameRefs;
+begin
+  if FRunningGames = nil then
+    Exit;
+  while FRunningGames.Count > 0 do
+  begin
+    TTournamentRunningGame(FRunningGames[0]).Free;
+    FRunningGames.Delete(0);
+  end;
 end;
 
 procedure TTournamentDialog.AddLabelledEdit(AParent: TWinControl;
@@ -625,7 +641,7 @@ begin
     Exit;
   if not (AGame is TRunningGame) then
     Exit;
-  if Trim(TRunningGame(AGame).Snapshot.MovesPlayedText) = '' then
+  if not TRunningGame(AGame).HasPlayedMoves then
     Exit;
   if not (Owner is TMainForm) then
     Exit;
@@ -746,7 +762,10 @@ begin
     CollectPairingRows(WhiteEngines, BlackEngines, Results);
     CollectRoundRows(Rounds);
     if not TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) then
-      ClearTournamentPairingGrid(FGrid)
+    begin
+      ClearTournamentGameRefs;
+      ClearTournamentPairingGrid(FGrid);
+    end
     else if not TournamentAllResultsKnown(WhiteEngines, BlackEngines, Results) then
     begin
       ShowGuiOkDialog(Self, 'Tournament',
@@ -788,6 +807,7 @@ begin
     'This will clear existing tournament results. Are you sure?', 'Yes',
     'No', mrNo) <> mrYes) then
     Exit;
+  ClearTournamentGameRefs;
   ClearTournamentPairingGrid(FGrid);
   FAcceptedTournamentSignature := TournamentSignature;
   if FInvalidationPanel <> nil then
@@ -868,13 +888,39 @@ begin
   end;
 end;
 
+function TTournamentDialog.ActiveRunningGameCount: Integer;
+var
+  I: Integer;
+begin
+  Result := 0;
+  if FRunningGames = nil then
+    Exit;
+  for I := 0 to FRunningGames.Count - 1 do
+    if TTournamentRunningGame(FRunningGames[I]).Active then
+      Inc(Result);
+end;
+
+function TTournamentDialog.FindTournamentGameByRow(
+  ARow: Integer): TTournamentRunningGame;
+var
+  I: Integer;
+begin
+  Result := nil;
+  if FRunningGames = nil then
+    Exit;
+  for I := FRunningGames.Count - 1 downto 0 do
+    if TTournamentRunningGame(FRunningGames[I]).Row = ARow then
+      Exit(TTournamentRunningGame(FRunningGames[I]));
+end;
+
 function TTournamentDialog.IsRowRunning(ARow: Integer): Boolean;
 var
   I: Integer;
 begin
   Result := False;
   for I := 0 to FRunningGames.Count - 1 do
-    if TTournamentRunningGame(FRunningGames[I]).Row = ARow then
+    if TTournamentRunningGame(FRunningGames[I]).Active and
+      (TTournamentRunningGame(FRunningGames[I]).Row = ARow) then
       Exit(True);
 end;
 
@@ -951,9 +997,11 @@ procedure TTournamentDialog.PairingGridMouseDown(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   Col: Integer;
+  Game: TRunningGame;
   Row: Integer;
+  RunningGame: TTournamentRunningGame;
 begin
-  if (Button <> mbRight) or (FGrid = nil) then
+  if FGrid = nil then
     Exit;
 
   FGrid.MouseToCell(X, Y, Col, Row);
@@ -962,6 +1010,13 @@ begin
   begin
     FGrid.Col := Col;
     FGrid.Row := Row;
+    if Button = mbLeft then
+    begin
+      RunningGame := FindTournamentGameByRow(Row);
+      Game := TournamentRunningGameFor(Owner, RunningGame);
+      if (Game <> nil) and Assigned(FOnSelectGame) then
+        FOnSelectGame(Self, Game);
+    end;
   end;
 end;
 
@@ -1152,6 +1207,7 @@ begin
           FEngineCheckList.Checked[Row] := True;
       end;
 
+    ClearTournamentGameRefs;
     ClearTournamentPairingGrid(FGrid);
     Games := TJSONObject(Data).Find('games');
     if (Games <> nil) and (Games.JSONType = jtArray) then
@@ -1221,10 +1277,13 @@ begin
   begin
     FRunning := False;
     StopRunningGames;
-    FTimer.Enabled := FRunningGames.Count > 0;
+    FTimer.Enabled := ActiveRunningGameCount > 0;
     UpdateButtons;
   end;
 
+  ClearTournamentGameRefs;
+  if FTimer <> nil then
+    FTimer.Enabled := False;
   ClearTournamentPairingGrid(FGrid);
   FAcceptedTournamentSignature := TournamentSignature;
   UpdateCrossTable;
@@ -1316,7 +1375,7 @@ begin
   begin
     FRunning := False;
     StopRunningGames;
-    FTimer.Enabled := FRunningGames.Count > 0;
+    FTimer.Enabled := ActiveRunningGameCount > 0;
     UpdateButtons;
     Exit;
   end;
@@ -1341,6 +1400,8 @@ begin
   for I := FRunningGames.Count - 1 downto 0 do
   begin
     RunningGame := TTournamentRunningGame(FRunningGames[I]);
+    if not RunningGame.Active then
+      Continue;
     Game := TournamentRunningGameFor(Owner, RunningGame);
     if Game <> nil then
     begin
@@ -1348,6 +1409,7 @@ begin
       begin
         ApplyTournamentGameResultToRow(FGrid, RunningGame.Row, Game);
         AppendTournamentGameToPdn(RunningGame, Game);
+        RunningGame.Active := False;
       end
       else
       begin
@@ -1363,8 +1425,7 @@ begin
         Continue;
       end;
     end;
-    RunningGame.Free;
-    FRunningGames.Delete(I);
+    RunningGame.Active := False;
   end;
   if (not FClosing) and (FGrid <> nil) then
     FGrid.Invalidate;
@@ -1389,7 +1450,7 @@ begin
     begin
       if (AGame is TRunningGame) and
         (TRunningGame(AGame).Lifecycle = rglFinished) and
-        (TRunningGame(AGame).Snapshot.State in [gosGameOver, gosError]) then
+        (TRunningGame(AGame).State in [gosGameOver, gosError]) then
       begin
         ApplyTournamentGameResultToRow(FGrid, RunningGame.Row,
           TRunningGame(AGame));
@@ -1407,6 +1468,9 @@ begin
     end;
     if (not (AGame is TRunningGame)) or
       (TRunningGame(AGame).Lifecycle = rglFinished) then
+      RunningGame.Active := False
+    else if (AGame is TRunningGame) and
+      (TRunningGame(AGame).Lifecycle = rglRemoveRequested) then
     begin
       RunningGame.Free;
       FRunningGames.Delete(I);
@@ -1461,7 +1525,7 @@ begin
 
     for Row := 1 to FGrid.RowCount - 1 do
     begin
-      if FRunningGames.Count >= MaxGames then
+      if ActiveRunningGameCount >= MaxGames then
         Break;
       if TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) and
         (StrToIntDef(FGrid.Cells[TournamentColRound, Row], 0) <> LatestRound) then
@@ -1477,6 +1541,7 @@ begin
         Continue;
 
       RunningGame := TTournamentRunningGame.Create;
+      RunningGame.Active := True;
       RunningGame.Row := Row;
       RunningGame.GameId := TRunningGame(GameObject).Id;
       FRunningGames.Add(RunningGame);
@@ -1494,7 +1559,7 @@ begin
     BusyEngineKeys.Free;
   end;
 
-  if (not StartedAny) and (FRunningGames.Count = 0) and
+  if (not StartedAny) and (ActiveRunningGameCount = 0) and
     (FindNextUnplayedRow = 0) then
   begin
     FRunning := False;
@@ -1509,23 +1574,24 @@ var
   I: Integer;
   RunningGame: TTournamentRunningGame;
 begin
-  if (not FRunning) and (FRunningGames.Count = 0) then
+  if (not FRunning) and (ActiveRunningGameCount = 0) then
     Exit;
 
   for I := FRunningGames.Count - 1 downto 0 do
   begin
     RunningGame := TTournamentRunningGame(FRunningGames[I]);
+    if not RunningGame.Active then
+      Continue;
     Game := TournamentRunningGameFor(Owner, RunningGame);
     if Game = nil then
     begin
-      RunningGame.Free;
-      FRunningGames.Delete(I);
+      RunningGame.Active := False;
       Continue;
     end;
     if Game.Lifecycle <> rglFinished then
       Continue;
 
-    if Game.Snapshot.State in [gosGameOver, gosError] then
+    if Game.State in [gosGameOver, gosError] then
     begin
       ApplyTournamentGameResultToRow(FGrid, RunningGame.Row, Game);
       AppendTournamentGameToPdn(RunningGame, Game);
@@ -1538,8 +1604,7 @@ begin
       else
         FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Unknown result';
     end;
-    RunningGame.Free;
-    FRunningGames.Delete(I);
+    RunningGame.Active := False;
     FLastGameStartTick := GetTickCount64;
     FGrid.Invalidate;
   end;
@@ -1547,7 +1612,7 @@ begin
   UpdateCrossTable;
   if FRunning then
     StartPendingGames
-  else if FRunningGames.Count = 0 then
+  else if ActiveRunningGameCount = 0 then
     FTimer.Enabled := False;
   UpdateButtons;
 end;

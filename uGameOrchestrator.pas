@@ -300,17 +300,29 @@ end;
 
 procedure TGameOrchestrator.StartEngineSessions;
 var
+  LBeginGameIncrement: Double;
   LSide: TDraughtsSide;
 begin
+  if FTimeControl.IncrementMode = cimFromStart then
+    LBeginGameIncrement := FTimeControl.IncrementSeconds
+  else
+  begin
+    LBeginGameIncrement := 0;
+    if FTimeControl.IncrementSeconds > 0 then
+      LogMessage('begin engine game; increment after move limit is not sent to engine session start');
+  end;
+
   for LSide := Low(TDraughtsSide) to High(TDraughtsSide) do
     if FEngines[LSide] <> nil then
     begin
       LogMessage('begin engine game; side=' + SideToString(LSide) +
         '; engine=' + FEngines[LSide].EngineName +
         '; game_minutes=' + FloatToStr(FTimeControl.MinutesPerPeriod) +
-        '; game_moves=' + IntToStr(FTimeControl.MovesPerPeriod));
+        '; game_moves=' + IntToStr(FTimeControl.MovesPerPeriod) +
+        '; begin_increment_seconds=' + FloatToStr(LBeginGameIncrement));
       FEngines[LSide].BeginGame(FStartingFEN, LSide,
-        FTimeControl.MinutesPerPeriod, FTimeControl.MovesPerPeriod);
+        FTimeControl.MinutesPerPeriod, FTimeControl.MovesPerPeriod,
+        LBeginGameIncrement);
     end;
 end;
 
@@ -483,7 +495,7 @@ begin
     raise EInvalidOperation.Create('Cannot play a move unless the orchestrator is running');
 
   LSide := FBoard.SideToMove;
-  if FBoard.LegalMoves.Count = 0 then
+  if FBoard.LegalMoveCount = 0 then
   begin
     if LSide = dsWhite then
       FinishGame('0-2', 'terminal position; no legal moves for white')

@@ -22,6 +22,7 @@ type
     FGameResult: string;
     FLastError: string;
     FLogLines: TStringList;
+    FLogRevision: QWord;
     FMoveAnnotationsText: string;
     FMovesPlayedText: string;
     FPlyCount: Integer;
@@ -50,6 +51,7 @@ type
     property GameResult: string read FGameResult;
     property LastError: string read FLastError;
     property LogLines: TStringList read FLogLines;
+    property LogRevision: QWord read FLogRevision;
     property MoveAnnotationsText: string read FMoveAnnotationsText;
     property MovesPlayedText: string read FMovesPlayedText;
     property PlyCount: Integer read FPlyCount;
@@ -77,7 +79,8 @@ type
     FOnFinished: TGameRunnerFinishedEvent;
     FOnSnapshot: TGameRunnerSnapshotEvent;
     FOrchestrator: TGameOrchestrator;
-    FPaused: Boolean;
+    FLastLogSnapshotTick: QWord;
+    FLogRevision: QWord;
     FLastPrincipalVariation: string;
     FPvBaseBoard: TDraughtsBoard;
     FPvBasePly: Integer;
@@ -95,6 +98,7 @@ type
       AEngine: TExternalEngineDefinition): string;
     procedure AddGameLog(const AMessage: string);
     procedure AddGameLogLines(ALines: TStrings);
+    procedure TrimGameLogLocked;
     procedure DrainCommands;
     procedure DetachRuntimeLogHandlers;
     procedure HandleCommand(ACommand: TObject);
@@ -103,6 +107,7 @@ type
     procedure CreateEngines;
     function CreateSnapshot: TGameRunnerSnapshot;
     procedure PublishSnapshot;
+    procedure PublishSnapshotIfDue;
     procedure PublishFinished;
     procedure RequestStopFromRunner(const AReason: string);
     procedure RuntimeLog(Sender: TObject; const AMessage: string);
@@ -113,8 +118,8 @@ type
       ASnapshotEvent: TGameRunnerSnapshotEvent;
       AFinishedEvent: TGameRunnerFinishedEvent);
     destructor Destroy; override;
+    procedure PostGuiLog(const AMessage: string);
     procedure PostHumanMove(const AMove: string);
-    procedure PostPause(AValue: Boolean);
     procedure PostShowStdout(AValue: Boolean);
     procedure PostStop;
     property GameId: Integer read FGameId;
@@ -122,11 +127,15 @@ type
 
 implementation
 
+const
+  RunnerLogSnapshotIntervalMs = 500;
+  RunnerMaxLogLines = 2000;
+
 type
   TGameRunnerCommandKind = (
     grcStop,
-    grcSetPaused,
     grcSetShowStdout,
+    grcGuiLog,
     grcHumanMove
   );
 
@@ -150,8 +159,8 @@ constructor TGameRunnerCommand.Create(ACommandKind: TGameRunnerCommandKind;
 const
   CommandNames: array[TGameRunnerCommandKind] of string = (
     'stop',
-    'set-paused',
     'set-show-stdout',
+    'gui-log',
     'human-move'
   );
 begin
@@ -215,7 +224,12 @@ begin
   FCurrentSide := ASource.FCurrentSide;
   FGameResult := ASource.FGameResult;
   FLastError := ASource.FLastError;
-  FLogLines.Assign(ASource.FLogLines);
+  if (FLogRevision <> ASource.FLogRevision) or
+    (FLogLines.Count <> ASource.FLogLines.Count) then
+  begin
+    FLogLines.Assign(ASource.FLogLines);
+    FLogRevision := ASource.FLogRevision;
+  end;
   FMoveAnnotationsText := ASource.FMoveAnnotationsText;
   FMovesPlayedText := ASource.FMovesPlayedText;
   FPlyCount := ASource.FPlyCount;
@@ -233,8 +247,11 @@ begin
   FGameResult := '*';
   FLastError := AReason;
   if Trim(AReason) <> '' then
+  begin
     FLogLines.Add(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
       ' [gui] stopped; reason=' + Trim(AReason));
+    Inc(FLogRevision);
+  end;
 end;
 
 constructor TGameRunnerThread.Create(const ASetup: TGameSetup; AGameId: Integer;
@@ -306,25 +323,21 @@ begin
   case RunnerCommand.CommandKind of
     grcStop:
       RequestStopFromRunner('command');
-    grcSetPaused:
-      begin
-        if FPaused <> RunnerCommand.BoolValue then
-        begin
-          FPaused := RunnerCommand.BoolValue;
-          if FPaused then
-            AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
-              ' [runner] command; kind=pause')
-          else
-            AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
-              ' [runner] command; kind=resume');
-        end;
-      end;
     grcSetShowStdout:
       begin
         FShowStdout := RunnerCommand.BoolValue;
         AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
           ' [runner] command; kind=set-show-stdout; value=' +
           BoolToStr(FShowStdout, True));
+      end;
+    grcGuiLog:
+      begin
+        if RunnerCommand.TextValue <> '' then
+        begin
+          AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+            ' [gui] ' + RunnerCommand.TextValue);
+          PublishSnapshot;
+        end;
       end;
     grcHumanMove:
       begin
@@ -344,6 +357,10 @@ begin
         FHumanTurnStartTick := 0;
         AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
           ' [runner] command; kind=human-move; move=' + RunnerCommand.TextValue);
+        if (FOrchestrator.State = gosRunning) and
+          (CurrentPlayerKind = pkHuman) then
+          FHumanTurnStartTick := GetTickCount64;
+        PublishSnapshot;
       end;
   end;
 end;
@@ -367,6 +384,8 @@ begin
   FLogLock.Acquire;
   try
     FGameLog.Add(AMessage);
+    TrimGameLogLocked;
+    Inc(FLogRevision);
   finally
     FLogLock.Release;
   end;
@@ -379,9 +398,20 @@ begin
   FLogLock.Acquire;
   try
     FGameLog.AddStrings(ALines);
+    if ALines.Count > 0 then
+    begin
+      TrimGameLogLocked;
+      Inc(FLogRevision);
+    end;
   finally
     FLogLock.Release;
   end;
+end;
+
+procedure TGameRunnerThread.TrimGameLogLocked;
+begin
+  while FGameLog.Count > RunnerMaxLogLines do
+    FGameLog.Delete(0);
 end;
 
 procedure TGameRunnerThread.PostCommand(ACommand: TObject);
@@ -436,14 +466,14 @@ begin
   PostCommand(TGameRunnerCommand.Create(grcStop));
 end;
 
+procedure TGameRunnerThread.PostGuiLog(const AMessage: string);
+begin
+  PostCommand(TGameRunnerCommand.CreateText(grcGuiLog, AMessage));
+end;
+
 procedure TGameRunnerThread.PostHumanMove(const AMove: string);
 begin
   PostCommand(TGameRunnerCommand.CreateText(grcHumanMove, AMove));
-end;
-
-procedure TGameRunnerThread.PostPause(AValue: Boolean);
-begin
-  PostCommand(TGameRunnerCommand.Create(grcSetPaused, AValue));
 end;
 
 procedure TGameRunnerThread.PostShowStdout(AValue: Boolean);
@@ -525,6 +555,8 @@ end;
 
 function TGameRunnerThread.CreateSnapshot: TGameRunnerSnapshot;
 var
+  LElapsedSeconds: Double;
+  LNowTick: QWord;
   LPvDepth: string;
   LPvScore: string;
   LPvTimeText: string;
@@ -544,6 +576,7 @@ begin
     FLogLock.Acquire;
     try
       Result.FLogLines.Assign(FGameLog);
+      Result.FLogRevision := FLogRevision;
     finally
       FLogLock.Release;
     end;
@@ -558,6 +591,7 @@ begin
   FLogLock.Acquire;
   try
     Result.FLogLines.Assign(FGameLog);
+    Result.FLogRevision := FLogRevision;
   finally
     FLogLock.Release;
   end;
@@ -570,6 +604,28 @@ begin
   Result.FBlackRemainingSeconds := FOrchestrator.RemainingSeconds[dsBlack];
   Result.FWhiteUsedSeconds := FOrchestrator.UsedSeconds[dsWhite];
   Result.FBlackUsedSeconds := FOrchestrator.UsedSeconds[dsBlack];
+  if (Result.FState = gosRunning) and
+    (FHumanTurnStartTick > 0) and (CurrentPlayerKind = pkHuman) then
+  begin
+    LNowTick := GetTickCount64;
+    LElapsedSeconds := (LNowTick - FHumanTurnStartTick) / 1000;
+    if Result.FCurrentSide = dsWhite then
+    begin
+      Result.FWhiteUsedSeconds := Result.FWhiteUsedSeconds + LElapsedSeconds;
+      Result.FWhiteRemainingSeconds := Result.FWhiteRemainingSeconds -
+        LElapsedSeconds;
+      if Result.FWhiteRemainingSeconds < 0 then
+        Result.FWhiteRemainingSeconds := 0;
+    end
+    else
+    begin
+      Result.FBlackUsedSeconds := Result.FBlackUsedSeconds + LElapsedSeconds;
+      Result.FBlackRemainingSeconds := Result.FBlackRemainingSeconds -
+        LElapsedSeconds;
+      if Result.FBlackRemainingSeconds < 0 then
+        Result.FBlackRemainingSeconds := 0;
+    end;
+  end;
   Result.FWhitePlayerName := PlayerDisplayName(FSetup.WhitePlayer,
     FWhiteEngine);
   Result.FBlackPlayerName := PlayerDisplayName(FSetup.BlackPlayer,
@@ -623,6 +679,19 @@ begin
   end;
 end;
 
+procedure TGameRunnerThread.PublishSnapshotIfDue;
+var
+  LNowTick: QWord;
+begin
+  LNowTick := GetTickCount64;
+  if (FLastLogSnapshotTick = 0) or
+    (LNowTick - FLastLogSnapshotTick >= RunnerLogSnapshotIntervalMs) then
+  begin
+    FLastLogSnapshotTick := LNowTick;
+    PublishSnapshot;
+  end;
+end;
+
 procedure TGameRunnerThread.PublishFinished;
 begin
   if Assigned(FOnFinished) then
@@ -634,7 +703,7 @@ begin
   if (not FShowStdout) and (Pos('stdout;', LowerCase(AMessage)) > 0) then
     Exit;
   AddGameLog(AMessage);
-  PublishSnapshot;
+  PublishSnapshotIfDue;
 end;
 
 procedure TGameRunnerThread.Execute;
@@ -656,25 +725,6 @@ begin
         DrainCommands;
         if Terminated then
           Break;
-
-        if FPaused then
-        begin
-          AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
-            ' [runner] paused');
-          PublishSnapshot;
-          while (not Terminated) and (FOrchestrator.State = gosRunning) and FPaused do
-          begin
-            DrainCommands;
-            Sleep(100);
-          end;
-          if (not Terminated) and (FOrchestrator.State = gosRunning) then
-          begin
-            AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
-              ' [runner] resumed');
-            PublishSnapshot;
-          end;
-          Continue;
-        end;
 
         if CurrentPlayerKind = pkRegistered then
         begin
@@ -699,6 +749,7 @@ begin
             if (FOrchestrator.State <> gosRunning) or
               (CurrentPlayerKind <> pkHuman) then
               Break;
+            PublishSnapshotIfDue;
             Sleep(100);
           end;
         end;

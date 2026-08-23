@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Controls, ExtCtrls, Forms, StdCtrls, SysUtils,
-  uEngineRegistry, uGameOrchestrator;
+  uEngineRegistry, uGameOrchestrator, uPreferences;
 
 type
   TPlayerKind = (pkHuman, pkRegistered);
@@ -26,6 +26,7 @@ type
   private
     FBlackPlayerCombo: TComboBox;
     FBusyEngineKeys: TStringList;
+    FDefaultTimeControl: TTimeControl;
     FIncrementEdit: TEdit;
     FIncrementModeCombo: TComboBox;
     FMovesEdit: TEdit;
@@ -56,6 +57,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    procedure ApplyPreferences(const APreferences: TGuiPreferences);
     procedure SetBusyEngineKeys(AKeys: TStrings);
     property OnAccepted: TGameSetupAcceptedEvent read FOnAccepted write FOnAccepted;
   end;
@@ -80,6 +82,7 @@ begin
   FBusyEngineKeys := TStringList.Create;
   FBusyEngineKeys.Sorted := True;
   FBusyEngineKeys.Duplicates := dupIgnore;
+  FDefaultTimeControl := DefaultTimeControl;
   FRegisteredEngines := TExternalEngineList.Create;
   LoadExternalEngines(EnginesJsonFileName, FRegisteredEngines);
 
@@ -108,15 +111,17 @@ begin
   AddLabelledCombo(LContentPanel, 'Black player', FBlackPlayerCombo, LTop);
 
   FMovesEdit := TEdit.Create(Self);
-  FMovesEdit.Text := '75';
+  FMovesEdit.Text := IntToStr(FDefaultTimeControl.MovesPerPeriod);
   AddLabelledEdit(LContentPanel, 'Moves per period', FMovesEdit, LTop);
 
   FMinutesEdit := TEdit.Create(Self);
-  FMinutesEdit.Text := '5';
+  FMinutesEdit.Text := FormatFloat('0.###',
+    FDefaultTimeControl.MinutesPerPeriod);
   AddLabelledEdit(LContentPanel, 'Minutes per period', FMinutesEdit, LTop);
 
   FIncrementEdit := TEdit.Create(Self);
-  FIncrementEdit.Text := '0';
+  FIncrementEdit.Text := FormatFloat('0.###',
+    FDefaultTimeControl.IncrementSeconds);
   AddLabelledEdit(LContentPanel, 'Increment seconds', FIncrementEdit, LTop);
 
   FIncrementModeCombo := TComboBox.Create(Self);
@@ -153,6 +158,19 @@ begin
   FBusyEngineKeys.Free;
   FRegisteredEngines.Free;
   inherited Destroy;
+end;
+
+procedure TGameSetupForm.ApplyPreferences(const APreferences: TGuiPreferences);
+begin
+  FDefaultTimeControl := DefaultTimeControl;
+  if FMinutesEdit <> nil then
+    FMinutesEdit.Text := FormatFloat('0.###',
+      FDefaultTimeControl.MinutesPerPeriod);
+  if FMovesEdit <> nil then
+    FMovesEdit.Text := IntToStr(FDefaultTimeControl.MovesPerPeriod);
+  if FIncrementEdit <> nil then
+    FIncrementEdit.Text := FormatFloat('0.###',
+      FDefaultTimeControl.IncrementSeconds);
 end;
 
 procedure TGameSetupForm.SetBusyEngineKeys(AKeys: TStrings);
@@ -334,9 +352,12 @@ begin
   LSetup.BlackPlayer := SelectedPlayer(FBlackPlayerCombo);
   LSetup.WhiteEngine := CopySelectedEngine(FWhitePlayerCombo);
   LSetup.BlackEngine := CopySelectedEngine(FBlackPlayerCombo);
-  LSetup.TimeControl.MovesPerPeriod := StrToIntDef(Trim(FMovesEdit.Text), 75);
-  LSetup.TimeControl.MinutesPerPeriod := StrToFloatDef(Trim(FMinutesEdit.Text), 5);
-  LSetup.TimeControl.IncrementSeconds := StrToFloatDef(Trim(FIncrementEdit.Text), 0);
+  LSetup.TimeControl.MovesPerPeriod := StrToIntDef(Trim(FMovesEdit.Text),
+    FDefaultTimeControl.MovesPerPeriod);
+  LSetup.TimeControl.MinutesPerPeriod := StrToFloatDef(Trim(FMinutesEdit.Text),
+    FDefaultTimeControl.MinutesPerPeriod);
+  LSetup.TimeControl.IncrementSeconds := StrToFloatDef(Trim(FIncrementEdit.Text),
+    FDefaultTimeControl.IncrementSeconds);
   if FIncrementModeCombo.ItemIndex = 1 then
     LSetup.TimeControl.IncrementMode := cimAfterMoveLimit
   else
