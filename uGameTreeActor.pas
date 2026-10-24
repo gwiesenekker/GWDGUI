@@ -131,6 +131,7 @@ type
       var AInvalidateRebuildSignature: Boolean);
     procedure Reject(ACommand: TGameTreeCommand; const AErrorText: string);
     procedure RebuildStoredVariations(ACommand: TGameTreeCommand);
+    procedure MaterializeStoredVariation(AVariationIndex: Integer);
     function StoreMoveVariationFromNode(ACommand: TGameTreeCommand;
       ANode: TGameTreePlyNode; const AMoveText: string;
       out AChanged: Boolean): Boolean;
@@ -874,6 +875,24 @@ begin
   ACommand.ErrorText := AErrorText;
 end;
 
+procedure TGameTreeActor.MaterializeStoredVariation(AVariationIndex: Integer);
+var
+  Line: TGameTreeVariationLine;
+  Moves: TStringList;
+begin
+  Line := FGameTree.VariationLine[AVariationIndex];
+  if Line = nil then
+    Exit;
+  Moves := TStringList.Create;
+  try
+    TextToMoveList(Line.MovesText, Moves);
+    RecordGameTreeVariationLine(FGameTree,
+      GameTreeVariationLineInput(Line, AVariationIndex, Moves, nil));
+  finally
+    Moves.Free;
+  end;
+end;
+
 procedure TGameTreeActor.RebuildStoredVariations(ACommand: TGameTreeCommand);
 var
   I: Integer;
@@ -1167,6 +1186,12 @@ begin
           Changed := Changed or OriginChanged;
         end;
         ACommand.Accepted := True;
+        if Changed or
+          (FGameTree.FindVariationNode(ACommand.VariationIndex, 1) = nil) then
+        begin
+          MaterializeStoredVariation(ACommand.VariationIndex);
+          Changed := True;
+        end;
         if Changed then
           AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
       end;

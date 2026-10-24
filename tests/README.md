@@ -21,6 +21,7 @@ Current checks:
 - `pdn_regression_check.pas`
 - `game_tree_pdn_filter_check.pas`
 - `game_tree_actor_check.pas`
+- `game_preservation_check.pas` (variation storage and game-content preservation)
 - `source_audit_check.sh`
 
 When `lazbuild` is installed, the sweep also builds and runs

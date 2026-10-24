@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Materialize imported variations when they are stored (G1)
+
+- Store a variation's text and create its move nodes in the same actor command,
+  so imported lines are immediately visible to rendering and PDN export.
+- Keep repeated storage of an unchanged, materialized line a no-op.
+- Add a preservation regression program covering the full variation, its
+  annotation, immediate export and unchanged-command revision handling.
+- Validation: all nine regression programs and the source audit pass.
+
 ### 2026-10-24 — Wait for runner completion before editing a stopped game (M3)
 
 - Gate mainline edits and variation exploration on the runner lifecycle,
