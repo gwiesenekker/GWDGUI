@@ -198,6 +198,62 @@ begin
   end;
 end;
 
+procedure CheckFrozenPvSurvivesRefresh(AForm: TMainForm);
+var
+  Actor: TGameTreeActor;
+  Command: TGameTreeCommand;
+  Memo, MovesMemo: TMemo;
+  MiniBoard: TDraughtsBoardControl;
+  Expected: TDraughtsBoard;
+  Key: Word;
+  FrozenText: string;
+begin
+  AForm.LoadStandaloneFen(DefaultStartingFEN);
+  Actor := TGameTreeActor.Create(AForm.ActiveGameTree, False);
+  Expected := TDraughtsBoard.Create;
+  try
+    Command := Actor.CreateRecordEnginePVCommand(AForm.ActiveGameTree.Root.NodeId,
+      '0.25', '32-28 18-23 37-32');
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'PV refresh fixture must be accepted');
+    finally
+      Command.Free;
+    end;
+    MovesMemo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Key := VK_LEFT;
+    MovesMemo.OnKeyDown(MovesMemo, Key, []);
+    Memo := TMemo(AForm.FindComponent('EnginePvMemo'));
+    MiniBoard := TDraughtsBoardControl(AForm.FindComponent('EnginePvBoard'));
+    Check((Memo <> nil) and (MiniBoard <> nil), 'named PV controls');
+    Memo.Enabled := False; // Invoke events directly without focusing the hidden form.
+    Memo.SelStart := Pos('18-23', Memo.Text) - 1;
+    Check(Memo.SelStart >= 0, 'PV fixture must be visible');
+    Memo.OnClick(Memo);
+    Expected.SetBeginPosition;
+    Expected.PlayMove('32-28');
+    Expected.PlayMove('18-23');
+    Check(MiniBoard.Board.CurrentFEN = Expected.CurrentFEN,
+      'PV click must show the selected PV position');
+    FrozenText := Memo.Text;
+    // Selecting the standalone game runs the same full refresh as a game update.
+    with TListBox(AForm.FindComponent('GameHistoryList')) do
+      OnClick(nil);
+    Check(MiniBoard.Board.CurrentFEN = Expected.CurrentFEN,
+      'main display refresh must not overwrite the frozen PV board');
+    Check(Memo.Text = FrozenText, 'frozen PV text must remain paired with its board');
+    Key := VK_ESCAPE;
+    Memo.OnKeyDown(Memo, Key, []);
+    Expected.PlayMove('37-32');
+    Check(MiniBoard.Board.CurrentFEN = Expected.CurrentFEN,
+      'Escape must return the PV board to the latest complete line');
+    Memo.Enabled := True;
+  finally
+    Expected.Free;
+    Actor.Free;
+  end;
+end;
+
 procedure CheckExportDoesNotMutate(AForm: TMainForm);
 var
   Game: TRunningGame;
@@ -282,6 +338,7 @@ begin
     try
       Check(not GameTreeHasContent(Form.ActiveGameTree),
         'untouched initial board should not prompt to save');
+      CheckFrozenPvSurvivesRefresh(Form);
       CheckNestedGuiNavigation(Form);
       CheckExportDoesNotMutate(Form);
       Game.EventName := 'Standalone test';

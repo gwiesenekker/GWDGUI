@@ -3,6 +3,14 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Preserve the frozen PV board during game refreshes (A3)
+
+- Let the PV browser exclusively update its mini board and popout. A main-game
+  refresh no longer copies the game position over a selected PV position.
+- Regress a PV selection followed by a full main-form refresh: the board and
+  highlighted line remain paired, and Escape resumes the latest complete PV.
+- Validation: the hidden GTK main-form preservation regression passes.
+
 ### 2026-10-24 — Keep tournament games and standings consistent (T2)
 
 - Store played PDN, original result, explicit manual override and attempt history

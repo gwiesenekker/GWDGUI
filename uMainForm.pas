@@ -696,7 +696,6 @@ type
     procedure RefreshDisplayedGameTreeViews(AGameTree: TGameTree;
       AForce: Boolean);
     procedure UpdateGameTreeView(AGameTree: TGameTree);
-    procedure UpdateMiniBoardFromBoard(ABoard: TDraughtsBoard);
     procedure UpdateMctsStatsFromLog(const AMessage: string);
     procedure TournamentClick(Sender: TObject);
   public
@@ -1788,6 +1787,7 @@ begin
   LPvPopup.Items.Add(LMenuItem);
 
   FMiniBoardControl := TDraughtsBoardControl.Create(Self);
+  FMiniBoardControl.Name := 'EnginePvBoard';
   FMiniBoardControl.Parent := LPvBoardPanel;
   FMiniBoardControl.Align := alClient;
   FMiniBoardControl.Board := FMiniBoard;
@@ -1843,6 +1843,7 @@ begin
     LSidePanel.Constraints.MinWidth := LPvSidePanelWidth;
 
   FPvMemo := TMemo.Create(Self);
+  FPvMemo.Name := 'EnginePvMemo';
   FPvMemo.Parent := LPvTextPanel;
   FPvMemo.Align := alClient;
   FPvMemo.ParentFont := True;
@@ -7487,7 +7488,6 @@ begin
   UpdateDisplayedPvCacheFromTree(AGameTree);
 
   UpdateBoardFromBrowseState(AGameTree);
-  UpdateMiniBoardFromBoard(FBoard);
   RefreshDisplayedGameTreeViews(AGameTree, AForceViews);
   UpdateBoardInfo;
   if LGame <> nil then
@@ -7760,22 +7760,5 @@ begin
     FGameLogMemo.SelStart := Length(FGameLogMemo.Text);
 end;
 
-procedure TMainForm.UpdateMiniBoardFromBoard(ABoard: TDraughtsBoard);
-begin
-  if (FMiniBoard = nil) or (ABoard = nil) then
-    Exit;
-
-  FMiniBoard.AssignFrom(ABoard);
-  if FMiniBoardControl <> nil then
-    FMiniBoardControl.Invalidate;
-
-  if (FMiniBoardForm <> nil) and FMiniBoardForm.Visible and
-    (FPopoutBoard <> nil) then
-  begin
-    FPopoutBoard.AssignFrom(FMiniBoard);
-    if FPopoutBoardControl <> nil then
-      FPopoutBoardControl.Invalidate;
-  end;
-end;
 
 end.
