@@ -6,6 +6,7 @@ OUT_DIR="${TMPDIR:-/tmp}/gwdgui-regression-checks"
 CHECKS=(
   analyzer_runner_shutdown_check.pas
   analyzer_position_check.pas
+  hub_search_fence_check.pas
   board_regression_check.pas
   pdn_regression_check.pas
   game_tree_pdn_filter_check.pas

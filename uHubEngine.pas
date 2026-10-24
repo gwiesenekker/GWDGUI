@@ -21,6 +21,7 @@ type
     FProcess: TPlatformProcess;
     FReceivedLines: TStringList;
     FStopping: Boolean;
+    FStopFailed: Boolean;
     FWorker: TThread;
     FWorkerQueue: TThreadMessageQueue;
     FWorkerThreadId: TThreadID;
@@ -48,6 +49,7 @@ type
     procedure QueueProcedureCommand(ACommand: TObject);
     function QueueStringCommand(ACommand: TObject): string;
     procedure SendHubParams;
+    procedure RequireSearchSynchronization;
     procedure SendLine(const ALine: string);
     function TakeReceivedLine(const APrefix: string; out ALine: string): Boolean;
     function WaitForDoneMove(ATimeoutMs: Integer; out AMove: string): Boolean;
@@ -84,6 +86,7 @@ implementation
 const
   HubWorkerWaitPollMs = 1000;
   HubWorkerWaitLogMs = 10000;
+  HubSearchStopTimeoutMs = 10000;
 
 type
   THubWorkerCommandKind = (
@@ -546,12 +549,18 @@ begin
       inherited BeginGame(HubCommand.StartingFEN, HubCommand.Side,
         HubCommand.GameMinutes, HubCommand.GameMoves);
     hwcSetGamePosition:
-      inherited SetGamePosition(HubCommand.StartingFEN, HubCommand.Moves);
+      begin
+        RequireSearchSynchronization;
+        inherited SetGamePosition(HubCommand.StartingFEN, HubCommand.Moves);
+      end;
     hwcSetClockInfo:
       DoSetClockInfo(HubCommand.MovesRemaining, HubCommand.RemainingSeconds,
         HubCommand.TotalUsedSeconds);
     hwcStartThinking:
-      HubCommand.StringResult := inherited StartThinking;
+      begin
+        RequireSearchSynchronization;
+        HubCommand.StringResult := inherited StartThinking;
+      end;
     hwcStartAnalyzing:
       DoStartAnalyzing;
     hwcStartMcts:
@@ -737,7 +746,7 @@ var
   ExtraDoneCount: Integer;
   Line: string;
 begin
-  if WaitForLine('done', 2000, Line) then
+  if WaitForLine('done', HubSearchStopTimeoutMs, Line) then
   begin
     Log('search stop acknowledged; line=' + Line);
     ExtraDoneCount := DrainDoneLinesAfterStop(100);
@@ -745,8 +754,15 @@ begin
       Log('discarded post-stop done lines; count=' + IntToStr(ExtraDoneCount));
   end
   else
-    Log('search stop acknowledgement not received; reason=' +
-      FLastWaitFailure);
+    raise EInvalidOperation.Create(
+      'search stop acknowledgement not received; reason=' + FLastWaitFailure);
+end;
+
+procedure THubEngine.RequireSearchSynchronization;
+begin
+  if FStopFailed then
+    raise EInvalidOperation.Create(
+      'Hub search is not synchronized; relaunch the engine before continuing');
 end;
 
 function THubEngine.DoLaunchAndInit: Boolean;
@@ -792,6 +808,7 @@ begin
     Result := WaitForLine('ready', 5000, Line);
     if Result then
     begin
+      FStopFailed := False;
       Log('launch check passed; ready received');
       ChangeState(esReady, 'hub ready');
     end
@@ -948,6 +965,7 @@ procedure THubEngine.DoStopSearch;
 var
   SearchWasActive: Boolean;
 begin
+  RequireSearchSynchronization;
   SearchWasActive := CurrentState in [esThinking, esWaitingForDone, esStopping];
   try
     SendLine('stop');
@@ -957,7 +975,12 @@ begin
       WaitForSearchStopped;
   except
     on E: Exception do
+    begin
+      FStopFailed := True;
+      ChangeState(esError, 'search stop failed; message=' + E.Message);
       Log('stop search command failed; message=' + E.Message);
+      raise;
+    end;
   end;
   if SearchWasActive and (CurrentState <> esError) then
     ChangeState(esReady, 'search stopped');
@@ -965,6 +988,7 @@ end;
 
 procedure THubEngine.DoStartAnalyzing;
 begin
+  RequireSearchSynchronization;
   DoStopSearch;
   SendLine(BuildHubPositionCommand);
   if FLevelCommand <> '' then
@@ -978,6 +1002,7 @@ end;
 
 procedure THubEngine.DoStartMcts;
 begin
+  RequireSearchSynchronization;
   DoStopSearch;
   SendLine(BuildHubPositionCommand);
   SendLine('level time=1000');

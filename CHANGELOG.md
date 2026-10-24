@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Fence stopped Hub searches before reuse (D1)
+
+- Wait up to ten seconds for the stopped search's `done` response instead of
+  treating an unacknowledged stop as success after two seconds.
+- On failure, report an error and reject new positions, analysis, MCTS and
+  thinking searches until the engine is relaunched. A late response cannot
+  become a move for a different position.
+- Add a fake-engine regression test for a slow acknowledgement and a missing
+  acknowledgement, checking both the next move and rejection of unsafe reuse.
+- Validation: all seven regression programs and the source audit pass.
+
 ### 2026-10-24 — Keep analysis attached to its searched position (A1)
 
 - Stop the previous search and clear its engine analysis by setting the new

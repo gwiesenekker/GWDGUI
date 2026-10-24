@@ -16,6 +16,8 @@ Current checks:
 - `analyzer_runner_shutdown_check.pas`
 - `analyzer_position_check.pas` (self-contained fake Hub engine; analysis,
   MCTS, terminal positions and one-shot searches while changing positions)
+- `hub_search_fence_check.pas` (slow/missing stop acknowledgements and safe
+  rejection of engine reuse after synchronization fails)
 - `pdn_regression_check.pas`
 - `game_tree_pdn_filter_check.pas`
 - `game_tree_actor_check.pas`
