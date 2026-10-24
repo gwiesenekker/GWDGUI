@@ -3,7 +3,7 @@ program game_tree_topology_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uDraughtsBoard, uGameTree, uGameTreeActor,
-  uGameTreeBuilder, uGameOrchestrator;
+  uGameTreeBuilder, uGameTreePdn, uGameOrchestrator;
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
@@ -250,9 +250,47 @@ begin
   end;
 end;
 
+procedure CheckScoresDoNotCreepForward;
+var
+  Actor: TGameTreeActor;
+  Lines, Moves: TStringList;
+  I: Integer;
+begin
+  Actor := TGameTreeActor.Create;
+  Lines := TStringList.Create;
+  Moves := TStringList.Create;
+  try
+    Rebuild(Actor, 'scores', '', '32-28 18-23 37-32 12-18');
+    Execute(Actor, Actor.CreateRecordAnnotatorPVCommand(
+      Actor.GameTree.MainlineNode[1].NodeId, '0.50', '18-23'));
+    Actor.GameTree.CopyMainlineMovesTo(Moves);
+    for I := 1 to 20 do
+    begin
+      Lines.Text := GameTreeScoreAnnotationsText(Actor.GameTree);
+      Check(Lines.Count = 4, 'score projection must retain empty ply slots');
+      Check((Lines[1] = '') and (Lines[2] = '') and (Lines[3] = ''),
+        'a missing score must not inherit the preceding position score');
+      Execute(Actor, Actor.CreateRebuildFromInputsCommand(
+        GameTreeHeaderInput('scores', '', '', '', '*', '', False,
+          DefaultTimeControl),
+        GameTreeMainlineInput(Moves, Lines, False, 0, 0, 0, 0),
+        GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', '')));
+      Check(Actor.GameTree.MainlineNode[1].AnnotatorScore = '0.50',
+        'refresh must preserve the actual annotated position');
+      Check(Actor.GameTree.MainlineNode[2].AnnotatorScore = '',
+        'refresh must not move a score to another position');
+    end;
+  finally
+    Moves.Free;
+    Lines.Free;
+    Actor.Free;
+  end;
+end;
+
 begin
   CheckMainlineAndReplay;
   CheckSharedBranches;
   CheckMetadataBelongsToNodes;
+  CheckScoresDoNotCreepForward;
   WriteLn('OK');
 end.

@@ -5244,7 +5244,6 @@ var
   Command: TGameTreeCommand;
   LErrorText: string;
   LAnnotations: TStringList;
-  LExistingAnnotations: TStringList;
   LGameTree: TGameTree;
   LInput: TRunningSnapshotTreeInput;
   LMoves: TStringList;
@@ -5275,26 +5274,9 @@ var
   end;
 
   function SnapshotExtendsCurrentTree: Boolean;
-  var
-    I: Integer;
   begin
-    Result := False;
-    if LGameTree.MainlineCount >= LMoves.Count then
-      Exit;
-    if not SnapshotMovesMatchTreePrefix(LGameTree.MainlineCount) then
-      Exit;
-
-    LExistingAnnotations := TStringList.Create;
-    try
-      LExistingAnnotations.Text := GameTreeScoreAnnotationsText(LGameTree);
-      for I := 0 to LGameTree.MainlineCount - 1 do
-        if Trim(LineOrEmpty(LExistingAnnotations, I)) <>
-          Trim(LineOrEmpty(LAnnotations, I)) then
-          Exit;
-    finally
-      LExistingAnnotations.Free;
-    end;
-    Result := True;
+    Result := (LGameTree.MainlineCount < LMoves.Count) and
+      SnapshotMovesMatchTreePrefix(LGameTree.MainlineCount);
   end;
 
   function SnapshotMovesMatchCurrentTree: Boolean;
@@ -5303,32 +5285,6 @@ var
     if LGameTree.MainlineCount <> LMoves.Count then
       Exit;
     Result := SnapshotMovesMatchTreePrefix(LGameTree.MainlineCount);
-  end;
-
-  procedure PreserveExistingSnapshotAnnotations;
-  var
-    I: Integer;
-    LLimit: Integer;
-  begin
-    LExistingAnnotations := TStringList.Create;
-    try
-      LExistingAnnotations.Text := GameTreeScoreAnnotationsText(LGameTree);
-      LLimit := LGameTree.MainlineCount;
-      if LMoves.Count < LLimit then
-        LLimit := LMoves.Count;
-      for I := 0 to LLimit - 1 do
-        if (Trim(LineOrEmpty(LAnnotations, I)) = '') and
-          (Trim(LineOrEmpty(LExistingAnnotations, I)) <> '') and
-          SameText(NormalizeMoveNotation(LGameTree.MainlineNode[I + 1].MoveText),
-            NormalizeMoveNotation(LMoves[I])) then
-        begin
-          while LAnnotations.Count <= I do
-            LAnnotations.Add('');
-          LAnnotations[I] := LExistingAnnotations[I];
-        end;
-    finally
-      LExistingAnnotations.Free;
-    end;
   end;
 
   function TryAppendSnapshotMoves: Boolean;
@@ -5413,7 +5369,6 @@ begin
   try
     TextToMoveList(LInput.MovesText, LMoves);
     LAnnotations.Text := LInput.AnnotationsText;
-    PreserveExistingSnapshotAnnotations;
 
     if TryAppendSnapshotMoves then
     begin
@@ -5421,9 +5376,7 @@ begin
       Exit;
     end;
 
-    if SnapshotMovesMatchCurrentTree and
-      (Trim(GameTreeScoreAnnotationsText(LGameTree)) =
-        Trim(LAnnotations.Text)) then
+    if SnapshotMovesMatchCurrentTree then
     begin
       Actor := ActorForGameTree(LGameTree);
       if Actor <> nil then

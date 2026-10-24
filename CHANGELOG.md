@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Stop score propagation during runner synchronization (G8)
+
+- Report only the score stored on each node; empty positions no longer inherit
+  an annotator score from the preceding move.
+- Remove rendered score-text feedback and score-text equality checks from runner
+  synchronization. Match move prefixes directly and preserve existing node data
+  when appending moves or updating a matching snapshot's header and clock.
+- Regress twenty refresh cycles with a single annotated position and verify all
+  later score slots remain empty.
+- Validation: ten headless regression programs, source audit and GTK check pass.
+
 ### 2026-10-24 — Keep analysis and historical clocks on their nodes (G3)
 
 - Remove the per-ply and per-variation-index analysis and clock side tables.

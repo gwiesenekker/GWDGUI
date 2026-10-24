@@ -720,7 +720,6 @@ var
   LAnnotatorScore: string;
   LLine: string;
   LNode: TGameTreePlyNode;
-  LPreviousNode: TGameTreePlyNode;
   Lines: TStringList;
 begin
   Result := '';
@@ -733,15 +732,7 @@ begin
     while AGameTree.MainlineNode[I] <> nil do
     begin
       LNode := AGameTree.MainlineNode[I];
-      if I = 1 then
-        LPreviousNode := AGameTree.Root
-      else
-        LPreviousNode := AGameTree.MainlineNode[I - 1];
-
       LAnnotatorScore := LNode.AnnotatorScore;
-      if (Trim(LAnnotatorScore) = '') and (LPreviousNode <> nil) then
-        LAnnotatorScore := LPreviousNode.AnnotatorScore;
-
       LLine := ScoreAnnotationLine(LNode.EngineScore, LAnnotatorScore);
       Lines.Add(LLine);
       Inc(I);
