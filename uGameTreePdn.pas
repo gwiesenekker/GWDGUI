@@ -392,7 +392,8 @@ function RenderVariationLine(ANode, APreviousPosition: TGameTreePlyNode;
 
 function RenderChildVariations(ANode, AContinuation: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions; ACompact: Boolean;
-  var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer): string;
+  var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer;
+  ABasePlyFilter: Integer = -1): string;
 var
   I: Integer;
   LBasePlyNumber: Integer;
@@ -412,6 +413,10 @@ begin
     LChild := ANode.Children[I];
     if (LChild = nil) or (LChild = AContinuation) or
       (Trim(LChild.VariationKey) = '') then
+      Continue;
+    ParseVariationKey(LChild.VariationKey, LBasePlyNumber,
+      LDisplayAfterPly, LVariationIndex, LVariationPlyNumber);
+    if (ABasePlyFilter >= 0) and (LBasePlyNumber <> ABasePlyFilter) then
       Continue;
     if NodeIsAnnotatorAlternative(ANode, LChild) and
       (not AOptions.ShowAnnotatorPVMove) and
@@ -565,8 +570,12 @@ begin
       AddInt(ARenderResult.MoveLengths, Length(LChild.MoveText));
     end;
     Result += LSegment;
+    LNested := RenderChildVariations(LPreviousPosition, nil, AOptions, ACompact,
+      ARenderResult, Length(Result) + 1, I - 1);
+    if LNested <> '' then
+      Result += ' ' + LNested;
     LNested := RenderChildVariations(LChild, nil, AOptions, ACompact,
-      ARenderResult, Length(Result) + 1);
+      ARenderResult, Length(Result) + 1, I - 1);
     if LNested <> '' then
       Result += ' ' + LNested;
     if (not LRootVariationRendered) and (LPreviousPosition = AGameTree.Root) then
@@ -589,6 +598,19 @@ begin
       AOptions.ShowAnnotatorScore);
     AppendAnalysisVariation(LChild, LChild.AutoPlayPV, '', '', True, True,
       False);
+  end;
+
+  if AGameTree.MainlineCount = 0 then
+    LChild := AGameTree.Root
+  else
+    LChild := AGameTree.MainlineNode[AGameTree.MainlineCount];
+  LNested := RenderChildVariations(LChild, nil, AOptions, ACompact,
+    ARenderResult, Length(Result) + 1, AGameTree.MainlineCount);
+  if LNested <> '' then
+  begin
+    if Result <> '' then
+      Result += ' ';
+    Result += LNested;
   end;
 
   if not LRootVariationRendered then

@@ -5,7 +5,7 @@ program game_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameOrchestrator;
+  uGameTreePdn, uGameOrchestrator, uPdn;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -76,6 +76,98 @@ begin
   end;
 end;
 
+function ParseGame(const AText: string): TPdnGame;
+var
+  FileName: string;
+  Lines: TStringList;
+  Games: TList;
+  I: Integer;
+begin
+  FileName := GetTempFileName(GetTempDir, 'gwd');
+  Lines := TStringList.Create;
+  Games := TList.Create;
+  try
+    Lines.Text := AText;
+    Lines.SaveToFile(FileName);
+    LoadPdnGamesFromFile(FileName, Games);
+    Check(Games.Count = 1, 'PDN should contain exactly one game');
+    Result := TPdnGame.Create;
+    Result.AssignFrom(TPdnGame(Games[0]));
+  finally
+    for I := 0 to Games.Count - 1 do
+      TObject(Games[I]).Free;
+    Games.Free;
+    Lines.Free;
+    DeleteFile(FileName);
+  end;
+end;
+
+procedure CheckStandardVariationPlacement;
+var
+  Game: TPdnGame;
+  Lines, Annotations: TStringList;
+  Display, Base: Integer;
+  Moves, AnnotationText, Text: string;
+  Actor: TGameTreeActor;
+begin
+  Lines := TStringList.Create;
+  Annotations := TStringList.Create;
+  Actor := TGameTreeActor.Create;
+  try
+    Game := ParseGame('[Event "standard"]' + LineEnding + LineEnding +
+      '1. 32-28 18-23 (1... 19-23) 2. 37-32 *');
+    try
+      Lines.Text := Game.MoveVariationsText;
+      Annotations.Text := Game.MoveVariationAnnotationsText;
+      Check(DecodePdnVariationLine(Lines[0], Annotations[0], 0,
+        Display, Base, Moves, AnnotationText), 'standard RAV should decode');
+      Check((Display = 2) and (Base = 1),
+        'numbered RAV must branch before the move it replaces');
+    finally
+      Game.Free;
+    end;
+    Game := ParseGame('[Event "unnumbered"]' + LineEnding + LineEnding +
+      '1. 32-28 18-23 (19-23) 2. 37-32 *');
+    try
+      Lines.Text := Game.MoveVariationsText;
+      Annotations.Text := Game.MoveVariationAnnotationsText;
+      DecodePdnVariationLine(Lines[0], Annotations[0], 0,
+        Display, Base, Moves, AnnotationText);
+      Check(Base = 1, 'unnumbered RAV must also replace the preceding move');
+    finally
+      Game.Free;
+    end;
+    Rebuild(Actor, 'placement', '', '32-28 18-23 37-32');
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(1, 1,
+      '19-23', '', gmsHuman));
+    Execute(Actor, Actor.CreateStoreMoveVariationCommand(
+      Actor.GameTree.Root.NodeId, '33-28', gmsHuman));
+    Text := GameTreeToPdnText(Actor.GameTree);
+    Check(Pos('32-28 (1. 33-28)', Text) > 0,
+      'root alternatives must be exported after the first move');
+    Check(Pos('18-23 (1... 19-23)', Text) > 0,
+      'GUI alternatives must be exported after the move they replace');
+    Game := ParseGame(Text);
+    try
+      Lines.Text := Game.MoveVariationsText;
+      Annotations.Text := Game.MoveVariationAnnotationsText;
+      Check(Lines.Count = 2, 'save/load must preserve root and reply alternatives');
+      DecodePdnVariationLine(Lines[0], Annotations[0], 0,
+        Display, Base, Moves, AnnotationText);
+      Check((Base = 0) and (Moves = '33-28'), 'root alternative must stay at root');
+      DecodePdnVariationLine(Lines[1], Annotations[1], 0,
+        Display, Base, Moves, AnnotationText);
+      Check((Base = 1) and (Moves = '19-23'), 'reply alternative must stay a reply');
+    finally
+      Game.Free;
+    end;
+  finally
+    Actor.Free;
+    Annotations.Free;
+    Lines.Free;
+  end;
+end;
+
 procedure CheckVariationsBelongToTheirGame;
 var
   Actor: TGameTreeActor;
@@ -107,5 +199,6 @@ end;
 begin
   CheckStoredVariationsAreExported;
   CheckVariationsBelongToTheirGame;
+  CheckStandardVariationPlacement;
   WriteLn('OK');
 end.

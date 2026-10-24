@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Preserve PDN variation branch positions (P1, root export in G5)
+
+- Keep the base ply inferred from a variation's move number unless explicit
+  legacy metadata overrides it. Unnumbered alternatives replace the preceding
+  move instead of starting after it.
+- Export mainline alternatives after the move they replace, including root
+  alternatives. Retain end-of-line continuations and variations on empty games.
+- Test numbered and unnumbered imports and save/load preservation of root and
+  reply alternatives created through the GUI's actor commands.
+- Validation: all nine regression programs and the source audit pass.
+
 ### 2026-10-24 — Keep variations with their original game (G4)
 
 - Carry stored variations into a rebuild only when the game identity matches.

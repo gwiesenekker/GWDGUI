@@ -639,13 +639,16 @@ var
         LVariationAnnotations, nil, nil, AStartingFEN);
       if LVariationMoves.Count = 0 then
         Exit;
-      LBasePly := InferVariationBasePly(AVariationText, AStartingFEN, LSlot);
+      LBasePly := LSlot - 1;
+      if LBasePly < 0 then
+        LBasePly := 0;
+      LBasePly := InferVariationBasePly(AVariationText, AStartingFEN, LBasePly);
       if LVariationAnnotations.Count > 0 then
       begin
         LVariationAnnotation := Trim(
           LVariationAnnotations[LVariationAnnotations.Count - 1]);
         LBasePly := StrToIntDef(ExtractAnnotationValue(LVariationAnnotation,
-          'base_ply'), LSlot);
+          'base_ply'), LBasePly);
       end
       else
         LVariationAnnotation := '';
