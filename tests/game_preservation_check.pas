@@ -4,7 +4,7 @@ program game_preservation_check;
 
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Classes, SysUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
+  Classes, SysUtils, StrUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
   uGameTreePdn, uGameOrchestrator, uPdn;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
@@ -362,7 +362,25 @@ begin
         'nested commentary must stay on the nested move');
       Check(Actor.GameTree.FindVariationNode(2, 3).CommentText = 'Deeper choice',
         'deeper commentary must stay on its own move');
+      Check(Actor.GameTree.FindVariationNode(0, 1) =
+        Actor.GameTree.FindVariationNode(1, 1),
+        'outer prefix must be one shared position');
+      Check(Actor.GameTree.FindVariationNode(1, 2) =
+        Actor.GameTree.FindVariationNode(2, 2),
+        'deeper alternatives must share the actual parent node');
+      Check(Actor.GameTree.FindVariationNode(1, 2).Parent =
+        Actor.GameTree.FindVariationNode(0, 1), 'nested choice parent');
+      Check(Actor.GameTree.FindVariationNode(2, 3).Parent =
+        Actor.GameTree.FindVariationNode(1, 2), 'deeper choice parent');
+      Check(Actor.GameTree.FindVariationNode(0, 1).ChildCount = 2,
+        'outer position must own both choices');
       Text := GameTreeToPdnText(Actor.GameTree);
+      Check(Pos('37-32 {Original continuation} (2. 38-32', Text) > 0,
+        'nested choice must export inside the outer branch');
+      Check(Pos('14-19 {Nested tail} (2... 20-24', Text) > 0,
+        'deeper choice must export inside the nested branch');
+      Check(Pos('Outer reply', Text) = RPos('Outer reply', Text),
+        'shared prefix must export once');
       Reloaded := ParseGame(Text);
       Game.Free;
       Game := Reloaded;

@@ -96,7 +96,78 @@ begin
   end;
 end;
 
+procedure CheckSharedBranches;
+var
+  Actor: TGameTreeActor;
+  Tree: TGameTree;
+  ParentId, NestedId: Int64;
+  Moves: TStringList;
+  Changed: Boolean;
+  Actual, Expected: TDraughtsBoard;
+  I: Integer;
+begin
+  Actor := TGameTreeActor.Create;
+  Moves := TStringList.Create;
+  Actual := TDraughtsBoard.Create;
+  Expected := TDraughtsBoard.Create;
+  try
+    Rebuild(Actor, 'shared', '', '32-28 18-23 37-32');
+    Tree := Actor.GameTree;
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+      '20-24 37-32 14-20', '', gmsHuman));
+    ParentId := Tree.FindVariationNode(0, 1).NodeId;
+    Execute(Actor, Actor.CreateRecordEnginePVCommand(ParentId,
+      '0.25', '37-32', '10', '0.2'));
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+      '20-24 38-32 14-20', '', gmsHuman));
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+      '20-24 38-32 18-22', '', gmsHuman));
+    Check(Tree.FindVariationNode(0, 1) = Tree.FindVariationNode(1, 1),
+      'shared prefix must have a single node');
+    Check(Tree.FindVariationNode(1, 2) = Tree.FindVariationNode(2, 2),
+      'nested prefix must have a single node');
+    Check(Tree.FindVariationNode(0, 1).EnginePV = '37-32',
+      'materializing another path must preserve shared analysis');
+    Check(Tree.FindVariationNode(0, 1).ChildCount = 2, 'branch count');
+    NestedId := Tree.FindVariationNode(2, 2).NodeId;
+    Check(Tree.TryBuildBoardAtNode(Tree.FindVariationNode(2, 3), Actual),
+      'nested replay must succeed');
+    Check(Tree.CopyNodeMovesTo(Tree.FindVariationNode(2, 3), Moves),
+      'nested path extraction');
+    Expected.SetBeginPosition;
+    for I := 0 to Moves.Count - 1 do
+      Expected.PlayMove(Moves[I]);
+    Check(Actual.CurrentFEN = Expected.CurrentFEN, 'nested replay path');
+    Rebuild(Actor, 'shared', '', '32-28 18-23 37-32');
+    Check(Tree.FindVariationNode(0, 1).NodeId = ParentId,
+      'refresh must retain shared identity');
+    Check(Tree.FindVariationNode(2, 2).NodeId = NestedId,
+      'refresh must retain nested identity');
+    Check(Tree.FindVariationNode(1, 1).EnginePV = '37-32',
+      'refresh must retain shared analysis');
+    Tree.StoreVariationLineAtIndex(0, 2, 1, '20-24', '', Changed);
+    TextToMoveList('20-24', Moves);
+    RecordGameTreeVariationLine(Tree, GameTreeVariationLineInput(
+      Tree.VariationLine[0], 0, Moves, nil));
+    Check(Tree.FindVariationNode(0, 2) = nil, 'shortened legacy path ends');
+    Check(Tree.FindNodeById(NestedId) = Tree.FindVariationNode(1, 2),
+      'shortening one path must preserve shared sibling subtree');
+    Execute(Actor, Actor.CreateClearStoredVariationsCommand);
+    Check(Tree.VariationLineCount = 0, 'clear removes aliases');
+    Check(Tree.FindNodeById(NestedId) = nil, 'clear removes nested variations');
+    Check(Tree.MainlineCount = 3, 'clear preserves mainline');
+    Check(Tree.MainlineNode[3].Parent = Tree.MainlineNode[2],
+      'clear preserves mainline chain');
+  finally
+    Expected.Free;
+    Actual.Free;
+    Moves.Free;
+    Actor.Free;
+  end;
+end;
+
 begin
   CheckMainlineAndReplay;
+  CheckSharedBranches;
   WriteLn('OK');
 end.

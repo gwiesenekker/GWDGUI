@@ -38,3 +38,6 @@ and removing human games. Build output and preference files stay in `/tmp`.
 
 `game_tree_topology_check` verifies parent chains, variation attachment, legal
 board replay, failed-replay isolation, trimming and Black-start numbering.
+The topology check also covers shared nested nodes, identity and analysis across
+refreshes, and trimming one path without deleting another path's subtree. The
+preservation check verifies nested PDN structure over three save/load cycles.

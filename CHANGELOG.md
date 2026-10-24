@@ -3,6 +3,19 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Preserve nested variations as shared move nodes
+
+- Consolidate legacy variation paths into parent-and-child move relationships.
+  Shared prefixes now refer to the same nodes rather than cloned sibling lines.
+  Keep legacy line indexes as compatibility paths for existing callers.
+- Export alternatives inside their enclosing variations, immediately after the
+  moves they replace. Render shared prefixes once and retain nested click targets.
+- Preserve analysis on shared nodes when importing another path. Shortening a
+  compatibility path only removes nodes no remaining path references.
+- Test nested parentage, shared identity, legal replay, stable refresh, analysis,
+  safe trimming and clearing, and nested comments over three save/load cycles.
+- Validation: ten headless regression programs, source audit and GTK check pass.
+
 ### 2026-10-24 — Follow move ancestry for board navigation
 
 - Link mainline moves to their preceding positions and attach alternatives at

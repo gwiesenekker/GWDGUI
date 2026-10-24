@@ -343,6 +343,8 @@ begin
   for I := 0 to ANode.ChildCount - 1 do
     if SameVariationLine(ANode, ANode.Children[I]) then
       Exit(ANode.Children[I]);
+  if ANode.ChildCount > 0 then
+    Result := ANode.Children[0];
 end;
 
 procedure ParseVariationKey(const AVariationKey: string; out ABasePlyNumber,
@@ -403,7 +405,8 @@ end;
 
 function RenderVariationLine(ANode, APreviousPosition: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions; ACompact: Boolean;
-  var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer): string; forward;
+  var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer;
+  AIncludeSiblings: Boolean = False): string; forward;
 
 function RenderChildVariations(ANode, AContinuation: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions; ACompact: Boolean;
@@ -452,7 +455,7 @@ begin
       AddInt(ARenderResult.VariationStarts, LLineOffset - 1);
       AddInt(ARenderResult.VariationLengths, Pos(LChild.MoveText, LText));
       AddInt(ARenderResult.VariationIndexes, LVariationIndex);
-      AddInt(ARenderResult.VariationPlies, 0);
+      AddInt(ARenderResult.VariationPlies, LVariationPlyNumber - 1);
       AddInt(ARenderResult.VariationBasePlies, LBasePlyNumber);
       AddString(ARenderResult.VariationMovesTexts, '');
     end;
@@ -464,7 +467,8 @@ end;
 
 function RenderVariationLine(ANode, APreviousPosition: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions; ACompact: Boolean;
-  var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer): string;
+  var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer;
+  AIncludeSiblings: Boolean): string;
 var
   LBasePlyNumber: Integer;
   LContinuation: TGameTreePlyNode;
@@ -509,16 +513,20 @@ begin
     end;
   end;
 
-  LNested := RenderChildVariations(ANode, LContinuation, AOptions, ACompact,
-    ARenderResult, ABaseOffset + Length(Result) + 1);
-  if LNested <> '' then
-    Result += ' ' + LNested;
+  // PDN alternatives follow the move they replace, at its parent position.
+  if AIncludeSiblings then
+  begin
+    LNested := RenderChildVariations(APreviousPosition, ANode, AOptions,
+      ACompact, ARenderResult, ABaseOffset + Length(Result) + 1);
+    if LNested <> '' then
+      Result += ' ' + LNested;
+  end;
   if LContinuation <> nil then
   begin
     if Result <> '' then
       Result += ' ';
     Result += RenderVariationLine(LContinuation, ANode, AOptions,
-      ACompact, ARenderResult, ABaseOffset + Length(Result));
+      ACompact, ARenderResult, ABaseOffset + Length(Result), True);
   end;
 end;
 
@@ -585,12 +593,8 @@ begin
       AddInt(ARenderResult.MoveLengths, Length(LChild.MoveText));
     end;
     Result += LSegment;
-    LNested := RenderChildVariations(LPreviousPosition, nil, AOptions, ACompact,
-      ARenderResult, Length(Result) + 1, I - 1);
-    if LNested <> '' then
-      Result += ' ' + LNested;
-    LNested := RenderChildVariations(LChild, nil, AOptions, ACompact,
-      ARenderResult, Length(Result) + 1, I - 1);
+    LNested := RenderChildVariations(LPreviousPosition, LChild, AOptions, ACompact,
+      ARenderResult, Length(Result) + 1);
     if LNested <> '' then
       Result += ' ' + LNested;
     if (not LRootVariationRendered) and (LPreviousPosition = AGameTree.Root) then
