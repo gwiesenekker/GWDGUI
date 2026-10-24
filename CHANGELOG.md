@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Reject invalid tournament loads before changing current data (T7)
+
+- Parse and validate tournament settings, engine selections and every pairing row
+  before applying anything to the form. Reject malformed roots, wrong field
+  types, invalid numeric settings and unknown result or pairing values.
+- Enter the loading flag only after successful validation and always release it.
+  Remember the selected file only after a successful load.
+- Regress syntax errors, invalid document shapes and a bad field in a game row;
+  verify existing settings/results remain byte-for-byte saveable and subsequent
+  edits still trigger change tracking.
+- Validation: the hidden GTK tournament preservation regression passes.
+
 ### 2026-10-24 — Ignore stale tournament callbacks and protect stopping games (T2c, T6)
 
 - Apply completion callbacks only to active tournament game references. Removing

@@ -118,7 +118,7 @@ implementation
 uses
   Dialogs, FPJSON, Graphics, JSONParser, Math, uGameOrchestrator,
   uGuiDialogs, uMainForm, uTournamentGridModel, uTournamentModel,
-  uTournamentPairing, uTournamentResults, uTournamentTypes;
+  uTournamentPairing, uTournamentResults, uTournamentTypes, uTournamentStorage;
 
 procedure DrawGridText(AGrid: TStringGrid; ACol, ARow: Integer;
   const ARect: TRect);
@@ -331,6 +331,7 @@ begin
   LoadButton.OnClick := @LoadClick;
 
   FInvalidationPanel := TPanel.Create(Self);
+  FInvalidationPanel.Name := 'TournamentSettingsChanged';
   FInvalidationPanel.Parent := Self;
   FInvalidationPanel.Align := alTop;
   FInvalidationPanel.Height := 40;
@@ -1093,7 +1094,6 @@ begin
     if Dialog.Execute then
     begin
       LoadTournamentFromFile(Dialog.FileName);
-      FFileName := Dialog.FileName;
     end;
   finally
     Dialog.Free;
@@ -1159,31 +1159,20 @@ end;
 
 procedure TTournamentDialog.LoadTournamentFromFile(const AFileName: string);
 var
-  Data: TJSONData;
+  Data: TJSONObject;
   EngineName: string;
   Engines: TJSONData;
   Game: TJSONObject;
   Games: TJSONData;
   I: Integer;
-  Lines: TStringList;
   Row: Integer;
   PairingType: string;
 begin
   if IsRunning then
     Exit;
+  Data := ReadTournamentDocument(AFileName);
   FLoadingTournament := True;
-  Lines := TStringList.Create;
   try
-    Lines.LoadFromFile(AFileName);
-    Data := GetJSON(Lines.Text);
-  finally
-    Lines.Free;
-  end;
-
-  try
-    if (Data = nil) or (Data.JSONType <> jtObject) then
-      Exit;
-
     FTournamentNameEdit.Text := TJSONObject(Data).Get('tournament_name',
       'Tournament');
     FStartingFENEdit.Text := TJSONObject(Data).Get('starting_fen',
@@ -1233,6 +1222,7 @@ begin
           FGrid.Cells[TournamentColResult, Row] := Game.Get('result', '*');
           FGrid.Cells[TournamentColReason, Row] := Game.Get('reason', '');
         end;
+    FFileName := ExpandFileName(AFileName);
     FAcceptedTournamentSignature := TournamentSignature;
     if FInvalidationPanel <> nil then
       FInvalidationPanel.Visible := False;

@@ -2,7 +2,7 @@ program tournament_preservation_check;
 {$mode objfpc}{$H+}
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Interfaces, Forms, Classes, SysUtils, StdCtrls, Grids,
+  Interfaces, Forms, Classes, SysUtils, StdCtrls, Grids, ExtCtrls,
   uTournamentDialog, uTournamentGridModel, uMainForm, uGameSetupForm,
   uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
 
@@ -129,6 +129,62 @@ begin
   end;
 end;
 
+procedure CheckFailedLoadIsTransactional(const Fixture: string);
+var
+  Dialog: TTournamentDialog;
+  Before, After, Bad: TStringList;
+  I: Integer;
+  Raised: Boolean;
+  Fen: TEdit;
+  Panel: TPanel;
+const
+  InvalidDocuments: array[0..3] of string = (
+    '{invalid JSON',
+    '[]',
+    '{"tournament_name":"Partial overwrite","games":[{"white":17}]}',
+    '{"tournament_name":"Partial overwrite","games":{}}');
+begin
+  Dialog := TTournamentDialog.Create(nil);
+  Before := TStringList.Create;
+  After := TStringList.Create;
+  Bad := TStringList.Create;
+  try
+    Dialog.LoadTournamentFromFile(Fixture);
+    Dialog.SetSelectedResult('1-1');
+    Dialog.SaveTournamentToFile(Fixture + '.before');
+    Before.LoadFromFile(Fixture + '.before');
+    for I := Low(InvalidDocuments) to High(InvalidDocuments) do
+    begin
+      Bad.Text := InvalidDocuments[I];
+      Bad.SaveToFile(Fixture + '.bad');
+      Raised := False;
+      try
+        Dialog.LoadTournamentFromFile(Fixture + '.bad');
+      except
+        on E: Exception do
+          Raised := True;
+      end;
+      Check(Raised, 'malformed tournament must be rejected');
+      Dialog.SaveTournamentToFile(Fixture + '.after');
+      After.LoadFromFile(Fixture + '.after');
+      Check(After.Text = Before.Text,
+        'failed load must preserve all current settings and results');
+    end;
+    Fen := TEdit(Dialog.FindComponent('TournamentStartingFEN'));
+    Panel := TPanel(Dialog.FindComponent('TournamentSettingsChanged'));
+    Fen.Text := 'B:W31-50:B1-20';
+    Check(Panel.Visible, 'failed load must not leave change tracking disabled');
+  finally
+    DeleteFile(Fixture + '.before');
+    DeleteFile(Fixture + '.after');
+    DeleteFile(Fixture + '.bad');
+    Bad.Free;
+    After.Free;
+    Before.Free;
+    Dialog.Free;
+  end;
+end;
+
 var
   Fixture, OtherFile: string;
 begin
@@ -141,6 +197,7 @@ begin
       WriteFixture(Fixture, 'Original');
       WriteFixture(OtherFile, 'Other');
       CheckCompletionIsAppliedOnce(Fixture);
+      CheckFailedLoadIsTransactional(Fixture);
       CheckPairingChangesWaitForShutdown(Fixture, OtherFile);
       WriteLn('OK');
     finally
