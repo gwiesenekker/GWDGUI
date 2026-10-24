@@ -3,6 +3,20 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Keep analysis and historical clocks on their nodes (G3)
+
+- Remove the per-ply and per-variation-index analysis and clock side tables.
+  Scores, PVs, depth, search time, Auto Play and historical clocks now belong to
+  the nodes that produced them and disappear when those nodes are removed.
+- Retain metadata on unchanged and shared nodes during refreshes, including when
+  a shared node receives a different compatibility variation address.
+- Keep the current live clock separately from historical node clocks; record the
+  initial clock on the root rather than transferring it onto a later move.
+- Regress replacement, trimming/re-addition, clearing/reusing a variation index,
+  rewriting a variation and refreshing a shared subtree. The new regression
+  fails against the preceding commit and passes with this fix.
+- Validation: ten headless regression programs, source audit and GTK check pass.
+
 ### 2026-10-24 — Verify nested branch navigation in the GUI
 
 - Exercise actual move-memo clicks on nested moves and branch openings, then

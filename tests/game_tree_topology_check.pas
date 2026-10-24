@@ -166,8 +166,93 @@ begin
   end;
 end;
 
+procedure CheckMetadataBelongsToNodes;
+var
+  Actor: TGameTreeActor;
+  Tree: TGameTree;
+  OldId, PrefixId, SharedId: Int64;
+  Changed: Boolean;
+  Moves: TStringList;
+
+  procedure AddAnalysis(Node: TGameTreePlyNode);
+  begin
+    Execute(Actor, Actor.CreateRecordEnginePVCommand(Node.NodeId,
+      '0.44', '37-32 12-18', '12', '1.2'));
+    Execute(Actor, Actor.CreateRecordAnnotatorPVCommand(Node.NodeId,
+      '0.55', '38-32 12-18', '9', '0.5'));
+    Execute(Actor, Actor.CreateRecordAutoPlayPVCommand(Node.NodeId, '39-33'));
+  end;
+
+  procedure CheckEmpty(Node: TGameTreePlyNode);
+  begin
+    Check((Node.EnginePV = '') and (Node.EngineScore = '') and
+      (Node.EnginePVDepth = '') and (Node.EnginePVTimeText = '') and
+      (Node.AnnotatorPV = '') and (Node.AnnotatorScore = '') and
+      (Node.AnnotatorPVDepth = '') and (Node.AnnotatorPVTimeText = '') and
+      (Node.AutoPlayPV = '') and (not Node.HasClockInfo),
+      'a replacement node must not inherit analysis or clocks');
+  end;
+begin
+  Actor := TGameTreeActor.Create;
+  Moves := TStringList.Create;
+  try
+    Rebuild(Actor, 'metadata', '', '32-28 18-23 37-32');
+    Tree := Actor.GameTree;
+    PrefixId := Tree.MainlineNode[1].NodeId;
+    AddAnalysis(Tree.MainlineNode[1]);
+    AddAnalysis(Tree.MainlineNode[2]);
+    Tree.RecordClockState(2, 299, 298, 1, 2);
+    OldId := Tree.MainlineNode[2].NodeId;
+    Rebuild(Actor, 'metadata', '', '32-28 19-23 28x19');
+    Check(Tree.FindNodeById(OldId) = nil, 'replaced node must disappear');
+    CheckEmpty(Tree.MainlineNode[2]);
+    Check(Tree.MainlineNode[1].NodeId = PrefixId, 'unchanged prefix identity');
+    Check(Tree.MainlineNode[1].AnnotatorPV = '38-32 12-18',
+      'unchanged prefix must retain its analysis');
+    AddAnalysis(Tree.MainlineNode[3]);
+    Tree.RecordClockState(3, 298, 298, 2, 2);
+    Rebuild(Actor, 'metadata', '', '32-28 19-23');
+    Rebuild(Actor, 'metadata', '', '32-28 19-23 28x19');
+    CheckEmpty(Tree.MainlineNode[3]);
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+      '20-24 37-32', '', gmsHuman));
+    AddAnalysis(Tree.FindVariationNode(0, 1));
+    Execute(Actor, Actor.CreateClearStoredVariationsCommand);
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+      '17-21 37-32', '', gmsHuman));
+    CheckEmpty(Tree.FindVariationNode(0, 1));
+    AddAnalysis(Tree.FindVariationNode(0, 2));
+    Tree.StoreVariationLineAtIndex(0, 2, 1, '17-21 38-32', '', Changed);
+    TextToMoveList('17-21 38-32', Moves);
+    RecordGameTreeVariationLine(Tree, GameTreeVariationLineInput(
+      Tree.VariationLine[0], 0, Moves, nil));
+    CheckEmpty(Tree.FindVariationNode(0, 2));
+    AddAnalysis(Tree.FindVariationNode(0, 2));
+    SharedId := Tree.FindVariationNode(0, 2).NodeId;
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+      '17-21 38-32 14-20', '', gmsHuman));
+    Tree.StoreVariationLineAtIndex(0, 2, 1, '17-21', '', Changed);
+    TextToMoveList('17-21', Moves);
+    RecordGameTreeVariationLine(Tree, GameTreeVariationLineInput(
+      Tree.VariationLine[0], 0, Moves, nil));
+    Rebuild(Actor, 'metadata', '', '32-28 19-23 28x19');
+    Check(Tree.FindVariationNode(1, 2).NodeId = SharedId,
+      'shared node must survive its original path being shortened');
+    Check(Tree.FindVariationNode(1, 2).EngineScore = '0.44',
+      'analysis must survive a changed canonical variation address');
+    Check(Tree.FindVariationNode(1, 2).AnnotatorPV = '38-32 12-18',
+      'refresh must preserve shared-node analysis by identity');
+    Check(Tree.FindVariationNode(1, 2).AutoPlayPV = '39-33',
+      'refresh must preserve Auto Play analysis by identity');
+  finally
+    Moves.Free;
+    Actor.Free;
+  end;
+end;
+
 begin
   CheckMainlineAndReplay;
   CheckSharedBranches;
+  CheckMetadataBelongsToNodes;
   WriteLn('OK');
 end.

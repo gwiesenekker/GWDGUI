@@ -44,3 +44,6 @@ preservation check verifies nested PDN structure over three save/load cycles.
 The GTK check also clicks nested moves and branch-opening parentheses, follows
 the selected branch with Left/Right, compares the displayed board with legal
 replay, and asserts that navigation does not mutate the exported tree.
+The topology check also verifies that replacing, trimming or clearing moves
+cannot transfer their analysis or clocks to another node, while unchanged and
+shared nodes retain their metadata through refreshes and path-index changes.
