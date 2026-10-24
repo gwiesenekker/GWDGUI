@@ -1696,6 +1696,7 @@ begin
   LPvPanel.BevelOuter := bvNone;
 
   FGameMoveMemo := TMemo.Create(Self);
+  FGameMoveMemo.Name := 'GameMoveMemo';
   FGameMoveMemo.Parent := LSidePanel;
   FGameMoveMemo.Align := alClient;
   FGameMoveMemo.ParentFont := True;
@@ -1878,6 +1879,7 @@ begin
   FWhiteClockLabel.Layout := tlCenter;
 
   FBoardControl := TDraughtsBoardControl.Create(Self);
+  FBoardControl.Name := 'MainBoard';
   FBoardControl.Parent := LMainPanel;
   FBoardControl.Align := alClient;
   FBoardControl.Board := FBoard;
@@ -6385,7 +6387,7 @@ begin
       begin
         FGameMoveMemo.SelStart := FVariationHits[I].Start;
         FGameMoveMemo.SelLength := FVariationHits[I].Length;
-        if AFocusMemo and FGameMoveMemo.CanFocus then
+        if AFocusMemo and Visible and CanFocus and FGameMoveMemo.CanFocus then
           FGameMoveMemo.SetFocus;
         Exit;
       end;
@@ -6400,7 +6402,7 @@ begin
       begin
         FGameMoveMemo.SelStart := FVariationHits[I].Start;
         FGameMoveMemo.SelLength := FVariationHits[I].Length;
-        if AFocusMemo and FGameMoveMemo.CanFocus then
+        if AFocusMemo and Visible and CanFocus and FGameMoveMemo.CanFocus then
           FGameMoveMemo.SetFocus;
         Exit;
       end;
@@ -6410,7 +6412,7 @@ begin
     FGameMoveMemo.SelStart := FGameMoveStarts[FGameBrowsePly - 1];
     FGameMoveMemo.SelLength := FGameMoveLengths[FGameBrowsePly - 1];
   end;
-  if AFocusMemo and FGameMoveMemo.CanFocus then
+  if AFocusMemo and Visible and CanFocus and FGameMoveMemo.CanFocus then
     FGameMoveMemo.SetFocus;
 end;
 

@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Verify nested branch navigation in the GUI
+
+- Exercise actual move-memo clicks on nested moves and branch openings, then
+  use Left/Right to verify the selected branch and legally replayed board.
+- Assert that browsing leaves the exported game tree unchanged.
+- Give the move memo and main board stable component names for the GUI test.
+  Avoid requesting focus when the main form is hidden or cannot accept focus.
+- Report unexpected GUI-test exceptions directly so they cannot leave a hidden
+  regression process waiting for an error dialog.
+- Validation: the expanded GTK navigation and standalone-preservation check passes;
+  the preceding model changes also pass all ten headless programs and source audit.
+
 ### 2026-10-24 — Preserve nested variations as shared move nodes
 
 - Consolidate legacy variation paths into parent-and-child move relationships.

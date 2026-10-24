@@ -41,3 +41,6 @@ board replay, failed-replay isolation, trimming and Black-start numbering.
 The topology check also covers shared nested nodes, identity and analysis across
 refreshes, and trimming one path without deleting another path's subtree. The
 preservation check verifies nested PDN structure over three save/load cycles.
+The GTK check also clicks nested moves and branch-opening parentheses, follows
+the selected branch with Left/Right, compares the displayed board with legal
+replay, and asserts that navigation does not mutate the exported tree.
