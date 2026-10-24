@@ -22,3 +22,10 @@ Current checks:
 - `game_tree_pdn_filter_check.pas`
 - `game_tree_actor_check.pas`
 - `source_audit_check.sh`
+
+When `lazbuild` is installed, the sweep also builds and runs
+`running_game_lifecycle_check.pas` with Lazarus's `nogui` widgetset. This tests
+the actual running-game model and runner without opening windows or needing a
+display. Run it separately with `bash tests/run_lifecycle_checks.sh`.
+The lifecycle check requires Lazarus/LCL; the other checks need only FPC and
+the source audit needs ripgrep.

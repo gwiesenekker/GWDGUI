@@ -243,6 +243,8 @@ end;
 
 procedure TGameRunnerSnapshot.MarkStopped(const AReason: string);
 begin
+  if FState in [gosGameOver, gosError] then
+    Exit;
   FState := gosStopped;
   FGameResult := '*';
   FLastError := AReason;

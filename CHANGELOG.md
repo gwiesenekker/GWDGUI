@@ -3,6 +3,20 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Preserve completed results when Stop is requested (M4)
+
+- Leave terminal snapshots unchanged when Stop is requested, preserving a
+  completed game's result and an existing error instead of replacing them
+  with a stopped `*` result.
+- Add a headless Lazarus lifecycle test that runs a real zero-clock human game
+  to completion, then requests Stop before marking its model finished and
+  checks the snapshot data used to update the tree.
+- The main regression sweep runs this check when Lazarus is installed and
+  reports a skip otherwise. No display server is needed.
+- Validation: all eight regression programs and the source audit pass.
+- Reapplying stored snapshots during export remains separate model work;
+  this change addresses the completed-result loss reported in M4.
+
 ### 2026-10-24 — Fence stopped Hub searches before reuse (D1)
 
 - Wait up to ten seconds for the stopped search's `done` response instead of
