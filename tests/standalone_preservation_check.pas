@@ -5,7 +5,7 @@ program standalone_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, LCLType,
-  uBoardControl, uDraughtsBoard, uMainForm, uPdn,
+  uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPvBrowser,
   uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameOrchestrator;
 
 type
@@ -198,6 +198,81 @@ begin
   end;
 end;
 
+procedure CheckPvReplayIsValidated(AForm: TMainForm);
+var
+  Browser: TPvBrowser;
+  Base, Displayed, Expected: TDraughtsBoard;
+  Memo: TMemo;
+  Info: TLabel;
+  Key: Word;
+begin
+  Base := TDraughtsBoard.Create;
+  Displayed := TDraughtsBoard.Create;
+  Expected := TDraughtsBoard.Create;
+  Memo := TMemo.Create(nil);
+  Info := TLabel.Create(nil);
+  Memo.Parent := AForm;
+  Memo.Enabled := False;
+  Browser := TPvBrowser.Create(Displayed, nil, Info, Memo);
+  try
+    Base.SetBeginPosition;
+    Expected.AssignFrom(Base);
+    Expected.PlayMove('32-28');
+    Browser.SetData(Base, 0, DefaultStartingFEN, '32-28 28-23 19-24', '', '', '');
+    Check(Displayed.CurrentFEN = Expected.CurrentFEN,
+      'a wrong-side PV move must stop at the last legal position');
+    Check(Pos('Invalid PV move 2: 28-23', Memo.Text) > 0,
+      'invalid PV move must be identified in the memo');
+    Memo.SelStart := Pos('19-24', Memo.Text) - 1;
+    Memo.OnClick(Memo);
+    Check((Displayed.CurrentFEN = Expected.CurrentFEN) and
+      (Memo.SelText = '1.32-28'),
+      'clicking past an invalid PV move must select the last legal position');
+    Key := VK_ESCAPE;
+    Memo.OnKeyDown(Memo, Key, []);
+    Browser.SetData(Base, 0, DefaultStartingFEN,
+      '32-28 19-23 46-41 23x32', '', '', '');
+    Expected.PlayMove('19-23');
+    Check(Displayed.CurrentFEN = Expected.CurrentFEN,
+      'an impossible PV move must not change any board square');
+    Check(Pos('Invalid PV move 3: 46-41', Memo.Text) > 0,
+      'impossible PV continuation must be marked');
+    Browser.SetData(Base, 0, DefaultStartingFEN, 'nonsense 32-28', '', '', '');
+    Check((Displayed.CurrentFEN = Base.CurrentFEN) and
+      (Pos('Invalid PV move 1: nonsense', Memo.Text) > 0),
+      'a malformed first PV move must show the base position with an explanation');
+    Base.LoadFromFEN('W:W37,45:B32,22,5');
+    Expected.AssignFrom(Base);
+    Expected.PlayMove('37x17');
+    Expected.PlayMove('5-10');
+    Expected.PlayMove('45-40');
+    Browser.SetData(Base, 0, Base.CurrentFEN, '37x17 5-10 45-40', '', '', '');
+    Check(Displayed.CurrentFEN = Expected.CurrentFEN,
+      'short-form multiple capture must replay the complete legal PV');
+    Check(Pos('Invalid PV', Memo.Text) = 0, 'new legal PV must clear old warnings');
+    Memo.SelStart := Pos('37x17', Memo.Text) - 1;
+    Memo.OnClick(Memo);
+    Expected.AssignFrom(Base);
+    Expected.PlayMove('37x17');
+    Base.SetBeginPosition;
+    Browser.SetData(Base, 0, DefaultStartingFEN, '19-24', '', '', '');
+    Check(Displayed.CurrentFEN = Expected.CurrentFEN,
+      'pending invalid PV must not replace a frozen legal position');
+    Key := VK_ESCAPE;
+    Memo.OnKeyDown(Memo, Key, []);
+    Check((Displayed.CurrentFEN = Base.CurrentFEN) and
+      (Pos('Invalid PV move 1: 19-24', Memo.Text) > 0),
+      'unfreezing must validate pending PV data and show its warning');
+  finally
+    Browser.Free;
+    Info.Free;
+    Memo.Free;
+    Expected.Free;
+    Displayed.Free;
+    Base.Free;
+  end;
+end;
+
 procedure CheckFrozenPvSurvivesRefresh(AForm: TMainForm);
 var
   Actor: TGameTreeActor;
@@ -338,6 +413,7 @@ begin
     try
       Check(not GameTreeHasContent(Form.ActiveGameTree),
         'untouched initial board should not prompt to save');
+      CheckPvReplayIsValidated(Form);
       CheckFrozenPvSurvivesRefresh(Form);
       CheckNestedGuiNavigation(Form);
       CheckExportDoesNotMutate(Form);

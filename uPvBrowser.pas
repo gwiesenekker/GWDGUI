@@ -36,6 +36,8 @@ type
     FStartingFEN: string;
     FTimeText: string;
     FVariation: string;
+    FValidMoveCount: Integer;
+    FInvalidMove: string;
     procedure ApplyBrowsePly(APly: Integer);
     procedure ApplyPendingData;
     function FormatInfo: string;
@@ -52,6 +54,7 @@ type
     procedure StorePendingData(ABaseBoard: TDraughtsBoard; ABasePly: Integer;
       const AStartingFEN, APv, AScore, ADepth, ATimeText: string);
     procedure UnlockUpdates;
+    procedure ValidateVariation;
   public
     constructor Create(ABoard: TDraughtsBoard; ABoardControl: TDraughtsBoardControl;
       AInfoLabel: TLabel; APvMemo: TMemo);
@@ -135,6 +138,8 @@ begin
   FBasePly := 0;
   FStartingFEN := '';
   FVariation := '';
+  FValidMoveCount := 0;
+  FInvalidMove := '';
   FScore := '';
   FDepth := '';
   FTimeText := '';
@@ -161,6 +166,8 @@ begin
     Result += ' time ' + Trim(FTimeText);
   if Result = 'PV:' then
     Result += ' no info';
+  if FInvalidMove <> '' then
+    Result += ' — invalid PV';
 end;
 
 procedure TPvBrowser.BuildMoveText(out AText: string; var AStarts,
@@ -197,6 +204,10 @@ begin
       ALengths[I] := Length(LSegment);
       AText += LSegment;
     end;
+    if FInvalidMove <> '' then
+      AText += LineEnding + 'Invalid PV move ' +
+        IntToStr(FBasePly + FValidMoveCount + 1) + ': ' + FInvalidMove +
+        '. Showing the last legal position.';
   finally
     LMoves.Free;
   end;
@@ -216,15 +227,10 @@ begin
   try
     TextToMoveList(FVariation, LMoves);
     LPly := FBrowsePly;
-    if (LPly < 0) or (LPly > LMoves.Count) then
-      LPly := LMoves.Count;
+    if (LPly < 0) or (LPly > FValidMoveCount) then
+      LPly := FValidMoveCount;
     for I := 0 to LPly - 1 do
-      try
-        FBoard.PlayMove(LMoves[I], True, False);
-      except
-        on E: Exception do
-          Break;
-      end;
+      FBoard.PlayMove(LMoves[I], True, True);
   finally
     LMoves.Free;
   end;
@@ -248,17 +254,38 @@ begin
   FPvMemo.SelLength := 0;
 end;
 
-function TPvBrowser.MoveCount: Integer;
+procedure TPvBrowser.ValidateVariation;
 var
-  LMoves: TStringList;
+  Candidate: TDraughtsBoard;
+  Moves: TStringList;
+  I: Integer;
 begin
-  LMoves := TStringList.Create;
+  FValidMoveCount := 0;
+  FInvalidMove := '';
+  Candidate := TDraughtsBoard.Create;
+  Moves := TStringList.Create;
   try
-    TextToMoveList(FVariation, LMoves);
-    Result := LMoves.Count;
+    Candidate.AssignFrom(FBaseBoard);
+    TextToMoveList(FVariation, Moves);
+    for I := 0 to Moves.Count - 1 do
+    begin
+      if not Candidate.IsLegalMove(Moves[I]) then
+      begin
+        FInvalidMove := Moves[I];
+        Break;
+      end;
+      Candidate.PlayMove(Moves[I], True, True);
+      Inc(FValidMoveCount);
+    end;
   finally
-    LMoves.Free;
+    Moves.Free;
+    Candidate.Free;
   end;
+end;
+
+function TPvBrowser.MoveCount: Integer;
+begin
+  Result := FValidMoveCount;
 end;
 
 procedure TPvBrowser.HighlightSelection(AFocusMemo: Boolean);
@@ -396,6 +423,7 @@ begin
   FScore := Trim(AScore);
   FDepth := Trim(ADepth);
   FTimeText := Trim(ATimeText);
+  ValidateVariation;
 
   if FInfoLabel <> nil then
     FInfoLabel.Caption := FormatInfo;

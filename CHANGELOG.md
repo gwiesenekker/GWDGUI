@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Validate PV browsing and identify illegal continuations (A2)
+
+- Validate each PV against its base position. Replay only its legal prefix, using
+  validated moves so short-form multiple captures resolve correctly.
+- Identify the first illegal move in the PV memo and restrict navigation and
+  selection to the last legal position. Revalidate pending data when unfreezing.
+- Regress wrong-side moves, impossible moves, malformed text, short captures,
+  invalid suffix selection, warning reset and frozen pending updates.
+- Validation: the expanded hidden GTK main-form regression passes.
+
 ### 2026-10-24 — Preserve the frozen PV board during game refreshes (A3)
 
 - Let the PV browser exclusively update its mini board and popout. A main-game

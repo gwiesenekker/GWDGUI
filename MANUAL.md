@@ -266,6 +266,11 @@ can be displayed as browsable PDN variations.
 Right-clicking the main board offers hint actions based on the main engine PV or
 annotator PV when those lines are available.
 
+Click a move in a PV or use Left/Right to inspect its position. The line stays
+frozen while you browse; press Escape in the PV to resume updates. If a PV
+contains an illegal move, the memo identifies that move and the board and
+selection stop at the last legal position.
+
 ### 5.4 MCTS annotator
 
 Right-click the MCTS analysis area to open or close an MCTS annotator. The
