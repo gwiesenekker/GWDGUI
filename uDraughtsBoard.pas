@@ -930,22 +930,22 @@ end;
 
 function TDraughtsBoard.CurrentFEN: string;
 
-  procedure AppendPieces(APiece: TDraughtsPieceKind; const APrefix: string);
+  procedure AppendPieces(AMan, AKing: TDraughtsPieceKind; const APrefix: string);
   var
     I: Integer;
     LFirst: Boolean;
   begin
+    Result += ':' + APrefix;
     LFirst := True;
     for I := Low(FSquares) to High(FSquares) do
-      if FSquares[I] = APiece then
+      if (FSquares[I] = AMan) or (FSquares[I] = AKing) then
       begin
         if LFirst then
-        begin
-          Result += ':' + APrefix;
-          LFirst := False;
-        end
+          LFirst := False
         else
           Result += ',';
+        if FSquares[I] = AKing then
+          Result += 'K';
         Result += IntToStr(I);
       end;
   end;
@@ -955,10 +955,8 @@ begin
     Result := 'W'
   else
     Result := 'B';
-  AppendPieces(pkWhiteMan, 'W');
-  AppendPieces(pkWhiteKing, 'WK');
-  AppendPieces(pkBlackMan, 'B');
-  AppendPieces(pkBlackKing, 'BK');
+  AppendPieces(pkWhiteMan, pkWhiteKing, 'W');
+  AppendPieces(pkBlackMan, pkBlackKing, 'B');
 end;
 
 function TDraughtsBoard.PositionKey: string;

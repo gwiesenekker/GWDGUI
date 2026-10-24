@@ -201,19 +201,35 @@ begin
 end;
 
 procedure CheckCurrentFenRoundTrip;
+const
+  Positions: array[0..4] of string = (
+    'B:W31,K32,K33:B1,K2,K3',
+    'W:WK32,K33,K34:BK1,K2',
+    'W:W31,32:B1,2',
+    'B:W:BK1,K2',
+    'W:WK32,K33:B'
+  );
 var
   Board: TDraughtsBoard;
   Fen: string;
+  I: Integer;
   RoundTripBoard: TDraughtsBoard;
 begin
   Board := TDraughtsBoard.Create;
   RoundTripBoard := TDraughtsBoard.Create;
   try
-    Board.LoadFromFEN('B:W31,K32:B1,K2');
-    Fen := Board.CurrentFEN;
-    RoundTripBoard.LoadFromFEN(Fen);
-    CheckEqual(RoundTripBoard.PositionKey, Board.PositionKey,
-      'exported current FEN should load back to the same position');
+    for I := Low(Positions) to High(Positions) do
+    begin
+      Board.LoadFromFEN(Positions[I]);
+      Fen := Board.CurrentFEN;
+      CheckEqual(Fen, Positions[I],
+        'current FEN should use one section per colour and mark every king');
+      RoundTripBoard.LoadFromFEN(Fen);
+      CheckEqual(RoundTripBoard.PositionKey, Board.PositionKey,
+        'exported current FEN should preserve all kings and the side to move');
+      CheckEqual(RoundTripBoard.LegalMovesText, Board.LegalMovesText,
+        'FEN round trip should preserve legal moves');
+    end;
   finally
     RoundTripBoard.Free;
     Board.Free;
