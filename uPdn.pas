@@ -38,6 +38,7 @@ function ExtractAnnotationValue(const AAnnotation, AName: string): string;
 function AnnotationWithoutName(const AAnnotation, AName: string): string;
 procedure DecodeVariationAnnotations(const AText: string; ACount: Integer;
   AAnnotations: TStrings);
+function EncodeVariationAnnotations(AAnnotations: TStrings): string;
 function EncodePdnVariationLine(ADisplayAfterPly, ABasePly: Integer;
   const AMovesText: string): string;
 function DecodePdnVariationLine(const ALine, AAnnotation: string;

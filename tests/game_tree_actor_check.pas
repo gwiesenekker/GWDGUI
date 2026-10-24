@@ -1085,9 +1085,11 @@ begin
         'move variation replacement from variation node should be accepted');
       Check(Command.TreeChanged,
         'move variation replacement should report tree change');
-      Check(Actor.GameTree.VariationLine[0].MovesText = '18-23 20-24',
-        'move variation replacement should clear tail after selected node');
-      VariationNode := Actor.GameTree.FindVariationNode(0, 2);
+      Check(Actor.GameTree.VariationLine[0].MovesText = '18-23 14-19',
+        'branching inside a variation must preserve its original continuation');
+      Check(Actor.GameTree.VariationLine[1].MovesText = '18-23 20-24',
+        'alternative continuation should be stored separately');
+      VariationNode := Actor.GameTree.FindVariationNode(1, 2);
       Check(VariationNode <> nil,
         'replacement move variation should materialize replacement node');
       Check(VariationNode.MoveText = '20-24',

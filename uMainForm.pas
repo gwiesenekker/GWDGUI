@@ -2674,12 +2674,19 @@ begin
 
   LActiveGameTree := ActiveGameTree;
   if AFollowVariationBrowse and (AGameTree = LActiveGameTree) and
-    (ACommand.CommandKind = gtcStoreMoveVariation) and
-    (ACommand.VariationIndex >= 0) then
+    (ACommand.CommandKind = gtcStoreMoveVariation) then
   begin
-    FGameBrowsePly := ACommand.BasePly;
-    FVariationIndex := ACommand.VariationIndex;
-    FVariationBrowsePly := ACommand.PlyNumber;
+    if ACommand.VariationIndex < 0 then
+    begin
+      ClearVariationExploration;
+      FGameBrowsePly := ACommand.PlyNumber;
+    end
+    else
+    begin
+      FGameBrowsePly := ACommand.BasePly;
+      FVariationIndex := ACommand.VariationIndex;
+      FVariationBrowsePly := ACommand.PlyNumber;
+    end;
   end;
 
   RefreshDisplayFromGameTree(AGameTree, True);

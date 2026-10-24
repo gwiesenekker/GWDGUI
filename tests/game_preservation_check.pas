@@ -260,6 +260,79 @@ begin
   end;
 end;
 
+procedure CheckExplorationPreservesContinuations;
+var
+  Actor: TGameTreeActor;
+  Command: TGameTreeCommand;
+  First: TGameTreePlyNode;
+  Original: string;
+begin
+  Actor := TGameTreeActor.Create;
+  try
+    Rebuild(Actor, 'exploration', '', '32-28 18-23 37-32');
+    Original := '19-23 37-32 14-19 41-37';
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(1, 1,
+      Original, 'Original tail', gmsHuman));
+    First := Actor.GameTree.FindVariationNode(0, 1);
+    Command := Actor.CreateStoreMoveVariationCommand(First.NodeId, '37-32', gmsHuman);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted and (not Command.TreeChanged),
+        'replaying the existing continuation should navigate without mutation');
+      Check((Command.VariationIndex = 0) and (Command.PlyNumber = 2),
+        'navigation should select the existing next variation node');
+    finally
+      Command.Free;
+    end;
+    Check(Actor.GameTree.VariationLine[0].MovesText = Original,
+      'replaying a move must not truncate the original continuation');
+    Execute(Actor, Actor.CreateStoreMoveVariationCommand(First.NodeId,
+      '31-27', gmsHuman));
+    Check(Actor.GameTree.VariationLineCount = 2,
+      'an alternative inside a variation must create a separate continuation');
+    Check(Actor.GameTree.VariationLine[0].MovesText = Original,
+      'branching must leave the original variation intact');
+    Check(Actor.GameTree.FindVariationNode(0, 4).CommentText = 'Original tail',
+      'branching must preserve the original tail annotation');
+    Check(Actor.GameTree.VariationLine[1].MovesText = '19-23 31-27',
+      'the new branch should retain its prefix');
+    Execute(Actor, Actor.CreateStoreMoveVariationCommand(
+      Actor.GameTree.FindVariationNode(1, 2).NodeId, '14-19', gmsHuman));
+    Check(Actor.GameTree.VariationLine[1].MovesText = '19-23 31-27 14-19',
+      'a new move at the end should extend its own branch');
+    Command := Actor.CreateStoreMoveVariationCommand(
+      Actor.GameTree.MainlineNode[1].NodeId, '19-23', gmsHuman);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted and (not Command.TreeChanged) and
+        (Command.VariationIndex = 0), 'replaying an alternative must find its line');
+    finally
+      Command.Free;
+    end;
+    Command := Actor.CreateStoreMoveVariationCommand(
+      Actor.GameTree.MainlineNode[1].NodeId, '18-23', gmsHuman);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted and (not Command.TreeChanged) and
+        (Command.VariationIndex = -1) and (Command.PlyNumber = 2),
+        'replaying the mainline move must navigate without making a duplicate');
+    finally
+      Command.Free;
+    end;
+    Check((Actor.GameTree.VariationLineCount = 2) and
+      (Actor.GameTree.VariationLine[0].MovesText = Original),
+      'navigation must preserve both complete branches');
+    Execute(Actor, Actor.CreateStoreMoveVariationCommand(
+      Actor.GameTree.FindVariationNode(0, 4).NodeId, '20-24', gmsHuman));
+    Check(Actor.GameTree.FindVariationNode(0, 4).CommentText = 'Original tail',
+      'extending a line must keep the old final comment on its move');
+    Check(Actor.GameTree.FindVariationNode(0, 5).CommentText = '',
+      'the newly appended move must not inherit the old final comment');
+  finally
+    Actor.Free;
+  end;
+end;
+
 procedure CheckCommentsStayWithTheirMoves;
 var
   Game: TPdnGame;
@@ -317,5 +390,6 @@ begin
   CheckStandardVariationPlacement;
   CheckCommentsStayWithTheirMoves;
   CheckCommentRoundTrips;
+  CheckExplorationPreservesContinuations;
   WriteLn('OK');
 end.

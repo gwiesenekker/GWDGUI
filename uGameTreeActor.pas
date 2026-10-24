@@ -210,7 +210,7 @@ type
 implementation
 
 uses
-  uDraughtsBoard;
+  uDraughtsBoard, uPdn;
 
 function TGameTreeSearchRecord.SearchRef: TGameTreeSearchRef;
 begin
@@ -959,6 +959,55 @@ var
   LStoredLine: TGameTreeVariationLine;
   LStoredMoves: TStringList;
   VariationLine: TGameTreeVariationLine;
+  ExtendExisting: Boolean;
+  ExistingIndex: Integer;
+  NextNode: TGameTreePlyNode;
+  Annotations: TStringList;
+
+  procedure FollowExisting(AIndex, APly: Integer; ATarget: TGameTreePlyNode);
+  begin
+    ACommand.Accepted := True;
+    ACommand.NodeId := ANode.NodeId;
+    ACommand.CreatedNodeId := ATarget.NodeId;
+    ACommand.VariationIndex := AIndex;
+    ACommand.PlyNumber := APly;
+    ACommand.BasePly := LBasePly;
+    ACommand.DisplayAfterPly := LDisplayAfterPly;
+    ACommand.MoveText := ATarget.MoveText;
+  end;
+
+  function FindExistingPrefix: Integer;
+  var
+    J, K: Integer;
+    Wanted, Existing: TStringList;
+    Matches: Boolean;
+    Line: TGameTreeVariationLine;
+  begin
+    Result := -1;
+    Wanted := TStringList.Create;
+    Existing := TStringList.Create;
+    try
+      TextToMoveList(LMovesText, Wanted);
+      for J := 0 to FGameTree.VariationLineCount - 1 do
+      begin
+        Line := FGameTree.VariationLine[J];
+        if Line.BasePly <> LBasePly then
+          Continue;
+        TextToMoveList(Line.MovesText, Existing);
+        if Existing.Count < Wanted.Count then
+          Continue;
+        Matches := True;
+        for K := 0 to Wanted.Count - 1 do
+          Matches := Matches and (NormalizeMoveNotation(Wanted[K]) =
+            NormalizeMoveNotation(Existing[K]));
+        if Matches then
+          Exit(J);
+      end;
+    finally
+      Existing.Free;
+      Wanted.Free;
+    end;
+  end;
 begin
   Result := False;
   AChanged := False;
@@ -977,6 +1026,7 @@ begin
   LVariationIndex := -1;
   LVariationPly := 0;
   LAnnotationText := '';
+  ExtendExisting := False;
   LOriginText := MoveSourceOriginText(ACommand.MoveSource);
   if Trim(ANode.VariationKey) <> '' then
   begin
@@ -998,6 +1048,14 @@ begin
       Reject(ACommand, 'variation line not found');
       Exit;
     end;
+    NextNode := FGameTree.FindVariationNode(LVariationIndex, LVariationPly + 1);
+    if (NextNode <> nil) and
+      (NormalizeMoveNotation(NextNode.MoveText) = LMoveText) then
+    begin
+      FollowExisting(LVariationIndex, LVariationPly + 1, NextNode);
+      Exit(True);
+    end;
+    ExtendExisting := NextNode = nil;
     LMovesText := '';
     for I := 1 to LVariationPly do
     begin
@@ -1011,13 +1069,47 @@ begin
     if LMovesText <> '' then
       LMovesText += ' ';
     LMovesText += LMoveText;
+    Annotations := TStringList.Create;
+    try
+      for I := 1 to LVariationPly do
+      begin
+        LVariationNode := FGameTree.FindVariationNode(LVariationIndex, I);
+        LAnnotationText := AnnotationWithScore(LVariationNode.CommentText,
+          'engine', LVariationNode.EngineScore);
+        LAnnotationText := AnnotationWithScore(LAnnotationText,
+          'annotator', LVariationNode.AnnotatorScore);
+        Annotations.Add(LAnnotationText);
+      end;
+      Annotations.Add('');
+      LAnnotationText := EncodeVariationAnnotations(Annotations);
+    finally
+      Annotations.Free;
+    end;
   end
   else
   begin
     LMovesText := LMoveText;
+    NextNode := FGameTree.MainlineNode[ANode.PlyNumber + 1];
+    if (NextNode <> nil) and
+      (NormalizeMoveNotation(NextNode.MoveText) = LMoveText) then
+    begin
+      FollowExisting(-1, NextNode.PlyNumber, NextNode);
+      Exit(True);
+    end;
   end;
 
-  if LVariationIndex >= 0 then
+  ExistingIndex := FindExistingPrefix;
+  if ExistingIndex >= 0 then
+  begin
+    NextNode := FGameTree.FindVariationNode(ExistingIndex, LVariationPly + 1);
+    if NextNode <> nil then
+    begin
+      FollowExisting(ExistingIndex, LVariationPly + 1, NextNode);
+      Exit(True);
+    end;
+  end;
+
+  if ExtendExisting then
     ACommand.VariationIndex := FGameTree.StoreVariationLineAtIndex(
       LVariationIndex, LDisplayAfterPly, LBasePly, LMovesText,
       LAnnotationText, AChanged)

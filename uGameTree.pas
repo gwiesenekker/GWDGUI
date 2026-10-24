@@ -1052,16 +1052,21 @@ begin
   end;
 end;
 
-function FirstMoveInText(const AMovesText: string): string;
+function CanonicalMoveLine(const AMovesText: string): string;
 var
   Moves: TStringList;
+  I: Integer;
 begin
   Result := '';
   Moves := TStringList.Create;
   try
     ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(AMovesText)), Moves);
-    if Moves.Count > 0 then
-      Result := NormalizeMoveNotation(Moves[0]);
+    for I := 0 to Moves.Count - 1 do
+    begin
+      if Result <> '' then
+        Result += ' ';
+      Result += NormalizeMoveNotation(Moves[I]);
+    end;
   finally
     Moves.Free;
   end;
@@ -1071,12 +1076,11 @@ function TGameTree.FindStoredVariation(ADisplayAfterPly, ABasePly: Integer;
   const AMovesText: string): Integer;
 var
   I: Integer;
-  NewFirstMove: string;
-  StoredFirstMove: string;
+  NewMoves: string;
   VariationEntry: TGameTreeVariationLine;
 begin
   Result := -1;
-  NewFirstMove := FirstMoveInText(AMovesText);
+  NewMoves := CanonicalMoveLine(AMovesText);
   for I := 0 to FVariationLines.Count - 1 do
   begin
     VariationEntry := TGameTreeVariationLine(FVariationLines[I]);
@@ -1085,9 +1089,7 @@ begin
       (VariationEntry.FBasePly <> ABasePly) then
       Continue;
 
-    StoredFirstMove := FirstMoveInText(VariationEntry.FMovesText);
-    if (StoredFirstMove = NewFirstMove) or
-      ((StoredFirstMove = '') and (NewFirstMove <> '')) then
+    if CanonicalMoveLine(VariationEntry.FMovesText) = NewMoves then
       Exit(I);
   end;
 end;

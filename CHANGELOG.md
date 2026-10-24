@@ -3,6 +3,20 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Explore variations without truncating existing lines (G2)
+
+- Replaying an existing mainline or variation move navigates to that node,
+  preserving its continuation and avoiding duplicate variations.
+- A different continuation inside a variation creates a separate branch with
+  the shared prefix. Appending at the end extends only that branch and keeps
+  existing comments and scores on their original prefix moves.
+- Match stored variation lines by their complete move sequence, allowing two
+  branches to share a first move without overwriting each other.
+- Test replay, branching, mainline navigation, tail and comment preservation,
+  and extension of the new branch. Update an old test that required truncation.
+- Validation: all nine headless regression programs, the source audit and
+  the GTK preservation check pass.
+
 ### 2026-10-24 — Keep the standalone board reachable and intact (U1)
 
 - Keep a permanent Board entry in game history. Selecting it or removing the
