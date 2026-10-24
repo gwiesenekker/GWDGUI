@@ -399,6 +399,12 @@ opens that directory for a new tournament. Save errors pause scheduling and appe
 in the tournament window title. Pairings cannot be replaced while games are still
 running or stopping.
 
+Applying changed settings, recreating round-robin pairings, or clearing pairings
+starts a new tournament ID with separate files beside the previous JSON. The
+previous tournament JSON and PDN remain available to load later. An unnamed
+tournament gets a separate recovery file instead. These actions are blocked
+until any save error has been resolved, so unsaved results are retained.
+
 Use **Save** to write the tournament state as JSON. The file contains the
 settings, selected engine names, pairings, results, reasons, and concurrency
 limit. Use **Load** to resume it later. Loading is available only while the

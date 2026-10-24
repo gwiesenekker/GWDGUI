@@ -67,6 +67,7 @@ type
     procedure AutoSaveTournament;
     procedure SaveTournamentSnapshot(const AFileName: string);
     procedure EnsureStoragePaths;
+    function StartNewTournamentStorage: Boolean;
     procedure ClearTournamentGameRefs;
     procedure CollectPairingRows(AWhiteEngines, ABlackEngines,
       AResults: TStrings);
@@ -391,6 +392,7 @@ begin
   EnginePanel.BorderSpacing.Around := 8;
 
   FEngineCheckList := TCheckListBox.Create(Self);
+  FEngineCheckList.Name := 'TournamentEngines';
   FEngineCheckList.Parent := EnginePanel;
   FEngineCheckList.Align := alClient;
 
@@ -646,6 +648,37 @@ begin
   Result := EnginePickerDisplayName(AEngine, 0);
 end;
 
+function TTournamentDialog.StartNewTournamentStorage: Boolean;
+var
+  Id: TGUID;
+  NewId, NewFileName, BaseName: string;
+begin
+  Result := False;
+  // Results may exist only in memory after a failed save. Keep them until the
+  // current tournament has been saved successfully instead of discarding them.
+  if IsRunning or (FStorageError <> '') then Exit;
+  repeat
+    if CreateGUID(Id) <> 0 then
+      raise EInOutError.Create('Could not create a tournament identity');
+    NewId := GUIDToString(Id);
+    NewFileName := '';
+    if FFileName <> '' then
+    begin
+      BaseName := ExtractFilePath(ExpandFileName(FFileName)) +
+        SafeFileNameText(FTournamentNameEdit.Text) + '.' + NewId;
+      NewFileName := BaseName + '.json';
+    end;
+  until (NewFileName = '') or
+    (not FileExists(NewFileName) and not DirectoryExists(NewFileName) and
+     not FileExists(ChangeFileExt(NewFileName, '.pdn')) and
+     not DirectoryExists(ChangeFileExt(NewFileName, '.pdn')));
+  FTournamentId := NewId;
+  FFileName := NewFileName;
+  FPdnFileName := '';
+  FLegacyPdnFileName := '';
+  Result := True;
+end;
+
 procedure TTournamentDialog.EnsureStoragePaths;
 var
   DirectoryName: string;
@@ -819,7 +852,7 @@ var
   Rounds: TStringList;
   WhiteEngines: TStringList;
 begin
-  if IsRunning then
+  if IsRunning or (FStorageError <> '') then
     Exit;
   if PendingInvalidatingChange then
     Exit;
@@ -837,12 +870,8 @@ begin
     end;
     CollectPairingRows(WhiteEngines, BlackEngines, Results);
     CollectRoundRows(Rounds);
-    if not TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) then
-    begin
-      ClearTournamentGameRefs;
-      ClearTournamentPairingGrid(FGrid);
-    end
-    else if not TournamentAllResultsKnown(WhiteEngines, BlackEngines, Results) then
+    if TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) and
+      not TournamentAllResultsKnown(WhiteEngines, BlackEngines, Results) then
     begin
       ShowGuiOkDialog(Self, 'Tournament',
         'Finish the current Swiss round first.');
@@ -859,6 +888,12 @@ begin
       LineEnding + 'Continue with repeated pairing?', 'Continue', '',
       mrCancel) <> mrYes) then
       Exit;
+    if not TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) then
+    begin
+      if not StartNewTournamentStorage then Exit;
+      ClearTournamentGameRefs;
+      ClearTournamentPairingGrid(FGrid);
+    end;
     ApplyTournamentPairingRoundToGrid(FGrid, PairingRound);
     FAcceptedTournamentSignature := TournamentSignature;
     if FInvalidationPanel <> nil then
@@ -877,15 +912,16 @@ end;
 
 procedure TTournamentDialog.ClearPairingsClick(Sender: TObject);
 begin
-  if IsRunning then
+  if IsRunning or (FStorageError <> '') then
     Exit;
   if FRunning then
     Exit;
   if HasNonByeResults and
     (ShowGuiConfirmationDialog(Self, 'Clear pairing',
-    'This will clear existing tournament results. Are you sure?', 'Yes',
+    'Start a new tournament without these pairings? Saved tournament files will be kept.', 'Yes',
     'No', mrNo) <> mrYes) then
     Exit;
+  if not StartNewTournamentStorage then Exit;
   ClearTournamentGameRefs;
   ClearTournamentPairingGrid(FGrid);
   FAcceptedTournamentSignature := TournamentSignature;
@@ -1386,8 +1422,7 @@ end;
 
 procedure TTournamentDialog.ApplyInvalidatingChange(Sender: TObject);
 begin
-  if IsRunning then
-    Exit;
+  if not StartNewTournamentStorage then Exit;
   if FInvalidationPanel <> nil then
     FInvalidationPanel.Visible := False;
 
@@ -1770,7 +1805,8 @@ begin
   begin
     Button := FindComponent(PairingActions[I]);
     if Button is TButton then
-      TButton(Button).Enabled := not IsRunning;
+      TButton(Button).Enabled := (not IsRunning) and
+        ((PairingActions[I] = 'LoadTournament') or (FStorageError = ''));
   end;
   Caption := 'Tournament';
   if FStorageError <> '' then

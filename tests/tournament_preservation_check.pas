@@ -2,7 +2,7 @@ program tournament_preservation_check;
 {$mode objfpc}{$H+}
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Interfaces, Forms, Classes, SysUtils, StdCtrls, Grids, ExtCtrls, FPJSON, JSONParser,
+  Interfaces, Forms, Classes, SysUtils, StdCtrls, Grids, ExtCtrls, CheckLst, Controls, FPJSON, JSONParser, uGuiDialogs,
   uTournamentDialog, uTournamentGridModel, uMainForm, uGameSetupForm,
   uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uPdn;
 
@@ -450,6 +450,216 @@ begin
   end;
 end;
 
+function FileContents(const FileName: string): string;
+var
+  Stream: TFileStream;
+begin
+  Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
+  try
+    SetLength(Result, Stream.Size);
+    if Result <> '' then Stream.ReadBuffer(Result[1], Length(Result));
+  finally
+    Stream.Free;
+  end;
+end;
+
+function TournamentId(const FileName: string): string;
+var
+  Data: TJSONObject;
+begin
+  Data := TJSONObject(GetJSON(FileContents(FileName)));
+  try
+    Result := Data.Get('tournament_id', '');
+  finally
+    Data.Free;
+  end;
+end;
+
+procedure CheckResetPreservesSavedFiles(const Fixture: string; Action: Integer);
+var
+  Dialog, Reloaded: TTournamentDialog;
+  Game: TRunningGame;
+  Command: TGameTreeCommand;
+  Grid: TStringGrid;
+  Engines: TCheckListBox;
+  Button: TButton;
+  JsonBefore, PdnBefore, OldPdn, OldId, NewId, NewJson: string;
+begin
+  WriteFixture(Fixture, 'Reset preservation');
+  Dialog := TTournamentDialog.Create(nil);
+  Reloaded := TTournamentDialog.Create(nil);
+  Game := NewGame(300 + Action);
+  try
+    Dialog.LoadTournamentFromFile(Fixture);
+    Dialog.RegisterRunningGame(1, Game);
+    Command := Game.GameTreeActor.CreateAppendMainlineMoveCommand('32-28', gmsHuman);
+    try
+      Game.GameTreeActor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'reset preservation move fixture');
+    finally
+      Command.Free;
+    end;
+    CompleteGame(Game, '2-0');
+    Dialog.GameStopped(Game);
+    Dialog.SetSelectedResult('1-1');
+    OldPdn := Dialog.PdnFileName;
+    OldId := TournamentId(Fixture);
+    JsonBefore := FileContents(Fixture);
+    PdnBefore := FileContents(OldPdn);
+    case Action of
+      0: begin
+        TEdit(Dialog.FindComponent('TournamentStartingFEN')).Text := 'B:W31-50:B1-20';
+        Button := TButton(Dialog.FindComponent('ApplyTournamentChanges'));
+      end;
+      1: begin
+        Engines := TCheckListBox(Dialog.FindComponent('TournamentEngines'));
+        Engines.Items.Clear;
+        Engines.Items.Add('Engine A');
+        Engines.Items.Add('Engine B');
+        Engines.Checked[0] := True;
+        Engines.Checked[1] := True;
+        Button := TButton(Dialog.FindComponent('CreatePairing'));
+      end;
+      else Button := TButton(Dialog.FindComponent('ClearPairing'));
+    end;
+    {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+    if Action = 2 then
+    begin
+      GuiTestConfirmationResult := mrNo;
+      try
+        Button.OnClick(Button);
+      finally
+        GuiTestConfirmationResult := 0;
+      end;
+      Check(Dialog.SaveFileName = ExpandFileName(Fixture), 'cancel must retain tournament identity');
+      Check((FileContents(Fixture) = JsonBefore) and
+        (FileContents(OldPdn) = PdnBefore), 'cancel must leave both saved files untouched');
+    end;
+    GuiTestConfirmationResult := mrYes;
+    {$ENDIF}
+    try
+      Button.OnClick(Button);
+    finally
+      {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+      GuiTestConfirmationResult := 0;
+      {$ENDIF}
+    end;
+    Check((FileContents(Fixture) = JsonBefore) and
+      (FileContents(OldPdn) = PdnBefore), 'reset must preserve the original JSON and PDN byte for byte');
+    NewJson := Dialog.SaveFileName;
+    Check((NewJson <> ExpandFileName(Fixture)) and FileExists(NewJson),
+      'reset must autosave to a separate file');
+    NewId := TournamentId(NewJson);
+    Check((NewId <> '') and (NewId <> OldId), 'reset must allocate a new tournament ID');
+    Check(Dialog.PdnFileName <> OldPdn, 'reset must not reuse the original PDN target');
+    Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    if Action = 1 then
+    begin
+      Check(TournamentGridHasPairingAtRow(Grid, 1), 'round robin must create fresh pairings');
+      Dialog.SetSelectedResult('0-2');
+    end
+    else
+      Check(TournamentPairingGridIsEmpty(Grid), 'apply and clear must reset the current pairings');
+    Reloaded.LoadTournamentFromFile(Fixture);
+    Check(TStringGrid(Reloaded.FindComponent('TournamentPairings')).Cells[
+      TournamentColResult, 1] = '1-1', 'the original tournament must still reopen with its result');
+    CheckPdnResult(OldPdn, '1-1', '1');
+    Check(Pos('32-28', FileContents(OldPdn)) > 0, 'the original played game must survive reset');
+    Check((FileContents(Fixture) = JsonBefore) and
+      (FileContents(OldPdn) = PdnBefore), 'later saves and reopening must preserve the original files');
+  finally
+    Game.Free;
+    Reloaded.Free;
+    Dialog.Free;
+  end;
+end;
+
+procedure CheckResetWaitsForSuccessfulSave(const Fixture: string);
+var
+  Dialog: TTournamentDialog;
+  Grid: TStringGrid;
+  Button: TButton;
+  Engines: TCheckListBox;
+  I: Integer;
+  Saved: string;
+const
+  Names: array[0..2] of string = ('CreatePairing', 'ClearPairing', 'ApplyTournamentChanges');
+begin
+  WriteFixture(Fixture, 'Failed reset save');
+  Dialog := TTournamentDialog.Create(nil);
+  try
+    Dialog.LoadTournamentFromFile(Fixture);
+    Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    Engines := TCheckListBox(Dialog.FindComponent('TournamentEngines'));
+    Engines.Items.Clear;
+    Engines.Items.Add('Engine A');
+    Engines.Items.Add('Engine B');
+    Engines.Checked[0] := True;
+    Engines.Checked[1] := True;
+    Check(RenameFile(Fixture, Fixture + '.saved'), 'prepare reset save failure');
+    Check(CreateDir(Fixture), 'block reset save destination');
+    Dialog.SetSelectedResult('1-1');
+    Check(Dialog.StorageError <> '', 'unsaved result must report save error');
+    for I := Low(Names) to High(Names) do
+    begin
+      if I = 2 then
+        TEdit(Dialog.FindComponent('TournamentStartingFEN')).Text := 'B:W31-50:B1-20';
+      Button := TButton(Dialog.FindComponent(Names[I]));
+      Check(not Button.Enabled, 'reset actions must be disabled while results remain unsaved');
+      Button.OnClick(Button);
+      Check((Dialog.SaveFileName = ExpandFileName(Fixture)) and
+        (Grid.Cells[TournamentColResult, 1] = '1-1'),
+        'direct reset actions must also retain the only in-memory result after a save failure');
+    end;
+    RemoveDir(Fixture);
+    Check(RenameFile(Fixture + '.saved', Fixture), 'restore reset save destination');
+    // Revert the pending edit before recovering the original tournament save.
+    TEdit(Dialog.FindComponent('TournamentStartingFEN')).Text := 'W:W31-50:B1-20';
+    Dialog.SetSelectedResult('1-1');
+    Check(Dialog.StorageError = '', 'successful save must unblock reset actions');
+    Saved := FileContents(Fixture);
+    TEdit(Dialog.FindComponent('TournamentStartingFEN')).Text := 'B:W31-50:B1-20';
+    Button := TButton(Dialog.FindComponent('ApplyTournamentChanges'));
+    Button.OnClick(Button);
+    Check((Dialog.SaveFileName <> ExpandFileName(Fixture)) and
+      (FileContents(Fixture) = Saved), 'reset after recovery must retain the saved result');
+  finally
+    if DirectoryExists(Fixture) then RemoveDir(Fixture);
+    if FileExists(Fixture + '.saved') then RenameFile(Fixture + '.saved', Fixture);
+    Dialog.Free;
+  end;
+end;
+
+procedure CheckResetPreservesRecoveryFiles;
+var
+  Dialog: TTournamentDialog;
+  Grid: TStringGrid;
+  OldJson, OldPdn, NewJson, NewPdn, Saved: string;
+begin
+  Dialog := TTournamentDialog.Create(nil);
+  OldJson := ''; OldPdn := ''; NewJson := ''; NewPdn := '';
+  try
+    Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    AddTournamentPairingRow(Grid, 'White', 'Black', 1);
+    Dialog.SetSelectedResult('1-1');
+    OldJson := Dialog.SaveFileName;
+    OldPdn := Dialog.PdnFileName;
+    Saved := FileContents(OldJson);
+    TEdit(Dialog.FindComponent('TournamentStartingFEN')).Text := 'B:W31-50:B1-20';
+    with TButton(Dialog.FindComponent('ApplyTournamentChanges')) do OnClick(nil);
+    NewJson := Dialog.SaveFileName;
+    NewPdn := Dialog.PdnFileName;
+    Check((NewJson <> OldJson) and FileExists(NewJson),
+      'resetting an unnamed tournament must create a separate recovery file');
+    Check(FileContents(OldJson) = Saved, 'the prior recovery JSON must survive reset');
+    CheckPdnResult(OldPdn, '1-1', '1');
+  finally
+    Dialog.Free;
+    DeleteFile(OldJson); DeleteFile(OldPdn);
+    DeleteFile(NewJson); DeleteFile(NewPdn);
+  end;
+end;
+
 var
   Fixture, OtherFile, TestDirectory: string;
   Id: TGUID;
@@ -474,6 +684,11 @@ begin
       CheckRecordsAndPdnStayConsistent(IncludeTrailingPathDelimiter(TestDirectory) + 'records.json');
       CheckLegacyPdnIsPreserved(IncludeTrailingPathDelimiter(TestDirectory) + 'legacy.json');
       CheckByeSurvivesReload(IncludeTrailingPathDelimiter(TestDirectory) + 'bye.json');
+      CheckResetPreservesSavedFiles(IncludeTrailingPathDelimiter(TestDirectory) + 'apply.json', 0);
+      CheckResetPreservesSavedFiles(IncludeTrailingPathDelimiter(TestDirectory) + 'create.json', 1);
+      CheckResetPreservesSavedFiles(IncludeTrailingPathDelimiter(TestDirectory) + 'clear.json', 2);
+      CheckResetWaitsForSuccessfulSave(IncludeTrailingPathDelimiter(TestDirectory) + 'failed-reset.json');
+      CheckResetPreservesRecoveryFiles;
       WriteLn('OK');
     finally
       if FindFirst(IncludeTrailingPathDelimiter(TestDirectory) + '*', faAnyFile, Search) = 0 then

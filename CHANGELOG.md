@@ -3,6 +3,20 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Preserve saved tournaments when resetting pairings (T10)
+
+- Start a new tournament ID and separate storage files for Apply settings,
+  round-robin recreation and Clear pairings. Leave the previous JSON and PDN
+  untouched, including unnamed recovery tournaments.
+- Build replacement pairings before resetting current state. Block destructive
+  resets while a save error leaves results only in memory.
+- Regress all three real dialog actions, cancel/confirm Clear, original file bytes,
+  reopening played games with manual overrides, separate recovery generations,
+  and reset attempts before and after failed-save recovery.
+- Keep confirmation responses explicit in noninteractive GUI tests; unexpected
+  dialogs still fail without opening a window.
+- Validation: expanded GTK tournament preservation checks pass.
+
 ### 2026-10-24 — Share the cursor with the tree window and keep tests noninteractive
 
 - Bind tree-window rows to immutable node IDs and their source tree. Tree clicks,

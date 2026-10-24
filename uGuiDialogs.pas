@@ -7,6 +7,10 @@ interface
 uses
   Forms, Types;
 
+{$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+var GuiTestConfirmationResult: Integer = 0;
+{$ENDIF}
+
 function ShowGuiConfirmationDialog(AOwner: TCustomForm; const ACaption,
   AText, AAcceptCaption, ARejectCaption: string; ARejectResult: Integer): Integer;
 function ShowGuiOkDialog(AOwner: TCustomForm; const ACaption,
@@ -291,6 +295,7 @@ var
   PromptLabel: TLabel;
 begin
   {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+  if GuiTestConfirmationResult <> 0 then Exit(GuiTestConfirmationResult);
   raise EInvalidOperation.Create('Unexpected dialog (' + ACaption + '): ' + AText);
   {$ENDIF}
   Dialog := TForm.Create(AOwner);
