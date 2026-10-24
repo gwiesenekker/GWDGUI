@@ -142,11 +142,6 @@ begin
     Result := 'black';
 end;
 
-function SecondsBetween(const AStartTime, AEndTime: TDateTime): Double;
-begin
-  Result := (AEndTime - AStartTime) * 24 * 60 * 60;
-end;
-
 constructor TGameOrchestrator.Create;
 begin
   inherited Create;
@@ -487,9 +482,25 @@ var
   LElapsedSeconds: Double;
   LEngine: TDraughtsEngine;
   LSide: TDraughtsSide;
-  LStartTime: TDateTime;
+  LStartTick: QWord;
+  LAvailableSeconds: Double;
+  LTimeoutMs: Integer;
+  LSearchStarted: Boolean;
+
+  procedure FinishOnEngineTimeout;
+  begin
+    FUsedSeconds[LSide] := FUsedSeconds[LSide] +
+      (GetTickCount64 - LStartTick) / 1000;
+    FRemainingSeconds[LSide] := 0;
+    if LSide = dsWhite then
+      FinishGame('0-2', 'flag fell for white; engine move deadline expired')
+    else
+      FinishGame('2-0', 'flag fell for black; engine move deadline expired');
+    Result := '';
+  end;
 begin
   Result := '';
+  LSearchStarted := False;
   FLastError := '';
   if FState <> gosRunning then
     raise EInvalidOperation.Create('Cannot play a move unless the orchestrator is running');
@@ -522,10 +533,32 @@ begin
     LEngine.SetClockInfo(GetMovesRemaining(LSide), FRemainingSeconds[LSide],
       FUsedSeconds[LSide]);
 
-    LogMessage('start thinking; side=' + SideToString(LSide));
-    LStartTime := Now;
+    LAvailableSeconds := FRemainingSeconds[LSide];
+    if (FTimeControl.IncrementMode = cimFromStart) or
+      ((FTimeControl.MovesPerPeriod > 0) and
+       (FTotalMovesBySide[LSide] + 1 >= FTimeControl.MovesPerPeriod)) then
+      if FTimeControl.IncrementSeconds > 0 then
+        LAvailableSeconds := LAvailableSeconds + FTimeControl.IncrementSeconds;
+    // Match the clock's increment allowance; the margin only bounds transport
+    // and polling overhead. It does not add time to the player's clock.
+    if LAvailableSeconds >= (High(Integer) - 250) / 1000 then
+      LTimeoutMs := High(Integer)
+    else if LAvailableSeconds <= 0 then
+      LTimeoutMs := 1
+    else
+      LTimeoutMs := Round(LAvailableSeconds * 1000) + 250;
+    LEngine.SetMoveTimeLimit(LTimeoutMs);
+    LogMessage('start thinking; side=' + SideToString(LSide) +
+      '; deadline_ms=' + IntToStr(LTimeoutMs));
+    LStartTick := GetTickCount64;
+    LSearchStarted := True;
     Result := LEngine.StartThinking;
-    LElapsedSeconds := SecondsBetween(LStartTime, Now);
+    LElapsedSeconds := (GetTickCount64 - LStartTick) / 1000;
+    if LEngine.MoveTimedOut then
+    begin
+      FinishOnEngineTimeout;
+      Exit;
+    end;
     LogMessage('move received; side=' + SideToString(LSide) + '; move=' + Result);
     if Result = '' then
     begin
@@ -541,9 +574,14 @@ begin
   except
     on E: Exception do
     begin
-      FLastError := E.Message;
-      ChangeState(gosError, E.Message);
-      raise;
+      if LSearchStarted and LEngine.MoveTimedOut then
+        FinishOnEngineTimeout
+      else
+      begin
+        FLastError := E.Message;
+        ChangeState(gosError, E.Message);
+        raise;
+      end;
     end;
   end;
 end;

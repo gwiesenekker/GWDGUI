@@ -62,3 +62,10 @@ win/draw claims cannot award results while resignations retain their meaning
 for both colours. Output and executables stay in `/tmp/gwdgui-dxp-checks`.
 The DXP check also disconnects the peer immediately after GAMEACC, verifying
 prompt error detection, unchanged game state and safe shutdown.
+
+`engine_clock_check` uses a self-contained fake Hub engine to check clock-derived
+deadlines, both colours' time losses, increment timing, stopping/fencing and reuse
+after a timed-out search. After the regular sweep, run
+`/tmp/gwdgui-regression-checks/engine_clock_check --long-check` to verify that a
+real 61-second search succeeds with a two-minute clock. The DXP integration
+check also tests a silent peer's clock deadline and loss on time.

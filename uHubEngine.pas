@@ -945,6 +945,8 @@ begin
 end;
 
 function THubEngine.DoStartThinking: string;
+var
+  Failure: string;
 begin
   SendLine(BuildHubPositionCommand);
   if FLevelCommand <> '' then
@@ -953,10 +955,22 @@ begin
   SendLine('go think');
   ChangeState(esWaitingForDone, 'search started; waiting for done');
 
-  if not WaitForDoneMove(60000, Result) then
+  if not WaitForDoneMove(MoveTimeLimitMs, Result) then
   begin
+    Failure := FLastWaitFailure;
+    if Failure = 'timeout' then
+    begin
+      MarkMoveTimedOut;
+      // Fence the timed-out search before another game can reuse this engine.
+      try
+        DoStopSearch;
+      except
+        on E: Exception do
+          Log('timed-out search could not be stopped; message=' + E.Message);
+      end;
+    end;
     ChangeState(esError, 'waiting for done move failed; reason=' +
-      FLastWaitFailure);
+      Failure);
     Result := '';
   end;
 end;

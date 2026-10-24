@@ -40,6 +40,14 @@ begin
     Stream.WriteBuffer(Text[1], Length(Text));
     if Reason = 'C' then
       Exit; // Crash/disconnect immediately after accepting the game.
+    if Reason = 'S' then
+    begin
+      Text := ReadPacket(Stream); // Silent until the GUI ends the timed-out game.
+      Check((Text <> '') and (Text[1] = 'E'), 'timeout must send GAMEEND');
+      Text := 'E00' + #0;
+      Stream.WriteBuffer(Text[1], Length(Text));
+      Exit;
+    end;
     Text := 'E' + Reason + '0' + #0;
     Stream.WriteBuffer(Text[1], Length(Text));
     Text := ReadPacket(Stream);
@@ -150,6 +158,47 @@ begin
   end;
 end;
 
+procedure CheckSilentPeerLosesOnTime;
+var
+  Definition: TExternalEngineDefinition;
+  Game: TGameOrchestrator;
+  Engine: TDxpEngine;
+  Clock: TTimeControl;
+  Port: Word;
+  Tick: QWord;
+begin
+  Port := AvailablePort;
+  Definition := TExternalEngineDefinition.Create;
+  Game := TGameOrchestrator.Create;
+  try
+    Definition.Kind := eekDxp;
+    Definition.DxpId := 'Silent DXP';
+    Definition.DxpRole := derListen;
+    Definition.DxpHost := '127.0.0.1';
+    Definition.DxpPort := Port;
+    Definition.ExePath := ExpandFileName(ParamStr(0));
+    Definition.Arguments := '--peer ' + IntToStr(Port) + ' S';
+    Engine := TDxpEngine.Create(Definition);
+    Game.Engine[dsWhite] := Engine;
+    Check(Engine.LaunchAndInit, 'silent peer should initialize');
+    Clock := DefaultTimeControl;
+    Clock.MinutesPerPeriod := 0.002;
+    Game.TimeControl := Clock;
+    Game.NewGame(DefaultStartingFEN);
+    Tick := GetTickCount64;
+    Check(Game.PlayNextMove = '', 'timed-out DXP search must not return a move');
+    Check(GetTickCount64 - Tick < 2000, 'DXP deadline must follow the short clock');
+    Check(Engine.MoveTimedOut, 'DXP adapter must report its expired deadline');
+    Check((Game.State = gosGameOver) and (Game.GameResult = '0-2') and
+      (Game.MoveHistory.Count = 0), 'DXP timeout must be scored as a loss on time');
+    Check(Pos('send; packet=DXP_GAMEEND', Engine.StateLog.Text) > 0,
+      'DXP timeout must stop the peer session');
+  finally
+    Game.Free;
+    Definition.Free;
+  end;
+end;
+
 begin
   if ParamStr(1) = '--peer' then
   begin
@@ -163,5 +212,6 @@ begin
   CheckGameEndClaim('1', dsWhite, '0-2');
   CheckGameEndClaim('1', dsBlack, '2-0');
   CheckDisconnectedPeerFailsPromptly;
+  CheckSilentPeerLosesOnTime;
   WriteLn('OK');
 end.

@@ -3,6 +3,23 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Use the game clock for engine move deadlines (D3)
+
+- Derive clocked-game search deadlines from remaining time and the increment
+  applicable to that move, with a small polling/transport margin. Replace the
+  Hub and DXP adapters' fixed sixty-second waits with that supplied deadline.
+- Stop and fence a timed-out Hub search; end and close a timed-out DXP session.
+  Report expiry separately from engine failures and record a loss on time with
+  clock usage, rather than an unfinished `*` result or runner error.
+- Bound the entire DXP move wait, so extra packets cannot restart its deadline.
+- Measure engine move elapsed time with a monotonic timer rather than wall time.
+- Regress short-clock losses for both colours, increment timing, clocks longer
+  than sixty seconds, timeout status reset and safe reuse after acknowledgement.
+  Add a silent-peer DXP timeout case and run a real sixty-one-second Hub search
+  successfully under a two-minute clock.
+- Validation: twelve headless regression programs, source audit, eight local-TCP
+  DXP integration cases, GTK check and the long-search regression pass.
+
 ### 2026-10-24 — Detect a disconnected DXP engine promptly (D5)
 
 - Distinguish socket EOF and hard read errors from temporary receive timeouts.

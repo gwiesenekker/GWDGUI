@@ -219,7 +219,6 @@ const
   DxpLaunchListenTimeoutMs = 5000;
   DxpLaunchSocketTimeoutMs = 120000;
   DxpGameAcceptedTimeoutMs = 10000;
-  DxpMoveTimeoutMs = 60000;
   DxpWorkerWaitPollMs = 1000;
   DxpWorkerWaitLogMs = 10000;
 
@@ -1139,13 +1138,21 @@ end;
 function TDxpEngine.WaitForDxpMove(ATimeoutMs: Integer): string;
 var
   MoveText: string;
+  StartTick, ElapsedMs: QWord;
+  RemainingMs: Integer;
   Packet: string;
   Reason: Char;
   StopCode: Char;
 begin
   Result := '';
-  while ReadDxpPacket(ATimeoutMs, Packet) do
-  begin
+  StartTick := GetTickCount64;
+  repeat
+    ElapsedMs := GetTickCount64 - StartTick;
+    if ElapsedMs >= QWord(ATimeoutMs) then
+      Break;
+    RemainingMs := ATimeoutMs - Integer(ElapsedMs);
+    if not ReadDxpPacket(RemainingMs, Packet) then
+      Break;
     if Packet = '' then
       Continue;
     case Packet[1] of
@@ -1178,9 +1185,15 @@ begin
     else
       Log('ignored DXP packet; packet=' + Packet);
     end;
-  end;
+  until False;
+  if FStopping or StopRequested then
+    Exit;
+  MarkMoveTimedOut;
   Log('DXP wait timeout; expected=DXP_MOVE or DXP_GAMEEND; timeout_ms=' +
     IntToStr(ATimeoutMs));
+  // A silent peer must not keep thinking after the game is lost on time.
+  DoStop;
+  ChangeState(esError, 'engine move deadline expired');
 end;
 
 function TDxpEngine.WaitForGameEndAcknowledgement(ATimeoutMs: Integer): Boolean;
@@ -1333,7 +1346,7 @@ begin
   end;
 
   ChangeState(esWaitingForDone, 'waiting for DXP_MOVE');
-  Result := WaitForDxpMove(DxpMoveTimeoutMs);
+  Result := WaitForDxpMove(MoveTimeLimitMs);
 end;
 
 procedure TDxpEngine.DoStop;

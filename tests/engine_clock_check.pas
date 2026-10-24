@@ -1,0 +1,210 @@
+program engine_clock_check;
+{$mode objfpc}{$H+}
+uses
+  {$IFDEF UNIX}cthreads,{$ENDIF}
+  Classes, SysUtils, uEngineBase, uHubEngine, uEngineRegistry,
+  uDraughtsBoard, uGameOrchestrator;
+
+procedure Check(Condition: Boolean; const MessageText: string);
+begin
+  if not Condition then
+    raise Exception.Create(MessageText);
+end;
+
+procedure FakeHub(const Mode: string);
+var
+  Line, MoveText: string;
+  Recovered: Boolean;
+begin
+  Recovered := False;
+  MoveText := '32-28';
+  while not EOF(Input) do
+  begin
+    ReadLn(Line);
+    if Line = 'hub' then
+    begin
+      WriteLn('id name=ClockHub');
+      WriteLn('wait');
+    end
+    else if Line = 'init' then
+      WriteLn('ready')
+    else if Pos('pos ', Line) = 1 then
+    begin
+      if Pos('18-23', Line) > 0 then
+        MoveText := '37-32'
+      else
+        MoveText := '32-28';
+    end
+    else if Line = 'go think' then
+    begin
+      if Mode = '--long-hub' then
+        Sleep(61000)
+      else if Mode = '--delayed-hub' then
+        Sleep(180);
+      if (Mode <> '--silent-hub') and
+        ((Mode <> '--recovering-hub') or Recovered) then
+        WriteLn('done move=' + MoveText);
+    end
+    else if Line = 'stop' then
+    begin
+      Recovered := True;
+      WriteLn('done move=' + MoveText);
+    end
+    else if Line = 'quit' then
+      Exit;
+    Flush(Output);
+  end;
+end;
+
+function CreateEngine(const Mode: string): THubEngine;
+var
+  Definition: TExternalEngineDefinition;
+begin
+  Definition := TExternalEngineDefinition.Create;
+  try
+    Definition.Kind := eekHub;
+    Definition.HubId := 'ClockHub';
+    Definition.ExePath := ExpandFileName(ParamStr(0));
+    Definition.Arguments := Mode;
+    Result := THubEngine.Create(Definition);
+  finally
+    Definition.Free;
+  end;
+end;
+
+procedure CheckClockedThink(const Mode: string; Side: TDraughtsSide;
+  Minutes, Increment: Double; ExpectedTimeout: Boolean);
+var
+  Game: TGameOrchestrator;
+  Engine: THubEngine;
+  Clock: TTimeControl;
+  Fen, MoveText: string;
+  Tick: QWord;
+begin
+  Game := TGameOrchestrator.Create;
+  try
+    Engine := CreateEngine(Mode);
+    Game.Engine[Side] := Engine;
+    Check(Engine.LaunchAndInit, 'clock fake Hub should initialize');
+    Clock := DefaultTimeControl;
+    Clock.MinutesPerPeriod := Minutes;
+    Clock.IncrementSeconds := Increment;
+    Clock.IncrementMode := cimFromStart;
+    Game.TimeControl := Clock;
+    Fen := DefaultStartingFEN;
+    if Side = dsBlack then
+      Fen[1] := 'B';
+    Game.NewGame(Fen);
+    Tick := GetTickCount64;
+    MoveText := Game.PlayNextMove;
+    if ExpectedTimeout then
+    begin
+      Check(GetTickCount64 - Tick < 2000, 'short clock must not wait sixty seconds');
+      Check(Engine.MoveTimedOut, 'expired adapter deadline must be reported');
+      Check((Game.State = gosGameOver) and (Game.MoveHistory.Count = 0),
+        'a timed-out search must finish without accepting a move');
+      if Side = dsWhite then
+        Check(Game.GameResult = '0-2', 'White timeout must be a loss')
+      else
+        Check(Game.GameResult = '2-0', 'Black timeout must be a loss');
+      Check((Game.RemainingSeconds[Side] = 0) and
+        (Game.UsedSeconds[Side] > 0), 'flag fall must record clock usage');
+      Check(Pos('send; message=stop', Engine.StateLog.Text) > 0,
+        'Hub timeout must stop and fence the search');
+      Check(Game.LastError = '', 'a clock loss must not become a runner error');
+    end
+    else
+    begin
+      Check((MoveText <> '') and (Game.MoveHistory.Count = 1),
+        'a move within its clock budget must be accepted');
+      Check(not Engine.MoveTimedOut, 'successful search must not be marked timed out');
+      if Minutes >= 2 then
+        Check(Engine.MoveTimeLimitMs > 60000,
+          'long clock must configure a deadline beyond sixty seconds');
+      if Mode = '--long-hub' then
+        Check(GetTickCount64 - Tick >= 60000,
+          'long-search regression must cross the previous fixed deadline');
+    end;
+  finally
+    Game.Free;
+  end;
+end;
+
+procedure CheckIncrementAfterMoveLimit;
+var
+  Game: TGameOrchestrator;
+  Engine: THubEngine;
+  Clock: TTimeControl;
+begin
+  Game := TGameOrchestrator.Create;
+  try
+    Engine := CreateEngine('--fast-hub');
+    Game.Engine[dsWhite] := Engine;
+    Check(Engine.LaunchAndInit, 'increment fake Hub should initialize');
+    Clock := DefaultTimeControl;
+    Clock.MinutesPerPeriod := 0.01;
+    Clock.MovesPerPeriod := 2;
+    Clock.IncrementSeconds := 10;
+    Clock.IncrementMode := cimAfterMoveLimit;
+    Game.TimeControl := Clock;
+    Game.NewGame(DefaultStartingFEN);
+    Check(Game.PlayNextMove <> '', 'first White move');
+    Check(Engine.MoveTimeLimitMs < 1000,
+      'increment must not enter deadline before the configured move limit');
+    Game.PlayMove('18-23', dsBlack, 0, 'human');
+    Check(Game.PlayNextMove <> '', 'second White move');
+    Check(Engine.MoveTimeLimitMs > 10000,
+      'increment must enter deadline when it becomes applicable');
+  finally
+    Game.Free;
+  end;
+end;
+
+procedure CheckReuseAfterClockTimeout;
+var
+  Game: TGameOrchestrator;
+  Engine: THubEngine;
+  Clock: TTimeControl;
+begin
+  Game := TGameOrchestrator.Create;
+  try
+    Engine := CreateEngine('--recovering-hub');
+    Game.Engine[dsWhite] := Engine;
+    Check(Engine.LaunchAndInit, 'recovering fake Hub should initialize');
+    Clock := DefaultTimeControl;
+    Clock.MinutesPerPeriod := 0.002;
+    Game.TimeControl := Clock;
+    Game.NewGame(DefaultStartingFEN);
+    Check(Game.PlayNextMove = '', 'first search must reach its deadline');
+    Check(Engine.MoveTimedOut, 'first game must report timeout');
+    Clock.MinutesPerPeriod := 1;
+    Game.TimeControl := Clock;
+    Game.NewGame(DefaultStartingFEN);
+    Check(Game.PlayNextMove = '32-28',
+      'an acknowledged stopped search must not leak into the next game');
+    Check((not Engine.MoveTimedOut) and (Game.State = gosRunning),
+      'a new successful search must clear the preceding timeout status');
+  finally
+    Game.Free;
+  end;
+end;
+
+begin
+  if Pos('-hub', ParamStr(1)) > 0 then
+  begin
+    FakeHub(ParamStr(1));
+    Halt(0);
+  end;
+  if ParamStr(1) = '--long-check' then
+    CheckClockedThink('--long-hub', dsWhite, 2, 0, False)
+  else
+  begin
+    CheckClockedThink('--silent-hub', dsWhite, 0.002, 0, True);
+    CheckClockedThink('--silent-hub', dsBlack, 0.002, 0, True);
+    CheckClockedThink('--fast-hub', dsWhite, 2, 0, False);
+    CheckClockedThink('--delayed-hub', dsWhite, 0.002, 0.2, False);
+    CheckIncrementAfterMoveLimit;
+    CheckReuseAfterClockTimeout;
+  end;
+  WriteLn('OK');
+end.

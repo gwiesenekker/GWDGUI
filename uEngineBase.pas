@@ -27,6 +27,8 @@ type
   TDraughtsEngine = class
   private
     FEngineName: string;
+    FMoveTimeLimitMs: Integer;
+    FMoveTimedOut: Boolean;
     FGameResult: string;
     FGameResultLock: TCriticalSection;
     FLastDepth: string;
@@ -64,6 +66,7 @@ type
     procedure ChangeState(ANewState: TEngineState; const AReason: string);
     function DoStartThinking: string; virtual; abstract;
     procedure Log(const AMessage: string);
+    procedure MarkMoveTimedOut;
     procedure SetGameResult(const AResult: string);
     function StopRequested: Boolean;
     property State: TEngineState read GetCurrentState;
@@ -84,7 +87,10 @@ type
     procedure SetGamePosition(const AStartingFEN: string; AMoves: TStrings); virtual;
     function StartThinking: string; virtual;
     procedure Stop; virtual;
+    procedure SetMoveTimeLimit(ATimeoutMs: Integer);
 
+    property MoveTimeLimitMs: Integer read FMoveTimeLimitMs;
+    property MoveTimedOut: Boolean read FMoveTimedOut;
     property EngineName: string read FEngineName write FEngineName;
     property CurrentState: TEngineState read GetCurrentState;
     property GameResult: string read GetGameResult;
@@ -159,6 +165,7 @@ constructor TDraughtsEngine.Create(const AEngineName: string);
 begin
   inherited Create;
   FEngineName := AEngineName;
+  FMoveTimeLimitMs := 60000;
   FMovesPlayed := TStringList.Create;
   FStateLog := TStringList.Create;
   FLogLock := TCriticalSection.Create;
@@ -567,6 +574,7 @@ end;
 
 function TDraughtsEngine.StartThinking: string;
 begin
+  FMoveTimedOut := False;
   Result := '';
   SetLastError('');
   ChangeState(esThinking, 'start thinking');
@@ -576,7 +584,8 @@ begin
       DoMove(Result)
     else
       Log('thinking finished without move');
-    ChangeState(esReady, 'thinking finished');
+    if not FMoveTimedOut then
+      ChangeState(esReady, 'thinking finished');
   except
     on E: Exception do
     begin
@@ -586,6 +595,19 @@ begin
       raise;
     end;
   end;
+end;
+
+procedure TDraughtsEngine.SetMoveTimeLimit(ATimeoutMs: Integer);
+begin
+  if ATimeoutMs < 1 then
+    ATimeoutMs := 1;
+  FMoveTimeLimitMs := ATimeoutMs;
+  FMoveTimedOut := False;
+end;
+
+procedure TDraughtsEngine.MarkMoveTimedOut;
+begin
+  FMoveTimedOut := True;
 end;
 
 procedure TDraughtsEngine.Stop;
