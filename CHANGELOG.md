@@ -3,6 +3,22 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Autosave tournament standings and keep storage paths stable (T1, T5)
+
+- Atomically replace tournament snapshots after pairing changes, registration,
+  completion, manual results and rescheduling. Create recovery files for unnamed
+  tournaments in the application config directory; Load starts there when needed.
+- Persist tournament identity and the absolute PDN path. Renaming the tournament
+  or saving its JSON elsewhere no longer redirects subsequent game records.
+- Include tournament ID, round and game number in exported game records, including
+  games that ended before their first move. Replace the PDN file atomically too.
+- Release completed game references before saving. Pause scheduling on save errors,
+  show the error in the tournament title, and retry pending saves on recovery.
+- Regress atomic overwrite/failure cleanup, recovery in a fresh form, unnamed
+  recovery files, stable paths, failed replacement and successful retry.
+- Validation: thirteen headless regression programs, source audit and expanded
+  GTK tournament checks pass.
+
 ### 2026-10-24 — Reject invalid tournament loads before changing current data (T7)
 
 - Parse and validate tournament settings, engine selections and every pairing row

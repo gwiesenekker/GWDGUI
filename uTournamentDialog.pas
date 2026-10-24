@@ -30,6 +30,9 @@ type
     FEngineCheckList: TCheckListBox;
     FEngines: TExternalEngineList;
     FFileName: string;
+    FPdnFileName: string;
+    FTournamentId: string;
+    FStorageError: string;
     FGrid: TStringGrid;
     FConcurrentGamesEdit: TEdit;
     FIncrementEdit: TEdit;
@@ -58,6 +61,8 @@ type
       AGame: TObject);
     procedure ClearPairingsClick(Sender: TObject);
     procedure ClearStaleRunningReasons;
+    procedure AutoSaveTournament;
+    procedure EnsureStoragePaths;
     procedure ClearTournamentGameRefs;
     procedure CollectPairingRows(AWhiteEngines, ABlackEngines,
       AResults: TStrings);
@@ -79,7 +84,6 @@ type
     function IsRowRunning(ARow: Integer): Boolean;
     function IsRowStartable(ARow: Integer; ABusyEngineKeys: TStrings): Boolean;
     procedure LoadClick(Sender: TObject);
-    function PdnFileName: string;
     function PendingInvalidatingChange: Boolean;
     procedure PairingGridDrawCell(Sender: TObject; ACol, ARow: Integer;
       Rect: TRect; State: TGridDrawState);
@@ -101,6 +105,9 @@ type
     procedure SaveTournamentToFile(const AFileName: string);
     procedure SetSelectedResult(const AResultText: string);
     procedure RescheduleSelectedGame(Sender: TObject);
+    function PdnFileName: string;
+    property SaveFileName: string read FFileName;
+    property StorageError: string read FStorageError;
     procedure BeginShutdown;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -116,9 +123,10 @@ type
 implementation
 
 uses
-  Dialogs, FPJSON, Graphics, JSONParser, Math, uGameOrchestrator,
+  Dialogs, FPJSON, Graphics, JSONParser, Math, LazFileUtils, uGameOrchestrator,
   uGuiDialogs, uMainForm, uTournamentGridModel, uTournamentModel,
-  uTournamentPairing, uTournamentResults, uTournamentTypes, uTournamentStorage;
+  uTournamentPairing, uTournamentResults, uTournamentTypes, uTournamentStorage,
+  uAtomicFile, uGameTreePdn, uPdn;
 
 procedure DrawGridText(AGrid: TStringGrid; ACol, ARow: Integer;
   const ARect: TRect);
@@ -204,8 +212,12 @@ var
   SaveButton: TButton;
   Splitter: TSplitter;
   TopPos: Integer;
+  Id: TGUID;
 begin
   inherited Create(AOwner);
+  if CreateGUID(Id) <> 0 then
+    raise EInOutError.Create('Could not create a tournament identity');
+  FTournamentId := GUIDToString(Id);
 
   Caption := 'Tournament';
   Position := poDesigned;
@@ -510,7 +522,6 @@ begin
       Exit;
 
     SaveTournamentToFile(Dialog.FileName);
-    FFileName := Dialog.FileName;
     Result := True;
   finally
     Dialog.Free;
@@ -628,41 +639,91 @@ begin
   Result := EnginePickerDisplayName(AEngine, 0);
 end;
 
-function TTournamentDialog.PdnFileName: string;
+procedure TTournamentDialog.EnsureStoragePaths;
 var
-  BaseName: string;
   DirectoryName: string;
 begin
-  BaseName := SafeFileNameText(FTournamentNameEdit.Text);
-  if not SameText(ExtractFileExt(BaseName), '.pdn') then
-    BaseName := BaseName + '.pdn';
-  DirectoryName := ExtractFilePath(FFileName);
-  if DirectoryName <> '' then
-    Result := DirectoryName + BaseName
-  else
-    Result := BaseName;
+  if FFileName = '' then
+  begin
+    DirectoryName := IncludeTrailingPathDelimiter(GetAppConfigDir(False)) + 'tournaments';
+    if not ForceDirectories(DirectoryName) then
+      raise EInOutError.Create('Could not create tournament recovery directory');
+    FFileName := IncludeTrailingPathDelimiter(DirectoryName) +
+      SafeFileNameText(FTournamentNameEdit.Text) + '.' + FTournamentId + '.json';
+  end;
+  if FPdnFileName = '' then
+    FPdnFileName := ChangeFileExt(ExpandFileName(FFileName), '.pdn');
+end;
+
+function TTournamentDialog.PdnFileName: string;
+begin
+  EnsureStoragePaths;
+  Result := FPdnFileName;
+end;
+
+procedure TTournamentDialog.AutoSaveTournament;
+var
+  I: Integer;
+  RunningGame: TTournamentRunningGame;
+  Game: TRunningGame;
+begin
+  if FLoadingTournament then
+    Exit;
+  FStorageError := '';
+  try
+    EnsureStoragePaths;
+    SaveTournamentToFile(FFileName);
+    for I := 0 to FRunningGames.Count - 1 do
+    begin
+      RunningGame := TTournamentRunningGame(FRunningGames[I]);
+      if RunningGame.Active or RunningGame.PdnSaved then
+        Continue;
+      Game := TournamentRunningGameFor(Owner, RunningGame);
+      if (Game <> nil) and (Game.Lifecycle = rglFinished) then
+        AppendTournamentGameToPdn(RunningGame, Game);
+    end;
+  except
+    on E: Exception do
+    begin
+      FStorageError := E.Message;
+      FRunning := False;
+      if FTimer <> nil then
+        FTimer.Enabled := ActiveRunningGameCount > 0;
+    end;
+  end;
+  if not FClosing then
+    UpdateButtons;
 end;
 
 procedure TTournamentDialog.AppendTournamentGameToPdn(
   ARunningGame: TTournamentRunningGame; AGame: TObject);
+var
+  Lines, Existing: TStringList;
+  PdnText: string;
 begin
-  if (ARunningGame = nil) or ARunningGame.PdnSaved then
+  if (ARunningGame = nil) or ARunningGame.PdnSaved or
+    not (AGame is TRunningGame) then
     Exit;
-  if not (AGame is TRunningGame) then
-    Exit;
-  if not TRunningGame(AGame).HasPlayedMoves then
-    Exit;
-  if not (Owner is TMainForm) then
-    Exit;
-
   FPdnWriteLock.Acquire;
+  Lines := TStringList.Create;
+  Existing := TStringList.Create;
   try
-    if ARunningGame.PdnSaved then
-      Exit;
-    TMainForm(Owner).AppendRunningGameToPdn(TRunningGame(AGame), PdnFileName,
-      FTournamentNameEdit.Text);
+    Lines.Text := GameTreeToPdnTextEx(TRunningGame(AGame).GameTree,
+      DefaultGameTreePdnRenderOptions, FTournamentNameEdit.Text);
+    Lines.Insert(0, TournamentPdnTag('TournamentId', FTournamentId));
+    Lines.Insert(1, TournamentPdnTag('Round', FGrid.Cells[TournamentColRound, ARunningGame.Row]));
+    Lines.Insert(2, TournamentPdnTag('GameNo', FGrid.Cells[TournamentColGame, ARunningGame.Row]));
+    if FileExists(PdnFileName) then
+      Existing.LoadFromFile(PdnFileName);
+    PdnText := Existing.Text;
+    if Trim(PdnText) <> '' then
+      PdnText += LineEnding;
+    PdnText += Lines.Text + LineEnding;
+    WriteTextFileAtomically(PdnFileName, PdnText);
     ARunningGame.PdnSaved := True;
   finally
+    Existing.Free;
+    Lines.Free;
     FPdnWriteLock.Release;
   end;
 end;
@@ -807,6 +868,7 @@ begin
     WhiteEngines.Free;
     Engines.Free;
   end;
+  AutoSaveTournament;
 end;
 
 procedure TTournamentDialog.ClearPairingsClick(Sender: TObject);
@@ -826,6 +888,7 @@ begin
   if FInvalidationPanel <> nil then
     FInvalidationPanel.Visible := False;
   UpdateCrossTable;
+  AutoSaveTournament;
 end;
 
 procedure TTournamentDialog.ClearStaleRunningReasons;
@@ -1046,6 +1109,7 @@ begin
   else
     FGrid.Cells[TournamentColReason, FGrid.Row] := 'Manual result';
   UpdateCrossTable;
+  AutoSaveTournament;
 end;
 
 procedure TTournamentDialog.SetSelectedResultClick(Sender: TObject);
@@ -1071,6 +1135,7 @@ begin
   FGrid.Invalidate;
   UpdateCrossTable;
   UpdateButtons;
+  AutoSaveTournament;
 end;
 
 procedure TTournamentDialog.SaveClick(Sender: TObject);
@@ -1089,6 +1154,10 @@ begin
   Dialog := TOpenDialog.Create(Self);
   try
     Dialog.Title := 'Load tournament';
+    if FFileName <> '' then
+      Dialog.InitialDir := ExtractFilePath(FFileName)
+    else if DirectoryExists(IncludeTrailingPathDelimiter(GetAppConfigDir(False)) + 'tournaments') then
+      Dialog.InitialDir := IncludeTrailingPathDelimiter(GetAppConfigDir(False)) + 'tournaments';
     Dialog.Filter := 'Tournament files (*.json)|*.json|All files (*.*)|*.*';
     Dialog.Options := Dialog.Options + [ofFileMustExist];
     if Dialog.Execute then
@@ -1108,9 +1177,15 @@ var
   Games: TJSONArray;
   I: Integer;
   Lines: TStringList;
+  NextPdnFileName: string;
 begin
+  NextPdnFileName := FPdnFileName;
+  if NextPdnFileName = '' then
+    NextPdnFileName := ChangeFileExt(ExpandFileName(AFileName), '.pdn');
   Data := TJSONObject.Create;
   try
+    Data.Add('tournament_id', FTournamentId);
+    Data.Add('pdn_file_name', NextPdnFileName);
     Data.Add('tournament_name', FTournamentNameEdit.Text);
     Data.Add('starting_fen', FStartingFENEdit.Text);
     Data.Add('moves_per_period', StrToIntDef(Trim(FMovesEdit.Text), 75));
@@ -1148,7 +1223,9 @@ begin
     Lines := TStringList.Create;
     try
       Lines.Text := Data.FormatJSON([], 2) + LineEnding;
-      Lines.SaveToFile(AFileName);
+      WriteTextFileAtomically(AFileName, Lines.Text);
+      FFileName := ExpandFileName(AFileName);
+      FPdnFileName := NextPdnFileName;
     finally
       Lines.Free;
     end;
@@ -1222,6 +1299,11 @@ begin
           FGrid.Cells[TournamentColResult, Row] := Game.Get('result', '*');
           FGrid.Cells[TournamentColReason, Row] := Game.Get('reason', '');
         end;
+    FTournamentId := Data.Get('tournament_id', FTournamentId);
+    FPdnFileName := Data.Get('pdn_file_name', ChangeFileExt(ExpandFileName(AFileName), '.pdn'));
+    if (FPdnFileName <> '') and not FilenameIsAbsolute(FPdnFileName) then
+      FPdnFileName := ExpandFileName(ExtractFilePath(ExpandFileName(AFileName)) + FPdnFileName);
+    FStorageError := '';
     FFileName := ExpandFileName(AFileName);
     FAcceptedTournamentSignature := TournamentSignature;
     if FInvalidationPanel <> nil then
@@ -1292,6 +1374,7 @@ begin
   FAcceptedTournamentSignature := TournamentSignature;
   UpdateCrossTable;
   UpdateButtons;
+  AutoSaveTournament;
 end;
 
 procedure TTournamentDialog.RevertInvalidatingChange(Sender: TObject);
@@ -1387,6 +1470,9 @@ begin
   if PendingInvalidatingChange then
     Exit;
 
+  AutoSaveTournament;
+  if FStorageError <> '' then
+    Exit;
   ClearStaleRunningReasons;
   FRunning := True;
   FLastGameStartTick := 0;
@@ -1412,7 +1498,6 @@ begin
       if Game.Lifecycle = rglFinished then
       begin
         ApplyTournamentGameResultToRow(FGrid, RunningGame.Row, Game);
-        AppendTournamentGameToPdn(RunningGame, Game);
         RunningGame.Active := False;
       end
       else
@@ -1435,6 +1520,7 @@ begin
     FGrid.Invalidate;
   if not FClosing then
     UpdateCrossTable;
+  AutoSaveTournament;
 end;
 
 procedure TTournamentDialog.GameStopped(AGame: TObject);
@@ -1460,7 +1546,6 @@ begin
       begin
         ApplyTournamentGameResultToRow(FGrid, RunningGame.Row,
           TRunningGame(AGame));
-        AppendTournamentGameToPdn(RunningGame, TRunningGame(AGame));
       end
       else
       begin
@@ -1491,6 +1576,7 @@ begin
     UpdateCrossTable;
     UpdateButtons;
   end;
+  AutoSaveTournament;
 end;
 
 procedure TTournamentDialog.RegisterRunningGame(ARow: Integer; AGame: TObject);
@@ -1507,6 +1593,7 @@ begin
   FRunningGames.Add(RunningGame);
   FGrid.Cells[TournamentColReason, ARow] := 'Running';
   UpdateButtons;
+  AutoSaveTournament;
 end;
 
 procedure TTournamentDialog.StartPendingGames;
@@ -1610,7 +1697,6 @@ begin
     if Game.State in [gosGameOver, gosError] then
     begin
       ApplyTournamentGameResultToRow(FGrid, RunningGame.Row, Game);
-      AppendTournamentGameToPdn(RunningGame, Game);
     end
     else if (RunningGame.Row > 0) and (RunningGame.Row < FGrid.RowCount) then
     begin
@@ -1623,6 +1709,7 @@ begin
     RunningGame.Active := False;
     FLastGameStartTick := GetTickCount64;
     FGrid.Invalidate;
+    AutoSaveTournament;
   end;
 
   UpdateCrossTable;
@@ -1650,6 +1737,8 @@ begin
       TButton(Button).Enabled := not IsRunning;
   end;
   Caption := 'Tournament';
+  if FStorageError <> '' then
+    Caption := Caption + ' - save failed: ' + FStorageError;
   if FRunning then
     Caption := Caption + ' - running'
   else if PendingInvalidatingChange then

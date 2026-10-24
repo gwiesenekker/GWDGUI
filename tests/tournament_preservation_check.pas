@@ -2,7 +2,7 @@ program tournament_preservation_check;
 {$mode objfpc}{$H+}
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Interfaces, Forms, Classes, SysUtils, StdCtrls, Grids, ExtCtrls,
+  Interfaces, Forms, Classes, SysUtils, StdCtrls, Grids, ExtCtrls, FPJSON, JSONParser,
   uTournamentDialog, uTournamentGridModel, uMainForm, uGameSetupForm,
   uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
 
@@ -185,6 +185,92 @@ begin
   end;
 end;
 
+procedure CheckAutosaveAndFailureRecovery(const Fixture: string);
+var
+  Dialog, Reloaded: TTournamentDialog;
+  Game: TRunningGame;
+  Name: TEdit;
+  OriginalPdn: string;
+  Data: TJSONData;
+  Lines: TStringList;
+begin
+  Dialog := TTournamentDialog.Create(nil);
+  Reloaded := nil;
+  Game := NewGame(103);
+  Lines := TStringList.Create;
+  try
+    WriteFixture(Fixture, 'Recovery test');
+    Dialog.LoadTournamentFromFile(Fixture);
+    OriginalPdn := Dialog.PdnFileName;
+    Name := TEdit(Dialog.FindComponent('TournamentName'));
+    Name.Text := 'Renamed tournament';
+    Dialog.SetSelectedResult('1-1');
+    Check(Dialog.PdnFileName = OriginalPdn, 'renaming must not redirect game records');
+    Lines.LoadFromFile(Fixture);
+    Data := GetJSON(Lines.Text);
+    try
+      Check(TJSONObject(Data).Get('tournament_id', '') <> '', 'autosave must retain identity');
+      Check(TJSONObject(Data).Get('pdn_file_name', '') = OriginalPdn,
+        'autosave must retain the absolute PDN path');
+    finally
+      Data.Free;
+    end;
+    Reloaded := TTournamentDialog.Create(nil);
+    Reloaded.LoadTournamentFromFile(Fixture);
+    Check(TStringGrid(Reloaded.FindComponent('TournamentPairings')).Cells[
+      TournamentColResult, 1] = '1-1', 'fresh form must recover autosaved result');
+    Reloaded.Free;
+    Reloaded := nil;
+    Dialog.RescheduleSelectedGame(nil);
+    // Make the save destination a directory: replacement must fail safely.
+    Check(RenameFile(Fixture, Fixture + '.previous'), 'prepare failed-save fixture');
+    Check(CreateDir(Fixture), 'prepare blocked destination');
+    Dialog.RegisterRunningGame(1, Game);
+    CompleteGame(Game, '2-0');
+    Dialog.GameStopped(Game);
+    Check(not Dialog.IsRunning, 'save failure must not leave a finished game active');
+    Check(Dialog.StorageError <> '', 'save failure must be visible and pause scheduling');
+    Check(FileExists(Fixture + '.previous'), 'previous successful save must survive');
+    RemoveDir(Fixture);
+    Check(RenameFile(Fixture + '.previous', Fixture), 'restore save destination');
+    Dialog.SetSelectedResult('1-1');
+    Check(Dialog.StorageError = '', 'a successful save must recover after failure');
+  finally
+    if DirectoryExists(Fixture) then
+      RemoveDir(Fixture);
+    if FileExists(Fixture + '.previous') then
+      RenameFile(Fixture + '.previous', Fixture);
+    DeleteFile(OriginalPdn);
+    Lines.Free;
+    Reloaded.Free;
+    Game.Free;
+    Dialog.Free;
+  end;
+end;
+
+procedure CheckUnsavedTournamentGetsRecoveryFile;
+var
+  Dialog: TTournamentDialog;
+  Grid: TStringGrid;
+  RecoveryFile: string;
+begin
+  Dialog := TTournamentDialog.Create(nil);
+  RecoveryFile := '';
+  try
+    Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    AddTournamentPairingRow(Grid, 'White', 'Black', 1);
+    Dialog.SetSelectedResult('1-1');
+    RecoveryFile := Dialog.SaveFileName;
+    Check((Dialog.StorageError = '') and FileExists(RecoveryFile),
+      'a tournament without a chosen filename must autosave a recovery file');
+    Check(Pos(IncludeTrailingPathDelimiter(GetAppConfigDir(False)), RecoveryFile) = 1,
+      'recovery files must use the application config directory');
+  finally
+    DeleteFile(RecoveryFile);
+    Dialog.Free;
+  end;
+end;
+
 var
   Fixture, OtherFile: string;
 begin
@@ -199,6 +285,8 @@ begin
       CheckCompletionIsAppliedOnce(Fixture);
       CheckFailedLoadIsTransactional(Fixture);
       CheckPairingChangesWaitForShutdown(Fixture, OtherFile);
+      CheckAutosaveAndFailureRecovery(Fixture);
+      CheckUnsavedTournamentGetsRecoveryFile;
       WriteLn('OK');
     finally
       DeleteFile(OtherFile);

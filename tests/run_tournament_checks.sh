@@ -11,4 +11,4 @@ if ! lazbuild --no-write-project --ws=gtk2 --pcp="$OUT_DIR/config" \
   exit 1
 fi
 cd "$OUT_DIR"
-"$OUT_DIR/tournament_preservation_check"
+XDG_CONFIG_HOME="$OUT_DIR/recovery" "$OUT_DIR/tournament_preservation_check"

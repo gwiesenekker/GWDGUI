@@ -15,6 +15,7 @@ CHECKS=(
   game_tree_topology_check.pas
   socket_disconnect_check.pas
   engine_clock_check.pas
+  atomic_file_check.pas
 )
 
 rm -rf "$OUT_DIR"

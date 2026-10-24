@@ -74,3 +74,6 @@ Run `bash tests/run_tournament_checks.sh` with GTK2 and an X display for the
 hidden tournament-form regressions. They cover stale completion callbacks,
 manual overrides, rescheduling and pairing actions during pending shutdown.
 All generated binaries, preference files and fixtures stay outside the repo.
+The tournament checks also cover failed-load isolation, autosave recovery in a
+fresh form, stable PDN paths, unnamed recovery files and failure/retry behavior.
+`atomic_file_check` verifies replacement and cleanup after a failed atomic save.

@@ -380,6 +380,12 @@ name. It also shows the individual matchup results.
 
 ### 7.4 Saving and loading tournaments
 
+Tournament changes and results are saved automatically. Until you choose a file,
+GWDGUI uses a recovery file in its application configuration directory; **Load**
+opens that directory for a new tournament. Save errors pause scheduling and appear
+in the tournament window title. Pairings cannot be replaced while games are still
+running or stopping.
+
 Use **Save** to write the tournament state as JSON. The file contains the
 settings, selected engine names, pairings, results, reasons, and concurrency
 limit. Use **Load** to resume it later. Loading is available only while the

@@ -3,11 +3,23 @@ unit uTournamentStorage;
 interface
 uses FPJSON;
 function ReadTournamentDocument(const AFileName: string): TJSONObject;
+function TournamentPdnTag(const AName, AValue: string): string;
 implementation
 uses Classes, SysUtils, JSONParser, uTournamentTypes, uTournamentResults;
 
 type
   TAllowedJsonTypes = set of TJSONType;
+
+function TournamentPdnTag(const AName, AValue: string): string;
+var
+  Value: string;
+begin
+  Value := StringReplace(AValue, '\', '\\', [rfReplaceAll]);
+  Value := StringReplace(Value, '"', '\"', [rfReplaceAll]);
+  Value := StringReplace(Value, #13, ' ', [rfReplaceAll]);
+  Value := StringReplace(Value, #10, ' ', [rfReplaceAll]);
+  Result := '[' + AName + ' "' + Value + '"]';
+end;
 
 procedure CheckField(AObject: TJSONObject; const AName: string;
   ATypes: TAllowedJsonTypes);
