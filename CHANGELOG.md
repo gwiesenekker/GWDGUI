@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Ignore stale tournament callbacks and protect stopping games (T2c, T6)
+
+- Apply completion callbacks only to active tournament game references. Removing
+  an old finished game can no longer replace a manual result or undo rescheduling.
+- Mark manual result changes explicitly, including overrides of played results.
+- Guard pairing creation, clearing, loading and settings application while games
+  are running or still stopping; disable the corresponding actions too.
+- Add a hidden GTK tournament regression covering duplicate callbacks, manual
+  overrides, rescheduling, pending shutdown and every destructive pairing action.
+- Validation: the tournament preservation regression passes.
+
 ### 2026-10-24 — Use the game clock for engine move deadlines (D3)
 
 - Derive clocked-game search deadlines from remaining time and the increment

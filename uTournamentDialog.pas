@@ -79,7 +79,6 @@ type
     function IsRowRunning(ARow: Integer): Boolean;
     function IsRowStartable(ARow: Integer; ABusyEngineKeys: TStrings): Boolean;
     procedure LoadClick(Sender: TObject);
-    procedure LoadTournamentFromFile(const AFileName: string);
     function PdnFileName: string;
     function PendingInvalidatingChange: Boolean;
     procedure PairingGridDrawCell(Sender: TObject; ACol, ARow: Integer;
@@ -87,11 +86,8 @@ type
     procedure PairingGridMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     procedure PopulateEngines;
-    procedure RescheduleSelectedGame(Sender: TObject);
     procedure RevertInvalidatingChange(Sender: TObject);
     procedure SaveClick(Sender: TObject);
-    procedure SaveTournamentToFile(const AFileName: string);
-    procedure SetSelectedResult(const AResultText: string);
     procedure SetSelectedResultClick(Sender: TObject);
     procedure StartStopClick(Sender: TObject);
     procedure StartPendingGames;
@@ -101,10 +97,15 @@ type
     procedure UpdateButtons;
     procedure UpdateCrossTable;
   public
+    procedure LoadTournamentFromFile(const AFileName: string);
+    procedure SaveTournamentToFile(const AFileName: string);
+    procedure SetSelectedResult(const AResultText: string);
+    procedure RescheduleSelectedGame(Sender: TObject);
     procedure BeginShutdown;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure GameStopped(AGame: TObject);
+    procedure RegisterRunningGame(ARow: Integer; AGame: TObject);
     function HasTournamentData: Boolean;
     function IsRunning: Boolean;
     function SaveTournamentWithDialog: Boolean;
@@ -228,10 +229,12 @@ begin
 
   TopPos := 4;
   FTournamentNameEdit := TEdit.Create(Self);
+  FTournamentNameEdit.Name := 'TournamentName';
   FTournamentNameEdit.Text := 'Tournament';
   AddLabelledEdit(ButtonPanel, 'Tournament name', FTournamentNameEdit, TopPos);
 
   FStartingFENEdit := TEdit.Create(Self);
+  FStartingFENEdit.Name := 'TournamentStartingFEN';
   FStartingFENEdit.Text := 'W:W31-50:B1-20';
   FStartingFENEdit.OnChange := @InvalidateTournamentResults;
   AddLabelledEdit(ButtonPanel, 'Starting FEN', FStartingFENEdit, TopPos);
@@ -295,6 +298,7 @@ begin
   FRoundRobinGroup.OnClick := @InvalidateTournamentResults;
 
   CreateButton := TButton.Create(Self);
+  CreateButton.Name := 'CreatePairing';
   CreateButton.Parent := ButtonPanel;
   CreateButton.SetBounds(640, 16, 120, 28);
   CreateButton.Caption := 'Create pairing';
@@ -307,6 +311,7 @@ begin
   FStartStopButton.OnClick := @StartStopClick;
 
   ClearButton := TButton.Create(Self);
+  ClearButton.Name := 'ClearPairing';
   ClearButton.Parent := ButtonPanel;
   ClearButton.SetBounds(770, 16, 120, 28);
   ClearButton.Caption := 'Clear pairing';
@@ -319,6 +324,7 @@ begin
   SaveButton.OnClick := @SaveClick;
 
   LoadButton := TButton.Create(Self);
+  LoadButton.Name := 'LoadTournament';
   LoadButton.Parent := ButtonPanel;
   LoadButton.SetBounds(834, 52, 56, 28);
   LoadButton.Caption := 'Load...';
@@ -350,6 +356,7 @@ begin
   PanelButton.Align := alRight;
   PanelButton.Width := 110;
   PanelButton.BorderSpacing.Right := 8;
+  PanelButton.Name := 'ApplyTournamentChanges';
   PanelButton.Caption := 'Apply change';
   PanelButton.OnClick := @ApplyInvalidatingChange;
 
@@ -402,6 +409,7 @@ begin
   PairingPanel.BevelOuter := bvNone;
 
   FGrid := TStringGrid.Create(Self);
+  FGrid.Name := 'TournamentPairings';
   FGrid.Parent := PairingPanel;
   FGrid.Align := alClient;
   FGrid.ColCount := 6;
@@ -745,6 +753,8 @@ var
   Rounds: TStringList;
   WhiteEngines: TStringList;
 begin
+  if IsRunning then
+    Exit;
   if PendingInvalidatingChange then
     Exit;
   Engines := TStringList.Create;
@@ -800,6 +810,8 @@ end;
 
 procedure TTournamentDialog.ClearPairingsClick(Sender: TObject);
 begin
+  if IsRunning then
+    Exit;
   if FRunning then
     Exit;
   if HasNonByeResults and
@@ -1029,12 +1041,8 @@ begin
 
   FGrid.Cells[TournamentColResult, FGrid.Row] := AResultText;
   if AResultText = '*' then
-  begin
-    if SameText(Trim(FGrid.Cells[TournamentColReason, FGrid.Row]),
-      'Manual result') then
-      FGrid.Cells[TournamentColReason, FGrid.Row] := '';
-  end
-  else if Trim(FGrid.Cells[TournamentColReason, FGrid.Row]) = '' then
+    FGrid.Cells[TournamentColReason, FGrid.Row] := ''
+  else
     FGrid.Cells[TournamentColReason, FGrid.Row] := 'Manual result';
   UpdateCrossTable;
 end;
@@ -1073,6 +1081,8 @@ procedure TTournamentDialog.LoadClick(Sender: TObject);
 var
   Dialog: TOpenDialog;
 begin
+  if IsRunning then
+    Exit;
   if FRunning then
     Exit;
   Dialog := TOpenDialog.Create(Self);
@@ -1159,6 +1169,8 @@ var
   Row: Integer;
   PairingType: string;
 begin
+  if IsRunning then
+    Exit;
   FLoadingTournament := True;
   Lines := TStringList.Create;
   try
@@ -1270,6 +1282,8 @@ end;
 
 procedure TTournamentDialog.ApplyInvalidatingChange(Sender: TObject);
 begin
+  if IsRunning then
+    Exit;
   if FInvalidationPanel <> nil then
     FInvalidationPanel.Visible := False;
 
@@ -1441,6 +1455,8 @@ begin
   for I := FRunningGames.Count - 1 downto 0 do
   begin
     RunningGame := TTournamentRunningGame(FRunningGames[I]);
+    if not RunningGame.Active then
+      Continue;
     if not (AGame is TRunningGame) then
       Continue;
     if RunningGame.GameId <> TRunningGame(AGame).Id then
@@ -1487,13 +1503,28 @@ begin
   end;
 end;
 
+procedure TTournamentDialog.RegisterRunningGame(ARow: Integer; AGame: TObject);
+var
+  RunningGame: TTournamentRunningGame;
+begin
+  if not (AGame is TRunningGame) or
+    (not TournamentGridHasPairingAtRow(FGrid, ARow)) or IsRowRunning(ARow) then
+    raise EInvalidOperation.Create('Cannot register a game for this tournament row');
+  RunningGame := TTournamentRunningGame.Create;
+  RunningGame.Active := True;
+  RunningGame.Row := ARow;
+  RunningGame.GameId := TRunningGame(AGame).Id;
+  FRunningGames.Add(RunningGame);
+  FGrid.Cells[TournamentColReason, ARow] := 'Running';
+  UpdateButtons;
+end;
+
 procedure TTournamentDialog.StartPendingGames;
 var
   BusyEngineKeys: TStringList;
   GameObject: TObject;
   LatestRound: Integer;
   MaxGames: Integer;
-  RunningGame: TTournamentRunningGame;
   Row: Integer;
   Setup: TGameSetup;
   StartedAny: Boolean;
@@ -1540,12 +1571,7 @@ begin
       if not (GameObject is TRunningGame) then
         Continue;
 
-      RunningGame := TTournamentRunningGame.Create;
-      RunningGame.Active := True;
-      RunningGame.Row := Row;
-      RunningGame.GameId := TRunningGame(GameObject).Id;
-      FRunningGames.Add(RunningGame);
-      FGrid.Cells[TournamentColReason, Row] := 'Running';
+      RegisterRunningGame(Row, GameObject);
       FGrid.Invalidate;
       HighlightRow(Row);
       StartedAny := True;
@@ -1618,9 +1644,21 @@ begin
 end;
 
 procedure TTournamentDialog.UpdateButtons;
+var
+  I: Integer;
+  Button: TComponent;
+const
+  PairingActions: array[0..3] of string = ('CreatePairing', 'ClearPairing',
+    'LoadTournament', 'ApplyTournamentChanges');
 begin
   if FClosing then
     Exit;
+  for I := Low(PairingActions) to High(PairingActions) do
+  begin
+    Button := FindComponent(PairingActions[I]);
+    if Button is TButton then
+      TButton(Button).Enabled := not IsRunning;
+  end;
   Caption := 'Tournament';
   if FRunning then
     Caption := Caption + ' - running'

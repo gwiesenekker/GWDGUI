@@ -69,3 +69,8 @@ after a timed-out search. After the regular sweep, run
 `/tmp/gwdgui-regression-checks/engine_clock_check --long-check` to verify that a
 real 61-second search succeeds with a two-minute clock. The DXP integration
 check also tests a silent peer's clock deadline and loss on time.
+
+Run `bash tests/run_tournament_checks.sh` with GTK2 and an X display for the
+hidden tournament-form regressions. They cover stale completion callbacks,
+manual overrides, rescheduling and pairing actions during pending shutdown.
+All generated binaries, preference files and fixtures stay outside the repo.
