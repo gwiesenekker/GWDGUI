@@ -418,6 +418,7 @@ var
   LPart, LPieceList, LEntry: string;
   LPiece: TDraughtsPieceKind;
   LSideChar: Char;
+  LSideToMove: TDraughtsSide;
 begin
   if Trim(AFEN) = '' then
     raise EConvertError.Create('FEN cannot be empty');
@@ -432,9 +433,9 @@ begin
   LSideChar := UpCase(LPart[1]);
   case LSideChar of
     'W':
-      FSideToMove := dsWhite;
+      LSideToMove := dsWhite;
     'B':
-      FSideToMove := dsBlack;
+      LSideToMove := dsBlack;
   else
     raise EConvertError.CreateFmt('Invalid FEN side to move: %s', [LPart]);
   end;
@@ -477,6 +478,7 @@ begin
   end;
 
   FSquares := LBoard;
+  FSideToMove := LSideToMove;
   FStartingFEN := Trim(AFEN);
   FMovesPlayed.Clear;
   GenerateLegalMoves;

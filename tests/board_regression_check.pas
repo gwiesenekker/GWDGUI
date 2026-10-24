@@ -265,6 +265,53 @@ begin
   end;
 end;
 
+procedure CheckRejectedFensPreserveBoard;
+const
+  InvalidFens: array[0..4] of string = (
+    'B:W99:B1',
+    'B:W31:B1-51',
+    'B:W31:B1:X2',
+    'W:W31:B0',
+    'W:W31:B1:Z2'
+  );
+var
+  Board, Before: TDraughtsBoard;
+  I: Integer;
+  Raised: Boolean;
+begin
+  Board := TDraughtsBoard.Create;
+  Before := TDraughtsBoard.Create;
+  try
+    for I := Low(InvalidFens) to High(InvalidFens) do
+    begin
+      Board.SetBeginPosition;
+      if I >= 3 then
+        Board.PlayMove('32-28');
+      Before.AssignFrom(Board);
+      Raised := False;
+      try
+        Board.LoadFromFEN(InvalidFens[I]);
+      except
+        on E: EConvertError do
+          Raised := True;
+      end;
+      Check(Raised, 'invalid FEN must raise: ' + InvalidFens[I]);
+      CheckBoardUnchanged(Board, Before, 'rejected FEN ' + InvalidFens[I]);
+    end;
+    Board.PlayMove('18-23');
+    Check(Board.MovesPlayedCount = 2,
+      'legal play should continue after a rejected FEN');
+    Board.LoadFromFEN('W:WK32,K33:B1');
+    CheckEqual(Board.CurrentFEN, 'W:WK32,K33:B1',
+      'a valid FEN should still replace the position');
+    Check(Board.MovesPlayedCount = 0,
+      'a valid FEN should clear the previous move history');
+  finally
+    Before.Free;
+    Board.Free;
+  end;
+end;
+
 procedure CheckCurrentFenRoundTrip;
 const
   Positions: array[0..4] of string = (
@@ -311,6 +358,7 @@ begin
   CheckKingCaptureKeepsCapturedPiecesAsBlockers;
   CheckEquivalentAliasMatchesAreNotAmbiguous;
   CheckRejectedMovesPreserveBoard;
+  CheckRejectedFensPreserveBoard;
   CheckCurrentFenRoundTrip;
   Writeln('OK');
 end.
