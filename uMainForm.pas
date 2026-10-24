@@ -365,7 +365,6 @@ type
     FVariationBrowseMoves: string;
     FWhiteClockLabel: TLabel;
     FWhitePlayerEdit: TEdit;
-    function ActiveGameTree: TGameTree;
     procedure ApplyBoardFlipped;
     procedure ApplyBoardTheme(AControl: TDraughtsBoardControl;
       AUseAnalysisTheme: Boolean);
@@ -524,6 +523,8 @@ type
     function DisplayedPositionIsTerminal(ADisplayedMoveCount,
       ATotalMoveCount: Integer; AGameState: TGameOrchestratorState): Boolean;
     function HasDisplayedGameToSave: Boolean;
+    function ConfirmReplaceStandaloneGame: Boolean;
+    procedure ShowStandaloneGame(Sender: TObject);
     function EngineSupportsMcts(AEngine: TExternalEngineDefinition): Boolean;
     function GameForTree(AGameTree: TGameTree): TRunningGame;
     function ActorForGameTree(AGameTree: TGameTree): TGameTreeActor;
@@ -637,7 +638,6 @@ type
     function MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
     procedure PlayHumanMove(const AMove: string;
       ASource: TGameTreeMoveSource = gmsHuman);
-    procedure RemoveGame(AGame: TRunningGame);
     procedure RemoveSelectedGame(Sender: TObject);
     procedure RestartAnalyzer(AGameTree: TGameTree);
     procedure RestartMctsAnnotator(AGameTree: TGameTree);
@@ -672,8 +672,6 @@ type
       const ATitlePrefix: string; out AGame: TObject);
     function TreeVariationLineByIndex(AIndex: Integer;
       AGameTree: TGameTree): TGameTreeVariationLine;
-    procedure LoadStandaloneFen(const AFEN: string);
-    procedure LoadPdnGameToDisplay(AGame: TPdnGame);
     procedure LoadTreeVariationsFromLegacyText(AGameTree: TGameTree;
       const AVariationsText, AVariationAnnotationsText: string);
     function FindTreeVariationByDisplayAfterPly(ADisplayAfterPly: Integer;
@@ -707,6 +705,10 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    function ActiveGameTree: TGameTree;
+    procedure LoadStandaloneFen(const AFEN: string);
+    procedure LoadPdnGameToDisplay(AGame: TPdnGame);
+    procedure RemoveGame(AGame: TRunningGame);
     procedure AppendRunningGameToPdn(AGame: TRunningGame;
       const AFileName, AEventName: string);
     procedure CollectBusyEngineKeys(AKeys: TStrings);
@@ -1594,10 +1596,13 @@ begin
   LGamesLabel.Layout := tlCenter;
 
   FGamesListBox := TListBox.Create(Self);
+  FGamesListBox.Name := 'GameHistoryList';
   FGamesListBox.Parent := LGamesPanel;
   FGamesListBox.SetBounds(0, 24, LGamesPanel.ClientWidth, LGamesPanel.ClientHeight - 24);
   FGamesListBox.Anchors := [akTop, akLeft, akRight, akBottom];
   FGamesListBox.OnClick := @GamesListBoxClick;
+  FGamesListBox.Items.Add('Board (PDN / FEN)');
+  FGamesListBox.ItemIndex := 0;
 
   LGamesPopup := TPopupMenu.Create(Self);
   LGamesPopup.OnPopup := @GamesPopupPopup;
@@ -3783,6 +3788,20 @@ begin
       Exit;
   end;
 
+  if FGameActive and GameTreeHasContent(FGameTree) then
+  begin
+    LResponse := ShowGuiConfirmationDialog(Self, 'Close GWDGUI',
+      'Save the standalone board as PDN before closing?', 'Yes', 'No', mrNo);
+    if LResponse = mrCancel then
+      Exit;
+    if LResponse = mrYes then
+    begin
+      ShowStandaloneGame(nil);
+      if not SaveCurrentGameWithDialog then
+        Exit;
+    end;
+  end;
+
   LLiveGames := LiveGameCount;
   if (LLiveGames > 0) or
     ((FTournamentDialog <> nil) and FTournamentDialog.IsRunning) then
@@ -3814,6 +3833,8 @@ end;
 
 procedure TMainForm.SetupPositionAccepted(Sender: TObject; const AFEN: string);
 begin
+  if not ConfirmReplaceStandaloneGame then
+    Exit;
   try
     LoadStandaloneFen(AFEN);
   except
@@ -3862,7 +3883,7 @@ begin
     ClearDisplayedPvCache(LBoard, 0);
     FViewedGameId := -1;
     if FGamesListBox <> nil then
-      FGamesListBox.ItemIndex := -1;
+      FGamesListBox.ItemIndex := 0;
     FGameLog.Clear;
     FGameLogSourceGameId := -1;
     FGameLogSourceLineCount := -1;
@@ -3885,6 +3906,8 @@ begin
     Exit;
   end;
 
+  if not ConfirmReplaceStandaloneGame then
+    Exit;
   try
     LoadStandaloneFen(LFen);
   except
@@ -4061,7 +4084,7 @@ begin
     ClearDisplayedPvCache(LBoard, CurrentMoveCount);
     FViewedGameId := -1;
     if FGamesListBox <> nil then
-      FGamesListBox.ItemIndex := -1;
+      FGamesListBox.ItemIndex := 0;
     FGameLog.Clear;
     FGameLogSourceGameId := -1;
     FGameLogSourceLineCount := -1;
@@ -4351,11 +4374,42 @@ begin
 end;
 
 function TMainForm.HasDisplayedGameToSave: Boolean;
-var
-  LGameTree: TGameTree;
 begin
-  LGameTree := ActiveGameTree;
-  Result := (LGameTree <> nil) and (LGameTree.MainlineCount > 0);
+  Result := GameTreeHasContent(ActiveGameTree);
+end;
+
+function TMainForm.ConfirmReplaceStandaloneGame: Boolean;
+var
+  Response: Integer;
+begin
+  Result := True;
+  if not GameTreeHasContent(FGameTree) then
+    Exit;
+  Response := ShowGuiConfirmationDialog(Self, 'Replace board',
+    'Save the standalone board as PDN before replacing it?', 'Yes', 'No', mrNo);
+  if Response = mrCancel then
+    Exit(False);
+  if Response = mrYes then
+  begin
+    ShowStandaloneGame(nil);
+    Result := SaveCurrentGameWithDialog;
+  end;
+end;
+
+procedure TMainForm.ShowStandaloneGame(Sender: TObject);
+begin
+  ClearHumanMoveSelection;
+  ClearVariationExploration;
+  FGameActive := False;
+  FViewedGameId := -1;
+  FGameBrowsePly := -1;
+  FGamesListBox.ItemIndex := 0;
+  SetDisplayedTreeTracking('', '', '', 0, -1);
+  FGameLog.Clear;
+  FGameLogSourceGameId := -1;
+  FGameLogSourceLineCount := -1;
+  FGameLogSourceShowStdout := False;
+  RefreshDisplayFromGameTree(FGameTree, True);
 end;
 
 procedure TMainForm.ClearStoredTreeVariations(AGameTree: TGameTree);
@@ -5731,7 +5785,6 @@ var
   LEffectiveResultText: string;
   LEffectiveStartingFEN: string;
   LEffectiveState: TGameOrchestratorState;
-  LBoard: TDraughtsBoard;
   LPositionChanged: Boolean;
   LPvChanged: Boolean;
   LRunningSignature: string;
@@ -5767,13 +5820,7 @@ var
 begin
   if AGame = nil then
   begin
-    ClearHumanMoveSelection;
-    LBoard := TDraughtsBoard.Create;
-    try
-      LoadStandaloneFen(LBoard.StartingFEN);
-    finally
-      LBoard.Free;
-    end;
+    ShowStandaloneGame(nil);
     Exit;
   end;
 
@@ -6755,7 +6802,8 @@ end;
 
 procedure TMainForm.PdnGameSelected(Sender: TObject; AGame: TPdnGame);
 begin
-  LoadPdnGameToDisplay(AGame);
+  if ConfirmReplaceStandaloneGame then
+    LoadPdnGameToDisplay(AGame);
 end;
 
 procedure TMainForm.AppendRunningGameToPdn(AGame: TRunningGame;
@@ -6778,6 +6826,12 @@ var
   RunningGame: TRunningGame;
 begin
   Result := False;
+  RunningGame := SelectedDisplayedGame;
+  if RunningGame <> nil then
+    LPdnText := RunningGameTreePdnText(RunningGame,
+      EventNameForTree(RunningGame.GameTree))
+  else
+    LPdnText := CurrentGameTreePdnText(EventNameForTree(FGameTree));
   Dialog := TSaveDialog.Create(Self);
   try
     Dialog.Title := 'Save PDN';
@@ -6787,16 +6841,6 @@ begin
     if not Dialog.Execute then
       Exit;
 
-    RunningGame := SelectedDisplayedGame;
-    if RunningGame <> nil then
-    begin
-      AppendRunningGameToPdn(RunningGame, Dialog.FileName,
-        EventNameForTree(RunningGame.GameTree));
-      Result := True;
-      Exit;
-    end;
-
-    LPdnText := CurrentGameTreePdnText(EventNameForTree(FGameTree));
     AppendPdnTextToFile(Dialog.FileName, LPdnText);
     Result := True;
   finally

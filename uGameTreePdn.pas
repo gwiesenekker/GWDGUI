@@ -42,8 +42,23 @@ procedure RenderGameTreeMovesToPdn(AGameTree: TGameTree;
   const AOptions: TGameTreePdnRenderOptions;
   out ARenderResult: TGameTreePdnRenderResult);
 function GameTreeScoreAnnotationsText(AGameTree: TGameTree): string;
+function GameTreeHasContent(AGameTree: TGameTree): Boolean;
 
 implementation
+
+function GameTreeHasContent(AGameTree: TGameTree): Boolean;
+begin
+  Result := False;
+  if AGameTree = nil then
+    Exit;
+  Result := (AGameTree.MainlineCount > 0) or (AGameTree.VariationLineCount > 0) or
+    (AGameTree.StartingFEN <> DefaultStartingFEN) or
+    (AGameTree.ResultText <> '*') or (AGameTree.EventName <> '?') or
+    (AGameTree.WhiteName <> 'White') or (AGameTree.BlackName <> 'Black') or
+    (AGameTree.Root.CommentText <> '') or (AGameTree.Root.EnginePV <> '') or
+    (AGameTree.Root.AnnotatorPV <> '') or (AGameTree.Root.AutoPlayPV <> '') or
+    (AGameTree.Root.EngineScore <> '') or (AGameTree.Root.AnnotatorScore <> '');
+end;
 
 function DefaultGameTreePdnRenderOptions: TGameTreePdnRenderOptions;
 begin

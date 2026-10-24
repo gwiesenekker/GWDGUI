@@ -30,3 +30,8 @@ the actual running-game model and runner without opening windows or needing a
 display. Run it separately with `bash tests/run_lifecycle_checks.sh`.
 The lifecycle check requires Lazarus/LCL; the other checks need only FPC and
 the source audit needs ripgrep.
+
+Run `bash tests/run_gui_checks.sh` with Lazarus's GTK2 widgetset and an X display
+to exercise the actual main form without showing its window. It verifies that
+PDN comments/variations and FEN-only boards survive starting, selecting, stopping
+and removing human games. Build output and preference files stay in `/tmp`.

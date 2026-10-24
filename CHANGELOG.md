@@ -3,6 +3,20 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Keep the standalone board reachable and intact (U1)
+
+- Keep a permanent Board entry in game history. Selecting it or removing the
+  last running game restores the existing standalone tree without resetting it.
+- Offer to save standalone content before replacement and before closing while
+  another game is selected. Include FEN-only and annotated root positions.
+- Capture the save target before opening the file chooser, so scheduling or
+  selection changes while it is open cannot redirect the saved game.
+- Add a GTK regression that exercises the actual hidden main form: load an
+  annotated PDN or FEN-only position, start/select/stop/remove human games, and
+  verify the original tree, commentary and variations remain intact.
+- Validation: nine headless regression programs, the source audit and the
+  GTK main-form preservation check pass.
+
 ### 2026-10-24 — Preserve PDN commentary and annotation positions (P2, P4)
 
 - Retain free text, consecutive comments and text mixed with scores. Normalize
