@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Detect a disconnected DXP engine promptly (D5)
+
+- Distinguish socket EOF and hard read errors from temporary receive timeouts.
+  Also notice an exited engine process while retrying a transient read.
+- Propagate disconnects as engine errors instead of silently polling until the
+  move deadline; intentional Stop still interrupts the wait normally.
+- Extend the local-TCP regression with a peer that disconnects after GAMEACC.
+  Verify prompt detection, an unchanged board/history, and safe shutdown of the
+  dead peer alongside all six result-claim cases.
+- Validation: all seven local-TCP DXP integration cases pass.
+
 ### 2026-10-24 — Do not award results from unverified DXP claims (D4)
 
 - Treat DXP GAMEEND win and draw reasons as peer information, retaining them in

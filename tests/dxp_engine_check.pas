@@ -38,6 +38,8 @@ begin
     Check((Text <> '') and (Text[1] = 'R'), 'peer should receive GAMEREQ');
     Text := 'A' + StringOfChar(' ', 32) + '0' + #0;
     Stream.WriteBuffer(Text[1], Length(Text));
+    if Reason = 'C' then
+      Exit; // Crash/disconnect immediately after accepting the game.
     Text := 'E' + Reason + '0' + #0;
     Stream.WriteBuffer(Text[1], Length(Text));
     Text := ReadPacket(Stream);
@@ -106,6 +108,48 @@ begin
   end;
 end;
 
+procedure CheckDisconnectedPeerFailsPromptly;
+var
+  Definition: TExternalEngineDefinition;
+  Game: TGameOrchestrator;
+  Engine: TDxpEngine;
+  Port: Word;
+  Tick: QWord;
+  Raised: Boolean;
+begin
+  Port := AvailablePort;
+  Definition := TExternalEngineDefinition.Create;
+  Game := TGameOrchestrator.Create;
+  try
+    Definition.Kind := eekDxp;
+    Definition.DxpId := 'Disconnected DXP';
+    Definition.DxpRole := derListen;
+    Definition.DxpHost := '127.0.0.1';
+    Definition.DxpPort := Port;
+    Definition.ExePath := ExpandFileName(ParamStr(0));
+    Definition.Arguments := '--peer ' + IntToStr(Port) + ' C';
+    Engine := TDxpEngine.Create(Definition);
+    Game.Engine[dsWhite] := Engine;
+    Check(Engine.LaunchAndInit, 'disconnecting peer should initialize');
+    Game.NewGame(DefaultStartingFEN);
+    Tick := GetTickCount64;
+    Raised := False;
+    try
+      Game.PlayNextMove;
+    except
+      on E: EInvalidOperation do
+        Raised := Pos('disconnected', E.Message) > 0;
+    end;
+    Check(Raised, 'EOF must report a disconnected engine instead of no data');
+    Check(GetTickCount64 - Tick < 2000, 'EOF detection must not wait a move timeout');
+    Check((Game.State = gosError) and (Game.MoveHistory.Count = 0),
+      'disconnect must report an error without accepting a move');
+  finally
+    Game.Free; // Shutdown must also tolerate the dead peer.
+    Definition.Free;
+  end;
+end;
+
 begin
   if ParamStr(1) = '--peer' then
   begin
@@ -118,5 +162,6 @@ begin
   CheckGameEndClaim('0', dsBlack, '*');
   CheckGameEndClaim('1', dsWhite, '0-2');
   CheckGameEndClaim('1', dsBlack, '2-0');
+  CheckDisconnectedPeerFailsPromptly;
   WriteLn('OK');
 end.

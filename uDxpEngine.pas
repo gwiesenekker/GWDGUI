@@ -7,7 +7,7 @@ interface
 uses
   Classes, sockets, ssockets,
   {$IFDEF MSWINDOWS}
-  Windows,
+  Windows, WinSock2,
   {$ENDIF}
   SyncObjs, SysUtils,
   {$IFDEF UNIX}
@@ -1077,6 +1077,7 @@ function TDxpEngine.ReadDxpPacket(ATimeoutMs: Integer; out APacket: string;
   AIgnoreStopping: Boolean): Boolean;
 var
   BytesRead: Longint;
+  ReadError: Integer;
   Ch: Char;
   StartTick: QWord;
 begin
@@ -1099,21 +1100,26 @@ begin
     if FProcess.NeedsPolling then
       FProcess.ReadAvailable;
     Ch := #0;
+    ReadError := 0;
+    FSocketLock.Acquire;
     try
-      FSocketLock.Acquire;
-      try
-        if FSocket = nil then
-          Exit(False);
-        BytesRead := FSocket.Read(Ch, 1);
-      finally
-        FSocketLock.Release;
-      end;
-    except
-      on E: Exception do
-      begin
-        Sleep(10);
-        Continue;
-      end;
+      if FSocket = nil then
+        Exit(False);
+      BytesRead := FSocket.Read(Ch, 1);
+      if BytesRead < 0 then
+        ReadError := FSocket.LastError;
+    finally
+      FSocketLock.Release;
+    end;
+    if BytesRead = 0 then
+      raise EInvalidOperation.Create('DXP peer disconnected while waiting for a packet');
+    if BytesRead < 0 then
+    begin
+      if (ReadError <> EsockEINTR) and (ReadError <> EsockEWOULDBLOCK)
+        {$IFDEF MSWINDOWS}and (ReadError <> WSAETIMEDOUT){$ENDIF} then
+        raise EInOutError.CreateFmt('DXP socket read failed; error=%d', [ReadError]);
+      if FProcess.HasProcess and (not FProcess.IsRunning) then
+        raise EInvalidOperation.Create('DXP engine process exited while waiting for a packet');
     end;
 
     if BytesRead > 0 then

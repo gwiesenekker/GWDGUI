@@ -60,3 +60,5 @@ Run `bash tests/run_dxp_checks.sh` with local TCP access to exercise the real DX
 adapter and orchestrator against a self-contained fake peer. It verifies that
 win/draw claims cannot award results while resignations retain their meaning
 for both colours. Output and executables stay in `/tmp/gwdgui-dxp-checks`.
+The DXP check also disconnects the peer immediately after GAMEACC, verifying
+prompt error detection, unchanged game state and safe shutdown.
