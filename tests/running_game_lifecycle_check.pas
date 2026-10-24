@@ -7,7 +7,7 @@ uses
   cthreads,
   {$ENDIF}
   Interfaces, Classes, SysUtils, SyncObjs, uMainForm, uGameRunnerThread,
-  uGameSetupForm, uGameOrchestrator;
+  uGameSetupForm, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
 
 type
   TObserver = class
@@ -107,7 +107,61 @@ begin
   end;
 end;
 
+procedure CheckEditsWaitForRunner;
+var
+  Setup: TGameSetup;
+  Game: TRunningGame;
+  Snapshot: TGameRunnerSnapshot;
+  Command: TGameTreeCommand;
+begin
+  Setup := Default(TGameSetup);
+  Setup.StartingFEN := 'W:W31-50:B1-20';
+  Setup.TimeControl := DefaultTimeControl;
+  Game := TRunningGame.Create(2, 'lifecycle', nil, pkHuman, pkHuman,
+    '', '', 'White', 'Black', nil, Setup);
+  Snapshot := TGameRunnerSnapshot.Create;
+  try
+    Check(not Game.CanEditGameTree, 'starting games must not allow tree edits');
+    Game.MarkRunningIfStarting;
+    Check(not Game.CanEditGameTree, 'running games must not allow tree edits');
+    Game.RequestStop('test');
+    Snapshot.MarkStopped('test');
+    Game.AssignRunnerSnapshot(Snapshot);
+    Command := Game.GameTreeActor.CreateSetHeaderCommand(
+      GameTreeHeaderInput('lifecycle', 'test', 'White', 'Black', '*',
+        Setup.StartingFEN, False, Setup.TimeControl, gosStopped, 'Stopped'));
+    try
+      Game.GameTreeActor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'stopped snapshot header should be accepted');
+    finally
+      Command.Free;
+    end;
+    Check(Game.State = gosStopped, 'tree can show stopped before runner finishes');
+    Check(not Game.CanEditGameTree,
+      'stopped tree must stay read-only until pending runner snapshots are drained');
+    Command := Game.GameTreeActor.CreateSetHeaderCommand(
+      GameTreeHeaderInput('lifecycle', 'test', 'White', 'Black', '0-2',
+        Setup.StartingFEN, False, Setup.TimeControl, gosGameOver, 'Game over'));
+    try
+      Game.GameTreeActor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'completed snapshot header should be accepted');
+    finally
+      Command.Free;
+    end;
+    Check(not Game.CanEditGameTree,
+      'game-over tree must also wait for the runner to finish');
+    Game.MarkFinished;
+    Check(Game.CanEditGameTree, 'finished games should allow tree exploration');
+    Game.RequestRemoval;
+    Check(not Game.CanEditGameTree, 'games pending removal must reject tree edits');
+  finally
+    Snapshot.Free;
+    Game.Free;
+  end;
+end;
+
 begin
   CheckCompletedResultSurvivesStop;
+  CheckEditsWaitForRunner;
   WriteLn('OK');
 end.

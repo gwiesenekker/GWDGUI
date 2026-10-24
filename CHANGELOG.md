@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Wait for runner completion before editing a stopped game (M3)
+
+- Gate mainline edits and variation exploration on the runner lifecycle,
+  rather than treating a stopped or game-over tree as proof of completion.
+- Reject new human input while Stop or removal is pending, so late runner
+  snapshots cannot overwrite moves added during shutdown.
+- Extend the lifecycle regression test across starting, running, stopped,
+  game-over, finished and removal states. Stopped and completed snapshot headers
+  remain read-only until the runner's finished event has been handled.
+- Validation: all eight regression programs and the source audit pass.
+
 ### 2026-10-24 — Preserve completed results when Stop is requested (M4)
 
 - Leave terminal snapshots unchanged when Stop is requested, preserving a

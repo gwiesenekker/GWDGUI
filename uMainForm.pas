@@ -178,6 +178,7 @@ type
     destructor Destroy; override;
 
     function IsEngineReservationActive: Boolean;
+    function CanEditGameTree: Boolean;
     function IsHumanToMove: Boolean;
     function GameTreeId: Int64;
     function ReservationSummary: string;
@@ -960,6 +961,11 @@ end;
 function TRunningGame.IsEngineReservationActive: Boolean;
 begin
   Result := FLifecycle <> rglFinished;
+end;
+
+function TRunningGame.CanEditGameTree: Boolean;
+begin
+  Result := FLifecycle = rglFinished;
 end;
 
 function TRunningGame.IsHumanToMove: Boolean;
@@ -2035,6 +2041,7 @@ begin
 
   LState := LGame.State;
   Result := (LGame.Runner <> nil) and
+    (not LGame.IsStopOrRemoveRequested) and
     ((LState = gosRunning) or (LGame.Lifecycle = rglStarting)) and
     LGame.IsHumanToMove;
 end;
@@ -2068,8 +2075,7 @@ begin
   LGame := SelectedDisplayedGame;
   if LGame <> nil then
   begin
-    Result := (LGame.Lifecycle = rglFinished) or
-      (LGame.State in [gosStopped, gosGameOver]);
+    Result := LGame.CanEditGameTree;
   end
   else
     Result := Trim(StartingFenForTree(ActiveGameTree)) <> '';
@@ -2743,6 +2749,10 @@ begin
   if LGameTree = nil then
     Exit;
 
+  LGame := SelectedDisplayedGame;
+  if (LGame <> nil) and LGame.IsStopOrRemoveRequested then
+    Exit;
+
   LBoard := TDraughtsBoard.Create;
   try
     if (not TryBuildDisplayedBoard(LGameTree, LBoard)) or
@@ -2764,7 +2774,8 @@ begin
     LState := LGame.State
   else
     LState := StateForTree(LGameTree);
-  if (LGame <> nil) and (LState in [gosStopped, gosGameOver]) and
+  if (LGame <> nil) and LGame.CanEditGameTree and
+    (LState in [gosStopped, gosGameOver]) and
     (FGameBrowsePly < 0) then
   begin
     LNode := ExecuteGameTreeAppendMainlineMove(LGameTree, LMove, ASource);
