@@ -2076,8 +2076,6 @@ begin
   Result := False;
   if Trim(FVariationBrowseMoves) <> '' then
     Exit;
-  if FGameBrowsePly < 0 then
-    Exit;
 
   LGame := SelectedDisplayedGame;
   if LGame <> nil then
@@ -2756,7 +2754,7 @@ var
   LGame: TRunningGame;
   LGameTree: TGameTree;
   LMove: string;
-  LNode: TGameTreePlyNode;
+  LNode, LTip: TGameTreePlyNode;
   LState: TGameOrchestratorState;
 begin
   LMove := NormalizeMoveNotation(AMove);
@@ -2778,27 +2776,32 @@ begin
   end;
 
   ClearHumanMoveSelection;
-  if CanExploreVariation then
-  begin
-    AddVariationMove(LMove, ASource);
-    Exit;
-  end;
-
-  LGame := SelectedDisplayedGame;
   if LGame <> nil then
     LState := LGame.State
   else
     LState := StateForTree(LGameTree);
-  if (LGame <> nil) and LGame.CanEditGameTree and
-    (LState in [gosStopped, gosGameOver]) and
-    (FGameBrowsePly < 0) then
+
+  if CanExploreVariation then
   begin
-    LNode := ExecuteGameTreeAppendMainlineMove(LGameTree, LMove, ASource);
-    if LNode = nil then
-      Exit;
-    ClearVariationExploration;
-    FGameBrowsePly := LNode.PlyNumber;
-    RefreshDisplayFromGameTree(LGameTree, True);
+    if LGameTree.MainlineCount = 0 then
+      LTip := LGameTree.Root
+    else
+      LTip := LGameTree.MainlineNode[LGameTree.MainlineCount];
+    // Only an unfinished mainline can grow. A completed game's result and
+    // official move sequence remain intact while exploring continuations.
+    if (FVariationIndex < 0) and
+      (CurrentDisplayedGameTreeNode(LGameTree) = LTip) and
+      (ResultForTree(LGameTree) = '*') and (LState <> gosGameOver) then
+    begin
+      LNode := ExecuteGameTreeAppendMainlineMove(LGameTree, LMove, ASource);
+      if LNode = nil then
+        Exit;
+      ClearVariationExploration;
+      FGameBrowsePly := -1;
+      RefreshDisplayFromGameTree(LGameTree, True);
+    end
+    else
+      AddVariationMove(LMove, ASource);
     Exit;
   end;
 
@@ -2822,7 +2825,7 @@ begin
     Exit;
 
   LMove := NormalizeMoveNotation(AMove);
-  if (FGameBrowsePly < 0) or (LMove = '') then
+  if LMove = '' then
     Exit;
 
   LNode := CurrentDisplayedGameTreeNode(LGameTree);

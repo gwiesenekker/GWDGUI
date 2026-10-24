@@ -3,6 +3,19 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Extend unfinished games and preserve completed mainlines (G5, U3)
+
+- Allow board moves at the end of a pasted position or unfinished imported game
+  to extend its mainline, including successive moves and an explicitly browsed tip.
+- Keep earlier-position edits as find-or-create variations. Preserve the existing
+  ability to extend a stopped game whose result is still unknown.
+- Store moves after a completed result as continuation variations; never extend
+  the official mainline or change its result. Keep alternative continuations too.
+- Regress actual board clicks for pasted FEN, imported PDN, earlier alternatives,
+  a stopped game, and a finished game with legal moves left after a loss on time.
+- Validation: fourteen headless regression programs, source audit, main-form
+  and tournament GTK regressions, and a full GTK application build pass.
+
 ### 2026-10-24 — Validate PV browsing and identify illegal continuations (A2)
 
 - Validate each PV against its base position. Replay only its legal prefix, using

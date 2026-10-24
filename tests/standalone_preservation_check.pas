@@ -4,7 +4,7 @@ program standalone_preservation_check;
 
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, LCLType,
+  Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, LCLType, Controls,
   uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPvBrowser,
   uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameOrchestrator;
 
@@ -195,6 +195,141 @@ begin
     Moves.Free;
     Source.Free;
     Games.Free;
+  end;
+end;
+
+procedure ClickBoardSquare(AForm: TMainForm; ASquare: Integer);
+var
+  Board: TDraughtsBoardControl;
+  X, Y: Integer;
+begin
+  Board := TDraughtsBoardControl(AForm.FindComponent('MainBoard'));
+  // Locate a point through the control's own coordinate mapping, including margins.
+  for Y := 0 to Board.Height div 4 do
+    for X := 0 to Board.Width div 4 do
+      if Board.SquareAtPoint(X * 4, Y * 4) = ASquare then
+      begin
+        Board.OnMouseDown(Board, mbLeft, [], X * 4, Y * 4);
+        Exit;
+      end;
+  Check(False, 'cannot locate board square ' + IntToStr(ASquare));
+end;
+
+procedure ClickBoardMove(AForm: TMainForm; AFrom, ATo: Integer);
+begin
+  ClickBoardSquare(AForm, AFrom);
+  ClickBoardSquare(AForm, ATo);
+end;
+
+procedure CheckStandaloneMainlineCanBeExtended(AForm: TMainForm);
+var
+  Tree: TGameTree;
+  Game: TPdnGame;
+  Memo: TMemo;
+  Key: Word;
+begin
+  AForm.LoadStandaloneFen(DefaultStartingFEN);
+  Tree := AForm.ActiveGameTree;
+  ClickBoardMove(AForm, 32, 28);
+  Check((Tree.MainlineCount = 1) and (Tree.MainlineNode[1].MoveText = '32-28'),
+    'a move from a pasted position must start the standalone mainline');
+  ClickBoardMove(AForm, 18, 23);
+  Check((Tree.MainlineCount = 2) and (Tree.VariationLineCount = 0),
+    'successive standalone moves must extend the same mainline');
+  Game := TPdnGame.Create;
+  try
+    Game.MovesText := '32-28 18-23';
+    Game.ResultText := '*';
+    AForm.LoadPdnGameToDisplay(Game);
+    Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Key := VK_LEFT;
+    Memo.OnKeyDown(Memo, Key, []);
+    ClickBoardMove(AForm, 37, 32);
+    Check((Tree.MainlineCount = 3) and (Tree.VariationLineCount = 0),
+      'a move at the explicitly selected last ply must extend an unfinished PDN');
+    ClickBoardMove(AForm, 12, 18);
+    Check(Tree.MainlineCount = 4, 'editing must continue at the new mainline tip');
+    // Earlier positions still create alternatives, retaining the full played line.
+    Key := VK_LEFT;
+    Memo.OnKeyDown(Memo, Key, []);
+    Key := VK_LEFT;
+    Memo.OnKeyDown(Memo, Key, []);
+    ClickBoardMove(AForm, 13, 18);
+    Check(Tree.MainlineCount = 4, 'editing an earlier position must retain the mainline');
+    Check(Pos('13-18', GameTreeToPdnText(Tree)) > 0,
+      'an earlier alternative must remain exportable');
+  finally
+    Game.Free;
+  end;
+end;
+
+procedure CheckCompletedGameKeepsOfficialMainline(AForm: TMainForm);
+var
+  Setup: TGameSetup;
+  Game: TRunningGame;
+  Command: TGameTreeCommand;
+  History: TListBox;
+  Memo: TMemo;
+  Tick: QWord;
+  Key: Word;
+  Text: string;
+begin
+  Setup := Default(TGameSetup);
+  Setup.StartingFEN := DefaultStartingFEN;
+  Setup.TimeControl := DefaultTimeControl;
+  Setup.WhitePlayer := pkHuman;
+  Setup.BlackPlayer := pkHuman;
+  Game := AForm.StartGameFromSetup(Setup);
+  Tick := GetTickCount64;
+  while (Game.Lifecycle = rglStarting) and (GetTickCount64 - Tick < 5000) do
+  begin
+    DrainGuiEvents(AForm);
+    Sleep(10);
+  end;
+  AForm.MarkGameStopped(Game, 'finished-game fixture');
+  Tick := GetTickCount64;
+  while (Game.Lifecycle <> rglFinished) and (GetTickCount64 - Tick < 5000) do
+  begin
+    DrainGuiEvents(AForm);
+    Sleep(10);
+  end;
+  Check(Game.Lifecycle = rglFinished, 'completed editing fixture must finish');
+  try
+    ClickBoardMove(AForm, 32, 28);
+    ClickBoardMove(AForm, 18, 23);
+    Check((Game.MainlineCount = 2) and (Game.ResultText = '*'),
+      'a stopped unfinished game must remain extendable');
+    Command := Game.GameTreeActor.CreateSetHeaderCommand(
+      GameTreeHeaderInput('finished-fixture', 'Game ended on time', 'White',
+        'Black', '0-2', DefaultStartingFEN, False, DefaultTimeControl, gosGameOver));
+    try
+      Game.GameTreeActor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'completed game header fixture');
+    finally
+      Command.Free;
+    end;
+    History := TListBox(AForm.FindComponent('GameHistoryList'));
+    History.OnClick(History);
+    // The game ended with legal moves available, as after a loss on time.
+    ClickBoardMove(AForm, 37, 32);
+    Check((Game.MainlineCount = 2) and (Game.ResultText = '0-2') and
+      (Game.State = gosGameOver),
+      'post-result exploration must preserve the official mainline and result');
+    Check(Game.GameTree.MainlineNode[2].ChildCount = 1,
+      'a move after a completed game must be retained as a continuation variation');
+    ClickBoardMove(AForm, 12, 18);
+    Check(Game.MainlineCount = 2, 'continued exploration must stay outside the official line');
+    Text := GameTreeToPdnText(Game.GameTree);
+    Check((Pos('37-32', Text) > 0) and (Pos('12-18', Text) > 0),
+      'post-result exploration must be visible in saved PDN');
+    Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Key := VK_ESCAPE;
+    Memo.OnKeyDown(Memo, Key, []);
+    ClickBoardMove(AForm, 38, 32);
+    Check((Game.MainlineCount = 2) and (Game.GameTree.MainlineNode[2].ChildCount = 2),
+      'a different post-result move must preserve the first continuation');
+  finally
+    AForm.RemoveGame(Game);
   end;
 end;
 
@@ -413,6 +548,8 @@ begin
     try
       Check(not GameTreeHasContent(Form.ActiveGameTree),
         'untouched initial board should not prompt to save');
+      CheckStandaloneMainlineCanBeExtended(Form);
+      CheckCompletedGameKeepsOfficialMainline(Form);
       CheckPvReplayIsValidated(Form);
       CheckFrozenPvSurvivesRefresh(Form);
       CheckNestedGuiNavigation(Form);

@@ -210,6 +210,11 @@ the position before its first move. Press `Escape` to leave variation browsing.
 Analysis may continue for the position being browsed, but browsing an engine or
 annotator PV does not add its moves to the structural game tree.
 
+Board moves at the end of an unfinished standalone or stopped game extend its
+mainline. Moves from an earlier position create or follow a variation. After a
+completed result, further board moves are saved as continuation variations;
+the official mainline and result remain unchanged.
+
 ### 4.1 Move-list display options
 
 Right-click the move notation to show or hide:
