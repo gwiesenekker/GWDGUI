@@ -241,23 +241,22 @@ begin
   case Command.CommandKind of
     accAnalyze:
       begin
-        ApplyPvContext(Command, False);
         if FEngine = nil then
           Exit;
-        if Command.Terminal then
-        begin
-          FEngine.StopSearch;
-          PublishSnapshot;
-          if Assigned(FOnLog) then
-            FOnLog(Self, DisplayName + ' idle; terminal position');
-          Exit;
-        end;
         Moves := TStringList.Create;
         try
           ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(Command.MovesText)),
             Moves);
           FEngine.StopSearch;
           FEngine.SetGamePosition(Command.StartingFEN, Moves);
+          ApplyPvContext(Command, False);
+          if Command.Terminal then
+          begin
+            PublishSnapshot;
+            if Assigned(FOnLog) then
+              FOnLog(Self, DisplayName + ' idle; terminal position');
+            Exit;
+          end;
           if FRunMode = armMcts then
             FEngine.StartMcts
           else
@@ -271,7 +270,6 @@ begin
       end;
     accThinkOnce:
       begin
-        ApplyPvContext(Command, True);
         if FEngine = nil then
           Exit;
         Moves := TStringList.Create;
@@ -280,6 +278,7 @@ begin
             Moves);
           FEngine.StopSearch;
           FEngine.SetGamePosition(Command.StartingFEN, Moves);
+          ApplyPvContext(Command, True);
           FEngine.SetClockInfo(1, Command.ThinkSeconds, 0);
           MoveText := Trim(FEngine.StartThinking);
         finally

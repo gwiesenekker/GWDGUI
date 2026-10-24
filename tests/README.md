@@ -13,6 +13,9 @@ compiled test binaries and units out of the source tree.
 Current checks:
 
 - `board_regression_check.pas`
+- `analyzer_runner_shutdown_check.pas`
+- `analyzer_position_check.pas` (self-contained fake Hub engine; analysis,
+  MCTS, terminal positions and one-shot searches while changing positions)
 - `pdn_regression_check.pas`
 - `game_tree_pdn_filter_check.pas`
 - `game_tree_actor_check.pas`
