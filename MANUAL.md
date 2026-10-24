@@ -236,8 +236,11 @@ The Game Tree window exposes the game tree that owns the current game state.
 Nodes can show engine scores and PVs, annotator scores and PVs, Auto Play PVs,
 and clock information.
 
-Click a node to inspect its position. While a node is selected, automatic tree
-following is suspended; press `Escape` to resume following the current game.
+Click a node to show its position on the main board and select its move in the
+notation. The tree window, notation and board share the same selection. Use
+Left/Right to follow parents and continuations; stepping back and forward retains
+the chosen branch. Press `Escape` to resume following the current game. If a
+selected branch is removed, selection returns to its nearest surviving ancestor.
 The tree window's context menu can copy the tree as PDN.
 
 ## 5. Analysis

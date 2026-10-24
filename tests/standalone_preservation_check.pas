@@ -4,8 +4,8 @@ program standalone_preservation_check;
 
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, LCLType, Controls,
-  uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPvBrowser,
+  Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, LCLType, Controls, ComCtrls, Menus,
+  uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPvBrowser, uGuiDialogs,
   uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameOrchestrator;
 
 type
@@ -354,6 +354,138 @@ begin
   end;
 end;
 
+procedure CheckUnexpectedDialogsAbort;
+{$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+var
+  I: Integer;
+  Rejected: Boolean;
+{$ENDIF}
+begin
+  {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+  for I := 1 to 2 do
+  begin
+    Rejected := False;
+    try
+      if I = 1 then ShowGuiOkDialog(nil, 'regression', 'unexpected dialog')
+      else ShowGuiTextDialog(nil, 'regression', 'unexpected dialog');
+    except
+      on E: EInvalidOperation do
+        Rejected := Pos('Unexpected dialog (regression)', E.Message) > 0;
+    end;
+    Check(Rejected, 'unexpected test dialogs must fail before opening a window');
+  end;
+  {$ENDIF}
+end;
+
+procedure CheckTreeWindowUsesSameCursor(AForm: TMainForm);
+var
+  Game: TPdnGame;
+  Window: TForm;
+  View: TTreeView;
+  Memo: TMemo;
+  Board: TDraughtsBoardControl;
+  Expected: TDraughtsBoard;
+  Target: Int64;
+  I: Integer;
+  Key: Word;
+  Actor: TGameTreeActor;
+  Command: TGameTreeCommand;
+
+  procedure CheckPosition(const MessageText: string);
+  begin
+    Check(Board.Board.CurrentFEN = Expected.CurrentFEN, MessageText);
+  end;
+begin
+  Game := TPdnGame.Create;
+  Expected := TDraughtsBoard.Create;
+  try
+    Game.MovesText := '32-28 18-23';
+    Game.MoveVariationsText := EncodePdnVariationLine(2, 1, '20-24 38-32 18-22');
+    AForm.LoadPdnGameToDisplay(Game);
+    Check(AForm.ActiveGameTree.FindVariationNode(0, 3) <> nil,
+      'tree-window fixture must materialize its variation: ' +
+      GameTreeToPdnText(AForm.ActiveGameTree));
+    Target := AForm.ActiveGameTree.FindVariationNode(0, 3).NodeId;
+    TMenuItem(AForm.FindComponent('ShowGameTree')).OnClick(nil);
+    Window := TForm(AForm.FindComponent('GameTreeWindow'));
+    Check(Window <> nil, 'tree window must open');
+    Window.Hide;
+    View := TTreeView(Window.FindComponent('GameTreeNodes'));
+    Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Board := TDraughtsBoardControl(AForm.FindComponent('MainBoard'));
+    for I := 0 to View.Items.Count - 1 do
+      if Int64(PtrUInt(View.Items[I].Data)) = Target then
+      begin
+        View.Selected := View.Items[I];
+        Break;
+      end;
+    Check(Int64(PtrUInt(View.Selected.Data)) = Target, 'select nested tree position');
+    View.OnClick(View);
+    Expected.SetBeginPosition;
+    Expected.PlayMove('32-28');
+    Expected.PlayMove('20-24');
+    Expected.PlayMove('38-32');
+    Expected.PlayMove('18-22');
+    CheckPosition('tree click must display that node on the main board');
+    Check(Pos('18-22', Memo.SelText) > 0, 'tree click must select the matching memo move');
+    Key := VK_LEFT;
+    View.OnKeyDown(View, Key, []);
+    Expected.SetBeginPosition;
+    Expected.PlayMove('32-28');
+    Expected.PlayMove('20-24');
+    Expected.PlayMove('38-32');
+    CheckPosition('tree keyboard Left must use the shared cursor parent');
+    Key := VK_RIGHT;
+    View.OnKeyDown(View, Key, []);
+    Expected.PlayMove('18-22');
+    CheckPosition('tree keyboard Right must restore the selected continuation');
+    Memo.SelStart := Pos('18-23', Memo.Text) - 1;
+    Memo.SelLength := 0;
+    Memo.OnClick(Memo);
+    Check(Int64(PtrUInt(View.Selected.Data)) = AForm.ActiveGameTree.MainlineNode[2].NodeId,
+      'memo clicks must also update the tree selection');
+    // A frozen tree view may still contain rows for a branch removed by a command.
+    Actor := TGameTreeActor.Create(AForm.ActiveGameTree, False);
+    try
+      Command := Actor.CreateClearStoredVariationsCommand;
+      try
+        Actor.ExecuteCommand(Command);
+        Check(Command.Accepted, 'remove tree-window branch fixture');
+      finally
+        Command.Free;
+      end;
+    finally
+      Actor.Free;
+    end;
+    for I := 0 to View.Items.Count - 1 do
+      if Int64(PtrUInt(View.Items[I].Data)) = Target then
+      begin
+        View.Selected := View.Items[I];
+        Break;
+      end;
+    View.OnClick(View);
+    Expected.SetBeginPosition;
+    Expected.PlayMove('32-28');
+    Expected.PlayMove('18-23');
+    CheckPosition('clicking a stale removed-node row must not retarget the board');
+    Key := VK_ESCAPE;
+    View.OnKeyDown(View, Key, []);
+    Expected.SetBeginPosition;
+    Expected.PlayMove('32-28');
+    Expected.PlayMove('18-23');
+    CheckPosition('tree Escape must return the shared cursor to the mainline tip');
+    View.Selected := View.Items[1]; // Event metadata belongs to the root position.
+    View.OnClick(View);
+    Expected.SetBeginPosition;
+    CheckPosition('metadata rows must select their enclosing position');
+    Key := VK_ESCAPE;
+    View.OnKeyDown(View, Key, []);
+  finally
+    Expected.Free;
+    Game.Free;
+  end;
+end;
+
 procedure CheckPvReplayIsValidated(AForm: TMainForm);
 var
   Browser: TPvBrowser;
@@ -571,6 +703,8 @@ begin
         'untouched initial board should not prompt to save');
       CheckStandaloneMainlineCanBeExtended(Form);
       CheckCompletedGameKeepsOfficialMainline(Form);
+      CheckUnexpectedDialogsAbort;
+      CheckTreeWindowUsesSameCursor(Form);
       CheckPvReplayIsValidated(Form);
       CheckFrozenPvSurvivesRefresh(Form);
       CheckNestedGuiNavigation(Form);

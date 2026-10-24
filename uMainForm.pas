@@ -287,6 +287,7 @@ type
     FGameTreeBrowseMode: Boolean;
     FGameTreeForm: TForm;
     FGameTreeView: TTreeView;
+    FGameTreeViewTreeId: Int64;
     FDisplayedAnnotationsSignature: string;
     FDisplayedMovesSignature: string;
     FDisplayedMoveLabelsSignature: string;
@@ -702,6 +703,7 @@ type
     procedure RefreshDisplayedGameTreeViews(AGameTree: TGameTree;
       AForce: Boolean);
     procedure UpdateGameTreeView(AGameTree: TGameTree);
+    procedure SyncGameTreeViewSelection;
     procedure UpdateMctsStatsFromLog(const AMessage: string);
     procedure TournamentClick(Sender: TObject);
   public
@@ -1773,6 +1775,7 @@ begin
   LGameMovePopup.Items.Add(LMenuItem);
   FShowGameTreeMenuItem := TMenuItem.Create(Self);
   FShowGameTreeMenuItem.Caption := 'Show game tree';
+  FShowGameTreeMenuItem.Name := 'ShowGameTree';
   FShowGameTreeMenuItem.OnClick := @ShowGameTreeClick;
   LGameMovePopup.Items.Add(FShowGameTreeMenuItem);
   FGameMoveMemo.PopupMenu := LGameMovePopup;
@@ -6193,24 +6196,37 @@ begin
 end;
 
 procedure TMainForm.GameTreeViewClick(Sender: TObject);
+var
+  Tree: TGameTree;
+  Node: TGameTreePlyNode;
 begin
+  Tree := ActiveGameTree;
+  if (Tree = nil) or (Tree.GameTreeId <> FGameTreeViewTreeId) then Exit;
+  Node := Tree.FindNodeById(SelectedGameTreeNodeId(FGameTreeView));
+  if Node = nil then Exit;
   FGameTreeBrowseMode := True;
-  if (FGameTreeView <> nil) and FGameTreeView.CanFocus then
-    FGameTreeView.SetFocus;
+  ClearHumanMoveSelection;
+  ClearVariationExploration;
+  FTreeCursor.Select(Tree, Node);
+  RefreshDisplayFromGameTree(Tree, False);
+  if Visible and CanFocus and (FGameTreeView <> nil) and
+    FGameTreeView.CanFocus then FGameTreeView.SetFocus;
 end;
 
 procedure TMainForm.GameTreeViewKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 var
-  LGameTree: TGameTree;
+  Tree: TGameTree;
+  WasEscape: Boolean;
 begin
-  if Key <> VK_ESCAPE then
-    Exit;
-
-  FGameTreeBrowseMode := False;
-  LGameTree := ActiveGameTree;
-  UpdateGameTreeView(LGameTree);
-  Key := 0;
+  if not (Key in [VK_ESCAPE, VK_LEFT, VK_RIGHT]) then Exit;
+  WasEscape := Key = VK_ESCAPE;
+  if WasEscape then FGameTreeBrowseMode := False;
+  GameMoveBrowseKeyDown(Sender, Key, Shift);
+  Tree := ActiveGameTree;
+  if (Tree = nil) or (FGameTreeView = nil) then Exit;
+  if WasEscape then UpdateGameTreeView(Tree);
+  SyncGameTreeViewSelection;
 end;
 
 procedure TMainForm.CopyGameTreePdnClick(Sender: TObject);
@@ -6234,6 +6250,7 @@ begin
   if FGameTreeForm = nil then
   begin
     FGameTreeForm := TForm.Create(Self);
+    FGameTreeForm.Name := 'GameTreeWindow';
     FGameTreeForm.Caption := 'Game tree';
     FGameTreeForm.Position := poDesigned;
     FGameTreeForm.Width := 520;
@@ -6244,6 +6261,7 @@ begin
     CenterFormOnLaptopPanel(FGameTreeForm, 0);
 
     FGameTreeView := TTreeView.Create(FGameTreeForm);
+    FGameTreeView.Name := 'GameTreeNodes';
     FGameTreeView.Parent := FGameTreeForm;
     FGameTreeView.Align := alClient;
     FGameTreeView.ReadOnly := True;
@@ -6265,8 +6283,10 @@ begin
   FGameTreeBrowseMode := False;
   LGameTree := ActiveGameTree;
   UpdateGameTreeView(LGameTree);
+  {$IFNDEF GWDGUI_NONINTERACTIVE_TEST}
   FGameTreeForm.Show;
   FGameTreeForm.BringToFront;
+  {$ENDIF}
 end;
 
 procedure TMainForm.HighlightGameMoveTextSelection(AFocusMemo: Boolean;
@@ -7432,6 +7452,7 @@ begin
   UpdateBoardFromBrowseState(AGameTree);
   RefreshDisplayedGameTreeViews(AGameTree, AForceViews);
   UpdateBoardInfo;
+  SyncGameTreeViewSelection;
   if LGame <> nil then
     UpdateGameListItem(LGame);
 end;
@@ -7564,12 +7585,33 @@ begin
   FDisplayedGameTreeRevision := LRevision;
 end;
 
+procedure TMainForm.SyncGameTreeViewSelection;
+var
+  Tree: TGameTree;
+  Node: TGameTreePlyNode;
+  I: Integer;
+begin
+  Tree := ActiveGameTree;
+  if (Tree = nil) or (FGameTreeView = nil) or
+    (Tree.GameTreeId <> FGameTreeViewTreeId) then Exit;
+  Node := FTreeCursor.Resolve(Tree);
+  if Node = nil then Exit;
+  for I := 0 to FGameTreeView.Items.Count - 1 do
+    if Int64(PtrUInt(FGameTreeView.Items[I].Data)) = Node.NodeId then
+    begin
+      FGameTreeView.Selected := FGameTreeView.Items[I];
+      Exit;
+    end;
+end;
+
 procedure TMainForm.UpdateGameTreeView(AGameTree: TGameTree);
 begin
   if (FGameTreeView = nil) or (AGameTree = nil) then
     Exit;
 
   PopulateGameTreeView(FGameTreeView, AGameTree);
+  FGameTreeViewTreeId := AGameTree.GameTreeId;
+  SyncGameTreeViewSelection;
 end;
 
 procedure TMainForm.UpdateGameListItem(AGame: TRunningGame);

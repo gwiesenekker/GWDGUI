@@ -8,11 +8,24 @@ uses
   ComCtrls, uGameTree;
 
 procedure PopulateGameTreeView(ATreeView: TTreeView; AGameTree: TGameTree);
+function SelectedGameTreeNodeId(ATreeView: TTreeView): Int64;
 
 implementation
 
 uses
   SysUtils, uDraughtsBoard;
+
+function SelectedGameTreeNodeId(ATreeView: TTreeView): Int64;
+var
+  Node: TTreeNode;
+begin
+  Result := 0;
+  if ATreeView = nil then Exit;
+  Node := ATreeView.Selected;
+  // Analysis and clock rows refer to their enclosing position.
+  while (Node <> nil) and (Node.Data = nil) do Node := Node.Parent;
+  if Node <> nil then Result := Int64(PtrUInt(Node.Data));
+end;
 
 function FormatClock(ASeconds: Double): string;
 var
@@ -95,6 +108,7 @@ begin
   begin
     LChildTreeNode := ATreeView.Items.AddChild(ATreeParent,
       NodeCaption(AModelParent.Children[I]));
+    LChildTreeNode.Data := Pointer(PtrUInt(AModelParent.Children[I].NodeId));
     AddAnalysisChildren(ATreeView, LChildTreeNode, AModelParent.Children[I]);
     AddClockChildren(ATreeView, LChildTreeNode, AModelParent.Children[I]);
     AddChildren(ATreeView, LChildTreeNode, AModelParent.Children[I]);
@@ -115,6 +129,7 @@ begin
     LRootCaption := AGameTree.WhiteName + ' - ' + AGameTree.BlackName +
       '  ' + AGameTree.ResultText;
     LRootTreeNode := ATreeView.Items.Add(nil, LRootCaption);
+    LRootTreeNode.Data := Pointer(PtrUInt(AGameTree.Root.NodeId));
     ATreeView.Items.AddChild(LRootTreeNode, 'Event: ' +
       AGameTree.EventName);
     ATreeView.Items.AddChild(LRootTreeNode, 'FEN: ' +

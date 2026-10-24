@@ -3,6 +3,20 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Share the cursor with the tree window and keep tests noninteractive
+
+- Bind tree-window rows to immutable node IDs and their source tree. Tree clicks,
+  memo clicks and Left/Right now share the board's cursor and selection. Metadata
+  rows select their enclosing position; Escape resumes following the mainline.
+- Ignore stale tree-window rows belonging to another game or removed nodes.
+- Give GUI regression builds a noninteractive mode: unexpected dialogs raise a
+  diagnostic before opening, and the tested tree window stays hidden. Normal
+  application builds retain the interactive UI.
+- Regress tree/memo/board agreement, nested parent/child navigation, Escape and
+  unexpected-dialog failures. Update the browsing documentation.
+- Validation: sixteen headless regression programs, source audit, both GTK
+  regression suites and a full application build pass.
+
 ### 2026-10-24 — Retain rebuild variations only on surviving parent paths
 
 - Carry existing variations into a rebuild only when their complete mainline

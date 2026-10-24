@@ -290,6 +290,9 @@ var
   TextWidth: Integer;
   PromptLabel: TLabel;
 begin
+  {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+  raise EInvalidOperation.Create('Unexpected dialog (' + ACaption + '): ' + AText);
+  {$ENDIF}
   Dialog := TForm.Create(AOwner);
   try
     Dialog.BorderStyle := bsDialog;
@@ -360,6 +363,9 @@ var
   Dialog: TForm;
   Memo: TMemo;
 begin
+  {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+  raise EInvalidOperation.Create('Unexpected dialog (' + ACaption + '): ' + AText);
+  {$ENDIF}
   Dialog := TForm.Create(AOwner);
   try
     Dialog.Caption := ACaption;
