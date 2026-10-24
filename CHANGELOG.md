@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Reject stale human input without ending the game (M2)
+
+- Validate human commands against the runner's current board before playing them,
+  and pass the resolved canonical move to the orchestrator.
+- Log a rejection and publish the unchanged position for illegal or stale input.
+  Keep the human turn's elapsed time and continue accepting legal commands.
+- Regress an illegal first move, a queued duplicate after the turn changes, and
+  legal continuation in a real human-versus-human runner.
+- Validation: the headless Lazarus lifecycle/runner regression passes.
+
 ### 2026-10-24 — Make PDN export read-only (remaining M4)
 
 - Export running and standalone games directly from their current trees. Remove

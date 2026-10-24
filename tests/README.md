@@ -49,3 +49,6 @@ cannot transfer their analysis or clocks to another node, while unchanged and
 shared nodes retain their metadata through refreshes and path-index changes.
 The GTK check also verifies read-only standalone and running-game exports,
 including event-name overrides and preservation of model content and revision.
+The lifecycle check also sends illegal and stale duplicate human commands to a
+real runner, verifies rejection without game failure, and continues legal play
+without resetting the human clock.

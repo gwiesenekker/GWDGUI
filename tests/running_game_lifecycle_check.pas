@@ -12,7 +12,7 @@ uses
 type
   TObserver = class
     Lock: TCriticalSection;
-    Ready, Complete: TEvent;
+    Ready, Complete, Rejected, TwoMoves: TEvent;
     Last: TGameRunnerSnapshot;
     constructor Create;
     destructor Destroy; override;
@@ -34,12 +34,16 @@ begin
   Lock := TCriticalSection.Create;
   Ready := TEvent.Create(nil, True, False, '');
   Complete := TEvent.Create(nil, True, False, '');
+  Rejected := TEvent.Create(nil, True, False, '');
+  TwoMoves := TEvent.Create(nil, True, False, '');
   Last := TGameRunnerSnapshot.Create;
 end;
 
 destructor TObserver.Destroy;
 begin
   Last.Free;
+  TwoMoves.Free;
+  Rejected.Free;
   Complete.Free;
   Ready.Free;
   Lock.Free;
@@ -51,6 +55,10 @@ begin
   Lock.Acquire;
   try
     Last.AssignFrom(AData);
+    if Pos('human move rejected', AData.LogLines.Text) > 0 then
+      Rejected.SetEvent;
+    if AData.PlyCount = 2 then
+      TwoMoves.SetEvent;
     if AData.State = gosRunning then
       Ready.SetEvent;
     if AData.State = gosGameOver then
@@ -160,8 +168,61 @@ begin
   end;
 end;
 
+procedure CheckIllegalHumanInputIsRejected;
+var
+  Setup: TGameSetup;
+  Observer: TObserver;
+  Runner: TGameRunnerThread;
+  Rejected, Continued: Boolean;
+begin
+  Setup := Default(TGameSetup);
+  Setup.StartingFEN := 'W:W31-50:B1-20';
+  Setup.WhitePlayer := pkHuman;
+  Setup.BlackPlayer := pkHuman;
+  Setup.TimeControl := DefaultTimeControl;
+  Observer := TObserver.Create;
+  Runner := TGameRunnerThread.Create(Setup, 2, @Observer.Snapshot, nil);
+  try
+    Runner.Start;
+    Check(Observer.Ready.WaitFor(5000) = wrSignaled, 'human game should initialize');
+    Sleep(100);
+    Runner.PostHumanMove('1-50');
+    Rejected := Observer.Rejected.WaitFor(3000) = wrSignaled;
+    Observer.Lock.Acquire;
+    try
+      Check(Rejected, 'illegal human input should be reported as rejected');
+      Check((Observer.Last.State = gosRunning) and (Observer.Last.PlyCount = 0),
+        'rejection must leave the running position unchanged');
+      Check(Observer.Last.LastError = '', 'rejection must not fail the runner');
+    finally
+      Observer.Lock.Release;
+    end;
+    Runner.PostHumanMove('32-28');
+    Runner.PostHumanMove('32-28'); // stale duplicate, now Black is to move
+    Runner.PostHumanMove('18-23');
+    Continued := Observer.TwoMoves.WaitFor(5000) = wrSignaled;
+    Observer.Lock.Acquire;
+    try
+      Check(Continued and (Observer.Last.State = gosRunning),
+        'legal moves after rejected/stale commands must continue the game');
+      Check(Observer.Last.MovesPlayedText = '32-28 18-23',
+        'only the two legal commands should reach the game history');
+      Check(Observer.Last.WhiteUsedSeconds >= 0.05,
+        'rejecting input must not reset the human clock');
+    finally
+      Observer.Lock.Release;
+    end;
+  finally
+    Runner.PostStop;
+    Runner.WaitFor;
+    Runner.Free;
+    Observer.Free;
+  end;
+end;
+
 begin
   CheckCompletedResultSurvivesStop;
   CheckEditsWaitForRunner;
+  CheckIllegalHumanInputIsRejected;
   WriteLn('OK');
 end.

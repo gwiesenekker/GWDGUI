@@ -317,6 +317,7 @@ end;
 procedure TGameRunnerThread.HandleCommand(ACommand: TObject);
 var
   RunnerCommand: TGameRunnerCommand;
+  LegalMove: string;
 begin
   if not (ACommand is TGameRunnerCommand) then
     Exit;
@@ -354,7 +355,16 @@ begin
             RunnerCommand.TextValue);
           Exit;
         end;
-        FOrchestrator.PlayMove(RunnerCommand.TextValue, FOrchestrator.CurrentSide,
+        if not FOrchestrator.Board.TryGetLegalMove(RunnerCommand.TextValue,
+          LegalMove) then
+        begin
+          AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+            ' [runner] human move rejected; reason=illegal for current position; move=' +
+            RunnerCommand.TextValue);
+          PublishSnapshot;
+          Exit;
+        end;
+        FOrchestrator.PlayMove(LegalMove, FOrchestrator.CurrentSide,
           (GetTickCount64 - FHumanTurnStartTick) / 1000, 'human');
         FHumanTurnStartTick := 0;
         AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
