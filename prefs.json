@@ -1,0 +1,15 @@
+{
+  "main_board_light" : "#E4CFB0",
+  "main_board_dark" : "#624935",
+  "analysis_board_light" : "#CEE4F6",
+  "analysis_board_dark" : "#365F8B",
+  "target_square" : "#00FF00",
+  "last_move" : "#FFFF00",
+  "pv_move" : "#FFA500",
+  "hint_move" : "#FF0000",
+  "default_game_minutes" : 1.0000000000000000E+000,
+  "default_game_moves" : 75,
+  "default_game_increment_seconds" : 0.0000000000000000E+000,
+  "evaluation_max_score" : 1.0000000000000000E+001,
+  "evaluation_scale" : "logarithmic"
+}
