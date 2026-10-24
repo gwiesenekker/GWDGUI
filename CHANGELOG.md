@@ -3,6 +3,22 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Keep tournament games and standings consistent (T2)
+
+- Store played PDN, original result, explicit manual override and attempt history
+  per pairing in the tournament JSON. Retain moves, comments and nested variations.
+- Regenerate PDN from current records instead of appending on completion. Repeated
+  callbacks and resumed games cannot duplicate a pairing; rescheduling archives
+  the previous attempt and removes it from the current PDN.
+- Save authoritative JSON before PDN and repair stale or failed PDN output on load.
+  Preserve older unlinked PDN archives separately when migrating legacy files.
+- Validate the storage version, records and unique round/game identifiers before
+  loading. Retain Swiss bye scores without creating fictitious PDN games.
+- Regress record round trips, annotations, overrides, replay history, zero-move
+  games, duplicate callbacks, failed PDN recovery, legacy archives and bye reloads.
+- Validation: fourteen headless regression programs, source audit and GTK
+  tournament preservation checks pass.
+
 ### 2026-10-24 — Autosave tournament standings and keep storage paths stable (T1, T5)
 
 - Atomically replace tournament snapshots after pairing changes, registration,

@@ -392,13 +392,23 @@ limit. Use **Load** to resume it later. Loading is available only while the
 tournament is not running, and its engines must still be registered under the
 saved names.
 
-Completed games with moves are also appended as PDN to a file named after the
-tournament. When the tournament JSON has been saved, the PDN is placed in the
-same directory; otherwise it is written in the current working directory.
+The JSON also contains each played game, its comments and variations, any manual
+result override, and earlier attempts of rescheduled pairings. Manual corrections
+change the standings while retaining the original played result. Rescheduling
+archives the previous attempt and clears the current result.
 
-The JSON is the resumable tournament administration file. The PDN is the game
-record. Preserve both. GWDGUI prompts to save tournament state when closing if
-unsaved tournament data exists.
+GWDGUI regenerates the tournament PDN from these saved records, with one game
+per current pairing attempt, including games ending before their first move.
+Byes do not create PDN games. The PDN path is chosen beside the first JSON file
+and remains fixed when you rename the tournament or save the JSON elsewhere.
+Manual overrides are identified in the PDN headers along with the played result.
+Loading the JSON repairs a stale or missing PDN. Earlier attempts remain in JSON.
+
+Older tournament files did not contain the played games. When loading one with
+an existing PDN archive, GWDGUI preserves that archive and creates a separate PDN
+for the linked records. Missing older moves cannot be recovered from standings.
+Preserve the older archive along with the tournament JSON. GWDGUI prompts to save
+tournament state when closing if unsaved tournament data exists.
 
 ## 8. PDN and FEN
 

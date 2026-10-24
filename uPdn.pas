@@ -33,6 +33,7 @@ procedure ReadPdnGamesFromFile(const AFileName: string;
 procedure AppendPdnGameToFile(const AFileName: string; AGame: TPdnGame);
 procedure AppendPdnTextToFile(const AFileName, APdnText: string);
 function PdnGameToText(AGame: TPdnGame): string;
+function PdnExportResult(const AText: string): string;
 function AnnotationWithScore(const AAnnotation, AName, AScore: string): string;
 function ExtractAnnotationValue(const AAnnotation, AName: string): string;
 function AnnotationWithoutName(const AAnnotation, AName: string): string;

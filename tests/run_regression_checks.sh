@@ -16,6 +16,7 @@ CHECKS=(
   socket_disconnect_check.pas
   engine_clock_check.pas
   atomic_file_check.pas
+  tournament_record_check.pas
 )
 
 rm -rf "$OUT_DIR"

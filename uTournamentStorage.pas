@@ -44,6 +44,39 @@ begin
     raise EConvertError.Create('Invalid tournament integer: ' + AName);
 end;
 
+procedure ValidateRecord(Data: TJSONObject; AHistoryAllowed: Boolean);
+var
+  Items: TJSONArray;
+  I: Integer;
+  Value: string;
+begin
+  CheckInteger(Data, 'attempt', 1);
+  CheckField(Data, 'pdn', [jtString]);
+  CheckField(Data, 'played_result', [jtString]);
+  CheckField(Data, 'manual_result', [jtString]);
+  Value := Data.Get('played_result', '');
+  if (Value <> '') and (Value <> '*') and
+    not TournamentResultIsKnown(ParseTournamentResult(Value)) then
+    raise EConvertError.Create('Invalid played tournament result');
+  Value := Data.Get('manual_result', '');
+  if (Value <> '') and (Value <> '*') and
+    not TournamentResultIsKnown(ParseTournamentResult(Value)) then
+    raise EConvertError.Create('Invalid manual tournament result');
+  CheckField(Data, 'history', [jtArray]);
+  Items := TJSONArray(Data.Find('history'));
+  if Items <> nil then
+  begin
+    if not AHistoryAllowed then
+      raise EConvertError.Create('Tournament attempt history must not be nested');
+    for I := 0 to Items.Count - 1 do
+    begin
+      if Items[I].JSONType <> jtObject then
+        raise EConvertError.Create('Invalid tournament attempt history');
+      ValidateRecord(TJSONObject(Items[I]), False);
+    end;
+  end;
+end;
+
 procedure ValidateDocument(Data: TJSONObject);
 var
   Value: TJSONData;
@@ -51,7 +84,17 @@ var
   Game: TJSONObject;
   I: Integer;
   PairingType, ResultText: string;
+  Seen: TStringList;
+  PairingKey: string;
 begin
+  CheckInteger(Data, 'storage_version', 1);
+  if Data.Get('storage_version', 1) > 2 then
+    raise EConvertError.Create('Unsupported tournament storage version');
+  if (Data.Find('tournament_id') <> nil) and
+    (Data.Find('tournament_id').JSONType = jtString) and
+    (Trim(Data.Find('tournament_id').AsString) = '') then
+    raise EConvertError.Create('Empty tournament identity');
+  CheckField(Data, 'legacy_pdn_file_name', [jtString]);
   CheckField(Data, 'tournament_name', [jtString]);
   CheckField(Data, 'starting_fen', [jtString]);
   CheckField(Data, 'tournament_id', [jtString]);
@@ -91,6 +134,11 @@ begin
     if Games[I].JSONType <> jtObject then
       raise EConvertError.Create('Invalid tournament game');
     Game := TJSONObject(Games[I]);
+    CheckField(Game, 'record', [jtObject]);
+    if Game.Find('record') <> nil then
+      ValidateRecord(TJSONObject(Game.Find('record')), True)
+    else if Data.Get('storage_version', 1) >= 2 then
+      raise EConvertError.Create('Tournament game record is missing');
     CheckInteger(Game, 'game', 1);
     CheckInteger(Game, 'round', 1);
     CheckField(Game, 'white', [jtString]);
@@ -101,6 +149,21 @@ begin
     if (ResultText <> '') and (ResultText <> '*') and
       not TournamentResultIsKnown(ParseTournamentResult(ResultText)) then
       raise EConvertError.Create('Invalid tournament game result');
+  end;
+  Seen := TStringList.Create;
+  try
+    Seen.Sorted := True;
+    for I := 0 to Games.Count - 1 do
+    begin
+      Game := TJSONObject(Games[I]);
+      PairingKey := IntToStr(Game.Get('round', 1)) + ':' +
+        IntToStr(Game.Get('game', I + 1));
+      if Seen.IndexOf(PairingKey) >= 0 then
+        raise EConvertError.Create('Duplicate tournament pairing identity');
+      Seen.Add(PairingKey);
+    end;
+  finally
+    Seen.Free;
   end;
 end;
 

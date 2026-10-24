@@ -4,7 +4,7 @@ uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, Grids, ExtCtrls, FPJSON, JSONParser,
   uTournamentDialog, uTournamentGridModel, uMainForm, uGameSetupForm,
-  uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
+  uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uPdn;
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
@@ -138,11 +138,14 @@ var
   Fen: TEdit;
   Panel: TPanel;
 const
-  InvalidDocuments: array[0..3] of string = (
+  InvalidDocuments: array[0..6] of string = (
     '{invalid JSON',
     '[]',
     '{"tournament_name":"Partial overwrite","games":[{"white":17}]}',
-    '{"tournament_name":"Partial overwrite","games":{}}');
+    '{"tournament_name":"Partial overwrite","games":{}}',
+    '{"storage_version":3}',
+    '{"games":[{"record":{"manual_result":17}}]}',
+    '{"games":[{"game":1,"round":1},{"game":1,"round":1}]}');
 begin
   Dialog := TTournamentDialog.Create(nil);
   Before := TStringList.Create;
@@ -266,18 +269,199 @@ begin
     Check(Pos(IncludeTrailingPathDelimiter(GetAppConfigDir(False)), RecoveryFile) = 1,
       'recovery files must use the application config directory');
   finally
+    Dialog.Free;
     DeleteFile(RecoveryFile);
+    DeleteFile(ChangeFileExt(RecoveryFile, '.pdn'));
+  end;
+end;
+
+procedure CheckPdnResult(const FileName, ExpectedResult, Attempt: string);
+var
+  Games: TList;
+  Lines: TStringList;
+  I: Integer;
+begin
+  Games := TList.Create;
+  Lines := TStringList.Create;
+  try
+    LoadPdnGamesFromFile(FileName, Games);
+    Check(Games.Count = 1, 'current pairing must have exactly one PDN game');
+    Check(TPdnGame(Games[0]).ResultText = ExpectedResult,
+      'PDN result must match the tournament result');
+    Lines.LoadFromFile(FileName);
+    Check(Pos('[Attempt "' + Attempt + '"]', Lines.Text) > 0, 'attempt identity');
+    Check((Pos('[TournamentId "', Lines.Text) > 0) and
+      (Pos('[GameNo "1"]', Lines.Text) > 0) and
+      (Pos('[Round "1"]', Lines.Text) > 0), 'persistent pairing identity tags');
+  finally
+    for I := 0 to Games.Count - 1 do
+      TObject(Games[I]).Free;
+    Lines.Free;
+    Games.Free;
+  end;
+end;
+
+procedure CheckRecordsAndPdnStayConsistent(const Fixture: string);
+var
+  Dialog, Reloaded: TTournamentDialog;
+  First, Second, Third: TRunningGame;
+  Lines: TStringList;
+  Data: TJSONObject;
+  GameData, RecordData: TJSONObject;
+  PdnPath: string;
+begin
+  WriteFixture(Fixture, 'Record preservation');
+  Dialog := TTournamentDialog.Create(nil);
+  Reloaded := nil;
+  First := NewGame(201);
+  Second := NewGame(202);
+  Third := NewGame(203);
+  Lines := TStringList.Create;
+  try
+    Dialog.LoadTournamentFromFile(Fixture);
+    Dialog.RegisterRunningGame(1, First);
+    CompleteGame(First, '2-0');
+    Dialog.GameStopped(First);
+    PdnPath := Dialog.PdnFileName;
+    CheckPdnResult(PdnPath, '2-0', '1'); // Result before any moves must be saved.
+    Dialog.SetSelectedResult('1-1');
+    Dialog.GameStopped(First);
+    CheckPdnResult(PdnPath, '1-1', '1');
+    Lines.LoadFromFile(PdnPath);
+    Check((Pos('[ResultSource "manual"]', Lines.Text) > 0) and
+      (Pos('[PlayedResult "2-0"]', Lines.Text) > 0),
+      'override must be explicit while retaining the played result');
+    Reloaded := TTournamentDialog.Create(nil);
+    Reloaded.LoadTournamentFromFile(Fixture);
+    CheckPdnResult(Reloaded.PdnFileName, '1-1', '1');
+    Reloaded.Free;
+    Reloaded := nil;
+    Dialog.RescheduleSelectedGame(nil);
+    Dialog.RegisterRunningGame(1, Second);
+    Reloaded := TTournamentDialog.Create(nil);
+    Reloaded.LoadTournamentFromFile(Fixture);
+    Check(TStringGrid(Reloaded.FindComponent('TournamentPairings')).Cells[
+      TournamentColResult, 1] = '*', 'resume must retain the pending attempt');
+    Reloaded.Free;
+    Reloaded := nil;
+    Dialog.GameStopped(First);
+    Check(Dialog.IsRunning, 'old completion must not finish the new attempt');
+    CompleteGame(Second, '0-2');
+    Dialog.GameStopped(Second);
+    CheckPdnResult(PdnPath, '0-2', '2');
+    Lines.LoadFromFile(Fixture);
+    Data := TJSONObject(GetJSON(Lines.Text));
+    try
+      GameData := TJSONObject(TJSONArray(Data.Find('games'))[0]);
+      RecordData := TJSONObject(GameData.Find('record'));
+      Check(TJSONArray(RecordData.Find('history')).Count = 1,
+        'rescheduled attempt must remain in JSON history');
+      Check(TJSONObject(TJSONArray(RecordData.Find('history'))[0]).Get(
+        'manual_result', '') = '1-1', 'attempt history must retain its override');
+    finally
+      Data.Free;
+    end;
+    // JSON is authoritative: loading must repair a stale or damaged PDN projection.
+    Lines.Text := 'stale export';
+    Lines.SaveToFile(PdnPath);
+    Reloaded := TTournamentDialog.Create(nil);
+    Reloaded.LoadTournamentFromFile(Fixture);
+    CheckPdnResult(PdnPath, '0-2', '2');
+    Reloaded.Free;
+    Reloaded := nil;
+    Dialog.RescheduleSelectedGame(nil);
+    Dialog.RegisterRunningGame(1, Third);
+    DeleteFile(PdnPath);
+    Check(CreateDir(PdnPath), 'prepare blocked PDN projection');
+    CompleteGame(Third, '2-0');
+    Dialog.GameStopped(Third);
+    Check((not Dialog.IsRunning) and (Dialog.StorageError <> ''),
+      'failed PDN write must pause without keeping a finished row active');
+    RemoveDir(PdnPath);
+    Reloaded := TTournamentDialog.Create(nil);
+    Reloaded.LoadTournamentFromFile(Fixture);
+    CheckPdnResult(PdnPath, '2-0', '3');
+    Check(Reloaded.StorageError = '', 'saved JSON must recover a failed PDN write');
+  finally
+    if DirectoryExists(PdnPath) then
+      RemoveDir(PdnPath);
+    Lines.Free;
+    Third.Free;
+    Second.Free;
+    First.Free;
+    Dialog.Free;
+    Reloaded.Free;
+  end;
+end;
+
+procedure CheckByeSurvivesReload(const Fixture: string);
+var
+  Dialog, Reloaded: TTournamentDialog;
+  Grid: TStringGrid;
+begin
+  WriteFixture(Fixture, 'Swiss bye');
+  Dialog := TTournamentDialog.Create(nil);
+  Reloaded := TTournamentDialog.Create(nil);
+  try
+    Dialog.LoadTournamentFromFile(Fixture);
+    Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    Grid.Cells[TournamentColBlack, 1] := 'BYE';
+    Grid.Cells[TournamentColResult, 1] := '2-0';
+    Grid.Cells[TournamentColReason, 1] := 'Bye';
+    Dialog.SaveTournamentToFile(Fixture);
+    Reloaded.LoadTournamentFromFile(Fixture);
+    Grid := TStringGrid(Reloaded.FindComponent('TournamentPairings'));
+    Check(Grid.Cells[TournamentColResult, 1] = '2-0',
+      'a bye must retain its awarded points after reload');
+    Check(Grid.Cells[TournamentColReason, 1] = 'Bye',
+      'a bye must retain its reason after reload');
+    Check(not FileExists(Reloaded.PdnFileName),
+      'a bye must not produce a fictitious played game');
+  finally
+    Reloaded.Free;
     Dialog.Free;
   end;
 end;
 
+procedure CheckLegacyPdnIsPreserved(const Fixture: string);
 var
-  Fixture, OtherFile: string;
+  Dialog: TTournamentDialog;
+  Lines: TStringList;
+  LegacyPath: string;
+begin
+  WriteFixture(Fixture, 'Legacy preservation');
+  LegacyPath := ChangeFileExt(Fixture, '.pdn');
+  Lines := TStringList.Create;
+  Dialog := TTournamentDialog.Create(nil);
+  try
+    Lines.Text := 'Original unlinked archive: keep exactly';
+    Lines.SaveToFile(LegacyPath);
+    Dialog.LoadTournamentFromFile(Fixture);
+    Check(Dialog.PdnFileName <> LegacyPath,
+      'legacy archives without persistent records must not be overwritten');
+    Dialog.SetSelectedResult('1-1');
+    CheckPdnResult(Dialog.PdnFileName, '1-1', '1');
+    Lines.LoadFromFile(LegacyPath);
+    Check(Trim(Lines.Text) = 'Original unlinked archive: keep exactly',
+      'migration must preserve the older PDN file');
+  finally
+    Dialog.Free;
+    Lines.Free;
+  end;
+end;
+
+var
+  Fixture, OtherFile, TestDirectory: string;
+  Id: TGUID;
+  Search: TSearchRec;
 begin
   RequireDerivedFormResource := False;
   Application.Initialize;
-  Fixture := GetTempFileName(GetTempDir, 'gwd');
-  OtherFile := Fixture + '.other';
+  Check(CreateGUID(Id) = 0, 'test directory identity');
+  TestDirectory := IncludeTrailingPathDelimiter(GetTempDir) + 'gwdtour-' + GUIDToString(Id);
+  Check(CreateDir(TestDirectory), 'create isolated test directory');
+  Fixture := IncludeTrailingPathDelimiter(TestDirectory) + 'tournament.json';
+  OtherFile := IncludeTrailingPathDelimiter(TestDirectory) + 'other.json';
   try
     try
       WriteFixture(Fixture, 'Original');
@@ -287,10 +471,20 @@ begin
       CheckPairingChangesWaitForShutdown(Fixture, OtherFile);
       CheckAutosaveAndFailureRecovery(Fixture);
       CheckUnsavedTournamentGetsRecoveryFile;
+      CheckRecordsAndPdnStayConsistent(IncludeTrailingPathDelimiter(TestDirectory) + 'records.json');
+      CheckLegacyPdnIsPreserved(IncludeTrailingPathDelimiter(TestDirectory) + 'legacy.json');
+      CheckByeSurvivesReload(IncludeTrailingPathDelimiter(TestDirectory) + 'bye.json');
       WriteLn('OK');
     finally
-      DeleteFile(OtherFile);
-      DeleteFile(Fixture);
+      if FindFirst(IncludeTrailingPathDelimiter(TestDirectory) + '*', faAnyFile, Search) = 0 then
+      begin
+        repeat
+          if (Search.Name <> '.') and (Search.Name <> '..') then
+            DeleteFile(IncludeTrailingPathDelimiter(TestDirectory) + Search.Name);
+        until FindNext(Search) <> 0;
+        FindClose(Search);
+      end;
+      RemoveDir(TestDirectory);
     end;
   except
     on E: Exception do
