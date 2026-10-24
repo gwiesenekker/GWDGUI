@@ -3,6 +3,22 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Make the structural browsing cursor a node ID
+
+- Replace independently stored mainline ply, variation index and variation ply
+  with a tree-scoped node-ID cursor. Derive legacy rendering coordinates on demand.
+- Navigate real parents and children, retaining the selected branch when stepping
+  back and forward. Keep temporary analysis-PV offsets separate from tree nodes.
+- Follow the live tip explicitly; keep a selected node frozen as the game grows.
+  If a selected node disappears, fall back to its nearest surviving ancestor.
+  Never select a replacement merely because it occupies the same ply or line index.
+- Return the created move's node ID from actor variation commands and use it when
+  following edits. Guard background-tree reads from changing the displayed cursor.
+- Regress nested navigation, shared-path changes, removal, replacement, tree changes,
+  and live following. Verify board and memo selection through actual GUI events.
+- Validation: sixteen headless regression programs and source audit pass; expanded
+  GTK main-form checks pass.
+
 ### 2026-10-24 — Validate structural moves at the actor boundary (G6)
 
 - Reject illegal, malformed and wrong-side moves, invalid variation bases and

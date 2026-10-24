@@ -124,6 +124,8 @@ var
   I: Integer;
   Key: Word;
   BeforeText: string;
+  Changed: Boolean;
+  SelectedId: Int64;
 
   procedure CheckBoard(const Path: string);
   var
@@ -187,6 +189,25 @@ begin
     Key := VK_RIGHT;
     Memo.OnKeyDown(Memo, Key, []);
     CheckBoard('32-28 20-24 38-32 18-22');
+    ClickText('38-32');
+    SelectedId := AForm.ActiveGameTree.FindVariationNode(1, 2).NodeId;
+    // The shared node survives, but its first compatibility path no longer
+    // contains it. Selection must follow identity rather than that old address.
+    AForm.ActiveGameTree.StoreVariationLineAtIndex(1, 2, 1, '20-24', 'Outer reply', Changed);
+    TextToMoveList('20-24', Moves);
+    RecordGameTreeVariationLine(AForm.ActiveGameTree,
+      GameTreeVariationLineInput(AForm.ActiveGameTree.VariationLine[1], 1, Moves, nil));
+    BeforeText := GameTreeToPdnText(AForm.ActiveGameTree);
+    Check(AForm.ActiveGameTree.FindVariationNode(2, 2).NodeId = SelectedId,
+      'fixture must retain the selected shared node through another path');
+    Key := VK_LEFT;
+    Memo.OnKeyDown(Memo, Key, []);
+    CheckBoard('32-28 20-24');
+    Key := VK_RIGHT;
+    Memo.OnKeyDown(Memo, Key, []);
+    CheckBoard('32-28 20-24 38-32');
+    Check(Pos('38-32', Memo.SelText) > 0,
+      'memo highlight must follow the surviving node after its path changes');
   finally
     for I := 0 to Games.Count - 1 do
       TObject(Games[I]).Free;

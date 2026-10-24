@@ -1160,6 +1160,8 @@ begin
     (FGameTree.FindVariationNode(ACommand.VariationIndex,
       ACommand.PlyNumber) <> nil) then
     AChanged := True;
+  ACommand.CreatedNodeId := FGameTree.FindVariationNode(
+    ACommand.VariationIndex, ACommand.PlyNumber).NodeId;
   Result := True;
 end;
 

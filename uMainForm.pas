@@ -12,7 +12,7 @@ uses
   uEngineParamsJson, uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
   uGuiDialogs, uDatabaseForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameTreeSearchRef, uGameTreeView, uPositionSetupForm,
+  uGameTreePdn, uGameTreeCursor, uGameTreeSearchRef, uGameTreeView, uPositionSetupForm,
   uPreferences, uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm;
 
 type
@@ -269,7 +269,8 @@ type
     FGameLogMemoLineCount: Integer;
     FGameLogMemoShowStdout: Boolean;
     FGameLogMemo: TMemo;
-    FGameBrowsePly: Integer;
+    FTreeCursor: TGameTreeCursor;
+    FPreviewPly: Integer;
     FGameResult: string;
     FGames: TList;
     FGamesListBox: TListBox;
@@ -360,8 +361,7 @@ type
     FTournamentDialog: TTournamentDialog;
     FViewedGameId: Integer;
     FVariationHits: TMoveVariationHitArray;
-    FVariationIndex: Integer;
-    FVariationBrowsePly: Integer;
+
     FVariationBrowseMoves: string;
     FWhiteClockLabel: TLabel;
     FWhitePlayerEdit: TEdit;
@@ -498,6 +498,12 @@ type
     function CanExploreVariation: Boolean;
     function CanAcceptHumanBoardMove: Boolean;
     function HasLegalDisplayedMove: Boolean;
+    function GetBrowseBasePly: Integer;
+    function GetBrowseVariationIndex: Integer;
+    function GetBrowseVariationPly: Integer;
+    property BrowseBasePly: Integer read GetBrowseBasePly;
+    property BrowseVariationIndex: Integer read GetBrowseVariationIndex;
+    property BrowseVariationPly: Integer read GetBrowseVariationPly;
     procedure ClearHumanMoveSelection;
     procedure ClearStoredTreeVariations(AGameTree: TGameTree);
     procedure ClearVariationExploration;
@@ -1280,10 +1286,9 @@ begin
   FStartingFEN := FBoard.StartingFEN;
   FGameState := gosWaiting;
   FGameResult := '*';
-  FGameBrowsePly := -1;
+  FTreeCursor := TGameTreeCursor.Create;
   FGameTreeBrowseMode := False;
-  FVariationIndex := -1;
-  FVariationBrowsePly := 0;
+  FPreviewPly := 0;
   FAutoPlaySearch := EmptyGameTreeSearchRef;
   FGameLogSourceGameId := -1;
   FGameLogSourceLineCount := -1;
@@ -1953,6 +1958,7 @@ begin
   FreeAndNil(FGameTreeForm);
   FreeAndNil(FAnalyzerPvBrowser);
   FreeAndNil(FPvBrowser);
+  FTreeCursor.Free;
   FHumanMoveChoices.Free;
   FGameTreeActor.Free;
   FGameTree.Free;
@@ -2039,7 +2045,7 @@ var
   LGame: TRunningGame;
   LState: TGameOrchestratorState;
 begin
-  if FGameBrowsePly >= 0 then
+  if BrowseBasePly >= 0 then
     Exit(False);
 
   LGame := SelectedDisplayedGame;
@@ -2097,8 +2103,7 @@ end;
 
 procedure TMainForm.ClearVariationExploration;
 begin
-  FVariationIndex := -1;
-  FVariationBrowsePly := 0;
+  FPreviewPly := 0;
   FVariationBrowseMoves := '';
 end;
 
@@ -2675,17 +2680,8 @@ begin
   if AFollowVariationBrowse and (AGameTree = LActiveGameTree) and
     (ACommand.CommandKind = gtcStoreMoveVariation) then
   begin
-    if ACommand.VariationIndex < 0 then
-    begin
-      ClearVariationExploration;
-      FGameBrowsePly := ACommand.PlyNumber;
-    end
-    else
-    begin
-      FGameBrowsePly := ACommand.BasePly;
-      FVariationIndex := ACommand.VariationIndex;
-      FVariationBrowsePly := ACommand.PlyNumber;
-    end;
+    ClearVariationExploration;
+    FTreeCursor.Select(AGameTree, AGameTree.FindNodeById(ACommand.CreatedNodeId));
   end;
 
   RefreshDisplayFromGameTree(AGameTree, True);
@@ -2789,7 +2785,7 @@ begin
       LTip := LGameTree.MainlineNode[LGameTree.MainlineCount];
     // Only an unfinished mainline can grow. A completed game's result and
     // official move sequence remain intact while exploring continuations.
-    if (FVariationIndex < 0) and
+    if (BrowseVariationIndex < 0) and
       (CurrentDisplayedGameTreeNode(LGameTree) = LTip) and
       (ResultForTree(LGameTree) = '*') and (LState <> gosGameOver) then
     begin
@@ -2797,7 +2793,7 @@ begin
       if LNode = nil then
         Exit;
       ClearVariationExploration;
-      FGameBrowsePly := -1;
+      FTreeCursor.Follow;
       RefreshDisplayFromGameTree(LGameTree, True);
     end
     else
@@ -2999,7 +2995,7 @@ begin
     Exit;
   end;
   if (Trim(FVariationBrowseMoves) <> '') or
-    ((FVariationIndex >= 0) and (FVariationBrowsePly > 0)) then
+    ((BrowseVariationIndex >= 0) and (BrowseVariationPly > 0)) then
   begin
     ShowGuiOkDialog(Self, 'Auto Play',
       'Press Escape to leave variation browsing first.');
@@ -3890,7 +3886,7 @@ begin
     FStandaloneBlackPlayerName := 'Black';
     FStandaloneEventName := '?';
     ClearVariationExploration;
-    FGameBrowsePly := -1;
+    FTreeCursor.Follow;
     ClearDisplayedPvCache(LBoard, 0);
     FViewedGameId := -1;
     if FGamesListBox <> nil then
@@ -4086,7 +4082,7 @@ begin
     FStandaloneBlackPlayerName := LBlackName;
     FStandaloneEventName := LEventName;
     ClearVariationExploration;
-    FGameBrowsePly := 0;
+    FTreeCursor.Select(FGameTree, FGameTree.Root);
     LoadTreeVariationsFromLegacyText(FGameTree, AGame.MoveVariationsText,
       AGame.MoveVariationAnnotationsText);
     ClearDisplayedPvCache(LBoard, CurrentMoveCount);
@@ -4126,22 +4122,17 @@ begin
   VariationLine := TreeVariationLineByIndex(AVariationIndex, LGameTree);
   if VariationLine = nil then
     Exit;
-  if AVariationPly <= 0 then
-  begin
-    ApplyGameBrowsePly(VariationLine.BasePly);
-    Exit;
-  end;
-
   LMoveCount := VariationNodeMoveCount(LGameTree, AVariationIndex);
-  if LMoveCount = 0 then
-    Exit;
-  if AVariationPly > LMoveCount then
-    AVariationPly := LMoveCount;
-
-  FGameBrowsePly := VariationLine.BasePly;
-  FVariationIndex := AVariationIndex;
-  FVariationBrowsePly := AVariationPly;
-  FVariationBrowseMoves := '';
+  if LMoveCount = 0 then Exit;
+  if AVariationPly < 0 then AVariationPly := 0;
+  if AVariationPly > LMoveCount then AVariationPly := LMoveCount;
+  ClearVariationExploration;
+  if AVariationPly < LMoveCount then
+    FTreeCursor.SelectBefore(LGameTree,
+      LGameTree.FindVariationNode(AVariationIndex, AVariationPly + 1))
+  else
+    FTreeCursor.Select(LGameTree,
+      LGameTree.FindVariationNode(AVariationIndex, AVariationPly));
 
   RefreshDisplayFromGameTree(LGameTree, False);
 end;
@@ -4168,9 +4159,11 @@ begin
   else if AVariationPly > LMoveCount then
     AVariationPly := LMoveCount;
 
-  FGameBrowsePly := ABasePly;
-  FVariationIndex := -1;
-  FVariationBrowsePly := AVariationPly;
+  if ABasePly = 0 then
+    FTreeCursor.Select(AGameTree, AGameTree.Root)
+  else
+    FTreeCursor.Select(AGameTree, AGameTree.MainlineNode[ABasePly]);
+  FPreviewPly := AVariationPly;
   FVariationBrowseMoves := Trim(AMovesText);
   RefreshDisplayFromGameTree(AGameTree, False);
 end;
@@ -4187,38 +4180,58 @@ end;
 
 function TMainForm.CurrentDisplayedGameTreeNode(
   AGameTree: TGameTree): TGameTreePlyNode;
-var
-  LPly: Integer;
 begin
-  Result := nil;
-  if AGameTree = nil then
-    Exit;
-
-  if Trim(FVariationBrowseMoves) <> '' then
+  if AGameTree <> ActiveGameTree then
   begin
-    if FGameBrowsePly <= 0 then
-      Result := AGameTree.Root
-    else
-      Result := AGameTree.MainlineNode[FGameBrowsePly];
-    Exit;
+    if AGameTree = nil then Exit(nil);
+    if AGameTree.MainlineCount = 0 then Exit(AGameTree.Root);
+    Exit(AGameTree.MainlineNode[AGameTree.MainlineCount]);
   end;
+  Result := FTreeCursor.Resolve(AGameTree);
+end;
 
-  if (FVariationIndex >= 0) and (FVariationBrowsePly > 0) then
-  begin
-    Result := AGameTree.FindVariationNode(FVariationIndex,
-      FVariationBrowsePly);
-    Exit;
-  end;
+function TMainForm.GetBrowseBasePly: Integer;
+var
+  Tree: TGameTree;
+  Node: TGameTreePlyNode;
+  Base, Display, Index, Ply: Integer;
+begin
+  Tree := ActiveGameTree;
+  Node := FTreeCursor.Resolve(Tree);
+  if FTreeCursor.Following or (Node = nil) then Exit(-1);
+  if (FVariationBrowseMoves = '') and
+    Tree.ParseVariationKey(Node.VariationKey, Base, Display, Index, Ply) then
+    Exit(Base);
+  Result := Node.PlyNumber;
+end;
 
-  if FGameBrowsePly < 0 then
-    LPly := AGameTree.MainlineCount
-  else
-    LPly := FGameBrowsePly;
+function TMainForm.GetBrowseVariationIndex: Integer;
+var
+  Tree: TGameTree;
+  Node: TGameTreePlyNode;
+  Base, Display, Index, Ply: Integer;
+begin
+  Result := -1;
+  Tree := ActiveGameTree;
+  Node := FTreeCursor.Resolve(Tree);
+  if FTreeCursor.Following or (Node = nil) or (FVariationBrowseMoves <> '') then Exit;
+  if Tree.ParseVariationKey(Node.VariationKey, Base, Display, Index, Ply) then
+    Result := Index;
+end;
 
-  if LPly <= 0 then
-    Result := AGameTree.Root
-  else
-    Result := AGameTree.MainlineNode[LPly];
+function TMainForm.GetBrowseVariationPly: Integer;
+var
+  Tree: TGameTree;
+  Node: TGameTreePlyNode;
+  Base, Display, Index, Ply: Integer;
+begin
+  if FVariationBrowseMoves <> '' then Exit(FPreviewPly);
+  Result := 0;
+  Tree := ActiveGameTree;
+  Node := FTreeCursor.Resolve(Tree);
+  if FTreeCursor.Following or (Node = nil) then Exit;
+  if Tree.ParseVariationKey(Node.VariationKey, Base, Display, Index, Ply) then
+    Result := Ply;
 end;
 
 function TMainForm.CurrentVariationMoveCount(AGameTree: TGameTree): Integer;
@@ -4235,7 +4248,7 @@ begin
       LMoves.Free;
     end;
   end;
-  Result := VariationNodeMoveCount(AGameTree, FVariationIndex);
+  Result := VariationNodeMoveCount(AGameTree, BrowseVariationIndex);
 end;
 
 function TMainForm.VariationNodeMoveCount(AGameTree: TGameTree;
@@ -4286,12 +4299,12 @@ begin
     if not AGameTree.CopyNodeMovesTo(CurrentDisplayedGameTreeNode(AGameTree),
       Moves) then
       Exit;
-    if (Trim(FVariationBrowseMoves) <> '') and (FVariationBrowsePly > 0) then
+    if (Trim(FVariationBrowseMoves) <> '') and (BrowseVariationPly > 0) then
     begin
       TextToMoveList(FVariationBrowseMoves, Preview);
-      if FVariationBrowsePly > Preview.Count then
+      if BrowseVariationPly > Preview.Count then
         Exit;
-      for I := 0 to FVariationBrowsePly - 1 do
+      for I := 0 to BrowseVariationPly - 1 do
         Moves.Add(Preview[I]);
     end;
     for I := 0 to Moves.Count - 1 do
@@ -4347,7 +4360,7 @@ function TMainForm.DisplayedPositionIsTerminal(ADisplayedMoveCount,
 begin
   Result := (not HasLegalDisplayedMove) or
     ((Trim(FVariationBrowseMoves) = '') and (AGameState = gosGameOver) and
-      ((FGameBrowsePly < 0) or (ADisplayedMoveCount >= ATotalMoveCount)));
+      ((BrowseBasePly < 0) or (ADisplayedMoveCount >= ATotalMoveCount)));
 end;
 
 function TMainForm.HasDisplayedGameToSave: Boolean;
@@ -4379,7 +4392,7 @@ begin
   ClearVariationExploration;
   FGameActive := False;
   FViewedGameId := -1;
-  FGameBrowsePly := -1;
+  FTreeCursor.Follow;
   FGamesListBox.ItemIndex := 0;
   SetDisplayedTreeTracking('', '', '', 0, -1);
   FGameLog.Clear;
@@ -4767,12 +4780,12 @@ begin
     if not TryBuildTreeBoardAtNode(AGameTree, LNode, Candidate) then
       Exit;
     try
-      if (Trim(FVariationBrowseMoves) <> '') and (FVariationBrowsePly > 0) then
+      if (Trim(FVariationBrowseMoves) <> '') and (BrowseVariationPly > 0) then
       begin
         TextToMoveList(FVariationBrowseMoves, LMoves);
-        if FVariationBrowsePly > LMoves.Count then
+        if BrowseVariationPly > LMoves.Count then
           Exit;
-        for I := 0 to FVariationBrowsePly - 1 do
+        for I := 0 to BrowseVariationPly - 1 do
           Candidate.PlayMove(LMoves[I], True, True);
       end;
       ABoard.AssignFrom(Candidate);
@@ -5437,22 +5450,22 @@ begin
     Exit;
   end;
 
-  LHighlightPly := FGameBrowsePly;
+  LHighlightPly := BrowseBasePly;
   if (LHighlightPly < 0) and (SelectedDisplayedGame <> nil) then
     LHighlightPly := CurrentMoveCount;
 
   if (FHighlightedGameMovePly = LHighlightPly) and
-    (FVariationIndex < 0) and (Trim(FVariationBrowseMoves) = '') then
+    (BrowseVariationIndex < 0) and (Trim(FVariationBrowseMoves) = '') then
     Exit;
-  if (FVariationIndex >= 0) or (Trim(FVariationBrowseMoves) <> '') then
+  if (BrowseVariationIndex >= 0) or (Trim(FVariationBrowseMoves) <> '') then
   begin
     for I := 0 to High(FVariationHits) do
-      if (FVariationHits[I].VariationPly = FVariationBrowsePly) and
+      if (FVariationHits[I].VariationPly = BrowseVariationPly) and
         (((Trim(FVariationBrowseMoves) <> '') and
-          (FVariationHits[I].BasePly = FGameBrowsePly) and
+          (FVariationHits[I].BasePly = BrowseBasePly) and
           (FVariationHits[I].MovesText = FVariationBrowseMoves)) or
          ((Trim(FVariationBrowseMoves) = '') and
-          (FVariationHits[I].VariationIndex = FVariationIndex))) then
+          (FVariationHits[I].VariationIndex = BrowseVariationIndex))) then
       begin
         FGameMoveMemo.SelStart := FVariationHits[I].Start;
         FGameMoveMemo.SelLength := FVariationHits[I].Length;
@@ -5537,10 +5550,10 @@ begin
       VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
         LPvScore, LPvDepth, LPvTimeText);
     TextToMoveList(LPvText, LPvMoves);
-    if FGameBrowsePly < 0 then
+    if BrowseBasePly < 0 then
       LDisplayedGamePly := LGameMoves.Count
     else
-      LDisplayedGamePly := FGameBrowsePly;
+      LDisplayedGamePly := BrowseBasePly;
     if (LDisplayedGamePly > 0) and
       (LDisplayedGamePly <= LGameMoves.Count) then
       FBoardControl.LastMoveTargetSquare := MoveSquareAt(
@@ -5584,35 +5597,30 @@ begin
   ClearHumanMoveSelection;
   ClearVariationExploration;
   LMoveCount := CurrentMoveCount;
-  if APly < 0 then
-    FGameBrowsePly := LMoveCount
-  else if APly > LMoveCount then
-    FGameBrowsePly := 0
-  else
-    FGameBrowsePly := APly;
+  if APly < 0 then APly := LMoveCount
+  else if APly > LMoveCount then APly := 0;
+  if APly = 0 then FTreeCursor.Select(ActiveGameTree, ActiveGameTree.Root)
+  else FTreeCursor.Select(ActiveGameTree, ActiveGameTree.MainlineNode[APly]);
   RefreshDisplayFromGameTree(ActiveGameTree, False);
 end;
 
 procedure TMainForm.ExitGameBrowseMode;
-var
-  LBasePly: Integer;
 begin
   if Trim(FVariationBrowseMoves) <> '' then
   begin
-    LBasePly := FGameBrowsePly;
     ClearVariationExploration;
-    FGameBrowsePly := LBasePly;
+
     RefreshDisplayFromGameTree(ActiveGameTree, False);
     Exit;
   end;
-  if FGameBrowsePly < 0 then
+  if BrowseBasePly < 0 then
   begin
     if FGameMoveMemo <> nil then
       FGameMoveMemo.SelLength := 0;
     Exit;
   end;
   ClearVariationExploration;
-  FGameBrowsePly := -1;
+  FTreeCursor.Follow;
   RefreshDisplayFromGameTree(ActiveGameTree, False);
 end;
 
@@ -5667,7 +5675,7 @@ begin
     ClearHumanMoveSelection;
     ClearVariationExploration;
     FViewedGameId := AGame.Id;
-    FGameBrowsePly := -1;
+    FTreeCursor.Follow;
     SetDisplayedTreeTracking('', '', '', 0, -1);
   end;
 
@@ -6072,7 +6080,7 @@ begin
   for I := 0 to High(FVariationHits) do
   begin
     if (Trim(FVariationBrowseMoves) <> '') and
-      ((FVariationHits[I].BasePly <> FGameBrowsePly) or
+      ((FVariationHits[I].BasePly <> BrowseBasePly) or
        (FVariationHits[I].MovesText <> FVariationBrowseMoves)) then
       Continue;
     if SelectionHitsRange(FVariationHits[I].Start,
@@ -6272,9 +6280,9 @@ begin
   if Trim(FVariationBrowseMoves) <> '' then
   begin
     for I := 0 to High(FVariationHits) do
-      if (FVariationHits[I].BasePly = FGameBrowsePly) and
+      if (FVariationHits[I].BasePly = BrowseBasePly) and
         (FVariationHits[I].MovesText = FVariationBrowseMoves) and
-        (FVariationHits[I].VariationPly = FVariationBrowsePly) then
+        (FVariationHits[I].VariationPly = BrowseVariationPly) then
       begin
         FGameMoveMemo.SelStart := FVariationHits[I].Start;
         FGameMoveMemo.SelLength := FVariationHits[I].Length;
@@ -6283,13 +6291,13 @@ begin
         Exit;
       end;
   end;
-  VariationLine := TreeVariationLineByIndex(FVariationIndex, AGameTree);
-  if (VariationLine <> nil) and (VariationLine.BasePly = FGameBrowsePly) and
-    (FVariationBrowsePly > 0) then
+  VariationLine := TreeVariationLineByIndex(BrowseVariationIndex, AGameTree);
+  if (VariationLine <> nil) and (VariationLine.BasePly = BrowseBasePly) and
+    (BrowseVariationPly > 0) then
   begin
     for I := 0 to High(FVariationHits) do
-      if (FVariationHits[I].VariationIndex = FVariationIndex) and
-        (FVariationHits[I].VariationPly = FVariationBrowsePly) then
+      if (FVariationHits[I].VariationIndex = BrowseVariationIndex) and
+        (FVariationHits[I].VariationPly = BrowseVariationPly) then
       begin
         FGameMoveMemo.SelStart := FVariationHits[I].Start;
         FGameMoveMemo.SelLength := FVariationHits[I].Length;
@@ -6298,10 +6306,10 @@ begin
         Exit;
       end;
   end;
-  if (FGameBrowsePly > 0) and (FGameBrowsePly <= Length(FGameMoveStarts)) then
+  if (BrowseBasePly > 0) and (BrowseBasePly <= Length(FGameMoveStarts)) then
   begin
-    FGameMoveMemo.SelStart := FGameMoveStarts[FGameBrowsePly - 1];
-    FGameMoveMemo.SelLength := FGameMoveLengths[FGameBrowsePly - 1];
+    FGameMoveMemo.SelStart := FGameMoveStarts[BrowseBasePly - 1];
+    FGameMoveMemo.SelLength := FGameMoveLengths[BrowseBasePly - 1];
   end;
   if AFocusMemo and Visible and CanFocus and FGameMoveMemo.CanFocus then
     FGameMoveMemo.SetFocus;
@@ -6310,96 +6318,35 @@ end;
 procedure TMainForm.GameMoveBrowseKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 var
-  LGameTree: TGameTree;
-  LPly: Integer;
-  LVariationMoveCount: Integer;
-  VariationLine: TGameTreeVariationLine;
+  Tree: TGameTree;
+  Ply, Count: Integer;
 begin
-  LGameTree := ActiveGameTree;
-  if Key = VK_LEFT then
+  Tree := ActiveGameTree;
+  if Key = VK_ESCAPE then
+    ExitGameBrowseMode
+  else if Key in [VK_LEFT, VK_RIGHT] then
   begin
-    if Trim(FVariationBrowseMoves) <> '' then
+    if FVariationBrowseMoves <> '' then
     begin
-      LVariationMoveCount := CurrentVariationMoveCount(LGameTree);
-      if LVariationMoveCount > 0 then
-      begin
-        if FVariationBrowsePly <= 0 then
-          LPly := LVariationMoveCount
-        else
-          LPly := FVariationBrowsePly - 1;
-        ApplyAnnotatorVariationBrowsePly(FGameBrowsePly, LPly,
-          FVariationBrowseMoves, LGameTree);
-      end;
-      HighlightGameMoveTextSelection(True, LGameTree);
-      Key := 0;
-      Exit;
-    end;
-    VariationLine := TreeVariationLineByIndex(FVariationIndex, LGameTree);
-    if (VariationLine <> nil) and (VariationLine.BasePly = FGameBrowsePly) and
-      (FVariationBrowsePly > 0) then
-    begin
-      if FVariationBrowsePly > 1 then
-        ApplyVariationBrowsePly(FVariationIndex, FVariationBrowsePly - 1,
-          LGameTree)
-      else
-        ApplyGameBrowsePly(VariationLine.BasePly);
-      HighlightGameMoveTextSelection(True, LGameTree);
-      Key := 0;
-      Exit;
-    end;
-
-    if FGameBrowsePly < 0 then
-      LPly := CurrentMoveCount
+      Count := CurrentVariationMoveCount(Tree);
+      Ply := FPreviewPly;
+      if Key = VK_LEFT then Dec(Ply) else Inc(Ply);
+      if Ply < 0 then Ply := Count;
+      if Ply > Count then Ply := 0;
+      ApplyAnnotatorVariationBrowsePly(BrowseBasePly, Ply,
+        FVariationBrowseMoves, Tree);
+    end
     else
-      LPly := FGameBrowsePly - 1;
-    ApplyGameBrowsePly(LPly);
-    HighlightGameMoveTextSelection(True, LGameTree);
-    Key := 0;
-  end
-  else if Key = VK_RIGHT then
-  begin
-    if Trim(FVariationBrowseMoves) <> '' then
     begin
-      LVariationMoveCount := CurrentVariationMoveCount(LGameTree);
-      if LVariationMoveCount > 0 then
-      begin
-        if FVariationBrowsePly >= LVariationMoveCount then
-          LPly := 0
-        else
-          LPly := FVariationBrowsePly + 1;
-        ApplyAnnotatorVariationBrowsePly(FGameBrowsePly, LPly,
-          FVariationBrowseMoves, LGameTree);
-      end;
-      HighlightGameMoveTextSelection(True, LGameTree);
-      Key := 0;
-      Exit;
+      ClearHumanMoveSelection;
+      if Key = VK_LEFT then FTreeCursor.StepLeft(Tree)
+      else FTreeCursor.StepRight(Tree);
+      RefreshDisplayFromGameTree(Tree, False);
     end;
-    VariationLine := TreeVariationLineByIndex(FVariationIndex, LGameTree);
-    if (VariationLine <> nil) and (VariationLine.BasePly = FGameBrowsePly) and
-      (FVariationBrowsePly > 0) then
-    begin
-      LVariationMoveCount := CurrentVariationMoveCount(LGameTree);
-      if FVariationBrowsePly < LVariationMoveCount then
-        ApplyVariationBrowsePly(FVariationIndex, FVariationBrowsePly + 1,
-          LGameTree);
-      HighlightGameMoveTextSelection(True, LGameTree);
-      Key := 0;
-      Exit;
-    end;
-
-    if FGameBrowsePly < 0 then
-      LPly := 0
-    else
-      LPly := FGameBrowsePly + 1;
-    ApplyGameBrowsePly(LPly);
-    HighlightGameMoveTextSelection(True, LGameTree);
-    Key := 0;
+    HighlightGameMoveTextSelection(True, Tree);
   end
-  else if Key = VK_ESCAPE then
-  begin
-    ExitGameBrowseMode;
-    Key := 0;
-  end;
+  else Exit;
+  Key := 0;
 end;
 
 procedure TMainForm.MainFormKeyDown(Sender: TObject; var Key: Word;
@@ -6724,7 +6671,7 @@ begin
 
   ClearHumanMoveSelection;
   SetDisplayedTreeTracking('', '', '', 0, -1);
-  FGameBrowsePly := -1;
+  FTreeCursor.Follow;
   FGameLogMemo.Clear;
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
@@ -7470,16 +7417,8 @@ begin
     Exit;
 
   LGame := SelectedDisplayedGame;
-  LMainlineCount := AGameTree.MainlineCount;
-  if FGameBrowsePly > LMainlineCount then
-    FGameBrowsePly := -1;
-  if FVariationIndex >= 0 then
-  begin
-    if TreeVariationLineByIndex(FVariationIndex, AGameTree) = nil then
-      ClearVariationExploration
-    else if FVariationBrowsePly > CurrentVariationMoveCount(AGameTree) then
-      FVariationBrowsePly := CurrentVariationMoveCount(AGameTree);
-  end;
+  // Resolve missing selections by identity before rendering any derived indexes.
+  FTreeCursor.Resolve(AGameTree);
 
   LMovesText := GameTreeMainlineMovesText(AGameTree);
   LAnnotationsText := GameTreeScoreAnnotationsText(AGameTree);
@@ -7550,7 +7489,7 @@ begin
   LStartingFEN := StartingFenForTree(LGameTree);
   LMoveCount := LGameTree.MainlineCount;
 
-  LPly := FGameBrowsePly;
+  LPly := BrowseBasePly;
   if LPly < 0 then
     LPly := LMoveCount;
   LSignature := IntToStr(LGameTree.GameTreeId) + #10 +
