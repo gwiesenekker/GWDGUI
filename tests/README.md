@@ -55,3 +55,8 @@ without resetting the human clock.
 `socket_disconnect_check` tests broken Unix sockets in isolated subprocesses,
 verifying per-socket SIGPIPE protection without changing the application's
 global signal disposition. It reports a skip on Windows.
+
+Run `bash tests/run_dxp_checks.sh` with local TCP access to exercise the real DXP
+adapter and orchestrator against a self-contained fake peer. It verifies that
+win/draw claims cannot award results while resignations retain their meaning
+for both colours. Output and executables stay in `/tmp/gwdgui-dxp-checks`.

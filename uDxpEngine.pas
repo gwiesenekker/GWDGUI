@@ -1016,25 +1016,15 @@ end;
 
 function TDxpEngine.TranslateGameEndResult(AReason: Char): string;
 begin
-  case AReason of
-    '1':
-      begin
-        if FEngineSide = dsWhite then
-          Result := '0-2'
-        else
-          Result := '2-0';
-      end;
-    '2':
-      Result := '1-1';
-    '3':
-      begin
-        if FEngineSide = dsWhite then
-          Result := '2-0'
-        else
-          Result := '0-2';
-      end;
-  else
-    Result := '*';
+  // GAMEEND reasons describe the peer's opinion. Only resignation concedes a
+  // result; terminal positions, draws and flag falls belong to the orchestrator.
+  Result := '*';
+  if AReason = '1' then
+  begin
+    if FEngineSide = dsWhite then
+      Result := '0-2'
+    else
+      Result := '2-0';
   end;
 end;
 

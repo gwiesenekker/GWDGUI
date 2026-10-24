@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Do not award results from unverified DXP claims (D4)
+
+- Treat DXP GAMEEND win and draw reasons as peer information, retaining them in
+  the engine log without awarding a result in a nonterminal position.
+- Continue accepting an explicit resignation as a loss for the engine that sent
+  it. Terminal positions, draw rules and clock adjudication remain with the GUI.
+- Add a self-contained fake DXP peer over local TCP and exercise both engine
+  colours, win/draw/unspecified claims, resignation and GAMEEND acknowledgement
+  through the real adapter and orchestrator.
+- Validation: the six local-TCP DXP integration cases pass.
+
 ### 2026-10-24 — Prevent broken DXP sockets from terminating the process (D2)
 
 - Suppress SIGPIPE on accepted and connected DXP sockets: use MSG_NOSIGNAL on
