@@ -37,7 +37,8 @@ type
 function DefaultGameTreePdnRenderOptions: TGameTreePdnRenderOptions;
 function GameTreeToPdnText(AGameTree: TGameTree): string;
 function GameTreeToPdnTextEx(AGameTree: TGameTree;
-  const AOptions: TGameTreePdnRenderOptions): string;
+  const AOptions: TGameTreePdnRenderOptions;
+  const AEventName: string = ''): string;
 procedure RenderGameTreeMovesToPdn(AGameTree: TGameTree;
   const AOptions: TGameTreePdnRenderOptions;
   out ARenderResult: TGameTreePdnRenderResult);
@@ -654,7 +655,7 @@ begin
 end;
 
 function GameTreeToPdnTextEx(AGameTree: TGameTree;
-  const AOptions: TGameTreePdnRenderOptions): string;
+  const AOptions: TGameTreePdnRenderOptions; const AEventName: string): string;
 var
   Lines: TStringList;
   RenderResult: TGameTreePdnRenderResult;
@@ -665,7 +666,10 @@ begin
 
   Lines := TStringList.Create;
   try
-    Lines.Add('[Event "' + PdnQuote(AGameTree.EventName) + '"]');
+    if Trim(AEventName) <> '' then
+      Lines.Add('[Event "' + PdnQuote(AEventName) + '"]')
+    else
+      Lines.Add('[Event "' + PdnQuote(AGameTree.EventName) + '"]');
     Lines.Add('[White "' + PdnQuote(AGameTree.WhiteName) + '"]');
     Lines.Add('[Black "' + PdnQuote(AGameTree.BlackName) + '"]');
     Lines.Add('[Result "' + PdnQuote(PdnExportResult(AGameTree.ResultText)) + '"]');

@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Make PDN export read-only (remaining M4)
+
+- Export running and standalone games directly from their current trees. Remove
+  retained-snapshot synchronization during export and before annotator updates.
+- Remove export-time writes from read-only header widgets. A requested event name
+  overrides only the exported header, without changing the stored game.
+- Regress repeated standalone exports and a running-game export with retained
+  snapshot state that differs from its corrected tree; verify names, moves,
+  analysis, terminal result, state and actor revision remain unchanged.
+- Validation: ten headless regression programs, source audit and expanded GTK
+  export/navigation/preservation check pass.
+
 ### 2026-10-24 — Stop score propagation during runner synchronization (G8)
 
 - Report only the score stored on each node; empty positions no longer inherit

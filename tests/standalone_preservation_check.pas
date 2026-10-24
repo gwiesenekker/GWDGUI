@@ -6,7 +6,7 @@ uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, LCLType,
   uBoardControl, uDraughtsBoard, uMainForm, uPdn,
-  uGameTree, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameOrchestrator;
+  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameOrchestrator;
 
 type
   TTestExceptionReporter = class
@@ -198,6 +198,75 @@ begin
   end;
 end;
 
+procedure CheckExportDoesNotMutate(AForm: TMainForm);
+var
+  Game: TRunningGame;
+  Setup: TGameSetup;
+  Moves, Saved: TStringList;
+  BeforeText, Exported, FileName: string;
+  Revision: Int64;
+  I: Integer;
+
+  procedure Execute(ACommand: TGameTreeCommand);
+  begin
+    try
+      Game.GameTreeActor.ExecuteCommand(ACommand);
+      Check(ACommand.Accepted, 'export fixture command: ' + ACommand.ErrorText);
+    finally
+      ACommand.Free;
+    end;
+  end;
+begin
+  BeforeText := GameTreeToPdnText(AForm.ActiveGameTree);
+  for I := 1 to 5 do
+  begin
+    Exported := AForm.CurrentGameTreePdnText('Export-only event');
+    Check(Pos('[Event "Export-only event"]', Exported) > 0,
+      'event override must appear in exported text');
+    Check(GameTreeToPdnText(AForm.ActiveGameTree) = BeforeText,
+      'standalone export must not change model headers or content');
+  end;
+  Setup := Default(TGameSetup);
+  Setup.StartingFEN := DefaultStartingFEN;
+  Setup.TimeControl := DefaultTimeControl;
+  Game := TRunningGame.Create(999, 'Export test', nil, pkHuman, pkHuman,
+    '', '', 'Old White', 'Old Black', nil, Setup);
+  Moves := TStringList.Create;
+  Saved := TStringList.Create;
+  FileName := GetTempFileName(GetTempDir, 'gwd');
+  try
+    TextToMoveList('32-28 18-23', Moves);
+    Execute(Game.GameTreeActor.CreateRebuildFromInputsCommand(
+      GameTreeHeaderInput('export', 'Corrected event', 'Corrected White',
+        'Corrected Black', '2-0', DefaultStartingFEN, False, DefaultTimeControl,
+        gosGameOver),
+      GameTreeMainlineInput(Moves, nil, False, 0, 0, 0, 0),
+      GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', '')));
+    Execute(Game.GameTreeActor.CreateRecordAnnotatorPVCommand(
+      Game.GameTree.MainlineNode[1].NodeId, '0.75', '18-23'));
+    BeforeText := GameTreeToPdnText(Game.GameTree);
+    Revision := Game.GameTreeActor.Revision;
+    AForm.AppendRunningGameToPdn(Game, FileName, 'Tournament export');
+    Saved.LoadFromFile(FileName);
+    Check(Pos('[Event "Tournament export"]', Saved.Text) > 0,
+      'running export must use requested event without changing the model');
+    Check(Pos('[White "Corrected White"]', Saved.Text) > 0,
+      'running export must read names from the authoritative tree');
+    Check(Pos('32-28', Saved.Text) > 0, 'running export must retain played moves');
+    Check((Game.GameTreeActor.Revision = Revision) and
+      (GameTreeToPdnText(Game.GameTree) = BeforeText),
+      'export must not reapply a retained runner snapshot or mutate revision');
+    Check((Game.GameTree.ResultText = '2-0') and
+      (Game.GameTree.GameState = gosGameOver),
+      'export must preserve the recorded terminal result');
+  finally
+    DeleteFile(FileName);
+    Saved.Free;
+    Moves.Free;
+    Game.Free;
+  end;
+end;
+
 var
   Form: TMainForm;
   Game: TPdnGame;
@@ -214,6 +283,7 @@ begin
       Check(not GameTreeHasContent(Form.ActiveGameTree),
         'untouched initial board should not prompt to save');
       CheckNestedGuiNavigation(Form);
+      CheckExportDoesNotMutate(Form);
       Game.EventName := 'Standalone test';
       Game.MovesText := '32-28 18-23';
       Game.InitialCommentText := 'Introduction';

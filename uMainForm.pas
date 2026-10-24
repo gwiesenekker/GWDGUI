@@ -577,9 +577,6 @@ type
       const AOptions: TGameTreePdnRenderOptions): string;
     function GameLogLineVisible(const ALine: string; AGame: TRunningGame): Boolean;
     function GameTitleEngineName(AEngine: TExternalEngineDefinition): string;
-    procedure PrepareGameTreeForPdn(AGame: TRunningGame;
-      AGameTree: TGameTree; const AEventName: string);
-    function CurrentGameTreePdnText(const AEventName: string): string;
     function PlayerSetupDisplayName(AKind: TPlayerKind;
       AEngine: TExternalEngineDefinition): string;
     function FindHumanMoveToTarget(ATargetSquare: Integer; out AMove: string): Boolean;
@@ -706,6 +703,7 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function ActiveGameTree: TGameTree;
+    function CurrentGameTreePdnText(const AEventName: string): string;
     procedure LoadStandaloneFen(const AFEN: string);
     procedure LoadPdnGameToDisplay(AGame: TPdnGame);
     procedure RemoveGame(AGame: TRunningGame);
@@ -3987,9 +3985,6 @@ begin
 
   if LGameTree = nil then
     Exit;
-  LGame := GameForTree(LGameTree);
-  if LGame <> nil then
-    UpdateRunningGameTreeFromSnapshot(LGame);
   if LHasSearch and
     (not TryResolveActiveSearchSnapshot(ASnapshot, Actor, LGameTree,
       LNode)) then
@@ -5419,9 +5414,8 @@ begin
   if AGame = nil then
     Exit;
 
-  UpdateRunningGameTreeFromSnapshot(AGame, nil, AEventName);
   LOptions := DefaultGameTreePdnRenderOptions;
-  Result := GameTreeToPdnTextEx(AGame.GameTree, LOptions);
+  Result := GameTreeToPdnTextEx(AGame.GameTree, LOptions, AEventName);
 end;
 
 procedure TMainForm.UpdateGameMoveHighlight;
@@ -6009,63 +6003,8 @@ begin
     Result := 'Engine';
 end;
 
-procedure TMainForm.PrepareGameTreeForPdn(AGame: TRunningGame;
-  AGameTree: TGameTree; const AEventName: string);
-var
-  LBlackName: string;
-  LEventName: string;
-  LResultText: string;
-  LStartingFEN: string;
-  LWhiteName: string;
-
-  procedure ApplyHeader(const AResolvedEventName, AResolvedWhiteName,
-    AResolvedBlackName, AResolvedResultText, AResolvedStartingFEN: string);
-  var
-    Actor: TGameTreeActor;
-    LErrorText: string;
-  begin
-    Actor := ActorForGameTree(AGameTree);
-    if Actor = nil then
-      Exit;
-
-    SetGameTreeHeader(Actor,
-      GameTreeHeaderInput('', AResolvedEventName, AResolvedWhiteName,
-        AResolvedBlackName, AResolvedResultText, AResolvedStartingFEN,
-        False, DefaultTimeControl, StateForTree(AGameTree),
-        AGameTree.StatusText), LErrorText);
-  end;
-begin
-  if AGameTree = nil then
-    Exit;
-
-  if AGame <> nil then
-  begin
-    LEventName := PlayerNameOrFallback(AEventName, EventNameForTree(AGameTree));
-    LWhiteName := PlayerNameOrFallback(Trim(AGameTree.WhiteName),
-      AGame.WhiteDisplayName);
-    LBlackName := PlayerNameOrFallback(Trim(AGameTree.BlackName),
-      AGame.BlackDisplayName);
-    LResultText := ResultForTree(AGameTree);
-    LStartingFEN := StartingFenForTree(AGameTree);
-    ApplyHeader(LEventName, LWhiteName, LBlackName, LResultText,
-      LStartingFEN);
-    Exit;
-  end;
-
-  LEventName := PlayerNameOrFallback(AEventName, EventNameForTree(AGameTree));
-  LWhiteName := PlayerNameOrFallback(FWhitePlayerEdit.Text,
-    WhiteNameForTree(AGameTree));
-  LBlackName := PlayerNameOrFallback(FBlackPlayerEdit.Text,
-    BlackNameForTree(AGameTree));
-  LResultText := ResultForTree(AGameTree);
-
-  ApplyHeader(LEventName, LWhiteName, LBlackName, LResultText,
-    StartingFenForTree(AGameTree));
-end;
-
 function TMainForm.CurrentGameTreePdnText(const AEventName: string): string;
 var
-  LGame: TRunningGame;
   LGameTree: TGameTree;
   LOptions: TGameTreePdnRenderOptions;
 begin
@@ -6074,10 +6013,8 @@ begin
   if LGameTree = nil then
     Exit;
 
-  LGame := GameForTree(LGameTree);
-  PrepareGameTreeForPdn(LGame, LGameTree, AEventName);
   LOptions := DefaultGameTreePdnRenderOptions;
-  Result := GameTreeToPdnTextEx(LGameTree, LOptions);
+  Result := GameTreeToPdnTextEx(LGameTree, LOptions, AEventName);
 end;
 
 function TMainForm.PlayerSetupDisplayName(AKind: TPlayerKind;
@@ -6266,15 +6203,12 @@ end;
 
 procedure TMainForm.CopyGameTreePdnClick(Sender: TObject);
 var
-  LGame: TRunningGame;
   LGameTree: TGameTree;
   LOptions: TGameTreePdnRenderOptions;
 begin
   LGameTree := ActiveGameTree;
   if LGameTree = nil then
     Exit;
-  LGame := GameForTree(LGameTree);
-  PrepareGameTreeForPdn(LGame, LGameTree, '');
   LOptions := CurrentFilteredGameTreePdnOptions;
   Clipboard.AsText := GameTreeToPdnTextEx(LGameTree, LOptions);
 end;
