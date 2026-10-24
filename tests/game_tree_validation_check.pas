@@ -65,6 +65,10 @@ begin
       '32-28', '', gmsHuman));
     RejectUnchanged(Actor, Actor.CreateStoreMoveVariationCommand(
       Actor.GameTree.MainlineNode[1].NodeId, '37-32', gmsHuman));
+    RejectUnchanged(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+      '20-24 37-32', '@pdn-annotations:["wrong count"]', gmsHuman));
+    RejectUnchanged(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+      '20-24', '@pdn-annotations:broken', gmsHuman));
     Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
       '20-24 37-32', '', gmsHuman));
     NodeId := Actor.GameTree.FindVariationNode(0, 2).NodeId;
@@ -85,6 +89,12 @@ begin
       GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', ''));
     Command.RebuildVariationLines.Add(TGameTreeVariationLine.Create(1, 1,
       '19-23 46-41', 'bad variation'));
+    RejectUnchanged(Actor, Command);
+    Command := Actor.CreateRebuildFromInputsCommand(Header,
+      GameTreeMainlineInput(Moves, nil, False, 0, 0, 0, 0),
+      GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', ''));
+    Command.RebuildVariationLines.Add(TGameTreeVariationLine.Create(1, 1,
+      '20-24', '@pdn-annotations:["too", "many"]'));
     RejectUnchanged(Actor, Command);
     Header.StartingFEN := 'B:W99:B1';
     RejectUnchanged(Actor, Actor.CreateSetHeaderCommand(Header));

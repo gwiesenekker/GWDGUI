@@ -1168,7 +1168,7 @@ end;
 function TGameTreeActor.ValidateMoveCommand(ACommand: TGameTreeCommand): Boolean;
 var
   Board: TDraughtsBoard;
-  Moves, Mainline: TStringList;
+  Moves, Mainline, Annotations: TStringList;
   Parent: TGameTreePlyNode;
   I, Ply: Integer;
   Fen: string;
@@ -1190,7 +1190,7 @@ var
       Board.LoadFromFEN(AValue);
   end;
 
-  procedure ValidateLine(ABase: Integer; const AText: string);
+  procedure ValidateLine(ABase: Integer; const AText, AAnnotations: string);
   begin
     if (ABase < 0) or (ABase > Mainline.Count) then
       raise EConvertError.Create('Variation base is outside the mainline');
@@ -1200,6 +1200,7 @@ var
     if Moves.Count = 0 then
       raise EConvertError.Create('Variation has no moves');
     Replay(Moves, Moves.Count);
+    DecodeVariationAnnotations(AAnnotations, Moves.Count, Annotations);
   end;
 begin
   Result := True;
@@ -1210,6 +1211,7 @@ begin
   Board := TDraughtsBoard.Create;
   Moves := TStringList.Create;
   Mainline := TStringList.Create;
+  Annotations := TStringList.Create;
   try
     try
       case ACommand.CommandKind of
@@ -1251,7 +1253,7 @@ begin
           begin
             Fen := FGameTree.StartingFEN;
             FGameTree.CopyMainlineMovesTo(Mainline);
-            ValidateLine(ACommand.BasePly, ACommand.MoveText);
+            ValidateLine(ACommand.BasePly, ACommand.MoveText, ACommand.AnnotationText);
           end;
         gtcRebuildFromInputs, gtcSetHeader:
           begin
@@ -1267,13 +1269,13 @@ begin
               begin
                 Line := TGameTreeVariationLine(ACommand.RebuildVariationLines[I]);
                 if Line <> nil then
-                  ValidateLine(Line.BasePly, Line.MovesText);
+                  ValidateLine(Line.BasePly, Line.MovesText, Line.AnnotationText);
               end
             else
               for I := 0 to FGameTree.VariationLineCount - 1 do
               begin
                 Line := FGameTree.VariationLine[I];
-                ValidateLine(Line.BasePly, Line.MovesText);
+                ValidateLine(Line.BasePly, Line.MovesText, Line.AnnotationText);
               end;
           end;
       end;
@@ -1285,6 +1287,7 @@ begin
       end;
     end;
   finally
+    Annotations.Free;
     Mainline.Free;
     Moves.Free;
     Board.Free;

@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Reject malformed variation annotations atomically (G6)
+
+- Validate encoded variation annotations during actor preflight, alongside their
+  move sequence. Reject malformed JSON and mismatched annotation counts before
+  storing a variation or applying a rebuild.
+- Regress malformed text and wrong counts in both variation and rebuild commands;
+  verify all existing headers, moves, metadata and revision remain unchanged.
+- Validation: the actor-validation regression passes.
+
 ### 2026-10-24 — Make the structural browsing cursor a node ID
 
 - Replace independently stored mainline ply, variation index and variation ply
