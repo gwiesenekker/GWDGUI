@@ -11,6 +11,7 @@ CHECKS=(
   pdn_regression_check.pas
   game_tree_pdn_filter_check.pas
   game_tree_actor_check.pas
+  game_tree_validation_check.pas
   game_preservation_check.pas
   game_tree_topology_check.pas
   socket_disconnect_check.pas

@@ -103,6 +103,7 @@ type
     function CommandRebuildSignature(ACommand: TGameTreeCommand): string;
     function MoveSourceOriginText(ASource: TGameTreeMoveSource): string;
     procedure ClearRebuildSignature;
+    function ValidateMoveCommand(ACommand: TGameTreeCommand): Boolean;
     function CreateCommand(AKind: TGameTreeActorCommandKind): TGameTreeCommand;
     function CreateRecordPVCommand(AKind: TGameTreeActorCommandKind;
       ANodeId: Int64; const AScore, APV, ADepth,
@@ -1162,6 +1163,132 @@ begin
   Result := True;
 end;
 
+function TGameTreeActor.ValidateMoveCommand(ACommand: TGameTreeCommand): Boolean;
+var
+  Board: TDraughtsBoard;
+  Moves, Mainline: TStringList;
+  Parent: TGameTreePlyNode;
+  I, Ply: Integer;
+  Fen: string;
+  Line: TGameTreeVariationLine;
+
+  procedure Replay(AList: TStrings; ACount: Integer);
+  var
+    J: Integer;
+  begin
+    for J := 0 to ACount - 1 do
+      Board.PlayMove(AList[J], True, True);
+  end;
+
+  procedure LoadStart(const AValue: string);
+  begin
+    if Trim(AValue) = '' then
+      Board.SetBeginPosition
+    else
+      Board.LoadFromFEN(AValue);
+  end;
+
+  procedure ValidateLine(ABase: Integer; const AText: string);
+  begin
+    if (ABase < 0) or (ABase > Mainline.Count) then
+      raise EConvertError.Create('Variation base is outside the mainline');
+    LoadStart(Fen);
+    Replay(Mainline, ABase);
+    TextToMoveList(AText, Moves);
+    if Moves.Count = 0 then
+      raise EConvertError.Create('Variation has no moves');
+    Replay(Moves, Moves.Count);
+  end;
+begin
+  Result := True;
+  if not (ACommand.CommandKind in [gtcAddMainlineMove, gtcAppendMainlineMove,
+    gtcAppendMainlineSnapshotMove, gtcStoreVariationLine, gtcStoreMoveVariation,
+    gtcRebuildFromInputs, gtcSetHeader]) then
+    Exit;
+  Board := TDraughtsBoard.Create;
+  Moves := TStringList.Create;
+  Mainline := TStringList.Create;
+  try
+    try
+      case ACommand.CommandKind of
+        gtcAddMainlineMove, gtcAppendMainlineMove,
+        gtcAppendMainlineSnapshotMove:
+          begin
+            Ply := FGameTree.MainlineCount + 1;
+            if ACommand.CommandKind = gtcAddMainlineMove then
+              Ply := ACommand.PlyNumber;
+            if (Ply < 1) or (Ply > FGameTree.MainlineCount + 1) then
+              raise EConvertError.Create('Mainline move would leave a hole');
+            if ACommand.CommandKind = gtcAppendMainlineSnapshotMove then
+            begin
+              // Validate the prospective header and complete sequence before
+              // applying either; a rejected snapshot must not alter headers.
+              LoadStart(ACommand.HeaderInput.StartingFEN);
+              FGameTree.CopyMainlineMovesTo(Mainline);
+              Replay(Mainline, Mainline.Count);
+            end
+            else
+            begin
+              if Ply = 1 then
+                Parent := FGameTree.Root
+              else
+                Parent := FGameTree.MainlineNode[Ply - 1];
+              if not FGameTree.TryBuildBoardAtNode(Parent, Board) then
+                raise EConvertError.Create('Cannot replay move parent');
+            end;
+            Board.PlayMove(ACommand.MoveText, True, True);
+          end;
+        gtcStoreMoveVariation:
+          begin
+            Parent := FGameTree.FindNodeById(ACommand.NodeId);
+            if (Parent = nil) or not FGameTree.TryBuildBoardAtNode(Parent, Board) then
+              raise EConvertError.Create('Cannot replay variation parent');
+            Board.PlayMove(ACommand.MoveText, True, True);
+          end;
+        gtcStoreVariationLine:
+          begin
+            Fen := FGameTree.StartingFEN;
+            FGameTree.CopyMainlineMovesTo(Mainline);
+            ValidateLine(ACommand.BasePly, ACommand.MoveText);
+          end;
+        gtcRebuildFromInputs, gtcSetHeader:
+          begin
+            Fen := ACommand.HeaderInput.StartingFEN;
+            LoadStart(Fen);
+            if ACommand.CommandKind = gtcRebuildFromInputs then
+              Mainline.Assign(ACommand.MainlineInput.Moves)
+            else
+              FGameTree.CopyMainlineMovesTo(Mainline);
+            Replay(Mainline, Mainline.Count);
+            if ACommand.CommandKind = gtcRebuildFromInputs then
+              for I := 0 to ACommand.RebuildVariationLines.Count - 1 do
+              begin
+                Line := TGameTreeVariationLine(ACommand.RebuildVariationLines[I]);
+                if Line <> nil then
+                  ValidateLine(Line.BasePly, Line.MovesText);
+              end
+            else
+              for I := 0 to FGameTree.VariationLineCount - 1 do
+              begin
+                Line := FGameTree.VariationLine[I];
+                ValidateLine(Line.BasePly, Line.MovesText);
+              end;
+          end;
+      end;
+    except
+      on E: Exception do
+      begin
+        Reject(ACommand, E.Message);
+        Result := False;
+      end;
+    end;
+  finally
+    Mainline.Free;
+    Moves.Free;
+    Board.Free;
+  end;
+end;
+
 procedure TGameTreeActor.ExecuteCommand(ACommand: TGameTreeCommand);
 var
   Changed: Boolean;
@@ -1197,6 +1324,8 @@ begin
     Reject(ACommand, 'wrong game tree id');
     Exit;
   end;
+  if not ValidateMoveCommand(ACommand) then
+    Exit;
   InvalidateRebuildSignature := False;
 
   case ACommand.CommandKind of

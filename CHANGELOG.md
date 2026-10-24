@@ -3,6 +3,20 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Validate structural moves at the actor boundary (G6)
+
+- Reject illegal, malformed and wrong-side moves, invalid variation bases and
+  mainline holes before mutating the tree. Validate against the actual parent
+  position, including nested branches and legal short-form multiple captures.
+- Preflight complete rebuilds and variation lines before applying any prefix;
+  validate snapshot and header changes before changing headers or annotations.
+- Rejected commands leave nodes, metadata, revision and queued follow-up work
+  intact. Add a dedicated regression covering every structural command path.
+- Replace older impossible test sequences with legal alternatives while retaining
+  their original preservation and topology assertions.
+- Validation: focused actor, preservation and topology checks and both GTK
+  regression suites pass.
+
 ### 2026-10-24 — Extend unfinished games and preserve completed mainlines (G5, U3)
 
 - Allow board moves at the end of a pasted position or unfinished imported game

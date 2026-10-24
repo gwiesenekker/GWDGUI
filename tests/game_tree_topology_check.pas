@@ -46,6 +46,7 @@ var
   SavedFen: string;
   Moves: TStringList;
   I: Integer;
+  Command: TGameTreeCommand;
 begin
   Actor := TGameTreeActor.Create;
   Actual := TDraughtsBoard.Create;
@@ -73,8 +74,13 @@ begin
       'variation replay must succeed');
     Check(Actual.CurrentFEN = Expected.CurrentFEN, 'replay must match legal path');
     SavedFen := Actual.CurrentFEN;
-    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
-      '1-50', '', gmsHuman));
+    Command := Actor.CreateStoreVariationLineCommand(2, 1, '1-50', '', gmsHuman);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(not Command.Accepted, 'illegal imported continuation must be rejected');
+    finally
+      Command.Free;
+    end;
     Check(not Tree.TryBuildBoardAtNode(Tree.FindVariationNode(1, 1), Actual),
       'illegal imported continuation must fail validation');
     Check(Actual.CurrentFEN = SavedFen, 'failed replay must leave board intact');
@@ -230,7 +236,7 @@ begin
     AddAnalysis(Tree.FindVariationNode(0, 2));
     SharedId := Tree.FindVariationNode(0, 2).NodeId;
     Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
-      '17-21 38-32 14-20', '', gmsHuman));
+      '17-21 38-32 12-17', '', gmsHuman));
     Tree.StoreVariationLineAtIndex(0, 2, 1, '17-21', '', Changed);
     TextToMoveList('17-21', Moves);
     RecordGameTreeVariationLine(Tree, GameTreeVariationLineInput(

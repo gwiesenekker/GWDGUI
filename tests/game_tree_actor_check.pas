@@ -107,7 +107,7 @@ begin
       Command.Free;
     end;
 
-    Command := Actor.CreateAppendMainlineMoveCommand('31-27', gmsHuman);
+    Command := Actor.CreateAppendMainlineMoveCommand('18-23', gmsHuman);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'append-mainline command should be accepted');
@@ -119,7 +119,7 @@ begin
         'append-mainline command should report created node id');
       Node := Actor.GameTree.FindNodeById(Command.NodeId);
       Check(Node <> nil, 'appended node id should resolve');
-      Check(Node.MoveText = '31-27', 'appended node should contain move');
+      Check(Node.MoveText = '18-23', 'appended node should contain move');
     finally
       Command.Free;
     end;
@@ -128,7 +128,7 @@ begin
       GameTreeHeaderInput('snapshot', 'Match', 'Engine A', 'Engine B', '*',
         'W:W31-50:B1-20', True, DefaultTimeControl, gosWaiting,
         'engine warning'),
-      '18-23', AnnotationWithScore('', 'engine', '0.37'),
+      '37-32', AnnotationWithScore('', 'engine', '0.37'),
       GameTreeMainlineInput(nil, nil, True, 299.0, 298.0, 1.0, 2.0),
       GameTreePvInput(True, 3, '0.37', '38-33', '8', '0.21'),
       gmsEngineMatch);
@@ -142,7 +142,7 @@ begin
         'append snapshot move should report appended ply');
       Node := Actor.GameTree.MainlineNode[3];
       Check(Node <> nil, 'snapshot appended node should exist');
-      Check(Node.MoveText = '18-23',
+      Check(Node.MoveText = '37-32',
         'snapshot appended node should contain move');
       Check(Node.EngineScore = '0.37',
         'snapshot appended node should keep move annotation score');
@@ -250,7 +250,7 @@ begin
 
     Moves.Clear;
     Moves.Add('32-28');
-    Moves.Add('31-27');
+    Moves.Add('18-23');
     Command := Actor.CreateRebuildFromInputsCommand(
       GameTreeHeaderInput('actor-rebuild-new-signature', 'Event', 'White',
         'Black', '*', 'W:W31-50:B1-20', False, DefaultTimeControl),
@@ -506,7 +506,7 @@ begin
     Check(not Actor.SearchState(Search, State),
       'queued release-search should remove done search');
 
-    Command := Actor.CreateAppendMainlineMoveCommand('37-31', gmsHuman);
+    Command := Actor.CreateAppendMainlineMoveCommand('18-23', gmsHuman);
     Check(Actor.PostCommand(Command),
       'observed queued append command should post');
     Command := nil;
@@ -1060,7 +1060,7 @@ begin
     Actor.GameTree.StoreVariationLineAtIndex(0, 1, 1, '20-24', '',
       Changed);
     Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
-      '14-19', gmsHuman);
+      '37-32', gmsHuman);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
@@ -1069,7 +1069,7 @@ begin
         'move variation command from variation node should report tree change');
       Check(Command.VariationIndex = 0,
         'move variation command should extend existing variation');
-      Check(Actor.GameTree.VariationLine[0].MovesText = '18-23 14-19',
+      Check(Actor.GameTree.VariationLine[0].MovesText = '18-23 37-32',
         'move variation command should append from materialized variation node');
       Check(Actor.GameTree.FindVariationNode(0, 2) <> nil,
         'extended move variation should materialize second variation node');
@@ -1078,21 +1078,21 @@ begin
     end;
 
     Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
-      '20-24', gmsHuman);
+      '38-32', gmsHuman);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'move variation replacement from variation node should be accepted');
       Check(Command.TreeChanged,
         'move variation replacement should report tree change');
-      Check(Actor.GameTree.VariationLine[0].MovesText = '18-23 14-19',
+      Check(Actor.GameTree.VariationLine[0].MovesText = '18-23 37-32',
         'branching inside a variation must preserve its original continuation');
-      Check(Actor.GameTree.VariationLine[1].MovesText = '18-23 20-24',
+      Check(Actor.GameTree.VariationLine[1].MovesText = '18-23 38-32',
         'alternative continuation should be stored separately');
       VariationNode := Actor.GameTree.FindVariationNode(1, 2);
       Check(VariationNode <> nil,
         'replacement move variation should materialize replacement node');
-      Check(VariationNode.MoveText = '20-24',
+      Check(VariationNode.MoveText = '38-32',
         'replacement variation node should contain replacement move');
     finally
       Command.Free;

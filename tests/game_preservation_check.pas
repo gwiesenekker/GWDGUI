@@ -57,18 +57,18 @@ begin
   try
     Rebuild(Actor, 'import', '', '32-28 18-23 37-32');
     Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
-      '19-23 37-32 14-19', 'A: 0.10', gmsUnknown));
+      '20-24 37-32 14-20', 'A: 0.10', gmsUnknown));
     Check(Actor.GameTree.FindVariationNode(0, 1) <> nil,
       'storing an imported variation must create its first node immediately');
     Check(Actor.GameTree.FindVariationNode(0, 3) <> nil,
       'all imported variation moves must be materialized');
     Text := GameTreeToPdnText(Actor.GameTree);
-    Check(Pos('(1... 19-23', Text) > 0, 'export must retain the variation');
-    Check(Pos('14-19 {A: 0.10}', Text) > 0,
+    Check(Pos('(1... 20-24', Text) > 0, 'export must retain the variation');
+    Check(Pos('14-20 {A: 0.10}', Text) > 0,
       'export must retain its tail and annotation');
     Revision := Actor.Revision;
     Command := Actor.CreateStoreVariationLineCommand(2, 1,
-      '19-23 37-32 14-19', 'A: 0.10', gmsUnknown);
+      '20-24 37-32 14-20', 'A: 0.10', gmsUnknown);
     Execute(Actor, Command);
     Check(Actor.Revision = Revision, 'storing an unchanged line must be a no-op');
   finally
@@ -115,7 +115,7 @@ begin
   Actor := TGameTreeActor.Create;
   try
     Game := ParseGame('[Event "standard"]' + LineEnding + LineEnding +
-      '1. 32-28 18-23 (1... 19-23) 2. 37-32 *');
+      '1. 32-28 18-23 (1... 20-24) 2. 37-32 *');
     try
       Lines.Text := Game.MoveVariationsText;
       Annotations.Text := Game.MoveVariationAnnotationsText;
@@ -127,7 +127,7 @@ begin
       Game.Free;
     end;
     Game := ParseGame('[Event "unnumbered"]' + LineEnding + LineEnding +
-      '1. 32-28 18-23 (19-23) 2. 37-32 *');
+      '1. 32-28 18-23 (20-24) 2. 37-32 *');
     try
       Lines.Text := Game.MoveVariationsText;
       Annotations.Text := Game.MoveVariationAnnotationsText;
@@ -139,13 +139,13 @@ begin
     end;
     Rebuild(Actor, 'placement', '', '32-28 18-23 37-32');
     Execute(Actor, Actor.CreateStoreVariationLineCommand(1, 1,
-      '19-23', '', gmsHuman));
+      '20-24', '', gmsHuman));
     Execute(Actor, Actor.CreateStoreMoveVariationCommand(
       Actor.GameTree.Root.NodeId, '33-28', gmsHuman));
     Text := GameTreeToPdnText(Actor.GameTree);
     Check(Pos('32-28 (1. 33-28)', Text) > 0,
       'root alternatives must be exported after the first move');
-    Check(Pos('18-23 (1... 19-23)', Text) > 0,
+    Check(Pos('18-23 (1... 20-24)', Text) > 0,
       'GUI alternatives must be exported after the move they replace');
     Game := ParseGame(Text);
     try
@@ -157,7 +157,7 @@ begin
       Check((Base = 0) and (Moves = '33-28'), 'root alternative must stay at root');
       DecodePdnVariationLine(Lines[1], Annotations[1], 0,
         Display, Base, Moves, AnnotationText);
-      Check((Base = 1) and (Moves = '19-23'), 'reply alternative must stay a reply');
+      Check((Base = 1) and (Moves = '20-24'), 'reply alternative must stay a reply');
     finally
       Game.Free;
     end;
@@ -217,9 +217,9 @@ var
 begin
   Game := ParseGame('[Event "comments"]' + LineEnding + LineEnding +
     '{Introduction to this game} 1. 32-28 {Strong move!; E: 0.10} ' +
-    '18-23 {Black reply} (1... 19-23 {First alternative comment} ' +
+    '18-23 {Black reply} (1... 20-24 {First alternative comment} ' +
     '2. 37-32 {Middle comment;' + LineEnding + 'E: 0.20} ' +
-    '14-19 {Last comment}) 2. 37-32 {Final mainline comment} *');
+    '14-20 {Last comment}) 2. 37-32 {Final mainline comment} *');
   Actor := TGameTreeActor.Create;
   try
     for Pass := 1 to 3 do
@@ -270,7 +270,7 @@ begin
   Actor := TGameTreeActor.Create;
   try
     Rebuild(Actor, 'exploration', '', '32-28 18-23 37-32');
-    Original := '19-23 37-32 14-19 41-37';
+    Original := '20-24 37-32 14-20 41-37';
     Execute(Actor, Actor.CreateStoreVariationLineCommand(1, 1,
       Original, 'Original tail', gmsHuman));
     First := Actor.GameTree.FindVariationNode(0, 1);
@@ -294,14 +294,14 @@ begin
       'branching must leave the original variation intact');
     Check(Actor.GameTree.FindVariationNode(0, 4).CommentText = 'Original tail',
       'branching must preserve the original tail annotation');
-    Check(Actor.GameTree.VariationLine[1].MovesText = '19-23 31-27',
+    Check(Actor.GameTree.VariationLine[1].MovesText = '20-24 31-27',
       'the new branch should retain its prefix');
     Execute(Actor, Actor.CreateStoreMoveVariationCommand(
-      Actor.GameTree.FindVariationNode(1, 2).NodeId, '14-19', gmsHuman));
-    Check(Actor.GameTree.VariationLine[1].MovesText = '19-23 31-27 14-19',
+      Actor.GameTree.FindVariationNode(1, 2).NodeId, '14-20', gmsHuman));
+    Check(Actor.GameTree.VariationLine[1].MovesText = '20-24 31-27 14-20',
       'a new move at the end should extend its own branch');
     Command := Actor.CreateStoreMoveVariationCommand(
-      Actor.GameTree.MainlineNode[1].NodeId, '19-23', gmsHuman);
+      Actor.GameTree.MainlineNode[1].NodeId, '20-24', gmsHuman);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted and (not Command.TreeChanged) and
@@ -323,7 +323,7 @@ begin
       (Actor.GameTree.VariationLine[0].MovesText = Original),
       'navigation must preserve both complete branches');
     Execute(Actor, Actor.CreateStoreMoveVariationCommand(
-      Actor.GameTree.FindVariationNode(0, 4).NodeId, '20-24', gmsHuman));
+      Actor.GameTree.FindVariationNode(0, 4).NodeId, '10-14', gmsHuman));
     Check(Actor.GameTree.FindVariationNode(0, 4).CommentText = 'Original tail',
       'extending a line must keep the old final comment on its move');
     Check(Actor.GameTree.FindVariationNode(0, 5).CommentText = '',
@@ -341,10 +341,10 @@ var
   Text: string;
 begin
   Game := ParseGame('[Event "nested"]' + LineEnding + LineEnding +
-    '1. 32-28 18-23 (1... 19-23 {Outer reply} ' +
+    '1. 32-28 18-23 (1... 20-24 {Outer reply} ' +
     '2. 37-32 {Original continuation} (2. 38-32 {Nested choice} ' +
-    '14-19 {Nested tail} (2... 20-24 {Deeper choice})) ' +
-    '14-19 {Original tail}) 2. 37-32 *');
+    '14-20 {Nested tail} (2... 18-22 {Deeper choice})) ' +
+    '14-20 {Original tail}) 2. 37-32 *');
   Actor := TGameTreeActor.Create;
   try
     for Pass := 1 to 3 do
@@ -352,11 +352,11 @@ begin
       LoadParsedGame(Actor, Game);
       Check(Actor.GameTree.VariationLineCount = 3,
         'all three nested continuation paths must survive import');
-      Check(Actor.GameTree.VariationLine[0].MovesText = '19-23 37-32 14-19',
+      Check(Actor.GameTree.VariationLine[0].MovesText = '20-24 37-32 14-20',
         'outer continuation must remain intact');
-      Check(Actor.GameTree.VariationLine[1].MovesText = '19-23 38-32 14-19',
+      Check(Actor.GameTree.VariationLine[1].MovesText = '20-24 38-32 14-20',
         'nested continuation must retain its outer prefix');
-      Check(Actor.GameTree.VariationLine[2].MovesText = '19-23 38-32 20-24',
+      Check(Actor.GameTree.VariationLine[2].MovesText = '20-24 38-32 18-22',
         'deeper continuation must retain both prefixes');
       Check(Actor.GameTree.FindVariationNode(1, 2).CommentText = 'Nested choice',
         'nested commentary must stay on the nested move');
@@ -377,7 +377,7 @@ begin
       Text := GameTreeToPdnText(Actor.GameTree);
       Check(Pos('37-32 {Original continuation} (2. 38-32', Text) > 0,
         'nested choice must export inside the outer branch');
-      Check(Pos('14-19 {Nested tail} (2... 20-24', Text) > 0,
+      Check(Pos('14-20 {Nested tail} (2... 18-22', Text) > 0,
         'deeper choice must export inside the nested branch');
       Check(Pos('Outer reply', Text) = RPos('Outer reply', Text),
         'shared prefix must export once');
@@ -422,7 +422,7 @@ begin
   try
     Rebuild(Actor, 'game A', '', '32-28 18-23');
     Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
-      '19-23 37-32', 'A: 0.20', gmsUnknown));
+      '20-24 37-32', 'A: 0.20', gmsUnknown));
     Rebuild(Actor, 'game A', '', '32-28 18-23');
     Check(Actor.GameTree.VariationLineCount = 1,
       'refreshing the same game must preserve its variation');
