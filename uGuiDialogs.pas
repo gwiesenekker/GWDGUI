@@ -163,12 +163,18 @@ begin
 end;
 
 function TryGetLaptopPanelRectFromXRandr(out ARect: TRect): Boolean;
+{$IFNDEF WINDOWS}
 var
   I: Integer;
   Lines: TStringList;
   Proc: TProcess;
+{$ENDIF}
 begin
   Result := False;
+{$IFDEF WINDOWS}
+  ARect := Rect(0, 0, 0, 0);
+  Exit;
+{$ELSE}
   Lines := TStringList.Create;
   Proc := TProcess.Create(nil);
   try
@@ -192,6 +198,7 @@ begin
     Proc.Free;
     Lines.Free;
   end;
+{$ENDIF}
 end;
 
 procedure CenterFormOnLaptopPanel(AForm: TCustomForm;

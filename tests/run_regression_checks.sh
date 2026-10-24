@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." >/dev/null && pwd -P)"
 OUT_DIR="${TMPDIR:-/tmp}/gwdgui-regression-checks"
 CHECKS=(
+  analyzer_runner_shutdown_check.pas
   board_regression_check.pas
   pdn_regression_check.pas
   game_tree_pdn_filter_check.pas

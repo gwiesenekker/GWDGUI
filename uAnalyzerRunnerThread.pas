@@ -316,8 +316,13 @@ procedure TAnalyzerRunnerThread.PostCommand(ACommand: TObject);
 begin
   if ACommand = nil then
     Exit;
-  if (FCommandQueue = nil) or (not FCommandQueue.TryPost(ACommand)) then
+  if FCommandQueue = nil then
+  begin
     ACommand.Free;
+    Exit;
+  end;
+  // An owning queue also destroys a command rejected after Close.
+  FCommandQueue.TryPost(ACommand);
 end;
 
 procedure TAnalyzerRunnerThread.Execute;
