@@ -248,11 +248,11 @@ begin
   if AVariationLine.Moves.Count = 0 then
     Exit;
 
-  if AVariationLine.Variation.DisplayAfterPly <= 0 then
+  if AVariationLine.Variation.BasePly <= 0 then
     LParentNode := AGameTree.Root
   else
     LParentNode := AGameTree.MainlineNode[
-      AVariationLine.Variation.DisplayAfterPly];
+      AVariationLine.Variation.BasePly];
   if LParentNode = nil then
     Exit;
 

@@ -35,3 +35,6 @@ Run `bash tests/run_gui_checks.sh` with Lazarus's GTK2 widgetset and an X displa
 to exercise the actual main form without showing its window. It verifies that
 PDN comments/variations and FEN-only boards survive starting, selecting, stopping
 and removing human games. Build output and preference files stay in `/tmp`.
+
+`game_tree_topology_check` verifies parent chains, variation attachment, legal
+board replay, failed-replay isolation, trimming and Black-start numbering.

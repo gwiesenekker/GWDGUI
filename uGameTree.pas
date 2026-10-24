@@ -150,6 +150,7 @@ type
     procedure ClearTreeMetadata;
     function IncrementModeCaption(AMode: TClockIncrementMode): string;
     function SideForPly(APlyNumber: Integer): TDraughtsSide;
+    function MoveNumberForPly(APlyNumber: Integer): Integer;
     function AddMove(AParent: TGameTreePlyNode; APlyNumber: Integer;
       const AMoveText: string): TGameTreePlyNode;
     function AddMainlineMove(APlyNumber: Integer;
@@ -253,6 +254,9 @@ type
       const AAnnotationText: string);
     procedure ClearStoredVariations;
     procedure CopyMainlineMovesTo(AMoves: TStrings);
+    function CopyNodeMovesTo(ANode: TGameTreePlyNode; AMoves: TStrings): Boolean;
+    function TryBuildBoardAtNode(ANode: TGameTreePlyNode;
+      ABoard: TDraughtsBoard): Boolean;
     procedure TrimMainlineToCount(ACount: Integer);
     procedure TrimVariationLine(ABasePlyNumber, ADisplayAfterPly,
       AVariationIndex, AVariationMoveCount: Integer);
@@ -753,7 +757,7 @@ begin
   end;
 
   Result.FPlyNumber := APlyNumber;
-  Result.FMoveNumber := ((APlyNumber - 1) div 2) + 1;
+  Result.FMoveNumber := MoveNumberForPly(APlyNumber);
   Result.FSideToMove := SideForPly(APlyNumber);
   Result.FMoveText := Trim(AMoveText);
   Result.FVariationKey := '';
@@ -818,7 +822,7 @@ begin
   end;
 
   Result.FPlyNumber := ABasePlyNumber + AVariationPlyNumber;
-  Result.FMoveNumber := ((Result.FPlyNumber - 1) div 2) + 1;
+  Result.FMoveNumber := MoveNumberForPly(Result.FPlyNumber);
   Result.FSideToMove := SideForPly(Result.FPlyNumber);
   Result.FMoveText := Trim(AMoveText);
   Result.FVariationKey := LVariationKey;
@@ -1422,6 +1426,68 @@ begin
   end;
 end;
 
+function TGameTree.CopyNodeMovesTo(ANode: TGameTreePlyNode;
+  AMoves: TStrings): Boolean;
+var
+  Path: TStringList;
+  I: Integer;
+begin
+  Result := False;
+  if AMoves = nil then
+    Exit;
+  AMoves.Clear;
+  if (ANode = nil) or (FindNodeById(ANode.NodeId) <> ANode) then
+    Exit;
+  Path := TStringList.Create;
+  try
+    while ANode <> FRoot do
+    begin
+      if ANode = nil then
+        Exit;
+      Path.Add(ANode.MoveText);
+      ANode := ANode.Parent;
+    end;
+    for I := Path.Count - 1 downto 0 do
+      AMoves.Add(Path[I]);
+    Result := True;
+  finally
+    Path.Free;
+  end;
+end;
+
+function TGameTree.TryBuildBoardAtNode(ANode: TGameTreePlyNode;
+  ABoard: TDraughtsBoard): Boolean;
+var
+  Moves: TStringList;
+  Candidate: TDraughtsBoard;
+  I: Integer;
+begin
+  Result := False;
+  if ABoard = nil then
+    Exit;
+  Moves := TStringList.Create;
+  Candidate := TDraughtsBoard.Create;
+  try
+    if not CopyNodeMovesTo(ANode, Moves) then
+      Exit;
+    try
+      if Trim(FStartingFEN) = '' then
+        Candidate.LoadFromFEN(DefaultStartingFEN)
+      else
+        Candidate.LoadFromFEN(FStartingFEN);
+      for I := 0 to Moves.Count - 1 do
+        Candidate.PlayMove(Moves[I], True, True);
+      ABoard.AssignFrom(Candidate);
+      Result := True;
+    except
+      Result := False;
+    end;
+  finally
+    Candidate.Free;
+    Moves.Free;
+  end;
+end;
+
 function TGameTree.FindVariationNodeByKey(
   const AVariationKey: string): TGameTreePlyNode;
   function SearchNode(ANode: TGameTreePlyNode): TGameTreePlyNode;
@@ -1510,6 +1576,14 @@ begin
     Result := dsBlack;
 end;
 
+function TGameTree.MoveNumberForPly(APlyNumber: Integer): Integer;
+begin
+  if FenStartingSide(FStartingFEN) = dsBlack then
+    Result := (APlyNumber div 2) + 1
+  else
+    Result := ((APlyNumber - 1) div 2) + 1;
+end;
+
 function TGameTree.BuildVariationKey(ABasePlyNumber, ADisplayAfterPly,
   AVariationIndex, AVariationPlyNumber: Integer): string;
 begin
@@ -1550,7 +1624,7 @@ begin
   Result := AParent.AddChild;
   AssignNodeId(Result);
   Result.FPlyNumber := APlyNumber;
-  Result.FMoveNumber := ((APlyNumber - 1) div 2) + 1;
+  Result.FMoveNumber := MoveNumberForPly(APlyNumber);
   Result.FSideToMove := SideForPly(APlyNumber);
   Result.FMoveText := Trim(AMoveText);
 end;
@@ -1561,7 +1635,12 @@ begin
   if APlyNumber <= 0 then
     Exit(nil);
 
-  Result := AddMove(FRoot, APlyNumber, AMoveText);
+  if APlyNumber = 1 then
+    Result := AddMove(FRoot, APlyNumber, AMoveText)
+  else if GetMainlineNode(APlyNumber - 1) <> nil then
+    Result := AddMove(GetMainlineNode(APlyNumber - 1), APlyNumber, AMoveText)
+  else
+    Exit(nil);
   while FMainline.Count < APlyNumber do
     FMainline.Add(nil);
   FMainline[APlyNumber - 1] := Result;

@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Follow move ancestry for board navigation
+
+- Link mainline moves to their preceding positions and attach alternatives at
+  their actual base position, independently of their legacy display slot.
+- Build displayed boards and analysis move lists from node ancestry. Validate
+  replay on a temporary board so an invalid continuation leaves the board intact.
+- Correct move numbering for games that begin with Black to move.
+- Add topology, legal replay, failed replay, trimming and Black-start regression
+  checks. All ten headless programs, the source audit and GTK check pass.
+
 ### 2026-10-24 — Retain nested PDN continuation paths (P3)
 
 - Recursively read nested alternatives instead of discarding them. Preserve

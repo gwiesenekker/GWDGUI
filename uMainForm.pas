@@ -4274,65 +4274,34 @@ end;
 function TMainForm.DisplayedMovesText(AGameTree: TGameTree): string;
 var
   I: Integer;
-  LLimit: Integer;
-  LMoves: TStringList;
-  LPly: Integer;
-  VariationLine: TGameTreeVariationLine;
-  LVariationNode: TGameTreePlyNode;
+  Moves, Preview: TStringList;
 begin
   Result := '';
   if AGameTree = nil then
     Exit;
-
-  LMoves := TStringList.Create;
+  Moves := TStringList.Create;
+  Preview := TStringList.Create;
   try
-    AGameTree.CopyMainlineMovesTo(LMoves);
-    LPly := FGameBrowsePly;
-    if (LPly < 0) or (LPly > LMoves.Count) then
-      LPly := LMoves.Count;
-    for I := 0 to LPly - 1 do
+    if not AGameTree.CopyNodeMovesTo(CurrentDisplayedGameTreeNode(AGameTree),
+      Moves) then
+      Exit;
+    if (Trim(FVariationBrowseMoves) <> '') and (FVariationBrowsePly > 0) then
+    begin
+      TextToMoveList(FVariationBrowseMoves, Preview);
+      if FVariationBrowsePly > Preview.Count then
+        Exit;
+      for I := 0 to FVariationBrowsePly - 1 do
+        Moves.Add(Preview[I]);
+    end;
+    for I := 0 to Moves.Count - 1 do
     begin
       if Result <> '' then
         Result += ' ';
-      Result += LMoves[I];
-    end;
-    if (Trim(FVariationBrowseMoves) <> '') and
-      (FGameBrowsePly = LPly) and (FVariationBrowsePly > 0) then
-    begin
-      LMoves.Clear;
-      TextToMoveList(FVariationBrowseMoves, LMoves);
-      LLimit := FVariationBrowsePly;
-      if LLimit > LMoves.Count then
-        LLimit := LMoves.Count;
-      for I := 0 to LLimit - 1 do
-      begin
-        if Result <> '' then
-          Result += ' ';
-        Result += LMoves[I];
-      end;
-    end
-    else
-    begin
-      VariationLine := TreeVariationLineByIndex(FVariationIndex, AGameTree);
-      if (VariationLine <> nil) and (VariationLine.BasePly = LPly) and
-      (FVariationBrowsePly > 0) then
-      begin
-        LLimit := FVariationBrowsePly;
-        if LLimit > VariationNodeMoveCount(AGameTree, FVariationIndex) then
-          LLimit := VariationNodeMoveCount(AGameTree, FVariationIndex);
-        for I := 0 to LLimit - 1 do
-        begin
-          LVariationNode := AGameTree.FindVariationNode(FVariationIndex, I + 1);
-          if LVariationNode = nil then
-            Break;
-          if Result <> '' then
-            Result += ' ';
-          Result += LVariationNode.MoveText;
-        end;
-      end;
+      Result += Moves[I];
     end;
   finally
-    LMoves.Free;
+    Preview.Free;
+    Moves.Free;
   end;
 end;
 
@@ -4762,64 +4731,21 @@ end;
 
 function TMainForm.TryBuildTreeBoardAtPly(AGameTree: TGameTree;
   APly: Integer; ABoard: TDraughtsBoard): Boolean;
-var
-  I: Integer;
-  LNode: TGameTreePlyNode;
 begin
   Result := False;
-  if (AGameTree = nil) or (ABoard = nil) or (APly < 0) then
+  if (AGameTree = nil) or (APly < 0) then
     Exit;
-
-  try
-    ABoard.LoadFromFEN(StartingFenForTree(AGameTree));
-    for I := 1 to APly do
-    begin
-      LNode := AGameTree.MainlineNode[I];
-      if LNode = nil then
-        Exit;
-      ABoard.PlayMove(LNode.MoveText, True, True);
-    end;
-    Result := True;
-  except
-    Result := False;
-  end;
+  if APly = 0 then
+    Result := AGameTree.TryBuildBoardAtNode(AGameTree.Root, ABoard)
+  else
+    Result := AGameTree.TryBuildBoardAtNode(AGameTree.MainlineNode[APly], ABoard);
 end;
 
 function TMainForm.TryBuildTreeBoardAtNode(AGameTree: TGameTree;
   ANode: TGameTreePlyNode; ABoard: TDraughtsBoard): Boolean;
-var
-  I: Integer;
-  LBasePly: Integer;
-  LDisplayAfterPly: Integer;
-  LVariationIndex: Integer;
-  LVariationNode: TGameTreePlyNode;
-  LVariationPly: Integer;
 begin
-  Result := False;
-  if (AGameTree = nil) or (ANode = nil) or (ABoard = nil) then
-    Exit;
-
-  if Trim(ANode.VariationKey) = '' then
-    Exit(TryBuildTreeBoardAtPly(AGameTree, ANode.PlyNumber, ABoard));
-
-  if not AGameTree.ParseVariationKey(ANode.VariationKey, LBasePly,
-    LDisplayAfterPly, LVariationIndex, LVariationPly) then
-    Exit;
-  if TreeVariationLineByIndex(LVariationIndex, AGameTree) = nil then
-    Exit;
-  if not TryBuildTreeBoardAtPly(AGameTree, LBasePly, ABoard) then
-    Exit;
-
-  if LVariationPly > VariationNodeMoveCount(AGameTree, LVariationIndex) then
-    LVariationPly := VariationNodeMoveCount(AGameTree, LVariationIndex);
-  for I := 1 to LVariationPly do
-  begin
-    LVariationNode := AGameTree.FindVariationNode(LVariationIndex, I);
-    if LVariationNode = nil then
-      Exit;
-    ABoard.PlayMove(LVariationNode.MoveText, True, True);
-  end;
-  Result := True;
+  Result := (AGameTree <> nil) and
+    AGameTree.TryBuildBoardAtNode(ANode, ABoard);
 end;
 
 function TMainForm.TryBuildDisplayedBoard(AGameTree: TGameTree;
@@ -4828,30 +4754,33 @@ var
   I: Integer;
   LNode: TGameTreePlyNode;
   LMoves: TStringList;
+  Candidate: TDraughtsBoard;
 begin
   Result := False;
   if (AGameTree = nil) or (ABoard = nil) then
     Exit;
-
   LNode := CurrentDisplayedGameTreeNode(AGameTree);
-  if LNode = nil then
-    Exit;
-
-  Result := TryBuildTreeBoardAtNode(AGameTree, LNode, ABoard);
-  if (not Result) or (Trim(FVariationBrowseMoves) = '') or
-    (FVariationBrowsePly <= 0) then
-    Exit;
-
   LMoves := TStringList.Create;
+  Candidate := TDraughtsBoard.Create;
   try
-    TextToMoveList(FVariationBrowseMoves, LMoves);
-    for I := 0 to FVariationBrowsePly - 1 do
-    begin
-      if I >= LMoves.Count then
-        Break;
-      ABoard.PlayMove(LMoves[I], True, True);
+    if not TryBuildTreeBoardAtNode(AGameTree, LNode, Candidate) then
+      Exit;
+    try
+      if (Trim(FVariationBrowseMoves) <> '') and (FVariationBrowsePly > 0) then
+      begin
+        TextToMoveList(FVariationBrowseMoves, LMoves);
+        if FVariationBrowsePly > LMoves.Count then
+          Exit;
+        for I := 0 to FVariationBrowsePly - 1 do
+          Candidate.PlayMove(LMoves[I], True, True);
+      end;
+      ABoard.AssignFrom(Candidate);
+      Result := True;
+    except
+      Result := False;
     end;
   finally
+    Candidate.Free;
     LMoves.Free;
   end;
 end;
@@ -5687,60 +5616,9 @@ begin
 end;
 
 procedure TMainForm.UpdateBoardFromBrowseState(AGameTree: TGameTree);
-var
-  I: Integer;
-  LGameMoves: TStringList;
-  LLimit: Integer;
-  LPly: Integer;
-  LVariationNode: TGameTreePlyNode;
-  VariationLine: TGameTreeVariationLine;
 begin
-  if AGameTree = nil then
+  if not TryBuildDisplayedBoard(AGameTree, FBoard) then
     Exit;
-
-  LGameMoves := TStringList.Create;
-  try
-    AGameTree.CopyMainlineMovesTo(LGameMoves);
-    FBoard.LoadFromFEN(StartingFenForTree(AGameTree));
-
-    LPly := FGameBrowsePly;
-    if (LPly < 0) or (LPly > LGameMoves.Count) then
-      LPly := LGameMoves.Count;
-    for I := 0 to LPly - 1 do
-      FBoard.PlayMove(LGameMoves[I], True, False);
-    if (Trim(FVariationBrowseMoves) <> '') and
-      (FGameBrowsePly = LPly) and (FVariationBrowsePly > 0) then
-    begin
-      LGameMoves.Clear;
-      TextToMoveList(FVariationBrowseMoves, LGameMoves);
-      LLimit := FVariationBrowsePly;
-      if LLimit > LGameMoves.Count then
-        LLimit := LGameMoves.Count;
-      for I := 0 to LLimit - 1 do
-        FBoard.PlayMove(LGameMoves[I], True, False);
-    end
-    else
-    begin
-      VariationLine := TreeVariationLineByIndex(FVariationIndex, AGameTree);
-      if (VariationLine <> nil) and (VariationLine.BasePly = LPly) and
-      (FVariationBrowsePly > 0) then
-      begin
-        LLimit := FVariationBrowsePly;
-        if LLimit > VariationNodeMoveCount(AGameTree, FVariationIndex) then
-          LLimit := VariationNodeMoveCount(AGameTree, FVariationIndex);
-        for I := 0 to LLimit - 1 do
-        begin
-          LVariationNode := AGameTree.FindVariationNode(FVariationIndex, I + 1);
-          if LVariationNode = nil then
-            Break;
-          FBoard.PlayMove(LVariationNode.MoveText, True, False);
-        end;
-      end;
-    end;
-  finally
-    LGameMoves.Free;
-  end;
-
   if FBoardControl <> nil then
     FBoardControl.Invalidate;
   UpdateDatabaseSearchPositionFromTree(AGameTree);
