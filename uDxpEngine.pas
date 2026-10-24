@@ -119,6 +119,8 @@ type
 
 implementation
 
+uses uSocketSafety;
+
 {$IFDEF UNIX}
 const
   LocalFdCloseOnExec = 1;
@@ -147,7 +149,10 @@ end;
 procedure SetSocketCloseOnExec(ASocket: TSocketStream);
 begin
   if ASocket <> nil then
+  begin
+    SuppressSocketSigPipe(ASocket);
     SetHandleCloseOnExec(ASocket.Handle);
+  end;
 end;
 
 type

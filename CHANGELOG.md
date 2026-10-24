@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Prevent broken DXP sockets from terminating the process (D2)
+
+- Suppress SIGPIPE on accepted and connected DXP sockets: use MSG_NOSIGNAL on
+  Unix send operations and SO_NOSIGPIPE on macOS, leaving global signal handling
+  unchanged. Broken writes remain ordinary exceptions handled during shutdown.
+- Add an isolated-child socket regression with SIGPIPE restored and unblocked.
+  Confirm a raw broken write receives SIGPIPE and a configured socket reports a
+  write error without terminating the process.
+- Validation: eleven headless regression programs, source audit and GTK check pass.
+
 ### 2026-10-24 — Reject stale human input without ending the game (M2)
 
 - Validate human commands against the runner's current board before playing them,

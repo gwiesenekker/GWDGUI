@@ -52,3 +52,6 @@ including event-name overrides and preservation of model content and revision.
 The lifecycle check also sends illegal and stale duplicate human commands to a
 real runner, verifies rejection without game failure, and continues legal play
 without resetting the human clock.
+`socket_disconnect_check` tests broken Unix sockets in isolated subprocesses,
+verifying per-socket SIGPIPE protection without changing the application's
+global signal disposition. It reports a skip on Windows.

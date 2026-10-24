@@ -13,6 +13,7 @@ CHECKS=(
   game_tree_actor_check.pas
   game_preservation_check.pas
   game_tree_topology_check.pas
+  socket_disconnect_check.pas
 )
 
 rm -rf "$OUT_DIR"
