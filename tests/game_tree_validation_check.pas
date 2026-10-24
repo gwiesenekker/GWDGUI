@@ -38,6 +38,51 @@ begin
     Command.Free;
   end;
 end;
+procedure CheckRebuildKeepsOnlySurvivingParents;
+var
+  Actor: TGameTreeActor;
+  Moves: TStringList;
+  Header: TGameTreeHeaderInput;
+  KeptId: Int64;
+
+  procedure Rebuild(const Text: string; APvIndex: Integer = -1);
+  begin
+    TextToMoveList(Text, Moves);
+    Execute(Actor, Actor.CreateRebuildFromInputsCommand(Header,
+      GameTreeMainlineInput(Moves, nil, False, 0, 0, 0, 0),
+      GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', ''),
+      APvIndex, 1, '0.75', '38-32'));
+  end;
+begin
+  Actor := TGameTreeActor.Create;
+  Moves := TStringList.Create;
+  try
+    Header := GameTreeHeaderInput('carry', 'carry', '', '', '*', '', False,
+      DefaultTimeControl);
+    Rebuild('32-28 18-23 37-32 12-18');
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(4, 3, '13-18', '', gmsHuman));
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+      '20-24 38-32', '', gmsHuman));
+    KeptId := Actor.GameTree.FindVariationNode(1, 1).NodeId;
+    Rebuild('32-28 18-23', 1);
+    Check((Actor.GameTree.MainlineCount = 2) and
+      (Actor.GameTree.VariationLineCount = 1),
+      'shorter reload must discard only branches whose parent no longer exists');
+    Check((Actor.GameTree.FindVariationNode(0, 1).NodeId = KeptId) and
+      (Actor.GameTree.FindVariationNode(0, 1).AnnotatorScore = '0.75'),
+      'surviving branch identity and explicit PV target must survive index remapping');
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(3, 2,
+      '38-32', '', gmsHuman));
+    Rebuild('32-28 19-23');
+    Check((Actor.GameTree.VariationLineCount = 1) and
+      (Actor.GameTree.FindVariationNode(0, 1).NodeId = KeptId),
+      'changing a parent path must not transplant its branches to the replacement');
+  finally
+    Moves.Free;
+    Actor.Free;
+  end;
+end;
+
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
@@ -46,6 +91,7 @@ var
   Header: TGameTreeHeaderInput;
   NodeId: Int64;
 begin
+  CheckRebuildKeepsOnlySurvivingParents;
   Actor := TGameTreeActor.Create;
   Moves := TStringList.Create;
   Board := TDraughtsBoard.Create;

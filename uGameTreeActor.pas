@@ -611,23 +611,40 @@ end;
 procedure TGameTreeActor.CopyStoredVariationsToCommand(
   ACommand: TGameTreeCommand);
 var
-  I: Integer;
-  SourceLine: TGameTreeVariationLine;
-  TargetLine: TGameTreeVariationLine;
+  I, Ply, RequestedIndex: Integer;
+  SourceLine, TargetLine: TGameTreeVariationLine;
+  Fits: Boolean;
+  RequestedFen: string;
 begin
-  if (ACommand = nil) or (FGameTree = nil) then
-    Exit;
-
+  if (ACommand = nil) or (FGameTree = nil) then Exit;
+  RequestedFen := Trim(ACommand.HeaderInput.StartingFEN);
+  if RequestedFen = '' then RequestedFen := DefaultStartingFEN;
+  RequestedIndex := ACommand.VariationIndex;
+  ACommand.VariationIndex := -1;
   ACommand.RebuildVariationLines.Clear;
   for I := 0 to FGameTree.VariationLineCount - 1 do
   begin
     SourceLine := FGameTree.VariationLine[I];
-    if SourceLine = nil then
-      Continue;
-
+    if SourceLine = nil then Continue;
+    Fits := (SourceLine.BasePly <= ACommand.MainlineInput.Moves.Count) and
+      (Trim(FGameTree.StartingFEN) = RequestedFen);
+    // Only carry branches whose actual parent path survives this rebuild.
+    // Explicit command-supplied branches are still validated, never filtered.
+    if Fits then
+      for Ply := 1 to SourceLine.BasePly do
+        if (FGameTree.MainlineNode[Ply] = nil) or
+          (NormalizeMoveNotation(FGameTree.MainlineNode[Ply].MoveText) <>
+           NormalizeMoveNotation(ACommand.MainlineInput.Moves[Ply - 1])) then
+        begin
+          Fits := False;
+          Break;
+        end;
+    if not Fits then Continue;
     TargetLine := TGameTreeVariationLine.Create(SourceLine.DisplayAfterPly,
       SourceLine.BasePly, SourceLine.MovesText, SourceLine.AnnotationText,
       SourceLine.OriginText);
+    if I = RequestedIndex then
+      ACommand.VariationIndex := ACommand.RebuildVariationLines.Count;
     ACommand.RebuildVariationLines.Add(TargetLine);
   end;
 end;
@@ -786,13 +803,15 @@ function TGameTreeActor.CreateRebuildFromInputsCommand(
   ): TGameTreeCommand;
 begin
   Result := CreateCommand(gtcRebuildFromInputs);
-  if FGameTree.Signature = AHeader.Signature then
-    CopyStoredVariationsToCommand(Result);
   Result.HeaderInput := AHeader;
   CopyMainlineInputToCommand(Result, AMainline, True);
+  Result.VariationIndex := AVariationPvIndex;
+  if FGameTree.Signature = AHeader.Signature then
+    CopyStoredVariationsToCommand(Result)
+  else
+    Result.VariationIndex := -1;
   Result.EnginePvInput := AEnginePV;
   Result.AnnotatorPvInput := AAnnotatorPV;
-  Result.VariationIndex := AVariationPvIndex;
   Result.PlyNumber := AVariationPvPly;
   Result.ScoreText := Trim(AVariationPvScore);
   Result.PvText := Trim(AVariationPvText);
@@ -898,7 +917,8 @@ end;
 
 procedure TGameTreeActor.RebuildStoredVariations(ACommand: TGameTreeCommand);
 var
-  I: Integer;
+  I, J: Integer;
+  Keep: Boolean;
   OriginChanged: Boolean;
   StoredLine: TGameTreeVariationLine;
   StoredVariationIndex: Integer;
@@ -908,6 +928,25 @@ begin
   if ACommand = nil then
     Exit;
 
+  // Drop obsolete compatibility paths without deleting surviving shared nodes.
+  for I := FGameTree.VariationLineCount - 1 downto 0 do
+  begin
+    VariationLine := FGameTree.VariationLine[I];
+    Keep := False;
+    for J := 0 to ACommand.RebuildVariationLines.Count - 1 do
+    begin
+      StoredLine := TGameTreeVariationLine(ACommand.RebuildVariationLines[J]);
+      if (StoredLine <> nil) and
+        (StoredLine.BasePly = VariationLine.BasePly) and
+        (StoredLine.DisplayAfterPly = VariationLine.DisplayAfterPly) and
+        (StoredLine.MovesText = VariationLine.MovesText) then
+      begin
+        Keep := True;
+        Break;
+      end;
+    end;
+    if not Keep then FGameTree.RemoveStoredVariationLineAtIndex(I);
+  end;
   VariationMoves := TStringList.Create;
   try
     for I := 0 to ACommand.RebuildVariationLines.Count - 1 do

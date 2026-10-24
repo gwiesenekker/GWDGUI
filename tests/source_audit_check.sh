@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." >/dev/null && pwd -P)"
-MUTATION_PATTERN='\.RecordMainlineMove\(|\.RecordMainlineAnnotation\(|\.StoreVariationLine\(|\.StoreVariationLineAtIndex\(|\.ClearStoredVariations\(|\.BeginRebuild\(|\.SetHeader\(|\.SetGameState\(|\.SetClockState\(|\.SetNodeClockState\(|\.RecordClockState\(|\.RecordTimeControl\(|\.RecordEnginePV\(|\.RecordAnnotatorPV\(|\.RecordEnginePVForNodeId\(|\.RecordAnnotatorPVForNodeId\(|\.TrimMainlineToCount\(|\.RemoveMainlineFrom\('
+MUTATION_PATTERN='\.RecordMainlineMove\(|\.RecordMainlineAnnotation\(|\.StoreVariationLine\(|\.StoreVariationLineAtIndex\(|\.ClearStoredVariations\(|\.BeginRebuild\(|\.SetHeader\(|\.SetGameState\(|\.SetClockState\(|\.SetNodeClockState\(|\.RecordClockState\(|\.RecordTimeControl\(|\.RecordEnginePV\(|\.RecordAnnotatorPV\(|\.RecordEnginePVForNodeId\(|\.RecordAnnotatorPVForNodeId\(|\.TrimMainlineToCount\(|\.RemoveMainlineFrom\(|\.RemoveStoredVariationLineAtIndex\('
 
 echo "==> source_audit_check"
 

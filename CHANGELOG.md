@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Retain rebuild variations only on surviving parent paths
+
+- Carry existing variations into a rebuild only when their complete mainline
+  parent path still exists. A shorter PDN reload no longer fails validation due
+  to branches attached beyond its new end, or transplants them to replaced moves.
+- Remove obsolete compatibility paths while preserving shared surviving nodes and
+  their analysis. Remap explicit variation-PV targets when retained indexes change.
+- Continue rejecting invalid branches explicitly supplied by a command.
+- Regress shorter same-game reloads, changed parents, surviving node identity and
+  explicit analysis targets after filtering; retain the existing topology checks.
+- Validation: actor, validation, cursor, topology and preservation checks pass.
+
 ### 2026-10-24 — Reject malformed variation annotations atomically (G6)
 
 - Validate encoded variation annotations during actor preflight, alongside their

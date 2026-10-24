@@ -210,6 +210,7 @@ type
       AVariationIndex, AVariationPlyNumber: Integer;
       const AAnnotationText: string);
     procedure ClearStoredVariations;
+    procedure RemoveStoredVariationLineAtIndex(AIndex: Integer);
     procedure CopyMainlineMovesTo(AMoves: TStrings);
     function CopyNodeMovesTo(ANode: TGameTreePlyNode; AMoves: TStrings): Boolean;
     function TryBuildBoardAtNode(ANode: TGameTreePlyNode;
@@ -814,6 +815,13 @@ begin
     ApplyAnnotationText(LNode, LNode.CommentText + '; ' + AAnnotationText)
   else
     ApplyAnnotationText(LNode, AAnnotationText);
+end;
+
+procedure TGameTree.RemoveStoredVariationLineAtIndex(AIndex: Integer);
+begin
+  if (AIndex < 0) or (AIndex >= FVariationLines.Count) then Exit;
+  FVariationLines.Delete(AIndex);
+  PruneUnreferencedVariations(FRoot);
 end;
 
 procedure TGameTree.ClearStoredVariations;
