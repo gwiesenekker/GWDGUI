@@ -693,6 +693,7 @@ begin
   AddLine(ACommand.HeaderInput.ResultText);
   AddLine(ACommand.HeaderInput.StartingFEN);
   AddLine(ACommand.HeaderInput.StatusText);
+  AddLine(ACommand.HeaderInput.InitialCommentText);
   AddLine(IntToStr(Ord(ACommand.HeaderInput.GameState)));
   AddLine(BoolText(ACommand.HeaderInput.RecordTimeControl));
   AddLine(IntToStr(ACommand.HeaderInput.TimeControl.MovesPerPeriod));

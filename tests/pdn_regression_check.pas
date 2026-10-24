@@ -67,7 +67,7 @@ begin
     CheckEqual(Game.MovesText, '34-30 20-25 32-28',
       'first game main line moves');
     CheckEqual(Game.MoveAnnotationsText, 'score=0.12' + LineEnding +
-      LineEnding + LineEnding, 'first game score annotation');
+      'comment' + LineEnding + LineEnding, 'first game score and comment annotations');
 
     Game := TPdnGame.Create;
     try

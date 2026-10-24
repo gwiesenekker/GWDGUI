@@ -472,7 +472,8 @@ type
       ACommand: TGameTreeCommand; AFollowVariationBrowse: Boolean);
     function RebuildStandaloneGameTreeFromImport(AGameTree: TGameTree;
       const AEventName, AWhiteName, ABlackName, AResultText, AStartingFEN,
-      AMovesText, AAnnotationsText: string): Boolean;
+      AMovesText, AAnnotationsText: string;
+      const AInitialCommentText: string = ''): Boolean;
     function CurrentGameTreeHeaderInput(AGame: TRunningGame;
       AGameTree: TGameTree): TGameTreeHeaderInput;
     function RunningSnapshotTreeInput(AGame: TRunningGame;
@@ -2681,7 +2682,8 @@ end;
 
 function TMainForm.RebuildStandaloneGameTreeFromImport(AGameTree: TGameTree;
   const AEventName, AWhiteName, ABlackName, AResultText, AStartingFEN,
-  AMovesText, AAnnotationsText: string): Boolean;
+  AMovesText, AAnnotationsText: string;
+  const AInitialCommentText: string): Boolean;
 var
   Actor: TGameTreeActor;
   LAnnotations: TStringList;
@@ -2706,7 +2708,7 @@ begin
       PlayerNameOrFallback(AWhiteName, 'White'),
       PlayerNameOrFallback(ABlackName, 'Black'),
       PlayerNameOrFallback(AResultText, '*'),
-      AStartingFEN, False, DefaultTimeControl);
+      AStartingFEN, False, DefaultTimeControl, gosWaiting, '', AInitialCommentText);
     Result := RebuildGameTreeFromInputs(Actor, LHeader,
       GameTreeMainlineInput(LMoves, LAnnotations, False, 0, 0, 0, 0),
       GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', ''),
@@ -4042,7 +4044,7 @@ begin
     LEventName := PlayerNameOrFallback(AGame.EventName, '?');
     if not RebuildStandaloneGameTreeFromImport(FGameTree, LEventName,
       LWhiteName, LBlackName, LResultText, LStartingFEN, AGame.MovesText,
-      AGame.MoveAnnotationsText) then
+      AGame.MoveAnnotationsText, AGame.InitialCommentText) then
     begin
       ShowGuiOkDialog(Self, 'Open PDN', 'Could not load the PDN game tree.');
       Exit;

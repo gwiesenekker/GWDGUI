@@ -730,9 +730,8 @@ begin
     ANode.FEngineScore := LEngineScore;
   if LAnnotatorScore <> '' then
     ANode.FAnnotatorScore := LAnnotatorScore;
-  if (LEngineScore = '') and (LAnnotatorScore = '') and
-    (Trim(AAnnotationText) <> '') then
-    ANode.FCommentText := Trim(AAnnotationText);
+  ANode.FCommentText := AnnotationWithoutName(AnnotationWithoutName(
+    AnnotationWithoutName(AAnnotationText, 'engine'), 'annotator'), 'score');
 end;
 
 function TGameTree.RecordMainlineMove(APlyNumber: Integer;
@@ -775,7 +774,10 @@ begin
     StoreValue(FEngineScoresByPly, APlyNumber, LEngineScore);
   if LAnnotatorScore <> '' then
     StoreValue(FAnnotatorScoresByPly, APlyNumber, LAnnotatorScore);
-  ApplyAnnotationText(GetMainlineNode(APlyNumber), AAnnotationText);
+  if APlyNumber = 0 then
+    ApplyAnnotationText(FRoot, AAnnotationText)
+  else
+    ApplyAnnotationText(GetMainlineNode(APlyNumber), AAnnotationText);
 end;
 
 procedure TGameTree.RecordEnginePV(APlyNumber: Integer; const AScore,

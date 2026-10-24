@@ -15,6 +15,7 @@ type
     BlackName: string;
     ResultText: string;
     StartingFEN: string;
+    InitialCommentText: string;
     MoveAnnotationsText: string;
     MoveVariationAnnotationsText: string;
     MoveVariationsText: string;
@@ -34,6 +35,9 @@ procedure AppendPdnTextToFile(const AFileName, APdnText: string);
 function PdnGameToText(AGame: TPdnGame): string;
 function AnnotationWithScore(const AAnnotation, AName, AScore: string): string;
 function ExtractAnnotationValue(const AAnnotation, AName: string): string;
+function AnnotationWithoutName(const AAnnotation, AName: string): string;
+procedure DecodeVariationAnnotations(const AText: string; ACount: Integer;
+  AAnnotations: TStrings);
 function EncodePdnVariationLine(ADisplayAfterPly, ABasePly: Integer;
   const AMovesText: string): string;
 function DecodePdnVariationLine(const ALine, AAnnotation: string;
@@ -42,8 +46,11 @@ function DecodePdnVariationLine(const ALine, AAnnotation: string;
 
 implementation
 
+uses FPJSON, JSONParser;
+
 const
   DefaultPdnFen = 'W:W31-50:B1-20';
+  VariationAnnotationsPrefix = '@pdn-annotations:';
 
 constructor TPdnGame.Create;
 begin
@@ -64,6 +71,7 @@ begin
   BlackName := ASource.BlackName;
   ResultText := ASource.ResultText;
   StartingFEN := ASource.StartingFEN;
+  InitialCommentText := ASource.InitialCommentText;
   MoveAnnotationsText := ASource.MoveAnnotationsText;
   MoveVariationAnnotationsText := ASource.MoveVariationAnnotationsText;
   MoveVariationsText := ASource.MoveVariationsText;
@@ -392,11 +400,56 @@ begin
   Result := Trim(StringReplace(AMoves.Text, LineEnding, ' ', [rfReplaceAll]));
 end;
 
-function CommentHasStoredAnnotation(const AComment: string): Boolean;
+function EncodeVariationAnnotations(AAnnotations: TStrings): string;
+var
+  I: Integer;
+  Items: TJSONArray;
+  HasEarlierComment: Boolean;
 begin
-  Result := AnnotationContainsName(AComment, 'score') or
-    AnnotationContainsName(AComment, 'engine') or
-    AnnotationContainsName(AComment, 'annotator');
+  Result := '';
+  if AAnnotations.Count = 0 then
+    Exit;
+  HasEarlierComment := False;
+  for I := 0 to AAnnotations.Count - 2 do
+    HasEarlierComment := HasEarlierComment or (Trim(AAnnotations[I]) <> '');
+  if (not HasEarlierComment) and
+    (Copy(AAnnotations[AAnnotations.Count - 1], 1,
+      Length(VariationAnnotationsPrefix)) <> VariationAnnotationsPrefix) then
+    Exit(AAnnotations[AAnnotations.Count - 1]);
+  Items := TJSONArray.Create;
+  try
+    for I := 0 to AAnnotations.Count - 1 do
+      Items.Add(AAnnotations[I]);
+    Result := VariationAnnotationsPrefix + Items.AsJSON;
+  finally
+    Items.Free;
+  end;
+end;
+
+procedure DecodeVariationAnnotations(const AText: string; ACount: Integer;
+  AAnnotations: TStrings);
+var
+  Data: TJSONData;
+  I: Integer;
+begin
+  AAnnotations.Clear;
+  for I := 1 to ACount do
+    AAnnotations.Add('');
+  if Copy(AText, 1, Length(VariationAnnotationsPrefix)) =
+    VariationAnnotationsPrefix then
+  begin
+    Data := GetJSON(Copy(AText, Length(VariationAnnotationsPrefix) + 1, MaxInt));
+    try
+      if (Data.JSONType <> jtArray) or (Data.Count <> ACount) then
+        raise EConvertError.Create('Invalid variation annotations');
+      for I := 0 to ACount - 1 do
+        AAnnotations[I] := Data.Items[I].AsString;
+    finally
+      Data.Free;
+    end;
+  end
+  else if ACount > 0 then
+    AAnnotations[ACount - 1] := AText;
 end;
 
 function EncodePdnVariationLine(ADisplayAfterPly, ABasePly: Integer;
@@ -449,7 +502,9 @@ begin
     end;
   end;
 
-  AVisibleAnnotation := AnnotationWithoutName(AVisibleAnnotation, 'base_ply');
+  if Copy(AVisibleAnnotation, 1, Length(VariationAnnotationsPrefix)) <>
+    VariationAnnotationsPrefix then
+    AVisibleAnnotation := AnnotationWithoutName(AVisibleAnnotation, 'base_ply');
   Result := AMovesText <> '';
 end;
 
@@ -534,7 +589,8 @@ begin
 end;
 
 procedure ExtractPdnMoveData(const AText: string; AMoves, AAnnotations,
-  AVariations, AVariationAnnotations: TStrings; const AStartingFEN: string = '');
+  AVariations, AVariationAnnotations: TStrings; const AStartingFEN: string = '';
+  AInitialComments: TStrings = nil);
 var
   I: Integer;
   LBraceDepth: Integer;
@@ -570,12 +626,20 @@ var
   var
     LCommentText: string;
   begin
-    LCommentText := Trim(LComment);
+    LCommentText := Trim(StringReplace(StringReplace(LComment, #13, ' ',
+      [rfReplaceAll]), #10, ' ', [rfReplaceAll]));
     LComment := '';
-    if (LLastMoveIndex < 0) or (LLastMoveIndex >= AAnnotations.Count) then
+    if LCommentText = '' then
       Exit;
-    if CommentHasStoredAnnotation(LCommentText) then
-      AAnnotations[LLastMoveIndex] := LCommentText;
+    if (LLastMoveIndex < 0) or (LLastMoveIndex >= AAnnotations.Count) then
+    begin
+      if AInitialComments <> nil then
+        AInitialComments.Add(LCommentText);
+      Exit;
+    end;
+    if AAnnotations[LLastMoveIndex] <> '' then
+      LCommentText := AAnnotations[LLastMoveIndex] + '; ' + LCommentText;
+    AAnnotations[LLastMoveIndex] := LCommentText;
   end;
 
   function ReadParenthesizedText: string;
@@ -627,6 +691,7 @@ var
     LVariationAnnotation: string;
     LVariationAnnotations: TStringList;
     LVariationMoves: TStringList;
+    LInitialComments: TStringList;
   begin
     if (AVariations = nil) or (AVariationAnnotations = nil) then
       Exit;
@@ -634,11 +699,20 @@ var
     LSlot := AMoves.Count;
     LVariationAnnotations := TStringList.Create;
     LVariationMoves := TStringList.Create;
+    LInitialComments := TStringList.Create;
     try
       ExtractPdnMoveData(AVariationText, LVariationMoves,
-        LVariationAnnotations, nil, nil, AStartingFEN);
+        LVariationAnnotations, nil, nil, AStartingFEN, LInitialComments);
       if LVariationMoves.Count = 0 then
         Exit;
+      if LInitialComments.Count > 0 then
+      begin
+        LVariationAnnotation := Trim(StringReplace(LInitialComments.Text,
+          LineEnding, ' ', [rfReplaceAll]));
+        if LVariationAnnotations[0] <> '' then
+          LVariationAnnotation += '; ' + LVariationAnnotations[0];
+        LVariationAnnotations[0] := LVariationAnnotation;
+      end;
       LBasePly := LSlot - 1;
       if LBasePly < 0 then
         LBasePly := 0;
@@ -655,10 +729,11 @@ var
       AVariations.Add(EncodePdnVariationLine(LSlot, LBasePly,
         MoveListText(LVariationMoves)));
       if LVariationAnnotations.Count > 0 then
-        AVariationAnnotations.Add(LVariationAnnotation)
+        AVariationAnnotations.Add(EncodeVariationAnnotations(LVariationAnnotations))
       else
         AVariationAnnotations.Add('');
     finally
+      LInitialComments.Free;
       LVariationMoves.Free;
       LVariationAnnotations.Free;
     end;
@@ -815,6 +890,7 @@ procedure AddCurrentGame(var ACurrent: TPdnGame; AMoveLines: TStrings;
   AGames: TList);
 var
   LAnnotations: TStringList;
+  LInitialComments: TStringList;
   LMoves: TStringList;
   LVariationAnnotations: TStringList;
   LVariations: TStringList;
@@ -822,12 +898,15 @@ begin
   if ACurrent = nil then
     Exit;
   LAnnotations := TStringList.Create;
+  LInitialComments := TStringList.Create;
   LMoves := TStringList.Create;
   LVariationAnnotations := TStringList.Create;
   LVariations := TStringList.Create;
   try
     ExtractPdnMoveData(AMoveLines.Text, LMoves, LAnnotations, LVariations,
-      LVariationAnnotations, ACurrent.StartingFEN);
+      LVariationAnnotations, ACurrent.StartingFEN, LInitialComments);
+    ACurrent.InitialCommentText := Trim(StringReplace(LInitialComments.Text,
+      LineEnding, ' ', [rfReplaceAll]));
     ACurrent.MovesText := MoveListText(LMoves);
     ACurrent.MoveAnnotationsText := LAnnotations.Text;
     ACurrent.MoveVariationsText := LVariations.Text;
@@ -843,6 +922,7 @@ begin
     end;
     AMoveLines.Clear;
   finally
+    LInitialComments.Free;
     LVariations.Free;
     LVariationAnnotations.Free;
     LMoves.Free;
@@ -985,10 +1065,11 @@ begin
 end;
 
 function FormatVariationForPdn(const AMovesText, AStartingFEN: string;
-  APlyOffset: Integer): string;
+  APlyOffset: Integer; const AAnnotationsText: string): string;
 var
   I: Integer;
   LMoves: TStringList;
+  LAnnotations: TStringList;
   LMoveNumber: Integer;
   LPly: Integer;
   LPlyFromWhiteStart: Integer;
@@ -997,8 +1078,10 @@ var
 begin
   Result := '';
   LMoves := TStringList.Create;
+  LAnnotations := TStringList.Create;
   try
     ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(AMovesText)), LMoves);
+    DecodeVariationAnnotations(AAnnotationsText, LMoves.Count, LAnnotations);
     if LMoves.Count = 0 then
       Exit;
 
@@ -1026,8 +1109,11 @@ begin
         Result += IntToStr(LMoveNumber) + '... ' + LMoves[I]
       else
         Result += LMoves[I];
+      if LAnnotations[I] <> '' then
+        Result += ' {' + LAnnotations[I] + '}';
     end;
   finally
+    LAnnotations.Free;
     LMoves.Free;
   end;
 end;
@@ -1068,9 +1154,7 @@ var
       if LDisplayAfterPly <> ADisplayAfterPly then
         Continue;
       LVariationText := FormatVariationForPdn(LVariationMovesText,
-        AStartingFEN, LVariationBasePly);
-      if LVariationComment <> '' then
-        LVariationText += ' {' + LVariationComment + '}';
+        AStartingFEN, LVariationBasePly, LVariationComment);
       if LVariationText <> '' then
       begin
         if LText <> '' then
@@ -1184,6 +1268,8 @@ begin
       Lines.Add('[SetUp "1"]');
     Lines.Add('[FEN "' + PdnQuote(AGame.StartingFEN) + '"]');
     Lines.Add('');
+    if AGame.InitialCommentText <> '' then
+      Lines.Add('{' + AGame.InitialCommentText + '}');
     Lines.Text := Lines.Text + FormatMovesForPdn(AGame.MovesText,
       AGame.MoveAnnotationsText, AGame.MoveVariationsText,
       AGame.MoveVariationAnnotationsText, AGame.ResultText, AGame.StartingFEN);

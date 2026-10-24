@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Preserve PDN commentary and annotation positions (P2, P4)
+
+- Retain free text, consecutive comments and text mixed with scores. Normalize
+  comment line breaks so they cannot create extra move-annotation slots.
+- Store introductory comments on the root and keep comments on every move of
+  a variation, rather than retaining only its final annotation.
+- Preserve these comments through both tree and legacy PDN exporters. Internal
+  per-move annotation encoding is never written into exported PDN.
+- Test three save/load cycles, mixed comments/scores, introductory text, first,
+  middle and final variation comments, and multiline annotation alignment.
+- Validation: all nine regression programs and the source audit pass.
+
 ### 2026-10-24 — Preserve PDN variation branch positions (P1, root export in G5)
 
 - Keep the base ply inferred from a variation's move number unless explicit

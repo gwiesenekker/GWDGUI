@@ -168,6 +168,121 @@ begin
   end;
 end;
 
+procedure LoadParsedGame(AActor: TGameTreeActor; AGame: TPdnGame);
+var
+  Moves, Annotations, Variations, VariationAnnotations: TStringList;
+  I, Display, Base: Integer;
+  MoveText, AnnotationText, RawAnnotationText: string;
+begin
+  Moves := TStringList.Create;
+  Annotations := TStringList.Create;
+  Variations := TStringList.Create;
+  VariationAnnotations := TStringList.Create;
+  try
+    TextToMoveList(AGame.MovesText, Moves);
+    Annotations.Text := AGame.MoveAnnotationsText;
+    Execute(AActor, AActor.CreateRebuildFromInputsCommand(
+      GameTreeHeaderInput('parsed game', AGame.EventName, AGame.WhiteName,
+        AGame.BlackName, AGame.ResultText, AGame.StartingFEN,
+        False, DefaultTimeControl, gosWaiting, '', AGame.InitialCommentText),
+      GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
+      GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', '')));
+    Execute(AActor, AActor.CreateClearStoredVariationsCommand);
+    Variations.Text := AGame.MoveVariationsText;
+    VariationAnnotations.Text := AGame.MoveVariationAnnotationsText;
+    for I := 0 to Variations.Count - 1 do
+    begin
+      RawAnnotationText := '';
+      if I < VariationAnnotations.Count then
+        RawAnnotationText := VariationAnnotations[I];
+      Check(DecodePdnVariationLine(Variations[I], RawAnnotationText, I,
+        Display, Base, MoveText, AnnotationText), 'imported line should decode');
+      Execute(AActor, AActor.CreateStoreVariationLineCommand(Display, Base,
+        MoveText, AnnotationText, gmsUnknown));
+    end;
+  finally
+    VariationAnnotations.Free;
+    Variations.Free;
+    Annotations.Free;
+    Moves.Free;
+  end;
+end;
+
+procedure CheckCommentRoundTrips;
+var
+  Game, Reloaded: TPdnGame;
+  Actor: TGameTreeActor;
+  Text: string;
+  Pass: Integer;
+begin
+  Game := ParseGame('[Event "comments"]' + LineEnding + LineEnding +
+    '{Introduction to this game} 1. 32-28 {Strong move!; E: 0.10} ' +
+    '18-23 {Black reply} (1... 19-23 {First alternative comment} ' +
+    '2. 37-32 {Middle comment;' + LineEnding + 'E: 0.20} ' +
+    '14-19 {Last comment}) 2. 37-32 {Final mainline comment} *');
+  Actor := TGameTreeActor.Create;
+  try
+    for Pass := 1 to 3 do
+    begin
+      LoadParsedGame(Actor, Game);
+      Check(Actor.GameTree.Root.CommentText = 'Introduction to this game',
+        'introduction must be stored on the root');
+      Check(Actor.GameTree.MainlineNode[1].CommentText = 'Strong move!',
+        'mixed score/comment must preserve its free text');
+      Check(Actor.GameTree.MainlineNode[2].CommentText = 'Black reply',
+        'reply comment must survive import');
+      Check(Actor.GameTree.FindVariationNode(0, 1).CommentText =
+        'First alternative comment', 'variation first comment must survive');
+      Check(Actor.GameTree.FindVariationNode(0, 2).CommentText = 'Middle comment',
+        'variation middle comment must survive alongside its score');
+      Check(Actor.GameTree.FindVariationNode(0, 3).CommentText = 'Last comment',
+        'variation last comment must survive');
+      Text := GameTreeToPdnText(Actor.GameTree);
+      Check(Pos('@pdn-annotations:', Text) = 0,
+        'internal comment storage must never leak into exported PDN');
+      Reloaded := ParseGame(Text);
+      Game.Free;
+      Game := Reloaded;
+    end;
+    Reloaded := ParseGame(PdnGameToText(Game));
+    try
+      LoadParsedGame(Actor, Reloaded);
+      Check(Actor.GameTree.Root.CommentText = 'Introduction to this game',
+        'legacy export must retain the introduction');
+      Check(Actor.GameTree.FindVariationNode(0, 1).CommentText =
+        'First alternative comment', 'legacy export must retain per-move comments');
+    finally
+      Reloaded.Free;
+    end;
+  finally
+    Actor.Free;
+    Game.Free;
+  end;
+end;
+
+procedure CheckCommentsStayWithTheirMoves;
+var
+  Game: TPdnGame;
+  Annotations: TStringList;
+begin
+  Game := ParseGame('[Event "comments"]' + LineEnding + LineEnding +
+    '1. 32-28 {Strong move!} {E: 0.10;' + LineEnding +
+    'A: 0.20} 18-23 {Black reply} 2. 37-32 {E: 0.30} *');
+  Annotations := TStringList.Create;
+  try
+    Annotations.Text := Game.MoveAnnotationsText;
+    Check(Annotations.Count = 3, 'multiline comments must not create annotation slots');
+    Check(Pos('Strong move!', Annotations[0]) > 0,
+      'free text must survive alongside a separate score comment');
+    Check(Annotations[1] = 'Black reply', 'reply comment must stay on the reply');
+    Check(ExtractAnnotationValue(Annotations[2], 'engine') = '0.30',
+      'later score must stay on its original move');
+  finally
+    Annotations.Free;
+    Game.Free;
+  end;
+end;
+
 procedure CheckVariationsBelongToTheirGame;
 var
   Actor: TGameTreeActor;
@@ -200,5 +315,7 @@ begin
   CheckStoredVariationsAreExported;
   CheckVariationsBelongToTheirGame;
   CheckStandardVariationPlacement;
+  CheckCommentsStayWithTheirMoves;
+  CheckCommentRoundTrips;
   WriteLn('OK');
 end.

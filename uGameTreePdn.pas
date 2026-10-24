@@ -548,7 +548,7 @@ begin
   if (AGameTree = nil) or (AGameTree.Root = nil) then
     Exit;
 
-  Result := '';
+  Result := Trim(NodeAnnotation(AGameTree.Root, AOptions));
   for I := 1 to AGameTree.MainlineCount do
   begin
     LChild := AGameTree.MainlineNode[I];
