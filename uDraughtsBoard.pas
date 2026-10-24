@@ -785,6 +785,7 @@ var
   LIsCapture: Boolean;
   LLegalMove: string;
   LMove: string;
+  LBoard: TDraughtsBoardArray;
   LPiece: TDraughtsPieceKind;
   LSquares: TStringList;
 begin
@@ -812,11 +813,12 @@ begin
       raise EInvalidOperation.CreateFmt('No piece on move source square: %d', [LFromSquare]);
 
     LIsCapture := Pos('x', LowerCase(LMove)) > 0;
-    FSquares[LFromSquare] := pkEmpty;
+    LBoard := FSquares;
+    LBoard[LFromSquare] := pkEmpty;
     LToSquare := StrToInt(LSquares[1]);
     if (LToSquare < Low(FSquares)) or (LToSquare > High(FSquares)) then
       raise ERangeError.CreateFmt('Move square out of range: %d', [LToSquare]);
-    if FSquares[LToSquare] <> pkEmpty then
+    if LBoard[LToSquare] <> pkEmpty then
       raise EInvalidOperation.CreateFmt('Move target square is occupied: %d', [LToSquare]);
 
     if LIsCapture then
@@ -827,17 +829,17 @@ begin
         if LCaptured = 0 then
           raise EInvalidOperation.CreateFmt('No captured piece between %d and %d',
             [LFromSquare, LToSquare]);
-        FSquares[LCaptured] := pkEmpty;
+        LBoard[LCaptured] := pkEmpty;
       end;
       for I := 2 to LSquares.Count - 1 do
       begin
         LCaptured := StrToInt(LSquares[I]);
         if (LCaptured < Low(FSquares)) or (LCaptured > High(FSquares)) then
           raise ERangeError.CreateFmt('Move square out of range: %d', [LCaptured]);
-        if not IsOpponentPiece(FSquares[LCaptured], FSideToMove) then
+        if not IsOpponentPiece(LBoard[LCaptured], FSideToMove) then
           raise EInvalidOperation.CreateFmt('No opponent piece on captured square: %d',
             [LCaptured]);
-        FSquares[LCaptured] := pkEmpty;
+        LBoard[LCaptured] := pkEmpty;
       end;
     end;
 
@@ -849,7 +851,8 @@ begin
         LPiece := pkBlackKing;
     end;
 
-    FSquares[LToSquare] := LPiece;
+    LBoard[LToSquare] := LPiece;
+    FSquares := LBoard;
     FSideToMove := OppositeSide(FSideToMove);
     if ARecordMove then
       FMovesPlayed.Add(LMove);

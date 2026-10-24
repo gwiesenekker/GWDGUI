@@ -200,6 +200,71 @@ begin
   end;
 end;
 
+procedure CheckBoardUnchanged(ABoard, ABefore: TDraughtsBoard;
+  const AContext: string);
+begin
+  CheckEqual(ABoard.PositionKey, ABefore.PositionKey,
+    AContext + ': pieces and side to move');
+  CheckEqual(ABoard.StartingFEN, ABefore.StartingFEN,
+    AContext + ': starting FEN');
+  CheckEqual(ABoard.MovesPlayedText, ABefore.MovesPlayedText,
+    AContext + ': recorded moves');
+  CheckEqual(ABoard.LegalMovesText, ABefore.LegalMovesText,
+    AContext + ': legal moves');
+end;
+
+procedure CheckRejectedMovesPreserveBoard;
+var
+  Board, Before: TDraughtsBoard;
+
+  procedure RejectMove(const AFen, AMove: string; AValidate: Boolean);
+  var
+    Raised: Boolean;
+  begin
+    Board.LoadFromFEN(AFen);
+    Before.AssignFrom(Board);
+    Raised := False;
+    try
+      Board.PlayMove(AMove, True, AValidate);
+    except
+      on E: Exception do
+        Raised := True;
+    end;
+    Check(Raised, 'invalid move must raise: ' + AMove);
+    CheckBoardUnchanged(Board, Before, 'rejected move ' + AMove);
+  end;
+
+begin
+  Board := TDraughtsBoard.Create;
+  Before := TDraughtsBoard.Create;
+  try
+    RejectMove(DefaultStartingFEN, '46-41', False);
+    RejectMove(DefaultStartingFEN, '46-41', True);
+    RejectMove('W:W28:B1', '28-51', False);
+    RejectMove('W:W28:B23,19', '28x14', False);
+    RejectMove('W:W37:B32,22', '37x17x32x99', False);
+    RejectMove('W:W37:B32,22', '37x17x32x21', False);
+    RejectMove('W:W37:B32,22', '37x17x32x32', False);
+
+    Board.LoadFromFEN(DefaultStartingFEN);
+    Board.PlayMove('32-28');
+    Before.AssignFrom(Board);
+    try
+      Board.PlayMove('18-99', True, False);
+      Check(False, 'out-of-range reply must raise');
+    except
+      on E: Exception do
+        CheckBoardUnchanged(Board, Before, 'rejected reply after recorded move');
+    end;
+    Board.PlayMove('18-23');
+    Check(Board.MovesPlayedCount = 2,
+      'legal play should continue after a rejected move');
+  finally
+    Before.Free;
+    Board.Free;
+  end;
+end;
+
 procedure CheckCurrentFenRoundTrip;
 const
   Positions: array[0..4] of string = (
@@ -245,6 +310,7 @@ begin
   CheckSingleCaptureMayOmitCapturedSquare;
   CheckKingCaptureKeepsCapturedPiecesAsBlockers;
   CheckEquivalentAliasMatchesAreNotAmbiguous;
+  CheckRejectedMovesPreserveBoard;
   CheckCurrentFenRoundTrip;
   Writeln('OK');
 end.
