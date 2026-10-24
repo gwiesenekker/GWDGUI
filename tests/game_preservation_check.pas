@@ -333,6 +333,46 @@ begin
   end;
 end;
 
+procedure CheckNestedVariationPathsSurvive;
+var
+  Game, Reloaded: TPdnGame;
+  Actor: TGameTreeActor;
+  Pass: Integer;
+  Text: string;
+begin
+  Game := ParseGame('[Event "nested"]' + LineEnding + LineEnding +
+    '1. 32-28 18-23 (1... 19-23 {Outer reply} ' +
+    '2. 37-32 {Original continuation} (2. 38-32 {Nested choice} ' +
+    '14-19 {Nested tail} (2... 20-24 {Deeper choice})) ' +
+    '14-19 {Original tail}) 2. 37-32 *');
+  Actor := TGameTreeActor.Create;
+  try
+    for Pass := 1 to 3 do
+    begin
+      LoadParsedGame(Actor, Game);
+      Check(Actor.GameTree.VariationLineCount = 3,
+        'all three nested continuation paths must survive import');
+      Check(Actor.GameTree.VariationLine[0].MovesText = '19-23 37-32 14-19',
+        'outer continuation must remain intact');
+      Check(Actor.GameTree.VariationLine[1].MovesText = '19-23 38-32 14-19',
+        'nested continuation must retain its outer prefix');
+      Check(Actor.GameTree.VariationLine[2].MovesText = '19-23 38-32 20-24',
+        'deeper continuation must retain both prefixes');
+      Check(Actor.GameTree.FindVariationNode(1, 2).CommentText = 'Nested choice',
+        'nested commentary must stay on the nested move');
+      Check(Actor.GameTree.FindVariationNode(2, 3).CommentText = 'Deeper choice',
+        'deeper commentary must stay on its own move');
+      Text := GameTreeToPdnText(Actor.GameTree);
+      Reloaded := ParseGame(Text);
+      Game.Free;
+      Game := Reloaded;
+    end;
+  finally
+    Actor.Free;
+    Game.Free;
+  end;
+end;
+
 procedure CheckCommentsStayWithTheirMoves;
 var
   Game: TPdnGame;
@@ -391,5 +431,6 @@ begin
   CheckCommentsStayWithTheirMoves;
   CheckCommentRoundTrips;
   CheckExplorationPreservesContinuations;
+  CheckNestedVariationPathsSurvive;
   WriteLn('OK');
 end.

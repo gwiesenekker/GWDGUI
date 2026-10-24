@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Retain nested PDN continuation paths (P3)
+
+- Recursively read nested alternatives instead of discarding them. Preserve
+  each full path with its shared prefix and per-move commentary.
+- The current line-based model stores these as sibling paths anchored to the
+  mainline; export writes equivalent complete alternatives. Original nesting
+  layout is flattened until the planned tree-topology consolidation.
+- Test an outer alternative, a nested choice and a deeper choice with their
+  comments over three save/load cycles.
+- Validation: all nine headless regression programs, the source audit and
+  the GTK preservation check pass.
+
 ### 2026-10-24 — Explore variations without truncating existing lines (G2)
 
 - Replaying an existing mainline or variation move navigates to that node,

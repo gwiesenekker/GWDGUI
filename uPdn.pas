@@ -591,7 +591,7 @@ end;
 
 procedure ExtractPdnMoveData(const AText: string; AMoves, AAnnotations,
   AVariations, AVariationAnnotations: TStrings; const AStartingFEN: string = '';
-  AInitialComments: TStrings = nil);
+  AInitialComments: TStrings = nil; APlyOffset: Integer = 0);
 var
   I: Integer;
   LBraceDepth: Integer;
@@ -693,17 +693,32 @@ var
     LVariationAnnotations: TStringList;
     LVariationMoves: TStringList;
     LInitialComments: TStringList;
+    NestedLines, NestedAnnotations, NestedMoves, NestedMoveAnnotations: TStringList;
+    CombinedMoves, CombinedAnnotations: TStringList;
+    J, K, NestedDisplay, NestedBase, PrefixCount: Integer;
+    NestedText, NestedComment: string;
   begin
     if (AVariations = nil) or (AVariationAnnotations = nil) then
       Exit;
 
-    LSlot := AMoves.Count;
+    LSlot := APlyOffset + AMoves.Count;
+    LBasePly := LSlot - 1;
+    if LBasePly < APlyOffset then
+      LBasePly := APlyOffset;
+    LBasePly := InferVariationBasePly(AVariationText, AStartingFEN, LBasePly);
     LVariationAnnotations := TStringList.Create;
     LVariationMoves := TStringList.Create;
     LInitialComments := TStringList.Create;
+    NestedLines := TStringList.Create;
+    NestedAnnotations := TStringList.Create;
+    NestedMoves := TStringList.Create;
+    NestedMoveAnnotations := TStringList.Create;
+    CombinedMoves := TStringList.Create;
+    CombinedAnnotations := TStringList.Create;
     try
       ExtractPdnMoveData(AVariationText, LVariationMoves,
-        LVariationAnnotations, nil, nil, AStartingFEN, LInitialComments);
+        LVariationAnnotations, NestedLines, NestedAnnotations, AStartingFEN,
+        LInitialComments, LBasePly);
       if LVariationMoves.Count = 0 then
         Exit;
       if LInitialComments.Count > 0 then
@@ -714,10 +729,6 @@ var
           LVariationAnnotation += '; ' + LVariationAnnotations[0];
         LVariationAnnotations[0] := LVariationAnnotation;
       end;
-      LBasePly := LSlot - 1;
-      if LBasePly < 0 then
-        LBasePly := 0;
-      LBasePly := InferVariationBasePly(AVariationText, AStartingFEN, LBasePly);
       if LVariationAnnotations.Count > 0 then
       begin
         LVariationAnnotation := Trim(
@@ -733,7 +744,38 @@ var
         AVariationAnnotations.Add(EncodeVariationAnnotations(LVariationAnnotations))
       else
         AVariationAnnotations.Add('');
+      for J := 0 to NestedLines.Count - 1 do
+      begin
+        if not DecodePdnVariationLine(NestedLines[J], NestedAnnotations[J], 0,
+          NestedDisplay, NestedBase, NestedText, NestedComment) then
+          Continue;
+        PrefixCount := NestedBase - LBasePly;
+        if (PrefixCount < 0) or (PrefixCount > LVariationMoves.Count) then
+          raise EConvertError.Create('Nested PDN variation starts outside its parent line');
+        ExtractStrings([' ', #9, #10, #13], [], PChar(NestedText), NestedMoves);
+        DecodeVariationAnnotations(NestedComment, NestedMoves.Count,
+          NestedMoveAnnotations);
+        CombinedMoves.Clear;
+        CombinedAnnotations.Clear;
+        for K := 0 to PrefixCount - 1 do
+        begin
+          CombinedMoves.Add(LVariationMoves[K]);
+          CombinedAnnotations.Add(LVariationAnnotations[K]);
+        end;
+        CombinedMoves.AddStrings(NestedMoves);
+        CombinedAnnotations.AddStrings(NestedMoveAnnotations);
+        AVariations.Add(EncodePdnVariationLine(LSlot, LBasePly,
+          MoveListText(CombinedMoves)));
+        AVariationAnnotations.Add(EncodeVariationAnnotations(CombinedAnnotations));
+        NestedMoves.Clear;
+      end;
     finally
+      CombinedAnnotations.Free;
+      CombinedMoves.Free;
+      NestedMoveAnnotations.Free;
+      NestedMoves.Free;
+      NestedAnnotations.Free;
+      NestedLines.Free;
       LInitialComments.Free;
       LVariationMoves.Free;
       LVariationAnnotations.Free;
