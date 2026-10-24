@@ -4,8 +4,24 @@ interface
 uses FPJSON;
 function ReadTournamentDocument(const AFileName: string): TJSONObject;
 function TournamentPdnTag(const AName, AValue: string): string;
+function UnusedTournamentPdnPath(const ACandidate: string): string;
 implementation
 uses Classes, SysUtils, JSONParser, uTournamentTypes, uTournamentResults;
+
+function UnusedTournamentPdnPath(const ACandidate: string): string;
+var
+  Id: TGUID;
+  BaseName: string;
+begin
+  Result := ExpandFileName(ACandidate);
+  BaseName := ChangeFileExt(Result, '');
+  while FileExists(Result) or DirectoryExists(Result) do
+  begin
+    if CreateGUID(Id) <> 0 then
+      raise EInOutError.Create('Could not create a tournament PDN name');
+    Result := BaseName + '.' + GUIDToString(Id) + '.pdn';
+  end;
+end;
 
 type
   TAllowedJsonTypes = set of TJSONType;
@@ -99,6 +115,7 @@ begin
   CheckField(Data, 'starting_fen', [jtString]);
   CheckField(Data, 'tournament_id', [jtString]);
   CheckField(Data, 'pdn_file_name', [jtString]);
+  CheckField(Data, 'pdn_owned', [jtBoolean]);
   CheckInteger(Data, 'moves_per_period', 0);
   CheckInteger(Data, 'concurrent_games', 1);
   CheckField(Data, 'minutes_per_period', [jtNumber]);

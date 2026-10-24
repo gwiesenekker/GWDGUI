@@ -30,6 +30,7 @@ type
     FEngines: TExternalEngineList;
     FFileName: string;
     FPdnFileName: string;
+    FPdnFileOwned: Boolean;
     FTournamentId: string;
     FStorageError: string;
     FGrid: TStringGrid;
@@ -521,6 +522,7 @@ begin
     Dialog.Title := 'Save tournament';
     Dialog.Filter := 'Tournament files (*.json)|*.json|All files (*.*)|*.*';
     Dialog.DefaultExt := 'json';
+    Dialog.Options := Dialog.Options + [ofOverwritePrompt];
     if FFileName <> '' then
       Dialog.FileName := FFileName
     else
@@ -675,6 +677,7 @@ begin
   FTournamentId := NewId;
   FFileName := NewFileName;
   FPdnFileName := '';
+  FPdnFileOwned := False;
   FLegacyPdnFileName := '';
   Result := True;
 end;
@@ -693,6 +696,8 @@ begin
   end;
   if FPdnFileName = '' then
     FPdnFileName := ChangeFileExt(ExpandFileName(FFileName), '.pdn');
+  if not FPdnFileOwned then
+    FPdnFileName := UnusedTournamentPdnPath(FPdnFileName);
 end;
 
 function TTournamentDialog.PdnFileName: string;
@@ -746,7 +751,6 @@ var
   Row: Integer;
   PdnText: string;
 begin
-  EnsureStoragePaths;
   PdnText := '';
   for Row := 1 to FGrid.RowCount - 1 do
     if TournamentGridHasPairingAtRow(FGrid, Row) and
@@ -755,11 +759,19 @@ begin
         FTournamentNameEdit.Text, FGrid.Cells[TournamentColRound, Row],
         FGrid.Cells[TournamentColGame, Row], FGrid.Cells[TournamentColWhite, Row],
         FGrid.Cells[TournamentColBlack, Row], FStartingFENEdit.Text) + LineEnding;
-  if (Trim(PdnText) = '') and not FileExists(PdnFileName) then
+  if (Trim(PdnText) = '') and
+    (not FPdnFileOwned or not FileExists(FPdnFileName)) then
     Exit;
   FPdnWriteLock.Acquire;
   try
-    WriteTextFileAtomically(PdnFileName, Trim(PdnText) + LineEnding);
+    WriteTextFileAtomically(FPdnFileName, Trim(PdnText) + LineEnding, FPdnFileOwned);
+    if not FPdnFileOwned then
+    begin
+      FPdnFileOwned := True;
+      // Persist ownership only after exclusive creation succeeded. If this
+      // snapshot fails, recovery preserves the unclaimed file and uses a new one.
+      SaveTournamentSnapshot(FFileName);
+    end;
   finally
     FPdnWriteLock.Release;
   end;
@@ -1216,6 +1228,7 @@ begin
   SaveTournamentSnapshot(AFileName);
   WritePdnProjection;
   FStorageError := '';
+  UpdateButtons;
 end;
 
 procedure TTournamentDialog.SaveTournamentSnapshot(const AFileName: string);
@@ -1231,12 +1244,15 @@ begin
   NextPdnFileName := FPdnFileName;
   if NextPdnFileName = '' then
     NextPdnFileName := ChangeFileExt(ExpandFileName(AFileName), '.pdn');
+  if not FPdnFileOwned then
+    NextPdnFileName := UnusedTournamentPdnPath(NextPdnFileName);
   Data := TJSONObject.Create;
   try
     Data.Add('storage_version', 2);
     Data.Add('legacy_pdn_file_name', FLegacyPdnFileName);
     Data.Add('tournament_id', FTournamentId);
     Data.Add('pdn_file_name', NextPdnFileName);
+    Data.Add('pdn_owned', FPdnFileOwned);
     Data.Add('tournament_name', FTournamentNameEdit.Text);
     Data.Add('starting_fen', FStartingFENEdit.Text);
     Data.Add('moves_per_period', StrToIntDef(Trim(FMovesEdit.Text), 75));
@@ -1364,6 +1380,12 @@ begin
     if (FPdnFileName <> '') and not FilenameIsAbsolute(FPdnFileName) then
       FPdnFileName := ExpandFileName(ExtractFilePath(ExpandFileName(AFileName)) + FPdnFileName);
     FLegacyPdnFileName := Data.Get('legacy_pdn_file_name', '');
+    FPdnFileOwned := (Data.Get('storage_version', 0) >= 2) and
+      Data.Get('pdn_owned', False);
+    if (Data.Get('storage_version', 0) >= 2) and
+      (Data.Find('pdn_owned') = nil) and FileExists(FPdnFileName) and
+      (FLegacyPdnFileName = '') then
+      FLegacyPdnFileName := FPdnFileName;
     if (Data.Get('storage_version', 0) < 2) and FileExists(FPdnFileName) then
     begin
       // Never overwrite an older, unlinked archive while migrating standings.

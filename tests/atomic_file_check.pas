@@ -7,13 +7,14 @@ begin
     raise Exception.Create(Text);
 end;
 var
-  FileName, DirectoryName: string;
+  FileName, DirectoryName, NewFile: string;
   Lines: TStringList;
   Search: TSearchRec;
   Raised: Boolean;
 begin
   FileName := GetTempFileName(GetTempDir, 'gwd');
   DirectoryName := FileName + '.directory';
+  NewFile := FileName + '.new';
   Lines := TStringList.Create;
   try
     WriteTextFileAtomically(FileName, 'Original' + #13#10);
@@ -22,6 +23,18 @@ begin
     WriteTextFileAtomically(FileName, 'Replacement' + LineEnding);
     Lines.LoadFromFile(FileName);
     Check(Trim(Lines.Text) = 'Replacement', 'atomic overwrite');
+    WriteTextFileAtomically(NewFile, 'First publication', False);
+    Raised := False;
+    try
+      WriteTextFileAtomically(NewFile, 'Must not overwrite', False);
+    except
+      on E: Exception do Raised := True;
+    end;
+    Lines.LoadFromFile(NewFile);
+    Check(Raised and (Lines.Text = 'First publication' + LineEnding),
+      'exclusive publication must preserve a destination that already exists');
+    Check(FindFirst(NewFile + '.tmp.*', faAnyFile, Search) <> 0,
+      'failed exclusive publication must clean up its temporary file');
     CreateDir(DirectoryName);
     Raised := False;
     try
@@ -36,6 +49,7 @@ begin
     Lines.LoadFromFile(FileName);
     Check(Trim(Lines.Text) = 'Replacement', 'failure must leave prior successful save intact');
   finally
+    DeleteFile(NewFile);
     RemoveDir(DirectoryName);
     DeleteFile(FileName);
     Lines.Free;

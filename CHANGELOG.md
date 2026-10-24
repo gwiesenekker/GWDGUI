@@ -1,7 +1,25 @@
 # Change history
 
-Entries are newest first. Review IDs refer to the code review of commit
-`98da11d`; they identify individual fixes, not release versions.
+Entries are newest first. Review IDs refer to the code reviews of commits
+`98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
+
+### 2026-10-24 — Avoid adopting or overwriting existing tournament PDNs (T11)
+
+- Choose an unused PDN target for a new tournament, including existing directory
+  names and collisions with a legacy migration's suffixed filename.
+- Persist whether a projection has actually been created. Unclaimed targets stay
+  unclaimed across reloads; a file arriving later gets a new target instead.
+  Older snapshots without an ownership marker also preserve their existing PDN.
+- Publish the first PDN atomically without replacement, so a file created between
+  path selection and publication cannot be overwritten. Continue atomically
+  updating established tournament projections and repairing them on reload.
+- Request overwrite confirmation when saving JSON over an existing file. Refresh
+  action availability after an explicit save resolves a previous save failure.
+- Regress empty saves beside archives, late arrivals, reload and correction,
+  directory collisions, legacy migration collisions, ownership validation and
+  exclusive atomic publication with failure cleanup.
+- Validation: sixteen headless regression programs, source audit, both GTK
+  regression suites and the full application build pass.
 
 ### 2026-10-24 — Preserve saved tournaments when resetting pairings (T10)
 

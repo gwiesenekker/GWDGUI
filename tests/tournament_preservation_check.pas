@@ -138,12 +138,13 @@ var
   Fen: TEdit;
   Panel: TPanel;
 const
-  InvalidDocuments: array[0..6] of string = (
+  InvalidDocuments: array[0..7] of string = (
     '{invalid JSON',
     '[]',
     '{"tournament_name":"Partial overwrite","games":[{"white":17}]}',
     '{"tournament_name":"Partial overwrite","games":{}}',
     '{"storage_version":3}',
+    '{"pdn_owned":"yes"}',
     '{"games":[{"record":{"manual_result":17}}]}',
     '{"games":[{"game":1,"round":1},{"game":1,"round":1}]}');
 begin
@@ -615,8 +616,10 @@ begin
     Check(RenameFile(Fixture + '.saved', Fixture), 'restore reset save destination');
     // Revert the pending edit before recovering the original tournament save.
     TEdit(Dialog.FindComponent('TournamentStartingFEN')).Text := 'W:W31-50:B1-20';
-    Dialog.SetSelectedResult('1-1');
-    Check(Dialog.StorageError = '', 'successful save must unblock reset actions');
+    Dialog.SaveTournamentToFile(Fixture);
+    Check((Dialog.StorageError = '') and
+      TButton(Dialog.FindComponent('CreatePairing')).Enabled,
+      'successful explicit save must unblock reset actions');
     Saved := FileContents(Fixture);
     TEdit(Dialog.FindComponent('TournamentStartingFEN')).Text := 'B:W31-50:B1-20';
     Button := TButton(Dialog.FindComponent('ApplyTournamentChanges'));
@@ -660,6 +663,161 @@ begin
   end;
 end;
 
+procedure WriteContents(const FileName, Text: string);
+var
+  Stream: TFileStream;
+begin
+  Stream := TFileStream.Create(FileName, fmCreate);
+  try
+    if Text <> '' then Stream.WriteBuffer(Text[1], Length(Text));
+  finally
+    Stream.Free;
+  end;
+end;
+
+procedure CheckNewProjectionPreservesExistingPdn(const Fixture: string);
+var
+  Dialog, Reloaded, Resumed: TTournamentDialog;
+  Grid: TStringGrid;
+  OriginalPdn, UnclaimedPdn, CurrentPdn: string;
+  Data: TJSONObject;
+const
+  OriginalText = 'Earlier archive: keep exactly' + #13#10;
+  ArrivalText = 'File created after the JSON save: keep exactly' + #13#10;
+begin
+  OriginalPdn := ChangeFileExt(Fixture, '.pdn');
+  WriteContents(OriginalPdn, OriginalText);
+  Dialog := TTournamentDialog.Create(nil);
+  Reloaded := TTournamentDialog.Create(nil);
+  Resumed := TTournamentDialog.Create(nil);
+  try
+    Dialog.SaveTournamentToFile(Fixture);
+    Check(FileContents(OriginalPdn) = OriginalText,
+      'saving an empty new tournament must not blank an existing same-name PDN');
+    UnclaimedPdn := Dialog.PdnFileName;
+    Check(UnclaimedPdn <> OriginalPdn, 'a new tournament must choose an unused projection target');
+    Data := TJSONObject(GetJSON(FileContents(Fixture)));
+    try
+      Check(not Data.Get('pdn_owned', True), 'an uncreated projection must not be claimed as owned');
+      Check(Data.Get('pdn_file_name', '') = UnclaimedPdn, 'JSON must record the unused target');
+    finally
+      Data.Free;
+    end;
+    Reloaded.LoadTournamentFromFile(Fixture);
+    Check(Reloaded.PdnFileName = UnclaimedPdn,
+      'an unused target must remain stable across reload');
+    // A different file may appear after path selection, even across application restarts.
+    WriteContents(UnclaimedPdn, ArrivalText);
+    Grid := TStringGrid(Reloaded.FindComponent('TournamentPairings'));
+    AddTournamentPairingRow(Grid, 'White', 'Black', 1);
+    Reloaded.SetSelectedResult('1-1');
+    CurrentPdn := Reloaded.PdnFileName;
+    Check((Reloaded.StorageError = '') and (CurrentPdn <> UnclaimedPdn) and
+      (CurrentPdn <> OriginalPdn), 'later arrival must select another unused target');
+    Check((FileContents(OriginalPdn) = OriginalText) and
+      (FileContents(UnclaimedPdn) = ArrivalText),
+      'first and subsequent autosaves must preserve both unrelated files byte for byte');
+    CheckPdnResult(CurrentPdn, '1-1', '1');
+    Data := TJSONObject(GetJSON(FileContents(Fixture)));
+    try
+      Check(Data.Get('pdn_owned', False), 'ownership must persist only after successful first publication');
+      Check(Data.Get('pdn_file_name', '') = CurrentPdn, 'JSON and published PDN path must agree');
+    finally
+      Data.Free;
+    end;
+    Resumed.LoadTournamentFromFile(Fixture);
+    Check(Resumed.PdnFileName = CurrentPdn, 'an owned projection must remain stable on resume');
+    Resumed.SetSelectedResult('0-2');
+    CheckPdnResult(CurrentPdn, '0-2', '1');
+    Check((FileContents(OriginalPdn) = OriginalText) and
+      (FileContents(UnclaimedPdn) = ArrivalText),
+      'resumed result corrections must leave unrelated archives untouched');
+  finally
+    Resumed.Free;
+    Reloaded.Free;
+    Dialog.Free;
+  end;
+end;
+
+procedure CheckProjectionAvoidsExistingDirectory(const Fixture: string);
+var
+  Dialog: TTournamentDialog;
+  Grid: TStringGrid;
+  DirectoryName: string;
+begin
+  DirectoryName := ChangeFileExt(Fixture, '.pdn');
+  Check(CreateDir(DirectoryName), 'prepare projection-name directory');
+  WriteContents(IncludeTrailingPathDelimiter(DirectoryName) + 'keep', 'directory content');
+  Dialog := TTournamentDialog.Create(nil);
+  try
+    Dialog.SaveTournamentToFile(Fixture);
+    Check(Dialog.PdnFileName <> DirectoryName, 'a directory must not be adopted as a PDN target');
+    Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    AddTournamentPairingRow(Grid, 'White', 'Black', 1);
+    Dialog.SetSelectedResult('1-1');
+    Check(Dialog.StorageError = '', 'an occupied base name must not prevent saving new game records');
+    CheckPdnResult(Dialog.PdnFileName, '1-1', '1');
+    Check(FileContents(IncludeTrailingPathDelimiter(DirectoryName) + 'keep') = 'directory content',
+      'directory contents must survive projection creation');
+  finally
+    Dialog.Free;
+    DeleteFile(IncludeTrailingPathDelimiter(DirectoryName) + 'keep');
+    RemoveDir(DirectoryName);
+  end;
+end;
+
+procedure CheckUnmarkedV2PdnIsPreserved(const Fixture: string);
+var
+  Dialog: TTournamentDialog;
+  Grid: TStringGrid;
+  ExistingPdn: string;
+begin
+  WriteContents(Fixture,
+    '{"storage_version":2,"tournament_id":"unmarked-v2","games":[]}');
+  ExistingPdn := ChangeFileExt(Fixture, '.pdn');
+  WriteContents(ExistingPdn, 'Unmarked existing archive');
+  Dialog := TTournamentDialog.Create(nil);
+  try
+    Dialog.LoadTournamentFromFile(Fixture);
+    Check((FileContents(ExistingPdn) = 'Unmarked existing archive') and
+      (Dialog.PdnFileName <> ExistingPdn),
+      'an older v2 snapshot without an ownership marker must not adopt or blank a PDN');
+    Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    AddTournamentPairingRow(Grid, 'White', 'Black', 1);
+    Dialog.SetSelectedResult('1-1');
+    CheckPdnResult(Dialog.PdnFileName, '1-1', '1');
+    Check(FileContents(ExistingPdn) = 'Unmarked existing archive',
+      'later autosaves of an older snapshot must preserve its original archive');
+  finally
+    Dialog.Free;
+  end;
+end;
+
+procedure CheckLegacyMigrationCollision(const Fixture: string);
+var
+  Dialog: TTournamentDialog;
+  Archive, Collision: string;
+begin
+  WriteContents(Fixture, '{"tournament_id":"legacy-collision","games":[' +
+    '{"white":"White","black":"Black","result":"1-1"}]}');
+  Archive := ChangeFileExt(Fixture, '.pdn');
+  Collision := ChangeFileExt(Archive, '') + '.legacy-collision.pdn';
+  WriteContents(Archive, 'original legacy archive');
+  WriteContents(Collision, 'earlier migration output');
+  Dialog := TTournamentDialog.Create(nil);
+  try
+    Dialog.LoadTournamentFromFile(Fixture);
+    Check((Dialog.PdnFileName <> Archive) and (Dialog.PdnFileName <> Collision),
+      'legacy migration must not adopt an existing suffixed archive');
+    Check((FileContents(Archive) = 'original legacy archive') and
+      (FileContents(Collision) = 'earlier migration output'),
+      'both legacy archives must survive migration');
+    CheckPdnResult(Dialog.PdnFileName, '1-1', '1');
+  finally
+    Dialog.Free;
+  end;
+end;
+
 var
   Fixture, OtherFile, TestDirectory: string;
   Id: TGUID;
@@ -689,6 +847,10 @@ begin
       CheckResetPreservesSavedFiles(IncludeTrailingPathDelimiter(TestDirectory) + 'clear.json', 2);
       CheckResetWaitsForSuccessfulSave(IncludeTrailingPathDelimiter(TestDirectory) + 'failed-reset.json');
       CheckResetPreservesRecoveryFiles;
+      CheckNewProjectionPreservesExistingPdn(IncludeTrailingPathDelimiter(TestDirectory) + 'collision.json');
+      CheckProjectionAvoidsExistingDirectory(IncludeTrailingPathDelimiter(TestDirectory) + 'directory.json');
+      CheckLegacyMigrationCollision(IncludeTrailingPathDelimiter(TestDirectory) + 'legacy-collision.json');
+      CheckUnmarkedV2PdnIsPreserved(IncludeTrailingPathDelimiter(TestDirectory) + 'unmarked-v2.json');
       WriteLn('OK');
     finally
       if FindFirst(IncludeTrailingPathDelimiter(TestDirectory) + '*', faAnyFile, Search) = 0 then
