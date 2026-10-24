@@ -76,7 +76,36 @@ begin
   end;
 end;
 
+procedure CheckVariationsBelongToTheirGame;
+var
+  Actor: TGameTreeActor;
+begin
+  Actor := TGameTreeActor.Create;
+  try
+    Rebuild(Actor, 'game A', '', '32-28 18-23');
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+      '19-23 37-32', 'A: 0.20', gmsUnknown));
+    Rebuild(Actor, 'game A', '', '32-28 18-23');
+    Check(Actor.GameTree.VariationLineCount = 1,
+      'refreshing the same game must preserve its variation');
+    Check(Actor.GameTree.FindVariationNode(0, 2).AnnotatorScore = '0.20',
+      'refreshing the same game must preserve variation annotations');
+    Rebuild(Actor, 'game B', '', '32-28 18-23');
+    Check(Actor.GameTree.VariationLineCount = 0,
+      'a different game must not inherit variations even with the same moves');
+    Execute(Actor, Actor.CreateStoreMoveVariationCommand(
+      Actor.GameTree.Root.NodeId, '33-28', gmsHuman));
+    Rebuild(Actor, 'game C', 'W:W31,32:B19,20', '');
+    Check((Actor.GameTree.VariationLineCount = 0) and
+      (Actor.GameTree.Root.ChildCount = 0),
+      'loading a new FEN must not inherit a previous root variation');
+  finally
+    Actor.Free;
+  end;
+end;
+
 begin
   CheckStoredVariationsAreExported;
+  CheckVariationsBelongToTheirGame;
   WriteLn('OK');
 end.

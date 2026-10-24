@@ -784,7 +784,8 @@ function TGameTreeActor.CreateRebuildFromInputsCommand(
   ): TGameTreeCommand;
 begin
   Result := CreateCommand(gtcRebuildFromInputs);
-  CopyStoredVariationsToCommand(Result);
+  if FGameTree.Signature = AHeader.Signature then
+    CopyStoredVariationsToCommand(Result);
   Result.HeaderInput := AHeader;
   CopyMainlineInputToCommand(Result, AMainline, True);
   Result.EnginePvInput := AEnginePV;

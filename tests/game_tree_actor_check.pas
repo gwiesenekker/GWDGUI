@@ -262,19 +262,11 @@ begin
         'rebuild with different signature should be accepted');
       Check(Command.TreeChanged,
         'rebuild with different signature should report tree change');
-      Check(Actor.GameTree.VariationLineCount = 1,
-        'rebuild should preserve stored variation lines');
+      Check(Actor.GameTree.VariationLineCount = 0,
+        'rebuild of a different game should discard previous variation lines');
       VariationNode := Actor.GameTree.FindVariationNode(0, 1);
-      Check(VariationNode <> nil,
-        'rebuild should recreate stored variation node');
-      Check(VariationNode.MoveText = '18-23',
-        'recreated variation node should contain stored move');
-      Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
-        'rebuild should preserve stored variation annotation text');
-      Check(Actor.GameTree.VariationLine[0].OriginText = 'Human',
-        'rebuild should preserve stored variation origin');
-      Check(VariationNode.AnnotatorScore = '0.22',
-        'recreated variation node should preserve stored annotation');
+      Check(VariationNode = nil,
+        'rebuild of a different game should not recreate old variation nodes');
     finally
       Command.Free;
     end;

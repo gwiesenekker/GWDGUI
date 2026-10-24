@@ -291,6 +291,7 @@ type
     property MinutesPerPeriod: Double read FMinutesPerPeriod;
     property MovesPerPeriod: Integer read FMovesPerPeriod;
     property ResultText: string read FResultText;
+    property Signature: string read FSignature;
     property StartingFEN: string read FStartingFEN;
     property StatusText: string read FStatusText;
     property VariationLineCount: Integer read GetVariationLineCount;

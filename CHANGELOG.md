@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code review of commit
 `98da11d`; they identify individual fixes, not release versions.
 
+### 2026-10-24 — Keep variations with their original game (G4)
+
+- Carry stored variations into a rebuild only when the game identity matches.
+  Loading another game or starting FEN no longer imports the old game's lines.
+- Test same-game refresh preservation, different games with identical moves,
+  and a new FEN where the old root alternative is illegal.
+- Correct an older regression assertion that required variations to survive
+  a change of game identity.
+- Validation: all nine regression programs and the source audit pass.
+
 ### 2026-10-24 — Materialize imported variations when they are stored (G1)
 
 - Store a variation's text and create its move nodes in the same actor command,
