@@ -116,16 +116,50 @@ begin
     CompleteGame(Game, '2-0');
     Dialog.FailCapture := True;
     Dialog.GameStopped(Game);
-    Check(not Dialog.IsRunning and (Pos('injected capture failure', Dialog.StorageError) > 0),
+    Check(not Dialog.IsRunning and (Dialog.StorageError = '') and
+      (Pos('Capture failed', TStringGrid(Dialog.FindComponent('TournamentPairings')).Cells[TournamentColReason, 1]) > 0),
       'capture failure must pause without leaving a finished row active');
+    Dialog.SetSelectedResult('1-1'); // manual edit while the failed capture is pending
     Dialog.FailCapture := False;
     Dialog.GameStopped(Game);
+    Check(TStringGrid(Dialog.FindComponent('TournamentPairings')).Cells[TournamentColResult, 1] = '1-1',
+      'a successful capture retry must preserve a pending manual override');
     Check(Dialog.StorageError = '', 'a pending capture must be retryable after its failure is corrected');
     Dialog.SetSelectedResult('1-1');
     Dialog.GameStopped(Game);
     Check(TStringGrid(Dialog.FindComponent('TournamentPairings')).Cells[TournamentColResult, 1] = '1-1',
       'successful capture retries must not enable stale completion overwrites');
   finally Game.Free; Dialog.Free; end;
+end;
+
+procedure CheckCaptureFailureDoesNotBlockSaving(const Fixture: string);
+var Dialog: TFailingCaptureTournament; Reloaded: TTournamentDialog;
+  Game: TRunningGame; Grid: TStringGrid; Data: TJSONObject;
+begin
+  WriteFixture(Fixture, 'Capture isolation');
+  Dialog := TFailingCaptureTournament.Create(nil); Reloaded := TTournamentDialog.Create(nil);
+  Game := NewGame(105);
+  try
+    Dialog.LoadTournamentFromFile(Fixture); Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    AddTournamentPairingRow(Grid, 'Other White', 'Other Black', 1);
+    Dialog.RegisterRunningGame(1, Game); CompleteGame(Game, '2-0');
+    Dialog.FailCapture := True; Dialog.GameStopped(Game);
+    Check(Dialog.StorageError = '', 'capture failure is row data, not a global storage failure');
+    Grid.Row := 2; Dialog.SetSelectedResult('1-1');
+    Dialog.SaveTournamentToFile(Fixture + '.saved');
+    Reloaded.LoadTournamentFromFile(Fixture + '.saved');
+    Check(TStringGrid(Reloaded.FindComponent('TournamentPairings')).Cells[TournamentColResult, 2] = '1-1',
+      'other results remain editable and durable while a capture is pending');
+    Data := ReadTournamentDocument(Fixture + '.saved');
+    try Check(Pos('capture_error', Data.AsJSON) > 0, 'capture diagnostic is persisted explicitly');
+    finally Data.Free; end;
+    Dialog.GameRemoved(Game); FreeAndNil(Game);
+    Dialog.SaveTournamentToFile(Fixture + '.after-removal');
+    Grid.Row := 1; Dialog.RescheduleSelectedGame(nil);
+    Check((Grid.Cells[TournamentColResult, 1] = '*') and (Grid.Cells[TournamentColReason, 1] = ''),
+      'failed capture row can be rescheduled after its live game is removed');
+    Dialog.SaveTournamentToFile(Fixture + '.rescheduled');
+  finally Game.Free; Reloaded.Free; Dialog.Free; end;
 end;
 
 procedure CheckPairingChangesWaitForShutdown(const Fixture, OtherFile: string);
@@ -1242,6 +1276,7 @@ begin
       end;
       WriteFixture(Fixture, 'Original');
       WriteFixture(OtherFile, 'Other');
+      CheckCaptureFailureDoesNotBlockSaving(IncludeTrailingPathDelimiter(TestDirectory) + 'capture-isolation.json');
       CheckCaptureFailureStopsCleanly(IncludeTrailingPathDelimiter(TestDirectory) + 'capture-failure.json');
       CheckCompletionIsAppliedOnce(Fixture);
       CheckFailedLoadIsTransactional(Fixture);

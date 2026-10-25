@@ -8,6 +8,7 @@ type
     FAttempt: Integer;
     FWhiteEngineKey, FBlackEngineKey: string;
     FPdn: string;
+    FCaptureError: string;
     FPlayedResult: string;
     FManualResult: string;
     FHistory: TJSONArray;
@@ -17,6 +18,7 @@ type
     destructor Destroy; override;
     procedure LoadFromJson(AGame: TJSONObject);
     function ToJson: TJSONObject;
+    procedure RecordCaptureFailure(const AResult, AError: string);
     procedure RecordPlayedGame(const APdn, AResult: string);
     procedure OverrideResult(const AResult: string);
     procedure Reschedule;
@@ -26,6 +28,7 @@ type
       AWhite, ABlack, AFen: string): string;
     property WhiteEngineKey: string read FWhiteEngineKey write FWhiteEngineKey;
     property BlackEngineKey: string read FBlackEngineKey write FBlackEngineKey;
+    property CaptureError: string read FCaptureError;
     property Attempt: Integer read FAttempt;
     property ManualResult: string read FManualResult;
     property PlayedResult: string read FPlayedResult;
@@ -53,6 +56,7 @@ begin
   Result.Add('white_engine_key', FWhiteEngineKey);
   Result.Add('black_engine_key', FBlackEngineKey);
   Result.Add('pdn', FPdn);
+  if FCaptureError <> '' then Result.Add('capture_error', FCaptureError);
   Result.Add('played_result', FPlayedResult);
   Result.Add('manual_result', FManualResult);
 end;
@@ -87,6 +91,7 @@ begin
   FBlackEngineKey := Data.Get('black_engine_key', FBlackEngineKey);
   FAttempt := Data.Get('attempt', 1);
   FPdn := Data.Get('pdn', '');
+  FCaptureError := Data.Get('capture_error', '');
   FPlayedResult := Data.Get('played_result', '');
   FManualResult := Data.Get('manual_result', '');
   History := Data.Find('history');
@@ -101,7 +106,14 @@ procedure TTournamentGameRecord.RecordPlayedGame(const APdn, AResult: string);
 begin
   FPdn := APdn;
   FPlayedResult := AResult;
-  FManualResult := '';
+  if FCaptureError = '' then FManualResult := '';
+  FCaptureError := '';
+end;
+
+procedure TTournamentGameRecord.RecordCaptureFailure(const AResult, AError: string);
+begin
+  FPlayedResult := AResult;
+  FCaptureError := AError;
 end;
 
 procedure TTournamentGameRecord.OverrideResult(const AResult: string);
@@ -115,6 +127,7 @@ begin
   if HasRecord then
     FHistory.Add(CurrentJson);
   Inc(FAttempt);
+  FCaptureError := '';
   FPdn := '';
   FPlayedResult := '';
   FManualResult := '';
@@ -122,7 +135,7 @@ end;
 
 function TTournamentGameRecord.HasRecord: Boolean;
 begin
-  Result := (FPdn <> '') or (FPlayedResult <> '') or (FManualResult <> '');
+  Result := (FPdn <> '') or (FPlayedResult <> '') or (FManualResult <> '') or (FCaptureError <> '');
 end;
 
 function TTournamentGameRecord.EffectiveResult: string;
@@ -174,6 +187,8 @@ begin
       SetTag('FEN', AFen);
       SetTag('RecordSource', 'standings');
     end;
+    if FCaptureError <> '' then
+    begin SetTag('RecordSource', 'capture-failed'); SetTag('CaptureError', FCaptureError); end;
     SetTag('Event', AEvent);
     SetTag('TournamentId', ATournamentId);
     SetTag('Round', ARound);

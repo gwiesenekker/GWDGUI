@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Isolate failed tournament captures to their rows (T20)
+
+- Persist a failed capture's result and diagnostic in its row and PDN placeholder,
+  pause scheduling, and keep unrelated result edits, autosaves and Save As working.
+- Keep capture retries available while the live game exists, preserve manual
+  overrides during retry, and detach pending references when a game is removed.
+- Allow explicit rescheduling, retaining the failed attempt in history. Show failed
+  captures in the row and window title, including after reload.
+- Validation: record and GTK tournament checks cover deterministic failure, retry,
+  another row's durable result, Save As, removal and rescheduling.
+
 ### 2026-10-25 — Distinguish tournament engine configurations (T19)
 
 - Include arguments, initialization/INI settings and DXP endpoint settings in

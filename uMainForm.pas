@@ -7051,7 +7051,10 @@ begin
 
   LIndex := FGamesListBox.Items.IndexOfObject(AGame);
   if (FTournamentDialog <> nil) and AGame.IsTournamentGame then
+  begin
     FTournamentDialog.GameStopped(AGame);
+    FTournamentDialog.GameRemoved(AGame);
+  end;
   FGames.Remove(AGame);
   if LIndex >= 0 then
     FGamesListBox.Items.Delete(LIndex);

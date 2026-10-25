@@ -70,7 +70,6 @@ type
     procedure ClearPairingsClick(Sender: TObject);
     procedure ClearStaleRunningReasons;
     procedure AutoSaveTournament;
-    function HasPendingCaptures: Boolean;
     procedure SaveTournamentSnapshot(const AFileName: string);
     procedure EnsureStoragePaths;
     function StartNewTournamentStorage: Boolean;
@@ -126,6 +125,7 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure GameStopped(AGame: TObject);
+    procedure GameRemoved(AGame: TObject);
     procedure RegisterRunningGame(ARow: Integer; AGame: TObject);
     function HasTournamentData: Boolean;
     function IsRunning: Boolean;
@@ -727,13 +727,6 @@ end;
 procedure TTournamentDialog.AutoSaveTournament;
 begin
   if FLoadingTournament then Exit;
-  if HasPendingCaptures then
-  begin
-    FRunning := False;
-    if FTimer <> nil then FTimer.Enabled := ActiveRunningGameCount > 0;
-    if not FClosing then UpdateButtons;
-    Exit;
-  end;
   FStorageError := '';
   try
     EnsureStoragePaths;
@@ -761,18 +754,6 @@ begin
   Result := TTournamentGameRecord(FGameRecords[ARow - 1]);
 end;
 
-function TTournamentDialog.HasPendingCaptures: Boolean;
-var I: Integer; Running: TTournamentRunningGame;
-begin
-  for I := 0 to FRunningGames.Count - 1 do
-  begin
-    Running := TTournamentRunningGame(FRunningGames[I]);
-    if Running.PendingCapture then
-    begin FStorageError := Running.CaptureError; Exit(True); end;
-  end;
-  Result := False;
-end;
-
 function TTournamentDialog.CaptureGamePdn(AGame: TObject): string;
 begin
   Result := GameTreeToPdnText(TRunningGame(AGame).GameTree);
@@ -793,7 +774,9 @@ begin
       ARunningGame.Active := False;
       ARunningGame.PendingCapture := True;
       ARunningGame.CaptureError := 'Could not capture finished game: ' + E.Message;
-      FStorageError := ARunningGame.CaptureError;
+      GameRecord(ARunningGame.Row).RecordCaptureFailure(TRunningGame(AGame).ResultText,
+        ARunningGame.CaptureError);
+      FGrid.Cells[TournamentColReason, ARunningGame.Row] := 'Capture failed: ' + ARunningGame.CaptureError;
       FRunning := False;
     end;
   end;
@@ -1240,7 +1223,6 @@ end;
 
 procedure TTournamentDialog.SetSelectedResult(const AResultText: string);
 begin
-  if HasPendingCaptures then Exit;
   if (FGrid = nil) or (FGrid.Row <= 0) or
     (FGrid.Row >= FGrid.RowCount) or IsRowRunning(FGrid.Row) or
     (not TournamentGridHasPairingAtRow(FGrid, FGrid.Row)) then
@@ -1268,7 +1250,8 @@ end;
 
 procedure TTournamentDialog.RescheduleSelectedGame(Sender: TObject);
 var
-  Row: Integer;
+  Row, I: Integer;
+  Running: TTournamentRunningGame;
 begin
   if FStorageError <> '' then Exit;
   Row := FGrid.Row;
@@ -1279,6 +1262,12 @@ begin
   if not TournamentGridHasPairingAtRow(FGrid, Row) then
     Exit;
 
+  for I := 0 to FRunningGames.Count - 1 do
+  begin
+    Running := TTournamentRunningGame(FRunningGames[I]);
+    if Running.Row = Row then
+    begin Running.PendingCapture := False; Running.Active := False; Running.GameId := 0; end;
+  end;
   GameRecord(Row).Reschedule;
   FGrid.Cells[TournamentColResult, Row] := '*';
   FGrid.Cells[TournamentColReason, Row] := '';
@@ -1334,7 +1323,6 @@ begin
     Game := TournamentRunningGameFor(Owner, Running);
     if Game <> nil then CaptureTournamentGame(Running, Game);
   end;
-  if HasPendingCaptures then raise EInOutError.Create(FStorageError);
   OldJson := FFileName;
   OldPdn := FPdnFileName;
   OldOwned := FPdnFileOwned;
@@ -1536,6 +1524,8 @@ begin
             FGrid.Cells[TournamentColReason, Row] := 'Manual result'
           else
             FGrid.Cells[TournamentColReason, Row] := Game.Get('reason', '');
+          if GameRecord(Row).CaptureError <> '' then
+            FGrid.Cells[TournamentColReason, Row] := 'Capture failed: ' + GameRecord(Row).CaptureError;
         end;
     FTournamentId := Data.Get('tournament_id', '');
     if FTournamentId = '' then
@@ -1789,6 +1779,21 @@ begin
   AutoSaveTournament;
 end;
 
+procedure TTournamentDialog.GameRemoved(AGame: TObject);
+var I: Integer; Running: TTournamentRunningGame;
+begin
+  if not (AGame is TRunningGame) then Exit;
+  for I := FRunningGames.Count - 1 downto 0 do
+  begin
+    Running := TTournamentRunningGame(FRunningGames[I]);
+    if Running.GameId = TRunningGame(AGame).Id then
+    begin Running.Free; FRunningGames.Delete(I); end;
+  end;
+  // A capture error/result is already durable row data. Removing its live game
+  // must not leave an unretryable pending reference blocking subsequent saves.
+  AutoSaveTournament;
+end;
+
 procedure TTournamentDialog.GameStopped(AGame: TObject);
 var
   I: Integer;
@@ -1814,6 +1819,13 @@ begin
       begin
         ApplyTournamentGameResultToRow(FGrid, RunningGame.Row,
           TRunningGame(AGame));
+        if GameRecord(RunningGame.Row).ManualResult <> '' then
+        begin
+          FGrid.Cells[TournamentColResult, RunningGame.Row] := GameRecord(RunningGame.Row).EffectiveResult;
+          FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Manual result';
+        end;
+        if GameRecord(RunningGame.Row).CaptureError <> '' then
+          FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Capture failed: ' + GameRecord(RunningGame.Row).CaptureError;
       end
       else
       begin
@@ -1966,6 +1978,13 @@ begin
     if Game.State in [gosGameOver, gosError] then
     begin
       ApplyTournamentGameResultToRow(FGrid, RunningGame.Row, Game);
+      if GameRecord(RunningGame.Row).ManualResult <> '' then
+      begin
+        FGrid.Cells[TournamentColResult, RunningGame.Row] := GameRecord(RunningGame.Row).EffectiveResult;
+        FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Manual result';
+      end;
+      if GameRecord(RunningGame.Row).CaptureError <> '' then
+        FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Capture failed: ' + GameRecord(RunningGame.Row).CaptureError;
     end
     else if (RunningGame.Row > 0) and (RunningGame.Row < FGrid.RowCount) then
     begin
@@ -1991,7 +2010,7 @@ end;
 
 procedure TTournamentDialog.UpdateButtons;
 var
-  I: Integer;
+  I, FailedCaptures: Integer;
   Button: TComponent;
 const
   PairingActions: array[0..3] of string = ('CreatePairing', 'ClearPairing',
@@ -2007,6 +2026,10 @@ begin
         ((PairingActions[I] = 'LoadTournament') or (FStorageError = ''));
   end;
   Caption := 'Tournament';
+  FailedCaptures := 0;
+  for I := 0 to FGameRecords.Count - 1 do
+    if TTournamentGameRecord(FGameRecords[I]).CaptureError <> '' then Inc(FailedCaptures);
+  if FailedCaptures > 0 then Caption := Caption + ' - ' + IntToStr(FailedCaptures) + ' game capture(s) failed; see rows';
   if FStorageNotice <> '' then Caption := Caption + ' - ' + FStorageNotice;
   if FStorageError <> '' then
     Caption := Caption + ' - save failed: ' + FStorageError;

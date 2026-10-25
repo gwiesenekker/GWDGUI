@@ -152,6 +152,7 @@ var
 begin
   CheckInteger(Data, 'attempt', 1);
   CheckField(Data, 'pdn', [jtString]);
+  CheckField(Data, 'capture_error', [jtString]);
   CheckField(Data, 'white_engine_key', [jtString]);
   CheckField(Data, 'black_engine_key', [jtString]);
   CheckField(Data, 'played_result', [jtString]);
