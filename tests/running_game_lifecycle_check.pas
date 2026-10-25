@@ -10,6 +10,10 @@ uses
   uGameSetupForm, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
 
 type
+  TLogRunner = class(TGameRunnerThread)
+    procedure InjectWorkerLog;
+  end;
+
   TObserver = class
     Lock: TCriticalSection;
     Ready, Complete, Rejected, TwoMoves: TEvent;
@@ -50,8 +54,15 @@ begin
   inherited Destroy;
 end;
 
+procedure TLogRunner.InjectWorkerLog;
+begin
+  RuntimeLog(Self, 'asynchronous engine worker log');
+end;
+
 procedure TObserver.Snapshot(Sender: TObject; AData: TGameRunnerSnapshot);
 begin
+  Check(GetCurrentThreadID = TGameRunnerThread(Sender).ThreadID,
+    'snapshots must only be constructed/published on the owning runner thread');
   Lock.Acquire;
   try
     Last.AssignFrom(AData);
@@ -73,7 +84,7 @@ procedure CheckCompletedResultSurvivesStop;
 var
   Setup: TGameSetup;
   Observer: TObserver;
-  Runner: TGameRunnerThread;
+  Runner: TLogRunner;
   Game: TRunningGame;
   Input: TRunningSnapshotTreeInput;
   Ready, Complete: Boolean;
@@ -85,9 +96,10 @@ begin
   Setup.TimeControl := DefaultTimeControl;
   Setup.TimeControl.MinutesPerPeriod := 0;
   Observer := TObserver.Create;
-  Runner := TGameRunnerThread.Create(Setup, 1, @Observer.Snapshot, nil);
+  Runner := TLogRunner.Create(Setup, 1, @Observer.Snapshot, nil);
   Game := nil;
   try
+    Runner.InjectWorkerLog;
     Runner.Start;
     Ready := Observer.Ready.WaitFor(5000) = wrSignaled;
     Runner.PostHumanMove('32-28');
@@ -172,7 +184,7 @@ procedure CheckIllegalHumanInputIsRejected;
 var
   Setup: TGameSetup;
   Observer: TObserver;
-  Runner: TGameRunnerThread;
+  Runner: TLogRunner;
   Rejected, Continued: Boolean;
   Moves: TGameMoveDataArray;
   CopySnapshot: TGameRunnerSnapshot;
@@ -183,11 +195,12 @@ begin
   Setup.BlackPlayer := pkHuman;
   Setup.TimeControl := DefaultTimeControl;
   Observer := TObserver.Create;
-  Runner := TGameRunnerThread.Create(Setup, 2, @Observer.Snapshot, nil);
+  Runner := TLogRunner.Create(Setup, 2, @Observer.Snapshot, nil);
   try
     Runner.Start;
     Check(Observer.Ready.WaitFor(5000) = wrSignaled, 'human game should initialize');
-    Sleep(100);
+    Sleep(600);
+    Runner.InjectWorkerLog;
     Runner.PostHumanMove('1-50');
     Rejected := Observer.Rejected.WaitFor(3000) = wrSignaled;
     Observer.Lock.Acquire;

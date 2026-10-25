@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Keep runner snapshots on their owning thread (M5)
+
+- Asynchronous engine log callbacks only append under the log lock; they cannot
+  snapshot the orchestrator while its runner is changing the board or history.
+  Runner-owned publication retains the accumulated log and completed move data.
+- Regress foreign-thread log delivery and assert snapshot callbacks always run
+  on the runner, including startup, human moves, rejection and shutdown.
+- Validation: thread-affinity regression fails before the fix; lifecycle suite passes.
+
 ### 2026-10-25 — Avoid phantom PDN games from header gaps and repeated results (P19)
 
 - Blank lines no longer split a header, including after its Result tag. Repeated

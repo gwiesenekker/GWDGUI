@@ -113,8 +113,8 @@ type
     procedure PublishSnapshotIfDue;
     procedure PublishFinished;
     procedure RequestStopFromRunner(const AReason: string);
-    procedure RuntimeLog(Sender: TObject; const AMessage: string);
   protected
+    procedure RuntimeLog(Sender: TObject; const AMessage: string);
     procedure Execute; override;
   public
     constructor Create(const ASetup: TGameSetup; AGameId: Integer;
@@ -725,7 +725,9 @@ begin
   if (not FShowStdout) and (Pos('stdout;', LowerCase(AMessage)) > 0) then
     Exit;
   AddGameLog(AMessage);
-  PublishSnapshotIfDue;
+  // Engine stdout may arrive on a worker thread while PlayMove mutates board
+  // and history. Logs are locked; snapshots belong exclusively to the runner.
+  if GetCurrentThreadID = ThreadID then PublishSnapshotIfDue;
 end;
 
 procedure TGameRunnerThread.Execute;
