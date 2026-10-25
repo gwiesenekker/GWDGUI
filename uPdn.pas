@@ -60,6 +60,7 @@ type
     ATotalBytes: Int64; var AStop: Boolean) of object;
 
 procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList);
+procedure LoadPdnGamesFromText(const AText: string; AGames: TList);
 procedure ReadPdnGamesFromFile(const AFileName: string;
   AOnGame: TPdnGameReadEvent; AHeadersOnly: Boolean = False);
 procedure AppendPdnGameToFile(const AFileName: string; AGame: TPdnGame);
@@ -1249,7 +1250,8 @@ begin
 end;
 
 procedure ReadPdnGamesInternal(const AFileName: string;
-  AOnGame: TPdnGameReadEvent; AOwnedGames: TList; AHeadersOnly: Boolean); forward;
+  AOnGame: TPdnGameReadEvent; AOwnedGames: TList; AHeadersOnly: Boolean;
+  AStream: TStream = nil); forward;
 
 procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList);
 begin
@@ -1258,8 +1260,19 @@ begin
   ReadPdnGamesInternal(AFileName, nil, AGames, False);
 end;
 
+procedure LoadPdnGamesFromText(const AText: string; AGames: TList);
+var Stream: TStringStream;
+begin
+  if AGames = nil then Exit;
+  ClearGameList(AGames);
+  Stream := TStringStream.Create(AText);
+  try ReadPdnGamesInternal('', nil, AGames, False, Stream);
+  finally Stream.Free; end;
+end;
+
 procedure ReadPdnGamesInternal(const AFileName: string;
-  AOnGame: TPdnGameReadEvent; AOwnedGames: TList; AHeadersOnly: Boolean);
+  AOnGame: TPdnGameReadEvent; AOwnedGames: TList; AHeadersOnly: Boolean;
+  AStream: TStream);
 var
   Buffer: array[0..65535] of Byte;
   BytesRead, I, J, BraceDepth, VariationDepth: Integer;
@@ -1269,7 +1282,7 @@ var
   MoveLine, TagText, Token: TStringBuilder;
   Stop, InTag, InQuote, Escaped, InLineComment, CommentEscaped: Boolean;
   HasMovetext, LineHasContent, PreviousCR, ResultSeen: Boolean;
-  Stream: TFileStream;
+  Stream: TStream;
   TotalBytes: Int64;
 
   procedure EnsureGame;
@@ -1460,7 +1473,8 @@ begin
   HeaderNames := TStringList.Create;
   Stream := nil;
   try
-    Stream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
+    Stream := AStream;
+    if Stream = nil then Stream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
     TotalBytes := Stream.Size;
     // Accept the optional UTF-8 BOM without passing it to the token reader.
     BytesRead := Stream.Read(Buffer, 3);
@@ -1535,7 +1549,7 @@ begin
     MoveLine.Free;
     HeaderNames.Free;
     MoveLines.Free;
-    Stream.Free;
+    if AStream = nil then Stream.Free;
   end;
 end;
 

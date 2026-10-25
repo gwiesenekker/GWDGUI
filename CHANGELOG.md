@@ -3,6 +3,20 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Retain complete imported database games (P13)
+
+- Store complete PDN alongside canonical mainline position rows, preserving root
+  comments, nested variations and typed node analysis through database load.
+- Include the complete serialized game in duplicate identity so distinct notes
+  and branches cannot be silently discarded. Canonicalization no longer mutates
+  the parsed source tree before storage.
+- Migrate existing rows without rewriting them, record schema version 4, and
+  refuse newer schemas. Creating a database now refuses an existing filename;
+  opening a database requires an existing file.
+- Regress nested analysis round trips, annotation-sensitive duplicates, legacy
+  migration, existing-file protection and future-version protection.
+- Validation: database recovery and PDN regression suites pass.
+
 ### 2026-10-25 — Preserve typed node analysis through PDN (P15)
 
 - Save PVs, scores, depths, timings and clocks in a versioned PDN comment

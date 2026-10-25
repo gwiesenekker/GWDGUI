@@ -38,6 +38,7 @@ type
     FConnection: TSQLite3Connection;
     FFileName: string;
     FTransaction: TSQLTransaction;
+    procedure InitializeDatabase(const AFileName: string);
     procedure ClearObjectList(AList: TList);
     procedure CommitActiveTransaction;
     function ContinuationSummaryAvailable: Boolean;
@@ -95,6 +96,7 @@ type
     FErrors: Integer;
     FGame: TPdnGame;
     FGameId: Integer;
+    FFullPdn: string;
     FGameInsertQuery: TSQLQuery;
     FHashQuery: TSQLQuery;
     FIdQuery: TSQLQuery;
@@ -353,8 +355,8 @@ begin
   FMoves := TStringList.Create;
   FGameInsertQuery := FDatabase.Query;
   FGameInsertQuery.SQL.Text :=
-    'insert into games(game_hash_lo, game_hash_hi, white, black, event, result, starting_fen, moves_text, annotations_text, ply_count) ' +
-    'values(:game_hash_lo, :game_hash_hi, :white, :black, :event, :result, :starting_fen, :moves_text, :annotations_text, :ply_count)';
+    'insert into games(game_hash_lo, game_hash_hi, white, black, event, result, starting_fen, moves_text, annotations_text, full_pdn, ply_count) ' +
+    'values(:game_hash_lo, :game_hash_hi, :white, :black, :event, :result, :starting_fen, :moves_text, :annotations_text, :full_pdn, :ply_count)';
   FHashQuery := FDatabase.Query;
   FHashQuery.SQL.Text :=
     'select id from games where game_hash_lo = :game_hash_lo and game_hash_hi = :game_hash_hi limit 1';
@@ -431,7 +433,6 @@ procedure TDatabasePdnImporter.CanonicalizeMovesForImport;
 var
   LLegalMove: string;
   LMove: string;
-  LMovesText: string;
   Points: Integer;
 begin
   FBoard.LoadFromFEN(FGame.StartingFEN);
@@ -447,8 +448,7 @@ begin
     FBoard.PlayMove(LLegalMove, False, False);
   end;
 
-  LMovesText := Trim(StringReplace(FMoves.Text, LineEnding, ' ', [rfReplaceAll]));
-  FGame.MovesText := LMovesText;
+  // Keep the parsed tree intact; FMoves alone supplies canonical position rows.
 end;
 
 procedure TDatabasePdnImporter.CommitBatchIfNeeded;
@@ -464,14 +464,7 @@ function TDatabasePdnImporter.GameHash: THash128;
 var
   LHashText: string;
 begin
-  LHashText :=
-    'gwdgui-db-v3-game-fnv1a128' + #10 +
-    Trim(FGame.EventName) + #10 +
-    Trim(FGame.WhiteName) + #10 +
-    Trim(FGame.BlackName) + #10 +
-    Trim(FGame.ResultText) + #10 +
-    Trim(FGame.StartingFEN) + #10 +
-    Trim(FGame.MovesText);
+  LHashText := 'gwdgui-db-v4-complete-game' + #10 + FFullPdn;
   Result := Fnv1a128Value(LHashText);
 end;
 
@@ -553,6 +546,7 @@ begin
         Exit;
       end;
     end;
+    FFullPdn := PdnGameToText(FGame);
     LGameHash := GameHash;
     if IsDuplicateGame(LGameHash) then
     begin
@@ -571,8 +565,9 @@ begin
     FGameInsertQuery.ParamByName('event').AsString := FGame.EventName;
     FGameInsertQuery.ParamByName('result').AsString := FGame.ResultText;
     FGameInsertQuery.ParamByName('starting_fen').AsString := FGame.StartingFEN;
-    FGameInsertQuery.ParamByName('moves_text').AsString := FGame.MovesText;
+    FGameInsertQuery.ParamByName('moves_text').AsString := Trim(StringReplace(FMoves.Text, LineEnding, ' ', [rfReplaceAll]));
     FGameInsertQuery.ParamByName('annotations_text').AsString := FGame.MoveAnnotationsText;
+    FGameInsertQuery.ParamByName('full_pdn').AsString := FFullPdn;
     FGameInsertQuery.ParamByName('ply_count').AsInteger := FMoves.Count;
     FGameInsertQuery.ExecSQL;
 
@@ -782,6 +777,13 @@ begin
 end;
 
 procedure TGameDatabase.CreateDatabase(const AFileName: string);
+begin
+  if FileExists(AFileName) then
+    raise EInvalidOperation.Create('Database already exists. Open it or choose a new filename.');
+  InitializeDatabase(AFileName);
+end;
+
+procedure TGameDatabase.InitializeDatabase(const AFileName: string);
 var
   Q: TSQLQuery;
 begin
@@ -791,6 +793,11 @@ begin
   StartTransactionIfNeeded;
   Q := Query;
   try
+    Q.SQL.Text := 'pragma user_version';
+    Q.Open;
+    if Q.Fields[0].AsInteger > 4 then
+      raise EInvalidOperation.Create('This database was created by a newer GWDGUI version');
+    Q.Close;
     Q.SQL.Text :=
       'create table if not exists games (' +
       'id integer primary key autoincrement,' +
@@ -801,6 +808,10 @@ begin
       'ply_count integer)';
     Q.ExecSQL;
     EnsureGameHashColumns;
+    if not TableColumnExists('games', 'full_pdn') then
+      ExecuteSql('alter table games add column full_pdn text');
+    // user_version 4 adds complete PDN storage; legacy rows retain their data.
+    ExecuteSql('pragma user_version=4');
     Q.SQL.Text :=
       'create table if not exists positions (' +
       'id integer primary key autoincrement,' +
@@ -830,7 +841,9 @@ end;
 
 procedure TGameDatabase.OpenDatabase(const AFileName: string);
 begin
-  CreateDatabase(AFileName);
+  if not FileExists(AFileName) then
+    raise EInvalidOperation.Create('Database file does not exist');
+  InitializeDatabase(AFileName);
 end;
 
 procedure TGameDatabase.ImportPdnFile(const AFileName: string; out AImported,
@@ -1034,6 +1047,8 @@ end;
 function TGameDatabase.LoadGameById(AGameId: Integer): TPdnGame;
 var
   Q: TSQLQuery;
+  Games: TList;
+  I: Integer;
 begin
   if not FConnection.Connected then
     raise EInvalidOperation.Create('No database is open');
@@ -1042,13 +1057,28 @@ begin
   Q := Query;
   try
     Q.SQL.Text :=
-      'select white, black, event, result, starting_fen, moves_text, annotations_text ' +
+      'select white, black, event, result, starting_fen, moves_text, annotations_text, full_pdn ' +
       'from games where id = :id';
     Q.ParamByName('id').AsInteger := AGameId;
     Q.Open;
     if Q.EOF then
       raise EInvalidOperation.Create('Game not found');
 
+    if Q.FieldByName('full_pdn').AsString <> '' then
+    begin
+      Games := TList.Create;
+      try
+        LoadPdnGamesFromText(Q.FieldByName('full_pdn').AsString, Games);
+        if Games.Count <> 1 then
+          raise EConvertError.Create('Stored database game is not a single PDN game');
+        Result := TPdnGame(Games[0]);
+        Games.Clear;
+      finally
+        for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
+        Games.Free;
+      end;
+      Exit;
+    end;
     Result := TPdnGame.Create;
     Result.WhiteName := Q.FieldByName('white').AsString;
     Result.BlackName := Q.FieldByName('black').AsString;

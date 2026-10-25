@@ -3,7 +3,7 @@ program database_import_recovery_check;
 {$mode objfpc}{$H+}
 
 uses
-  Classes, SysUtils, Process, SQLite3Conn, SQLDB, uDraughtsBoard, uGameDatabase;
+  Classes, SysUtils, Process, SQLite3Conn, SQLDB, uDraughtsBoard, uGameDatabase, uPdn, uGameTreeNodeData;
 
 type
   TImportObserver = class
@@ -301,6 +301,63 @@ begin
   end;
 end;
 
+procedure CheckCompleteGameStorage(const DbName, PdnName: string);
+var Database: TGameDatabase; Lines: TStringList; Game: TPdnGame;
+  Root: TPdnMoveNode; Data: TGameTreeNodeData; Imported, Duplicates, Errors: Integer;
+  Raised: Boolean;
+begin
+  Database := TGameDatabase.Create; Lines := TStringList.Create;
+  try
+    Data := Default(TGameTreeNodeData); Data.CommentText := 'branch note';
+    Data.EnginePV := '20-25'; Data.EnginePVDepth := '20';
+    Lines.Text := '[Event "complete"]' + LineEnding +
+      '{introduction} 1.32-28 (1.34-30 {branch note} {' +
+      EncodeNodeData(Data, 'branch note') + '} 20-25 (1...18-23)) 18-23 *';
+    Lines.SaveToFile(PdnName);
+    Database.CreateDatabase(DbName);
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
+    Check((Imported = 1) and (Errors = 0), 'complete import succeeds');
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
+    Check((Imported = 0) and (Duplicates = 1), 'complete duplicate recognized');
+    Lines.Text := StringReplace(Lines.Text, 'introduction', 'revised introduction', []);
+    Lines.SaveToFile(PdnName);
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
+    Check(Imported = 1, 'distinct annotation must not disappear as duplicate');
+    Database.Close; Database.OpenDatabase(DbName);
+    Game := Database.LoadGameById(1);
+    try
+      Root := Game.BuildMoveTree;
+      try
+        Check(Root.AnnotationText = 'introduction', 'database retains initial comment');
+        Check(Root.ChildCount = 2, 'database retains root variation');
+        Check(Root.Children[1].ChildCount = 2, 'database retains nested variation');
+        Check(Root.Children[1].HasNodeData and
+          (Root.Children[1].NodeData.EnginePVDepth = '20'), 'database retains typed analysis');
+      finally Root.Free; end;
+    finally Game.Free; end;
+    Database.Close;
+    Check(Scalar(DbName, 'pragma user_version') = 4, 'complete schema version persisted');
+    RawSQL(DbName, 'alter table games drop column full_pdn');
+    RawSQL(DbName, 'pragma user_version=0');
+    Database.OpenDatabase(DbName);
+    Game := Database.LoadGameById(1);
+    try Check(Game.MovesText = '32-28 18-23', 'legacy migration preserves canonical moves');
+    finally Game.Free; end;
+    Database.Close;
+    Check(Scalar(DbName, 'pragma user_version') = 4, 'legacy schema migrated');
+    Raised := False;
+    try Database.CreateDatabase(DbName); except on E: EInvalidOperation do Raised := True; end;
+    Check(Raised, 'create must not silently append to an existing database');
+    Check(Scalar(DbName, 'select count(*) from games') = 2, 'refused create preserves games');
+    RawSQL(DbName, 'pragma user_version=99');
+    Raised := False;
+    try Database.OpenDatabase(DbName); except on E: EInvalidOperation do Raised := True; end;
+    Check(Raised, 'future database schema must be refused');
+    Database.Close;
+    Check(Scalar(DbName, 'pragma user_version') = 99, 'future version remains unchanged');
+  finally Lines.Free; Database.Free; end;
+end;
+
 var
   DbName, PdnName: string;
   Database: TGameDatabase;
@@ -321,6 +378,8 @@ begin
   PdnName := GetTempFileName(GetTempDir, 'gwd-recovery');
   DbName := PdnName + '.db';
   try
+    CheckCompleteGameStorage(DbName, PdnName);
+    DeleteFile(DbName);
     CheckLiveSummary(DbName, PdnName);
     DeleteFile(DbName);
     CheckFailedRebuild(DbName, PdnName);
