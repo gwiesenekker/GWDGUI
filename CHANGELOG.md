@@ -3,6 +3,13 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Keep canonical capture identities in fast storage (F8/P22)
+
+- Reuse the importer’s already validated mainline moves in the storage writer,
+  so standard and internal capture spellings retain the same duplicate identity
+  without an additional replay.
+- Validation: standard/internal capture reimport and database recovery checks pass.
+
 ### 2026-10-25 — Isolate auxiliary process pipes and default zero startup timeouts
 
 - Launch the monitor-query process under the same lock as engines, protect its

@@ -656,7 +656,7 @@ begin
         Exit;
       end;
     end;
-    FFullPdn := PdnGameToStorageText(FGame);
+    FFullPdn := PdnGameToStorageText(FGame, FMoves);
     LGameHash := GameHash;
     if IsDuplicateGame(LGameHash) or IsLegacyDuplicate then
     begin

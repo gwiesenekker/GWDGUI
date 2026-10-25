@@ -71,7 +71,7 @@ procedure ReadPdnGamesFromFile(const AFileName: string;
 procedure AppendPdnGameToFile(const AFileName: string; AGame: TPdnGame);
 procedure AppendPdnTextToFile(const AFileName, APdnText: string);
 function PdnGameToText(AGame: TPdnGame): string;
-function PdnGameToStorageText(AGame: TPdnGame): string;
+function PdnGameToStorageText(AGame: TPdnGame; CanonicalMainline: TStrings = nil): string;
 function PdnExportResult(const AText: string): string;
 function EscapePdnComment(const Text: string): string;
 function NormalizePdnComment(const Text: string): string;
@@ -1718,7 +1718,7 @@ begin
   Result := FParsedRoot.Clone;
 end;
 
-function RenderPdnGame(AGame: TPdnGame; StandardNotation: Boolean): string;
+function RenderPdnGame(AGame: TPdnGame; StandardNotation: Boolean; CanonicalMainline: TStrings = nil): string;
 var
   Lines, Mainline: TStringList;
   Root: TPdnMoveNode;
@@ -1754,6 +1754,8 @@ var
       if Side = dsWhite then Output.Append('. ') else Output.Append('... ');
     end;
     Text := Node.MoveText;
+    if IsMainline and (CanonicalMainline <> nil) and (Ply < CanonicalMainline.Count) then
+      Text := CanonicalMainline[Ply];
     if PositionValid then Text := Before.PdnMoveNotation(Text);
     Output.Append(Text);
     WriteAnnotation(Node);
@@ -1842,11 +1844,11 @@ end;
 function PdnGameToText(AGame: TPdnGame): string;
 begin Result := RenderPdnGame(AGame, True); end;
 
-function PdnGameToStorageText(AGame: TPdnGame): string;
+function PdnGameToStorageText(AGame: TPdnGame; CanonicalMainline: TStrings): string;
 begin
   // Internal storage retains the parsed notation; public exports still validate
   // positions and resolve ambiguous captures to standard PDN paths.
-  Result := RenderPdnGame(AGame, False);
+  Result := RenderPdnGame(AGame, False, CanonicalMainline);
 end;
 
 end.

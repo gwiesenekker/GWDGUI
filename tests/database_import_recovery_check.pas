@@ -404,13 +404,22 @@ begin
     Lines.SaveToFile(PdnName);
     Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
     Check((Imported = 1) and (Duplicates = 0), 'legacy match must retain new notes and variations');
+    Lines.Text := '[Event "capture"]' + LineEnding + '[FEN "W:W32:B27,17"]' + LineEnding + '1.32x12 *';
+    Lines.SaveToFile(PdnName);
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
+    Check((Imported = 1) and (Errors = 0), 'standard capture imported');
+    Lines.Text := StringReplace(Lines.Text, '32x12', '32x12x27x17', []);
+    Lines.SaveToFile(PdnName);
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
+    Check((Imported = 0) and (Duplicates = 1), 'canonical capture aliases share an identity');
+
     Lines.Text := '[Event "large"]' + LineEnding + '{' + StringOfChar('a', 20000) + '} 1.32-28 *';
     Lines.SaveToFile(PdnName);
     Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
     Database.Close;
     Check(Scalar(DbName, 'select length(full_pdn) from games where event=''large''') < 1000,
       'complete storage compresses repeated comment data');
-    Database.OpenDatabase(DbName); Game := Database.LoadGameById(3);
+    Database.OpenDatabase(DbName); Game := Database.LoadGameById(4);
     try Check(Pos(StringOfChar('a', 20000), PdnGameToText(Game)) > 0, 'compressed full comment reloads');
     finally Game.Free; end;
   finally Lines.Free; Database.Free; end;
