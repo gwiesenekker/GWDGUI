@@ -3,7 +3,7 @@ program board_regression_check;
 {$mode objfpc}{$H+}
 
 uses
-  SysUtils,
+  Classes, SysUtils,
   uDraughtsBoard,
   uDxpProtocol;
 
@@ -63,6 +63,26 @@ begin
   Check(DxpMoveMessageToText('M000025340130', MoveText),
     'DXP capture move packet parses');
   CheckEqual(MoveText, '25x34x30', 'DXP capture move text is canonicalized');
+end;
+
+procedure CheckDxpHistoryReconciliation;
+var Exchanged, Current: TStringList; HasMove: Boolean;
+begin
+  Exchanged := TStringList.Create; Current := TStringList.Create;
+  try
+    Exchanged.Add('32-28'); Current.Assign(Exchanged);
+    Check(DxpHistoryMatches(Exchanged, Current, HasMove) and not HasMove, 'exact DXP history matches');
+    Current.Add('18-23');
+    Check(DxpHistoryMatches(Exchanged, Current, HasMove) and HasMove, 'one opponent move can be sent');
+    Current.Add('37-32');
+    Check(not DxpHistoryMatches(Exchanged, Current, HasMove), 'skipped exchanges rejected');
+    Current.Clear;
+    Check(not DxpHistoryMatches(Exchanged, Current, HasMove), 'takeback rejected');
+    Current.Add('33-28');
+    Check(not DxpHistoryMatches(Exchanged, Current, HasMove), 'changed prefix rejected');
+    Exchanged[0] := '032-028'; Current[0] := '32-28';
+    Check(DxpHistoryMatches(Exchanged, Current, HasMove), 'equivalent notation matches');
+  finally Current.Free; Exchanged.Free; end;
 end;
 
 procedure CheckStrictDxpPackets;
@@ -436,6 +456,7 @@ end;
 
 begin
   CheckMoveNormalization;
+  CheckDxpHistoryReconciliation;
   CheckStrictDxpPackets;
   CheckDxpMoveConversion;
   CheckInitialHumanMoveIsLegal;

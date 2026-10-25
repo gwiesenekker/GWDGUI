@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Reconcile DXP exchanges with the game record (D10)
+
+- Track the exact moves and starting position exchanged with a DXP peer. Send
+  only a single new opponent move after an unchanged prefix; reject takebacks,
+  changed prefixes, changed starts and skipped exchanges with a resynchronization
+  diagnostic instead of silently continuing a different game.
+- Record received engine moves in the exchanged history and wait for acceptance
+  when opening a resumed session. Recovery requires explicitly starting a new game.
+- Validation: board regressions cover matching/changed/shortened/skipped histories
+  and equivalent notation; the real TCP DXP suite passes.
+
 ### 2026-10-25 — Harden engine protocol boundaries and pipe ownership (D11/D12)
 
 - Retain partial DXP packets between timed reads, enforce the 127-byte limit,

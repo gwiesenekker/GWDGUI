@@ -18,6 +18,8 @@ type
     procedure Clear;
   end;
 
+function DxpHistoryMatches(AExchanged, ACurrent: TStrings;
+  out AHasOpponentMove: Boolean): Boolean;
 function DxpBuildGameReqPacket(ABoard: TDraughtsBoard; AEngineSide: TDraughtsSide;
   AGameMinutes: Double; AGameMoves: Integer; const ANameText: string): string;
 function DxpBuildGameReqFischerPacket(ABoard: TDraughtsBoard;
@@ -42,6 +44,19 @@ end;
 
 procedure TDxpPacketBuffer.Clear;
 begin FPartial := ''; end;
+
+function DxpHistoryMatches(AExchanged, ACurrent: TStrings;
+  out AHasOpponentMove: Boolean): Boolean;
+var I: Integer;
+begin
+  AHasOpponentMove := False;
+  Result := (ACurrent.Count >= AExchanged.Count) and
+    (ACurrent.Count <= AExchanged.Count + 1);
+  if not Result then Exit;
+  for I := 0 to AExchanged.Count - 1 do
+    if NormalizeMoveNotation(AExchanged[I]) <> NormalizeMoveNotation(ACurrent[I]) then Exit(False);
+  AHasOpponentMove := ACurrent.Count > AExchanged.Count;
+end;
 
 function Dxp2(AValue: Integer): string;
 begin

@@ -57,7 +57,8 @@ type
     FGameStarted: Boolean;
     FLastMovesText: string;
     FProcess: TPlatformProcess;
-    FSentMoveCount: Integer;
+    FExchangedMoves: TStringList;
+    FExchangedStartingFEN: string;
     FPacketBuffer: TDxpPacketBuffer;
     FSocket: TSocketStream;
     FSocketLock: TCriticalSection;
@@ -539,6 +540,7 @@ begin
   EngineName := FEngine.IdText;
   if EngineName = '' then
     EngineName := ChangeFileExt(FEngine.ExecutableName, '');
+  FExchangedMoves := TStringList.Create;
   FBoard := TDraughtsBoard.Create;
   FProcess := TPlatformProcess.Create;
   FProcess.SynchronizeData := False;
@@ -569,6 +571,7 @@ begin
   FSocketLock.Free;
   FProcess.Free;
   FBoard.Free;
+  FExchangedMoves.Free;
   FEngine.Free;
   inherited Destroy;
 end;
@@ -1280,7 +1283,8 @@ begin
   FGameMoves := AGameMoves;
   FGameIncrementSeconds := AIncrementSeconds;
   FGameStarted := False;
-  FSentMoveCount := 0;
+  FExchangedMoves.Clear;
+  FExchangedStartingFEN := StartingFEN;
   FPacketBuffer.Clear;
   FTotalUsedSeconds := 0;
 
@@ -1316,6 +1320,7 @@ var
   GameReq: string;
   MovePacket: string;
   PacketName: string;
+  HasOpponentMove: Boolean;
 begin
   if FSocket = nil then
     raise EInvalidOperation.Create('DXP socket is not connected');
@@ -1325,17 +1330,24 @@ begin
     GameReq := GameRequestPacket(CurrentSide, PacketName);
     SendPacket(PacketName, GameReq);
     FGameStarted := True;
-    FSentMoveCount := MovesPlayed.Count;
+    FExchangedMoves.Assign(MovesPlayed);
+    FExchangedStartingFEN := StartingFEN;
+    if not WaitForGameAccepted(EngineStartupTimeoutMs(FParams)) then
+      raise EInvalidOperation.Create('DXP engine did not accept the resumed game');
   end
-  else if MovesPlayed.Count > FSentMoveCount then
+  else if (StartingFEN <> FExchangedStartingFEN) or
+    not DxpHistoryMatches(FExchangedMoves, MovesPlayed, HasOpponentMove) then
+    raise EInvalidOperation.Create('DXP game history differs from exchanged moves; start a new game to resynchronize')
+  else if HasOpponentMove then
   begin
     MovePacket := DxpBuildMovePacket(LastMoveText, 0);
     SendPacket('DXP_MOVE', MovePacket);
-    FSentMoveCount := MovesPlayed.Count;
+    FExchangedMoves.Assign(MovesPlayed);
   end;
 
   ChangeState(esWaitingForDone, 'waiting for DXP_MOVE');
   Result := WaitForDxpMove(MoveTimeLimitMs);
+  if Result <> '' then FExchangedMoves.Add(NormalizeMoveNotation(Result));
 end;
 
 procedure TDxpEngine.DoStop;
