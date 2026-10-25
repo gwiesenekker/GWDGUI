@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Adjudicate flag fall before granting the next period (D14)
+
+- Check the current period's clock before adding the next period's allowance.
+  A late boundary move loses on time without changing the board or move history.
+- Retain the applicable increment policy used by engine deadlines.
+- Regress both colors, human/engine move sources, exact expiry, overspending and
+  successful in-time boundary moves receiving their next period.
+- Validation: boundary regression reproduces the old rescue; expanded engine clock checks pass.
+
 ### 2026-10-25 — Interrupt stuck annotators and report worker errors (D13)
 
 - Request engine cancellation before waiting for annotator shutdown, including

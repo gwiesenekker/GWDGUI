@@ -453,6 +453,17 @@ begin
   if LApplyIncrement then
     FRemainingSeconds[ASide] := FRemainingSeconds[ASide] + FTimeControl.IncrementSeconds;
 
+  // The next period is earned only by completing this one in time. Keep the
+  // applicable increment policy aligned with the engine's search deadline.
+  if FRemainingSeconds[ASide] <= 0 then
+  begin
+    if ASide = dsWhite then
+      FinishGame('0-2', 'flag fell for white')
+    else
+      FinishGame('2-0', 'flag fell for black');
+    Exit;
+  end;
+
   if (FTimeControl.MovesPerPeriod > 0) and
     (FMovesInPeriod[ASide] >= FTimeControl.MovesPerPeriod) then
   begin
@@ -468,13 +479,7 @@ begin
     '; total_used=' + FormatFloat('0.000', FUsedSeconds[ASide]) +
     '; remaining=' + FormatFloat('0.000', FRemainingSeconds[ASide]));
 
-  if FRemainingSeconds[ASide] <= 0 then
-  begin
-    if ASide = dsWhite then
-      FinishGame('0-2', 'flag fell for white')
-    else
-      FinishGame('2-0', 'flag fell for black');
-  end;
+
 end;
 
 function TGameOrchestrator.PlayNextMove: string;

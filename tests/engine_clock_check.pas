@@ -160,6 +160,65 @@ begin
   end;
 end;
 
+procedure CheckPeriodBoundary;
+var
+  Game: TGameOrchestrator;
+  Clock: TTimeControl;
+  Side: TDraughtsSide;
+  Used, SourceIndex: Integer;
+  Fen, FirstMove, Reply, LastMove, Source, BeforeMove: string;
+begin
+  for Side := Low(TDraughtsSide) to High(TDraughtsSide) do
+    for SourceIndex := 0 to 1 do
+      for Used := 49 to 51 do
+      begin
+        Game := TGameOrchestrator.Create;
+        try
+          Clock := DefaultTimeControl;
+          Clock.MinutesPerPeriod := 1;
+          Clock.MovesPerPeriod := 2;
+          Clock.IncrementSeconds := 0;
+          Game.TimeControl := Clock;
+          Fen := DefaultStartingFEN;
+          if Side = dsWhite then
+          begin
+            FirstMove := '32-28'; Reply := '18-23'; LastMove := '37-32';
+          end
+          else
+          begin
+            Fen[1] := 'B';
+            FirstMove := '18-23'; Reply := '32-28'; LastMove := '23x32';
+          end;
+          if SourceIndex = 0 then Source := 'human' else Source := 'engine';
+          Game.NewGame(Fen);
+          Game.PlayMove(FirstMove, Side, 10, Source);
+          Game.PlayMove(Reply, Game.Board.SideToMove, 0, 'human');
+          BeforeMove := Game.Board.CurrentFEN;
+          Game.PlayMove(LastMove, Side, Used, Source);
+          if Used >= 50 then
+          begin
+            Check(Game.State = gosGameOver, 'period time must not rescue an exhausted clock');
+            if Side = dsWhite then
+              Check(Game.GameResult = '0-2', 'White loses on period-boundary flag')
+            else
+              Check(Game.GameResult = '2-0', 'Black loses on period-boundary flag');
+            Check((Game.Board.CurrentFEN = BeforeMove) and (Game.MovesPlayed.Count = 2),
+              'flagged boundary move must not enter the board or history');
+            Check(Game.RemainingSeconds[Side] <= 0, 'flagged side must not receive next period');
+          end
+          else
+          begin
+            Check((Game.State = gosRunning) and (Game.MovesPlayed.Count = 3),
+              'in-time boundary move must be accepted');
+            Check(Abs(Game.RemainingSeconds[Side] - 61) < 0.001,
+              'in-time boundary move must earn the next period allowance');
+          end;
+        finally
+          Game.Free;
+        end;
+      end;
+end;
+
 procedure CheckReuseAfterClockTimeout;
 var
   Game: TGameOrchestrator;
@@ -204,6 +263,7 @@ begin
     CheckClockedThink('--fast-hub', dsWhite, 2, 0, False);
     CheckClockedThink('--delayed-hub', dsWhite, 0.002, 0.2, False);
     CheckIncrementAfterMoveLimit;
+    CheckPeriodBoundary;
     CheckReuseAfterClockTimeout;
   end;
   WriteLn('OK');
