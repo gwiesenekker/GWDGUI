@@ -79,6 +79,7 @@ type
       AIncrementSeconds: Double = 0.0); virtual;
     procedure NewGame(const AStartingFEN: string); virtual;
     procedure DoMove(const AMove: string); virtual;
+    procedure ReadSearchInfo(out APv, AScore, ADepth, ATime: string);
     procedure LogCurrentState(const AReason: string = ''); virtual;
     function ReceiveMessage(const AMessage: string): string; virtual;
     procedure RequestStop; virtual;
@@ -302,6 +303,15 @@ begin
   finally
     FLastErrorLock.Release;
   end;
+end;
+
+procedure TDraughtsEngine.ReadSearchInfo(out APv, AScore, ADepth, ATime: string);
+begin
+  FPvLock.Acquire;
+  try
+    APv := FPrincipalVariation; AScore := FLastScore;
+    ADepth := FLastDepth; ATime := FLastTimeText;
+  finally FPvLock.Release; end;
 end;
 
 function TDraughtsEngine.GetLastScore: string;

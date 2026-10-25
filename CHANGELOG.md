@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Publish live engine analysis from stable position snapshots (M6)
+
+- Keep full position/history snapshots on the owning runner thread. During a
+  search, engine log callbacks may publish a copy of its last stable snapshot
+  with current locked PV/score/depth/time and log data, throttled to 500 ms.
+- Gate updates by the active engine and serialize publication so no stale live
+  update follows the completed move. Never read the orchestrator on an engine thread.
+- Regress a two-second fake Hub think with live info, verifying analysis arrives
+  before the move, its board/history stay unchanged and the final move follows.
+- Validation: Lazarus lifecycle/runner regressions pass.
+
 ### 2026-10-25 — Compare DXP captures independently of square order (D16)
 
 - Compare source, destination and the captured-square multiset for exchanged DXP

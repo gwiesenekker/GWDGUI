@@ -10,7 +10,7 @@ uses
   cthreads,
   {$ENDIF}
   Interfaces, Classes, SysUtils, SyncObjs, uMainForm, uGameRunnerThread,
-  uGameSetupForm, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
+  uEngineRegistry, uDraughtsBoard, uGameSetupForm, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
 
 type
   TLogRunner = class(TGameRunnerThread)
@@ -19,7 +19,7 @@ type
 
   TObserver = class
     Lock: TCriticalSection;
-    Ready, Complete, Rejected, TwoMoves: TEvent;
+    Ready, Complete, Rejected, TwoMoves, Live, OneMove: TEvent;
     Last: TGameRunnerSnapshot;
     constructor Create;
     destructor Destroy; override;
@@ -39,6 +39,8 @@ constructor TObserver.Create;
 begin
   inherited Create;
   Lock := TCriticalSection.Create;
+  Live := TEvent.Create(nil, True, False, '');
+  OneMove := TEvent.Create(nil, True, False, '');
   Ready := TEvent.Create(nil, True, False, '');
   Complete := TEvent.Create(nil, True, False, '');
   Rejected := TEvent.Create(nil, True, False, '');
@@ -49,6 +51,7 @@ end;
 destructor TObserver.Destroy;
 begin
   Last.Free;
+  Live.Free; OneMove.Free;
   TwoMoves.Free;
   Rejected.Free;
   Complete.Free;
@@ -64,11 +67,21 @@ end;
 
 procedure TObserver.Snapshot(Sender: TObject; AData: TGameRunnerSnapshot);
 begin
-  Check(GetCurrentThreadID = TGameRunnerThread(Sender).ThreadID,
-    'snapshots must only be constructed/published on the owning runner thread');
+  Check(AData.LiveUpdate or (GetCurrentThreadID = TGameRunnerThread(Sender).ThreadID),
+    'full position snapshots must only be constructed on the owning runner thread');
   Lock.Acquire;
   try
     Last.AssignFrom(AData);
+    if AData.LiveUpdate and (AData.PrincipalVariation <> '') then
+    begin
+      Check((AData.PlyCount = 0) and (AData.Board.MovesPlayedCount = 0) and
+        (AData.Board[32] = pkWhiteMan) and (AData.Board[28] = pkEmpty) and
+        (AData.PvBaseBoard.PositionKey = AData.Board.PositionKey) and (AData.PvBasePly = 0), 'live update must retain the last immutable position/history');
+      Check((AData.PvScore = '0.4') and (AData.PvSnapshot.Depth = '15'),
+        'live snapshot includes locked engine score and depth');
+      Live.SetEvent;
+    end;
+    if AData.PlyCount = 1 then OneMove.SetEvent;
     if Pos('human move rejected', AData.LogLines.Text) > 0 then
       Rejected.SetEvent;
     if AData.PlyCount = 2 then
@@ -81,6 +94,46 @@ begin
     AData.Free;
     Lock.Release;
   end;
+end;
+
+procedure FakeLiveHub;
+var Line: string; I: Integer;
+begin
+  while not EOF(Input) do
+  begin
+    ReadLn(Line);
+    if Line = 'hub' then begin WriteLn('id name=LiveHub'); WriteLn('wait'); end
+    else if Line = 'init' then WriteLn('ready')
+    else if Line = 'go think' then
+    begin
+      for I := 1 to 20 do
+      begin WriteLn('info pv="32-28" score=0.4 depth=15 time=0.1'); Flush(Output); Sleep(100); end;
+      WriteLn('done move=32-28');
+    end
+    else if Line = 'quit' then Exit;
+    Flush(Output);
+  end;
+end;
+
+procedure CheckLiveInfoDuringThink;
+var Setup: TGameSetup; Definition: TExternalEngineDefinition;
+  Observer: TObserver; Runner: TGameRunnerThread;
+begin
+  Definition := TExternalEngineDefinition.Create; Observer := TObserver.Create;
+  Setup := Default(TGameSetup);
+  Setup.StartingFEN := DefaultStartingFEN; Setup.TimeControl := DefaultTimeControl;
+  Setup.WhitePlayer := pkRegistered; Setup.BlackPlayer := pkHuman;
+  Definition.Kind := eekHub; Definition.HubId := 'LiveHub';
+  Definition.ExePath := ExpandFileName(ParamStr(0)); Definition.Arguments := '--live-hub';
+  Setup.WhiteEngine := Definition;
+  Runner := TGameRunnerThread.Create(Setup, 7, @Observer.Snapshot, nil);
+  try
+    Runner.Start;
+    Check(Observer.Ready.WaitFor(5000) = wrSignaled, 'live-info runner becomes ready');
+    Check(Observer.Live.WaitFor(1500) = wrSignaled, 'PV/score/log must arrive before a two-second think completes');
+    Check(Observer.OneMove.WaitFor(0) <> wrSignaled, 'live update must precede accepted move');
+    Check(Observer.OneMove.WaitFor(5000) = wrSignaled, 'runner publishes completed move after live updates');
+  finally Runner.PostStop; Runner.WaitFor; Runner.Free; Observer.Free; Definition.Free; end;
 end;
 
 procedure CheckCompletedResultSurvivesStop;
@@ -256,6 +309,8 @@ begin
 end;
 
 begin
+  if ParamStr(1) = '--live-hub' then begin FakeLiveHub; Halt(0); end;
+  CheckLiveInfoDuringThink;
   CheckCompletedResultSurvivesStop;
   CheckEditsWaitForRunner;
   CheckIllegalHumanInputIsRejected;

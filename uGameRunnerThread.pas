@@ -27,6 +27,7 @@ type
     FMoveData: TGameMoveDataArray;
     FMovesPlayedText: string;
     FPlyCount: Integer;
+    FLiveUpdate: Boolean;
     FPvSnapshot: TPvSnapshot;
     FState: TGameOrchestratorState;
     FStartingFEN: string;
@@ -45,6 +46,7 @@ type
     procedure AssignFrom(ASource: TGameRunnerSnapshot);
     procedure MarkStopped(const AReason: string);
 
+    property LiveUpdate: Boolean read FLiveUpdate;
     property BlackRemainingSeconds: Double read FBlackRemainingSeconds;
     property BlackPlayerName: string read FBlackPlayerName;
     property BlackUsedSeconds: Double read FBlackUsedSeconds;
@@ -92,6 +94,9 @@ type
     FSetup: TGameSetup;
     FShowStdout: Boolean;
     FSnapshotLock: TCriticalSection;
+    FLastFullSnapshot: TGameRunnerSnapshot;
+    FHasFullSnapshot: Boolean;
+    FActiveSearchEngine: TDraughtsEngine;
     FStopLogged: Boolean;
     FWhiteEngine: TExternalEngineDefinition;
     FBlackEngine: TExternalEngineDefinition;
@@ -111,6 +116,7 @@ type
     function CreateSnapshot: TGameRunnerSnapshot;
     procedure PublishSnapshot;
     procedure PublishSnapshotIfDue;
+    procedure PublishLiveUpdate(AEngine: TDraughtsEngine);
     procedure PublishFinished;
     procedure RequestStopFromRunner(const AReason: string);
   protected
@@ -225,6 +231,7 @@ procedure TGameRunnerSnapshot.AssignFrom(ASource: TGameRunnerSnapshot);
 begin
   if ASource = nil then
     Exit;
+  FLiveUpdate := ASource.FLiveUpdate;
   FBlackPlayerName := ASource.FBlackPlayerName;
   FBlackRemainingSeconds := ASource.FBlackRemainingSeconds;
   FBlackUsedSeconds := ASource.FBlackUsedSeconds;
@@ -290,6 +297,7 @@ begin
   FGameLog := TStringList.Create;
   FLogLock := TCriticalSection.Create;
   FSnapshotLock := TCriticalSection.Create;
+  FLastFullSnapshot := TGameRunnerSnapshot.Create;
   FCommandQueue := TThreadMessageQueue.Create(True);
   FStopToken := TCancellationToken.Create;
   FPvBaseBoard := TDraughtsBoard.Create;
@@ -304,6 +312,7 @@ begin
   FBlackEngine.Free;
   FWhiteEngine.Free;
   FStopToken.Free;
+  FLastFullSnapshot.Free;
   FSnapshotLock.Free;
   FLogLock.Free;
   FGameLog.Free;
@@ -657,13 +666,8 @@ begin
   LPvDepth := '';
   LPvTimeText := '';
   LPvEngine := FOrchestrator.Engine[FOrchestrator.CurrentSide];
-  if (LPvEngine <> nil) and (LPvEngine.PrincipalVariation <> '') then
-  begin
-    LPvText := LPvEngine.PrincipalVariation;
-    LPvScore := LPvEngine.LastScore;
-    LPvDepth := LPvEngine.LastDepth;
-    LPvTimeText := LPvEngine.LastTimeText;
-  end;
+  if LPvEngine <> nil then
+    LPvEngine.ReadSearchInfo(LPvText, LPvScore, LPvDepth, LPvTimeText);
   if LPvText <> '' then
   begin
     if (LPvText <> FLastPrincipalVariation) or
@@ -692,6 +696,8 @@ begin
   FSnapshotLock.Acquire;
   try
     Snapshot := CreateSnapshot;
+    FLastFullSnapshot.AssignFrom(Snapshot);
+    FHasFullSnapshot := True;
     if Assigned(FOnSnapshot) then
       FOnSnapshot(Self, Snapshot)
     else
@@ -702,16 +708,43 @@ begin
 end;
 
 procedure TGameRunnerThread.PublishSnapshotIfDue;
-var
-  LNowTick: QWord;
+var NowTick: QWord;
 begin
-  LNowTick := GetTickCount64;
-  if (FLastLogSnapshotTick = 0) or
-    (LNowTick - FLastLogSnapshotTick >= RunnerLogSnapshotIntervalMs) then
-  begin
-    FLastLogSnapshotTick := LNowTick;
-    PublishSnapshot;
-  end;
+  FSnapshotLock.Acquire;
+  try
+    NowTick := GetTickCount64;
+    if (FLastLogSnapshotTick = 0) or
+      (NowTick - FLastLogSnapshotTick >= RunnerLogSnapshotIntervalMs) then
+    begin FLastLogSnapshotTick := NowTick; PublishSnapshot; end;
+  finally FSnapshotLock.Release; end;
+end;
+
+procedure TGameRunnerThread.PublishLiveUpdate(AEngine: TDraughtsEngine);
+var Snapshot: TGameRunnerSnapshot; NowTick: QWord; Pv, Score, Depth, TimeText: string;
+begin
+  FSnapshotLock.Acquire;
+  try
+    // Never read the orchestrator from an engine thread. Extend an immutable
+    // runner-owned position snapshot only while that engine's search is active.
+    if not FHasFullSnapshot or (AEngine <> FActiveSearchEngine) then Exit;
+    NowTick := GetTickCount64;
+    if (FLastLogSnapshotTick <> 0) and
+      (NowTick - FLastLogSnapshotTick < RunnerLogSnapshotIntervalMs) then Exit;
+    FLastLogSnapshotTick := NowTick;
+    Snapshot := TGameRunnerSnapshot.Create;
+    try
+      Snapshot.AssignFrom(FLastFullSnapshot);
+      Snapshot.FLiveUpdate := True;
+      FLogLock.Acquire;
+      try
+        Snapshot.FLogLines.Assign(FGameLog); Snapshot.FLogRevision := FLogRevision;
+      finally FLogLock.Release; end;
+      AEngine.ReadSearchInfo(Pv, Score, Depth, TimeText);
+      Snapshot.FPvSnapshot.SetData(Snapshot.FBoard, Snapshot.FPlyCount, Pv, Score, Depth, TimeText);
+      if Assigned(FOnSnapshot) then
+      begin FOnSnapshot(Self, Snapshot); Snapshot := nil; end;
+    finally Snapshot.Free; end;
+  finally FSnapshotLock.Release; end;
 end;
 
 procedure TGameRunnerThread.PublishFinished;
@@ -727,7 +760,8 @@ begin
   AddGameLog(AMessage);
   // Engine stdout may arrive on a worker thread while PlayMove mutates board
   // and history. Logs are locked; snapshots belong exclusively to the runner.
-  if GetCurrentThreadID = ThreadID then PublishSnapshotIfDue;
+  if GetCurrentThreadID = ThreadID then PublishSnapshotIfDue
+  else if Sender is TDraughtsEngine then PublishLiveUpdate(TDraughtsEngine(Sender));
 end;
 
 procedure TGameRunnerThread.Execute;
@@ -756,7 +790,15 @@ begin
           AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
             ' [runner] engine to move; side=' + SideToString(FOrchestrator.CurrentSide));
           PublishSnapshot;
-          FOrchestrator.PlayNextMove;
+          FSnapshotLock.Acquire;
+          try FActiveSearchEngine := FOrchestrator.Engine[FOrchestrator.CurrentSide];
+          finally FSnapshotLock.Release; end;
+          try FOrchestrator.PlayNextMove;
+          finally
+            FSnapshotLock.Acquire;
+            try FActiveSearchEngine := nil;
+            finally FSnapshotLock.Release; end;
+          end;
           DrainCommands;
           PublishSnapshot;
         end
