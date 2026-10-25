@@ -5,13 +5,14 @@ unit uDxpTestConnection;
 interface
 
 uses
-  Classes, ssockets, uEngineRegistry;
+  Classes, SyncObjs, ssockets, uEngineRegistry;
 
 type
   TDxpTestLogEvent = procedure(Sender: TObject; const AText: string) of object;
 
   TDxpTestConnectionThread = class(TThread)
   private
+    FLock: TCriticalSection;
     FDxpHost: string;
     FDxpPort: Word;
     FLogText: string;
@@ -42,7 +43,9 @@ constructor TDxpTestConnectionThread.Create(const AHost: string; APort: Word;
 begin
   inherited Create(True);
   FreeOnTerminate := False;
+  FLock := TCriticalSection.Create;
   FDxpHost := AHost;
+  if Trim(FDxpHost) = '' then FDxpHost := '127.0.0.1';
   FDxpPort := APort;
   FRole := ARole;
   FOnLog := AOnLog;
@@ -54,6 +57,9 @@ end;
 destructor TDxpTestConnectionThread.Destroy;
 begin
   StopConnection;
+  WaitFor;
+  FSocket.Free;
+  FLock.Free;
   inherited Destroy;
 end;
 
@@ -85,7 +91,8 @@ begin
     Exit;
   Socket := nil;
   try
-    Socket := TInetSocket.Create('127.0.0.1', FDxpPort, 100);
+    if FDxpHost = '0.0.0.0' then Socket := TInetSocket.Create('127.0.0.1', FDxpPort, 100)
+    else Socket := TInetSocket.Create(FDxpHost, FDxpPort, 100);
   except
     on E: Exception do
       ;
@@ -101,16 +108,20 @@ begin
   try
     if FRole = derListen then
     begin
-      Log('[DXP listening on 0.0.0.0:' + IntToStr(FDxpPort) + ']');
-      FServer := TInetServer.Create('0.0.0.0', FDxpPort);
+      Log('[DXP listening on ' + FDxpHost + ':' + IntToStr(FDxpPort) + ']');
+      FLock.Acquire;
+      try FServer := TInetServer.Create(FDxpHost, FDxpPort);
+      finally FLock.Release; end;
       try
         FServer.ReuseAddress := True;
         FServer.MaxConnections := 1;
         FServer.OnConnect := @AcceptConnection;
         FServer.Listen;
-        FServer.StartAccepting;
+        if not Terminated then FServer.StartAccepting;
       finally
-        FreeAndNil(FServer);
+        FLock.Acquire;
+        try FreeAndNil(FServer);
+        finally FLock.Release; end;
       end;
       if Terminated then
         Exit;
@@ -162,10 +173,11 @@ end;
 procedure TDxpTestConnectionThread.StopConnection;
 begin
   Terminate;
-  if FServer <> nil then
-    FServer.StopAccepting(False);
+  FLock.Acquire;
+  try
+    if FServer <> nil then FServer.StopAccepting(False);
+  finally FLock.Release; end;
   WakeListener;
-  FreeAndNil(FSocket);
 end;
 
 end.

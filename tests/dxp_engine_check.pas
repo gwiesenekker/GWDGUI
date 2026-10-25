@@ -3,7 +3,7 @@ program dxp_engine_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, sockets, ssockets, uSocketSafety,
-  uDraughtsBoard, uDxpEngine, uEngineRegistry, uGameOrchestrator;
+  uDraughtsBoard, uDxpEngine, uDxpTestConnection, uEngineRegistry, uGameOrchestrator;
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
@@ -72,6 +72,41 @@ begin
     Result := ntohs(Address.sin_port);
   finally
     Server.Free;
+  end;
+end;
+
+procedure CheckLoopbackBinding;
+var Listener: TDxpAcceptThread; Port: Word; Wrong, Right: TInetSocket; Tick: QWord;
+begin
+  Port := AvailablePort;
+  Listener := TDxpAcceptThread.Create(Port);
+  Wrong := nil;
+  Right := nil;
+  try
+    Tick := GetTickCount64;
+    while not Listener.Listening and (GetTickCount64 - Tick < 2000) do Sleep(5);
+    Check(Listener.Listening, 'binding fixture must listen');
+    try Wrong := TInetSocket.Create('127.0.0.2', Port, 100); except on E: Exception do ; end;
+    Check(Wrong = nil, 'default DXP listener must not accept connections on other interfaces');
+    Right := TInetSocket.Create('127.0.0.1', Port, 1000);
+  finally
+    Right.Free;
+    Wrong.Free;
+    Listener.StopAccepting;
+    Listener.WaitFor;
+    Listener.Free;
+  end;
+end;
+
+procedure CheckListenerShutdownRaces;
+var I: Integer; Listener: TDxpAcceptThread; Test: TDxpTestConnectionThread;
+begin
+  for I := 1 to 20 do
+  begin
+    Listener := TDxpAcceptThread.Create(AvailablePort);
+    Listener.Free;
+    Test := TDxpTestConnectionThread.Create('127.0.0.1', AvailablePort, derListen, nil);
+    Test.Free;
   end;
 end;
 
@@ -209,6 +244,8 @@ begin
   CheckGameEndClaim('3', dsBlack, '*');
   CheckGameEndClaim('2', dsWhite, '*');
   CheckGameEndClaim('0', dsBlack, '*');
+  CheckLoopbackBinding;
+  CheckListenerShutdownRaces;
   CheckGameEndClaim('1', dsWhite, '0-2');
   CheckGameEndClaim('1', dsBlack, '2-0');
   CheckDisconnectedPeerFailsPromptly;

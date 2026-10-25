@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Bind DXP locally and protect listener lifetimes (D8, A7)
+
+- Bind listeners to the configured host (loopback by default), including the
+  connection tester, and wake the same address during shutdown.
+- Protect server references while stopping/freeing listeners. Join workers before
+  freeing their sockets/locks; the connection tester no longer frees a socket
+  while its worker may still be assigning it.
+- Regress rejection on another loopback interface, a normal local peer and
+  repeated immediate shutdown of both listener implementations.
+- Validation: interface-binding regression fails before the fix; full local TCP
+  DXP suite passes, including claims, disconnects and clock timeout handling.
+
 ### 2026-10-25 — Keep extended clock configuration protocol-neutral (D7)
 
 - Route increment-aware clock data through a typed engine method. Hub adds its

@@ -23,6 +23,7 @@ type
     FLock: TCriticalSection;
     FListening: Boolean;
     FPort: Word;
+    FHost: string;
     FServer: TInetServer;
     FSocket: TSocketStream;
     procedure AcceptConnection(Sender: TObject; Data: TSocketStream);
@@ -33,7 +34,7 @@ type
   protected
     procedure Execute; override;
   public
-    constructor Create(APort: Word);
+    constructor Create(APort: Word; const AHost: string = '127.0.0.1');
     destructor Destroy; override;
     function DetachSocket: TSocketStream;
     procedure StopAccepting;
@@ -380,18 +381,21 @@ begin
   {$ENDIF}
 end;
 
-constructor TDxpAcceptThread.Create(APort: Word);
+constructor TDxpAcceptThread.Create(APort: Word; const AHost: string);
 begin
   inherited Create(True);
   FreeOnTerminate := False;
   FLock := TCriticalSection.Create;
   FPort := APort;
+  FHost := Trim(AHost);
+  if FHost = '' then FHost := '127.0.0.1';
   Start;
 end;
 
 destructor TDxpAcceptThread.Destroy;
 begin
   StopAccepting;
+  WaitFor;
   FLock.Acquire;
   try
     FreeAndNil(FSocket);
@@ -454,7 +458,8 @@ begin
 
   LocalSocket := nil;
   try
-    LocalSocket := TInetSocket.Create('127.0.0.1', FPort, 100);
+    if FHost = '0.0.0.0' then LocalSocket := TInetSocket.Create('127.0.0.1', FPort, 100)
+    else LocalSocket := TInetSocket.Create(FHost, FPort, 100);
   except
     on E: Exception do
       ;
@@ -465,8 +470,10 @@ end;
 procedure TDxpAcceptThread.StopAccepting;
 begin
   Terminate;
-  if FServer <> nil then
-    FServer.StopAccepting(False);
+  FLock.Acquire;
+  try
+    if FServer <> nil then FServer.StopAccepting(False);
+  finally FLock.Release; end;
   WakeListener;
 end;
 
@@ -484,7 +491,9 @@ end;
 procedure TDxpAcceptThread.Execute;
 begin
   try
-    FServer := TInetServer.Create('0.0.0.0', FPort);
+    FLock.Acquire;
+    try FServer := TInetServer.Create(FHost, FPort);
+    finally FLock.Release; end;
     SetHandleCloseOnExec(FServer.Socket);
     try
       FServer.ReuseAddress := True;
@@ -497,7 +506,7 @@ begin
       finally
         FLock.Release;
       end;
-      FServer.StartAccepting;
+      if not Terminated then FServer.StartAccepting;
     finally
       FLock.Acquire;
       try
@@ -505,7 +514,9 @@ begin
       finally
         FLock.Release;
       end;
-      FreeAndNil(FServer);
+      FLock.Acquire;
+      try FreeAndNil(FServer);
+      finally FLock.Release; end;
     end;
   except
     on E: Exception do
@@ -853,8 +864,8 @@ var
 begin
   Result := False;
   StopListening;
-  Log('DXP listen; host=0.0.0.0; port=' + IntToStr(FEngine.DxpPort));
-  FAcceptThread := TDxpAcceptThread.Create(FEngine.DxpPort);
+  Log('DXP listen; host=' + FEngine.DxpHost + '; port=' + IntToStr(FEngine.DxpPort));
+  FAcceptThread := TDxpAcceptThread.Create(FEngine.DxpPort, FEngine.DxpHost);
   StartTick := GetTickCount64;
   repeat
     if FStopping or StopRequested then
