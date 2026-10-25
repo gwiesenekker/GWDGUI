@@ -82,6 +82,27 @@ type
 
 implementation
 
+uses SQLite3Dyn, ctypes, UnicodeData;
+
+function FoldUtf8(const Text: string): string;
+var Lowered: UnicodeString;
+begin
+  UnicodeToLower(UTF8Decode(Text), True, Lowered);
+  Result := UTF8Encode(Lowered);
+end;
+
+procedure SqlUnicodeLower(Context: psqlite3_context; Count: cint;
+  Values: ppsqlite3_value); cdecl;
+var Text: string;
+begin
+  try
+    Text := FoldUtf8(StrPas(sqlite3_value_text(Values^)));
+    sqlite3_result_text(Context, PChar(Text), Length(Text), sqlite3_destructor_type(SQLITE_TRANSIENT));
+  except
+    sqlite3_result_error(Context, 'Unicode name conversion failed', -1);
+  end;
+end;
+
 type
   THash128 = record
     Lo: Int64;
@@ -493,9 +514,9 @@ begin
   FPositionInsertQuery.ParamByName('ply').AsInteger := APly;
   FPositionInsertQuery.ParamByName('position_key_lo').AsLargeInt := PositionKey.Lo;
   FPositionInsertQuery.ParamByName('position_key_hi').AsLargeInt := PositionKey.Hi;
-  FPositionInsertQuery.ParamByName('side_to_move').AsString := SideText;
-  FPositionInsertQuery.ParamByName('next_move').AsString := ANextMove;
-  FPositionInsertQuery.ParamByName('result').AsString := FGame.ResultText;
+  FPositionInsertQuery.ParamByName('side_to_move').AsUTF8String := SideText;
+  FPositionInsertQuery.ParamByName('next_move').AsUTF8String := ANextMove;
+  FPositionInsertQuery.ParamByName('result').AsUTF8String := FGame.ResultText;
   FPositionInsertQuery.ExecSQL;
 end;
 
@@ -560,14 +581,14 @@ begin
 
     FGameInsertQuery.ParamByName('game_hash_lo').AsLargeInt := LGameHash.Lo;
     FGameInsertQuery.ParamByName('game_hash_hi').AsLargeInt := LGameHash.Hi;
-    FGameInsertQuery.ParamByName('white').AsString := FGame.WhiteName;
-    FGameInsertQuery.ParamByName('black').AsString := FGame.BlackName;
-    FGameInsertQuery.ParamByName('event').AsString := FGame.EventName;
-    FGameInsertQuery.ParamByName('result').AsString := FGame.ResultText;
-    FGameInsertQuery.ParamByName('starting_fen').AsString := FGame.StartingFEN;
-    FGameInsertQuery.ParamByName('moves_text').AsString := Trim(StringReplace(FMoves.Text, LineEnding, ' ', [rfReplaceAll]));
-    FGameInsertQuery.ParamByName('annotations_text').AsString := FGame.MoveAnnotationsText;
-    FGameInsertQuery.ParamByName('full_pdn').AsString := FFullPdn;
+    FGameInsertQuery.ParamByName('white').AsUTF8String := FGame.WhiteName;
+    FGameInsertQuery.ParamByName('black').AsUTF8String := FGame.BlackName;
+    FGameInsertQuery.ParamByName('event').AsUTF8String := FGame.EventName;
+    FGameInsertQuery.ParamByName('result').AsUTF8String := FGame.ResultText;
+    FGameInsertQuery.ParamByName('starting_fen').AsUTF8String := FGame.StartingFEN;
+    FGameInsertQuery.ParamByName('moves_text').AsUTF8String := Trim(StringReplace(FMoves.Text, LineEnding, ' ', [rfReplaceAll]));
+    FGameInsertQuery.ParamByName('annotations_text').AsUTF8String := FGame.MoveAnnotationsText;
+    FGameInsertQuery.ParamByName('full_pdn').AsUTF8String := FFullPdn;
     FGameInsertQuery.ParamByName('ply_count').AsInteger := FMoves.Count;
     FGameInsertQuery.ExecSQL;
 
@@ -741,7 +762,7 @@ begin
     Q.Open;
     while not Q.EOF do
     begin
-      if SameText(Q.FieldByName('name').AsString, AColumnName) then
+      if SameText(Q.FieldByName('name').AsUTF8String, AColumnName) then
       begin
         Result := True;
         Break;
@@ -790,6 +811,9 @@ begin
   Close;
   FConnection.DatabaseName := AFileName;
   FConnection.Connected := True;
+  if sqlite3_create_function(FConnection.Handle, 'gwd_lower', 1, SQLITE_UTF8,
+    nil, @SqlUnicodeLower, nil, nil) <> SQLITE_OK then
+    raise EInvalidOperation.Create('Could not register Unicode name matching');
   StartTransactionIfNeeded;
   Q := Query;
   try
@@ -947,7 +971,7 @@ var
       WhereSql := ' where '
     else
       WhereSql := WhereSql + ' and ';
-    WhereSql := WhereSql + 'lower(' + AColumn + ') like :' + AParamName;
+    WhereSql := WhereSql + 'instr(gwd_lower(' + AColumn + '), :' + AParamName + ') > 0';
   end;
 
   procedure AddPlayerFilter;
@@ -959,23 +983,23 @@ var
     else
       WhereSql := WhereSql + ' and ';
     WhereSql := WhereSql +
-      '(lower(white) like :player_filter or lower(black) like :player_filter)';
+      '(instr(gwd_lower(white), :player_filter) > 0 or instr(gwd_lower(black), :player_filter) > 0)';
   end;
 
   procedure BindFilters(AQuery: TSQLQuery);
   begin
     if Trim(AWhiteFilter) <> '' then
-      AQuery.ParamByName('white_filter').AsString :=
-        '%' + AnsiLowerCase(Trim(AWhiteFilter)) + '%';
+      AQuery.ParamByName('white_filter').AsUTF8String :=
+        FoldUtf8(Trim(AWhiteFilter));
     if Trim(ABlackFilter) <> '' then
-      AQuery.ParamByName('black_filter').AsString :=
-        '%' + AnsiLowerCase(Trim(ABlackFilter)) + '%';
+      AQuery.ParamByName('black_filter').AsUTF8String :=
+        FoldUtf8(Trim(ABlackFilter));
     if Trim(AEventFilter) <> '' then
-      AQuery.ParamByName('event_filter').AsString :=
-        '%' + AnsiLowerCase(Trim(AEventFilter)) + '%';
+      AQuery.ParamByName('event_filter').AsUTF8String :=
+        FoldUtf8(Trim(AEventFilter));
     if Trim(APlayerFilter) <> '' then
-      AQuery.ParamByName('player_filter').AsString :=
-        '%' + AnsiLowerCase(Trim(APlayerFilter)) + '%';
+      AQuery.ParamByName('player_filter').AsUTF8String :=
+        FoldUtf8(Trim(APlayerFilter));
   end;
 begin
   ATotalMatches := 0;
@@ -991,11 +1015,11 @@ begin
 
   case ASortColumn of
     dgscWhite:
-      OrderBy := 'lower(white), lower(black), lower(event), id';
+      OrderBy := 'gwd_lower(white), gwd_lower(black), gwd_lower(event), id';
     dgscBlack:
-      OrderBy := 'lower(black), lower(white), lower(event), id';
+      OrderBy := 'gwd_lower(black), gwd_lower(white), gwd_lower(event), id';
     dgscEvent:
-      OrderBy := 'lower(event), lower(white), lower(black), id';
+      OrderBy := 'gwd_lower(event), gwd_lower(white), gwd_lower(black), id';
   else
     OrderBy := 'id';
   end;
@@ -1021,11 +1045,11 @@ begin
     begin
       Info := TDatabaseGameInfo.Create;
       Info.Id := Q.FieldByName('id').AsInteger;
-      Info.WhiteName := Q.FieldByName('white').AsString;
-      Info.BlackName := Q.FieldByName('black').AsString;
-      Info.EventName := Q.FieldByName('event').AsString;
-      Info.ResultText := Q.FieldByName('result').AsString;
-      Info.StartingFEN := Q.FieldByName('starting_fen').AsString;
+      Info.WhiteName := Q.FieldByName('white').AsUTF8String;
+      Info.BlackName := Q.FieldByName('black').AsUTF8String;
+      Info.EventName := Q.FieldByName('event').AsUTF8String;
+      Info.ResultText := Q.FieldByName('result').AsUTF8String;
+      Info.StartingFEN := Q.FieldByName('starting_fen').AsUTF8String;
       Info.PlyCount := Q.FieldByName('ply_count').AsInteger;
       AList.Add(Info);
       Q.Next;
@@ -1064,11 +1088,11 @@ begin
     if Q.EOF then
       raise EInvalidOperation.Create('Game not found');
 
-    if Q.FieldByName('full_pdn').AsString <> '' then
+    if Q.FieldByName('full_pdn').AsUTF8String <> '' then
     begin
       Games := TList.Create;
       try
-        LoadPdnGamesFromText(Q.FieldByName('full_pdn').AsString, Games);
+        LoadPdnGamesFromText(Q.FieldByName('full_pdn').AsUTF8String, Games);
         if Games.Count <> 1 then
           raise EConvertError.Create('Stored database game is not a single PDN game');
         Result := TPdnGame(Games[0]);
@@ -1080,13 +1104,13 @@ begin
       Exit;
     end;
     Result := TPdnGame.Create;
-    Result.WhiteName := Q.FieldByName('white').AsString;
-    Result.BlackName := Q.FieldByName('black').AsString;
-    Result.EventName := Q.FieldByName('event').AsString;
-    Result.ResultText := Q.FieldByName('result').AsString;
-    Result.StartingFEN := Q.FieldByName('starting_fen').AsString;
-    Result.MovesText := Q.FieldByName('moves_text').AsString;
-    Result.MoveAnnotationsText := Q.FieldByName('annotations_text').AsString;
+    Result.WhiteName := Q.FieldByName('white').AsUTF8String;
+    Result.BlackName := Q.FieldByName('black').AsUTF8String;
+    Result.EventName := Q.FieldByName('event').AsUTF8String;
+    Result.ResultText := Q.FieldByName('result').AsUTF8String;
+    Result.StartingFEN := Q.FieldByName('starting_fen').AsUTF8String;
+    Result.MovesText := Q.FieldByName('moves_text').AsUTF8String;
+    Result.MoveAnnotationsText := Q.FieldByName('annotations_text').AsUTF8String;
     Q.Close;
   finally
     Q.Free;
@@ -1114,7 +1138,7 @@ begin
       'and p.side_to_move = :side_to_move ' +
       'group by p.game_id limit ' + IntToStr(ALimit + 1);
     BindPositionKey(Q, APositionKey);
-    Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
+    Q.ParamByName('side_to_move').AsUTF8String := SideToText(ASideToMove);
     Q.Open;
     while not Q.EOF do
     begin
@@ -1150,7 +1174,7 @@ begin
       'and p.side_to_move = :side_to_move ' +
       'group by p.game_id)';
     BindPositionKey(Q, APositionKey);
-    Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
+    Q.ParamByName('side_to_move').AsUTF8String := SideToText(ASideToMove);
     Q.Open;
     ATotalMatches := Q.FieldByName('game_count').AsInteger;
     Q.Close;
@@ -1166,17 +1190,17 @@ begin
     if ALimit > 0 then
       Q.SQL.Text := Q.SQL.Text + ' limit ' + IntToStr(ALimit);
     BindPositionKey(Q, APositionKey);
-    Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
+    Q.ParamByName('side_to_move').AsUTF8String := SideToText(ASideToMove);
     Q.Open;
     while not Q.EOF do
     begin
       Info := TDatabaseGameInfo.Create;
       Info.Id := Q.FieldByName('id').AsInteger;
-      Info.WhiteName := Q.FieldByName('white').AsString;
-      Info.BlackName := Q.FieldByName('black').AsString;
-      Info.EventName := Q.FieldByName('event').AsString;
-      Info.ResultText := Q.FieldByName('result').AsString;
-      Info.StartingFEN := Q.FieldByName('starting_fen').AsString;
+      Info.WhiteName := Q.FieldByName('white').AsUTF8String;
+      Info.BlackName := Q.FieldByName('black').AsUTF8String;
+      Info.EventName := Q.FieldByName('event').AsUTF8String;
+      Info.ResultText := Q.FieldByName('result').AsUTF8String;
+      Info.StartingFEN := Q.FieldByName('starting_fen').AsUTF8String;
       Info.PlyCount := Q.FieldByName('ply_count').AsInteger;
       AList.Add(Info);
       Q.Next;
@@ -1218,7 +1242,7 @@ begin
           'where c.position_key_lo = :position_key_lo and c.position_key_hi = :position_key_hi ' +
           'and c.side_to_move = :side_to_move ' +
           'order by c.game_count desc, wins desc, c.next_move';
-      Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
+      Q.ParamByName('side_to_move').AsUTF8String := SideToText(ASideToMove);
     end
     else if ASideToMove = dsBlack then
       Q.SQL.Text :=
@@ -1245,12 +1269,12 @@ begin
         'group by p.next_move ' +
         'order by game_count desc, wins desc, p.next_move';
     BindPositionKey(Q, APositionKey);
-    Q.ParamByName('side_to_move').AsString := SideToText(ASideToMove);
+    Q.ParamByName('side_to_move').AsUTF8String := SideToText(ASideToMove);
     Q.Open;
     while not Q.EOF do
     begin
       ResultItem := TDatabaseSearchResult.Create;
-      ResultItem.MoveText := Q.FieldByName('next_move').AsString;
+      ResultItem.MoveText := Q.FieldByName('next_move').AsUTF8String;
       ResultItem.GameCount := Q.FieldByName('game_count').AsInteger;
       ResultItem.Wins := Q.FieldByName('wins').AsInteger;
       ResultItem.Draws := Q.FieldByName('draws').AsInteger;

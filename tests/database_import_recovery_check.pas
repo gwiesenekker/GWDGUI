@@ -303,6 +303,7 @@ end;
 
 procedure CheckCompleteGameStorage(const DbName, PdnName: string);
 var Database: TGameDatabase; Lines: TStringList; Game: TPdnGame;
+  Items: TList; Matches: Integer;
   Root: TPdnMoveNode; Data: TGameTreeNodeData; Imported, Duplicates, Errors: Integer;
   Raised: Boolean;
 begin
@@ -310,7 +311,8 @@ begin
   try
     Data := Default(TGameTreeNodeData); Data.CommentText := 'branch note';
     Data.EnginePV := '20-25'; Data.EnginePVDepth := '20';
-    Lines.Text := '[Event "complete"]' + LineEnding +
+    Lines.Text := '[Event "Über"]' + LineEnding + '[White "Émile_50%"]' + LineEnding +
+      '[Black "ИВАН"]' + LineEnding +
       '{introduction} 1.32-28 (1.34-30 {branch note} {' +
       EncodeNodeData(Data, 'branch note') + '} 20-25 (1...18-23)) 18-23 *';
     Lines.SaveToFile(PdnName);
@@ -335,6 +337,19 @@ begin
           (Root.Children[1].NodeData.EnginePVDepth = '20'), 'database retains typed analysis');
       finally Root.Free; end;
     finally Game.Free; end;
+    Database.Close;
+    Database.OpenDatabase(DbName);
+    Items := TList.Create;
+    try
+      Database.LoadGames(Items, 0, 'émile_50%', 'иван', 'über', '', dgscId, False, Matches);
+      Check(Matches = 2, 'Unicode filters match accents and Cyrillic across case');
+      FreeItems(Items);
+      Database.LoadGames(Items, 0, 'émileX50X', '', '', '', dgscId, False, Matches);
+      Check(Matches = 0, 'percent and underscore are literal filter characters');
+      FreeItems(Items);
+      Database.LoadGames(Items, 0, '', '', '', 'иван', dgscWhite, False, Matches);
+      Check(Matches = 2, 'either-player filter uses Unicode folding');
+    finally FreeItems(Items); Items.Free; end;
     Database.Close;
     Check(Scalar(DbName, 'pragma user_version') = 4, 'complete schema version persisted');
     RawSQL(DbName, 'alter table games drop column full_pdn');

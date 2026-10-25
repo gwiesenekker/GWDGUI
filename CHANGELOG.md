@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Match database names across Unicode case (P14)
+
+- Use Unicode case folding consistently for database name/event filters and
+  sorting. Treat percent and underscore as literal search characters.
+- Bind and read database text explicitly as UTF-8, preserving accented and
+  Cyrillic names in imported games as well as in search parameters.
+- Regress accented/Cyrillic import, case-insensitive individual and either-player
+  filters, literal wildcard characters and Unicode sorting.
+- Validation: database recovery and PDN regression suites pass.
+
 ### 2026-10-25 — Retain complete imported database games (P13)
 
 - Store complete PDN alongside canonical mainline position rows, preserving root
