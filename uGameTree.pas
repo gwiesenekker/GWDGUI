@@ -153,6 +153,8 @@ type
       AAnnotationText: string): Boolean;
     function FindVariationNodeByKey(const AVariationKey: string): TGameTreePlyNode;
   public
+    function TryLocateVariationNode(ANode: TGameTreePlyNode;
+      out ABase, ADisplay, AIndex, APly: Integer): Boolean;
     function FindChildByMove(AParent: TGameTreePlyNode; const AMove: string): TGameTreePlyNode;
     function RecordCompletedMoveData(APly: Integer; const AData: TGameMoveData): Boolean;
     constructor Create;
@@ -1336,6 +1338,31 @@ begin
   Result.FMoveNumber := MoveNumberForPly(APlyNumber);
   Result.FSideToMove := SideForPly(APlyNumber);
   Result.FMoveText := Trim(AMoveText);
+end;
+
+function TGameTree.TryLocateVariationNode(ANode: TGameTreePlyNode;
+  out ABase, ADisplay, AIndex, APly: Integer): Boolean;
+var
+  I, J: Integer;
+  Line: TGameTreeVariationLine;
+begin
+  Result := False;
+  ABase := -1; ADisplay := -1; AIndex := -1; APly := -1;
+  if (ANode = nil) or (ANode = FRoot) or
+    (GetMainlineNode(ANode.PlyNumber) = ANode) then Exit;
+  // Compatibility locations are derived from node identity, never parsed from
+  // an alias that can change when another path is removed or reindexed.
+  for I := 0 to FVariationLines.Count - 1 do
+  begin
+    Line := GetVariationLine(I);
+    for J := 0 to High(Line.FNodeIds) do
+      if Line.FNodeIds[J] = ANode.NodeId then
+      begin
+        ABase := Line.BasePly; ADisplay := Line.DisplayAfterPly;
+        AIndex := I; APly := J + 1;
+        Exit(True);
+      end;
+  end;
 end;
 
 function TGameTree.FindChildByMove(AParent: TGameTreePlyNode;

@@ -19,6 +19,8 @@ type
   TIntArray = array of Integer;
   TPvHintSource = (phsMain, phsAnalyzer);
   TMoveVariationHit = record
+    NodeId: Int64;
+    BeforeMove: Boolean;
     Start: Integer;
     Length: Integer;
     VariationIndex: Integer;
@@ -4205,7 +4207,7 @@ begin
   Node := FTreeCursor.Resolve(Tree);
   if FTreeCursor.Following or (Node = nil) then Exit(-1);
   if (FVariationBrowseMoves = '') and
-    Tree.ParseVariationKey(Node.VariationKey, Base, Display, Index, Ply) then
+    Tree.TryLocateVariationNode(Node, Base, Display, Index, Ply) then
     Exit(Base);
   Result := Node.PlyNumber;
 end;
@@ -4220,7 +4222,7 @@ begin
   Tree := ActiveGameTree;
   Node := FTreeCursor.Resolve(Tree);
   if FTreeCursor.Following or (Node = nil) or (FVariationBrowseMoves <> '') then Exit;
-  if Tree.ParseVariationKey(Node.VariationKey, Base, Display, Index, Ply) then
+  if Tree.TryLocateVariationNode(Node, Base, Display, Index, Ply) then
     Result := Index;
 end;
 
@@ -4235,7 +4237,7 @@ begin
   Tree := ActiveGameTree;
   Node := FTreeCursor.Resolve(Tree);
   if FTreeCursor.Following or (Node = nil) then Exit;
-  if Tree.ParseVariationKey(Node.VariationKey, Base, Display, Index, Ply) then
+  if Tree.TryLocateVariationNode(Node, Base, Display, Index, Ply) then
     Result := Ply;
 end;
 
@@ -5052,6 +5054,8 @@ begin
   SetLength(FVariationHits, Length(LRenderResult.VariationStarts));
   for I := 0 to High(LRenderResult.VariationStarts) do
   begin
+    FVariationHits[I].NodeId := LRenderResult.VariationNodeIds[I];
+    FVariationHits[I].BeforeMove := LRenderResult.VariationBeforeMoves[I];
     FVariationHits[I].Start := LRenderResult.VariationStarts[I];
     FVariationHits[I].Length := LRenderResult.VariationLengths[I];
     FVariationHits[I].VariationIndex := LRenderResult.VariationIndexes[I];
@@ -6093,7 +6097,17 @@ begin
     if SelectionHitsRange(FVariationHits[I].Start,
       FVariationHits[I].Length) then
     begin
-      if Trim(FVariationHits[I].MovesText) <> '' then
+      if FVariationHits[I].NodeId > 0 then
+      begin
+        ClearHumanMoveSelection;
+        ClearVariationExploration;
+        if FVariationHits[I].BeforeMove then
+          FTreeCursor.SelectBefore(LGameTree, LGameTree.FindNodeById(FVariationHits[I].NodeId))
+        else
+          FTreeCursor.Select(LGameTree, LGameTree.FindNodeById(FVariationHits[I].NodeId));
+        RefreshDisplayFromGameTree(LGameTree, False);
+      end
+      else if Trim(FVariationHits[I].MovesText) <> '' then
         ApplyAnnotatorVariationBrowsePly(FVariationHits[I].BasePly,
           FVariationHits[I].VariationPly, FVariationHits[I].MovesText,
           LGameTree)

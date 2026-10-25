@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Render and select branches by structure and node identity (G7)
+
+- Render a branch's first-child continuation and sibling alternatives directly
+  from the tree, without parsing variation keys or using them to pick children.
+- Carry immutable node IDs in stored-variation caret ranges. Move clicks select
+  that node; variation prefixes select its real parent and remember the child.
+- Derive remaining compatibility locations from node IDs; cursor lookup no
+  longer parses encoded variation keys.
+- Regress node-based caret ranges before and after shared-path shortening,
+  alongside nested/Black-start navigation and existing annotation filters.
+- Validation: topology, PDN filtering, preservation, cursor and GTK checks pass.
+
 ### 2026-10-25 — Reuse explored nodes as first-child main continuations (G7)
 
 - Find an existing child before adding a mainline move. Promote that same node

@@ -38,6 +38,34 @@ begin
   end;
 end;
 
+procedure CheckRenderedNodeHits(Tree: TGameTree);
+var
+  Render: TGameTreePdnRenderResult;
+  Node: TGameTreePlyNode;
+  I, Count: Integer;
+begin
+  RenderGameTreeMovesToPdn(Tree, DefaultGameTreePdnRenderOptions, Render);
+  Check((Length(Render.VariationStarts) = Length(Render.VariationNodeIds)) and
+    (Length(Render.VariationStarts) = Length(Render.VariationBeforeMoves)),
+    'every variation caret range must carry its node identity');
+  Count := 0;
+  for I := 0 to High(Render.VariationNodeIds) do
+    if Render.VariationNodeIds[I] > 0 then
+    begin
+      Inc(Count);
+      Node := Tree.FindNodeById(Render.VariationNodeIds[I]);
+      Check(Node <> nil, 'stored-variation caret must resolve to a surviving node');
+      if Render.VariationBeforeMoves[I] then
+        Check((Node.Parent <> nil) and
+          (Pos('(', Copy(Render.Text, Render.VariationStarts[I] + 1,
+            Render.VariationLengths[I])) > 0), 'variation prefix must select before its child')
+      else
+        Check(Copy(Render.Text, Render.VariationStarts[I] + 1,
+          Render.VariationLengths[I]) = Node.MoveText, 'move caret must identify its exact node');
+    end;
+  Check(Count > 0, 'stored branches must provide node-based caret ranges');
+end;
+
 procedure CheckMainlineAndReplay;
 var
   Actor: TGameTreeActor;
@@ -187,6 +215,7 @@ begin
       'refresh must retain nested identity');
     Check(Tree.FindVariationNode(1, 1).EnginePV = '37-32',
       'refresh must retain shared analysis');
+    CheckRenderedNodeHits(Tree);
     Tree.StoreVariationLineAtIndex(0, 2, 1, '20-24', '', Changed);
     TextToMoveList('20-24', Moves);
     RecordGameTreeVariationLine(Tree, GameTreeVariationLineInput(
@@ -194,6 +223,7 @@ begin
     Check(Tree.FindVariationNode(0, 2) = nil, 'shortened legacy path ends');
     Check(Tree.FindNodeById(NestedId) = Tree.FindVariationNode(1, 2),
       'shortening one path must preserve shared sibling subtree');
+    CheckRenderedNodeHits(Tree);
     Execute(Actor, Actor.CreateClearStoredVariationsCommand);
     Check(Tree.VariationLineCount = 0, 'clear removes aliases');
     Check(Tree.FindNodeById(NestedId) = nil, 'clear removes nested variations');
