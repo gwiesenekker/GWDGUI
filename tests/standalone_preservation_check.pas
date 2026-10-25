@@ -109,6 +109,8 @@ begin
       Check(Games.Count = 1, 'GUI round trip remains one game');
       Game := TPdnGame(Games[0]);
       AForm.LoadPdnGameToDisplay(Game);
+      Check((AForm.LastDisplayReplayCount > 0) and (AForm.LastDisplayReplayCount <= 3),
+        'a refresh must reuse validated boards for repeated consumers');
       Check(EncodeNodeData(AForm.ActiveGameTree.Root.NodeData, '') =
         EncodeNodeData(Data, ''), 'GUI imports complete root analysis');
       Check(AForm.ActiveGameTree.Root.ChildCount = 2, 'GUI preserves real root variations');

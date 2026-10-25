@@ -58,6 +58,11 @@ type
     LogLineCount: Integer;
   end;
 
+  TDisplayReplayCacheEntry = record
+    TreeId, NodeId, Revision: Int64;
+    Board: TDraughtsBoard;
+  end;
+
   TDisplayedBoardInfo = record
     WhiteName: string;
     BlackName: string;
@@ -367,6 +372,11 @@ type
 
     FVariationBrowseMoves: string;
     FDisplayBoardFailed: Boolean;
+    FDisplayRefreshDepth: Integer;
+    FDisplayReplayCache: array of TDisplayReplayCacheEntry;
+    {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+    FDisplayReplayBuildCount: Integer;
+    {$ENDIF}
     FWhiteClockLabel: TLabel;
     FWhitePlayerEdit: TEdit;
     procedure ApplyBoardFlipped;
@@ -693,6 +703,9 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+    property LastDisplayReplayCount: Integer read FDisplayReplayBuildCount;
+    {$ENDIF}
     function ActiveGameTree: TGameTree;
     function CurrentGameTreePdnText(const AEventName: string): string;
     procedure LoadStandaloneFen(const AFEN: string);
@@ -4596,16 +4609,40 @@ begin
   if (AGameTree = nil) or (APly < 0) then
     Exit;
   if APly = 0 then
-    Result := AGameTree.TryBuildBoardAtNode(AGameTree.Root, ABoard)
+    Result := TryBuildTreeBoardAtNode(AGameTree, AGameTree.Root, ABoard)
   else
-    Result := AGameTree.TryBuildBoardAtNode(AGameTree.MainlineNode[APly], ABoard);
+    Result := TryBuildTreeBoardAtNode(AGameTree, AGameTree.MainlineNode[APly], ABoard);
 end;
 
 function TMainForm.TryBuildTreeBoardAtNode(AGameTree: TGameTree;
   ANode: TGameTreePlyNode; ABoard: TDraughtsBoard): Boolean;
+var I: Integer; Revision: Int64; Actor: TGameTreeActor;
 begin
-  Result := (AGameTree <> nil) and
-    AGameTree.TryBuildBoardAtNode(ANode, ABoard);
+  Result := False;
+  if (AGameTree = nil) or (ANode = nil) or (ABoard = nil) then Exit;
+  Actor := ActorForGameTree(AGameTree);
+  Revision := -1;
+  if Actor <> nil then Revision := Actor.Revision;
+  if FDisplayRefreshDepth > 0 then
+    for I := 0 to High(FDisplayReplayCache) do
+      if (FDisplayReplayCache[I].TreeId = AGameTree.GameTreeId) and
+        (FDisplayReplayCache[I].NodeId = ANode.NodeId) and
+        (FDisplayReplayCache[I].Revision = Revision) then
+      begin ABoard.AssignFrom(FDisplayReplayCache[I].Board); Exit(True); end;
+  {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+  if FDisplayRefreshDepth > 0 then Inc(FDisplayReplayBuildCount);
+  {$ENDIF}
+  Result := AGameTree.TryBuildBoardAtNode(ANode, ABoard);
+  if Result and (FDisplayRefreshDepth > 0) then
+  begin
+    I := Length(FDisplayReplayCache);
+    SetLength(FDisplayReplayCache, I + 1);
+    FDisplayReplayCache[I].TreeId := AGameTree.GameTreeId;
+    FDisplayReplayCache[I].NodeId := ANode.NodeId;
+    FDisplayReplayCache[I].Revision := Revision;
+    FDisplayReplayCache[I].Board := TDraughtsBoard.Create;
+    FDisplayReplayCache[I].Board.AssignFrom(ABoard);
+  end;
 end;
 
 function TMainForm.TryBuildDisplayedBoard(AGameTree: TGameTree;
@@ -7282,10 +7319,16 @@ var
   LGame: TRunningGame;
   LMainlineCount: Integer;
   LMovesText: string;
+  I: Integer;
 begin
   if (AGameTree = nil) or (AGameTree <> ActiveGameTree) then
     Exit;
 
+  {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+  if FDisplayRefreshDepth = 0 then FDisplayReplayBuildCount := 0;
+  {$ENDIF}
+  Inc(FDisplayRefreshDepth);
+  try
   LGame := SelectedDisplayedGame;
   // Resolve missing selections by identity before rendering any derived indexes.
   FTreeCursor.Resolve(AGameTree);
@@ -7305,6 +7348,14 @@ begin
   SyncGameTreeViewSelection;
   if LGame <> nil then
     UpdateGameListItem(LGame);
+  finally
+    Dec(FDisplayRefreshDepth);
+    if FDisplayRefreshDepth = 0 then
+    begin
+      for I := 0 to High(FDisplayReplayCache) do FDisplayReplayCache[I].Board.Free;
+      SetLength(FDisplayReplayCache, 0);
+    end;
+  end;
 end;
 
 function TMainForm.TryGetDisplayedBoardFen(AGameTree: TGameTree;

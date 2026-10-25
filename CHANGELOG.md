@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Reuse validated boards within a display refresh (F4)
+
+- Cache successful board replays by tree, node and actor revision for the duration
+  of one refresh. Board/highlight/PV/search consumers receive independent copies;
+  no cached board survives the refresh or a changed revision.
+- Route ply-based replay through the same node cache and free copies on errors.
+- Validation: GTK import/navigation/preservation suite passes, including a bound
+  on repeated replay builds, tree edits, invalid selections and recovery.
+
 ### 2026-10-25 — Defer archive move trees until selection (F2)
 
 - List PDN headers/results while retaining each game's raw movetext, then build
@@ -95,7 +104,7 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ### 2026-10-25 — Match database names across Unicode case (P14)
 
-- Use Unicode case folding consistently for database name/event filters and
+- Use Unicode lowercasing consistently for database name/event filters and
   sorting. Treat percent and underscore as literal search characters.
 - Bind and read database text explicitly as UTF-8, preserving accented and
   Cyrillic names in imported games as well as in search parameters.
