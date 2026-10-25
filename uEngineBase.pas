@@ -209,10 +209,12 @@ var
 begin
   LState := GetCurrentState;
   LMessage := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) + ' [' +
-    FEngineName + '] current_state=' + EngineStateToString(LState) + '; ' + AMessage;
+    FEngineName + '] current_state=' + EngineStateToString(LState) + '; ' + Copy(AMessage, 1, 8192);
   FLogLock.Acquire;
   try
     FStateLog.Add(LMessage);
+    if FStateLog.Count > 4096 then
+      while FStateLog.Count > 3584 do FStateLog.Delete(0);
     if Assigned(FLogTarget) then
       FLogTarget.Add(LMessage);
   finally
@@ -245,6 +247,8 @@ begin
   FLogLock.Acquire;
   try
     FStateLog.Add(LMessage);
+    if FStateLog.Count > 4096 then
+      while FStateLog.Count > 3584 do FStateLog.Delete(0);
     if Assigned(FLogTarget) then
       FLogTarget.Add(LMessage);
   finally

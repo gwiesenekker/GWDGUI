@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Bound engine output retained in memory (F1)
+
+- Bound engine state logs and individual diagnostic entries. Consume Hub info
+  updates without retaining them in the protocol-response queue; bound that queue
+  and discard oversized output lines without treating their suffix as a command.
+- Remove the DXP stdout buffer/list that was populated but never consumed.
+- Regress 20,000 log entries, a 20,000-line info flood and a malformed oversized
+  line followed by a real move. Existing DXP protocol tests still pass.
+- Validation: unbounded-log regression fails before the fix; clock/flood and local
+  TCP DXP suites pass.
+
 ### 2026-10-25 — Allow configurable cold engine startup (D9)
 
 - Use a 60-second Hub handshake/ready and DXP acceptance default, configurable

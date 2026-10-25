@@ -9,9 +9,12 @@ type
   TClockProbe = class(TDraughtsEngine)
     Used: Double;
     Calls: Integer;
+    procedure EmitLog;
     function DoStartThinking: string; override;
     procedure SetClockInfo(Moves: Integer; Remaining, TotalUsed: Double); override;
   end;
+procedure TClockProbe.EmitLog;
+begin Log('bounded log regression'); end;
 function TClockProbe.DoStartThinking: string;
 begin Result := ''; end;
 procedure TClockProbe.SetClockInfo(Moves: Integer; Remaining, TotalUsed: Double);
@@ -34,10 +37,21 @@ begin
   finally Engine.Free; end;
 end;
 
+procedure CheckBoundedEngineLog;
+var Engine: TClockProbe; I: Integer;
+begin
+  Engine := TClockProbe.Create;
+  try
+    for I := 1 to 20000 do Engine.EmitLog;
+    Check(Engine.StateLog.Count <= 4096, 'engine state log must stay bounded');
+  finally Engine.Free; end;
+end;
+
 procedure FakeHub(const Mode: string);
 var
   Line, MoveText: string;
   Recovered: Boolean;
+  I: Integer;
 begin
   Recovered := False;
   MoveText := '32-28';
@@ -63,6 +77,11 @@ begin
     end
     else if Line = 'go think' then
     begin
+      if Mode = '--flood-hub' then
+      begin
+        WriteLn(StringOfChar('x', 100000) + 'done move=50-1');
+        for I := 1 to 20000 do WriteLn('info depth=17 score=0.2 pv="32-28"');
+      end;
       if Mode = '--long-hub' then
         Sleep(61000)
       else if Mode = '--delayed-hub' then
@@ -353,6 +372,8 @@ begin
     CheckClockedThink('--long-hub', dsWhite, 2, 0, False)
   else
   begin
+    CheckBoundedEngineLog;
+    CheckClockedThink('--flood-hub', dsWhite, 2, 0, False);
     CheckStartupTimeout;
     CheckTypedClockCompatibility;
     CheckHubLevel;

@@ -47,7 +47,6 @@ type
   private
     FAcceptThread: TDxpAcceptThread;
     FBoard: TDraughtsBoard;
-    FBuffer: string;
     FEngine: TExternalEngineDefinition;
     FParams: TEngineParamArray;
     FEngineSide: TDraughtsSide;
@@ -58,7 +57,6 @@ type
     FGameStarted: Boolean;
     FLastMovesText: string;
     FProcess: TPlatformProcess;
-    FReceivedLines: TStringList;
     FSentMoveCount: Integer;
     FSocket: TSocketStream;
     FSocketLock: TCriticalSection;
@@ -544,7 +542,6 @@ begin
   FProcess := TPlatformProcess.Create;
   FProcess.SynchronizeData := False;
   FProcess.OnData := @ProcessData;
-  FReceivedLines := TStringList.Create;
   FSocketLock := TCriticalSection.Create;
   FWorkerQueue := TThreadMessageQueue.Create(False);
   FWorker := TDxpWorkerThread.Create(Self, FWorkerQueue);
@@ -567,7 +564,6 @@ begin
   end;
   FWorker.Free;
   FWorkerQueue.Free;
-  FReceivedLines.Free;
   FAcceptThread.Free;
   FSocketLock.Free;
   FProcess.Free;
@@ -577,36 +573,14 @@ begin
 end;
 
 procedure TDxpEngine.ProcessData(Sender: TObject; const AText: string);
-var
-  DelimiterLength: Integer;
-  Line: string;
-  LineEnd: Integer;
 begin
   if not IsWorkerThread then
   begin
     QueueProcessData(AText);
     Exit;
   end;
-
+  // DXP uses its socket for protocol data; stdout is only diagnostic output.
   Log('stdout; text=' + StringReplace(AText, LineEnding, '\n', [rfReplaceAll]));
-  FBuffer += AText;
-  while True do
-  begin
-    DelimiterLength := Length(LineEnding);
-    LineEnd := Pos(LineEnding, FBuffer);
-    if LineEnd = 0 then
-    begin
-      LineEnd := Pos(#10, FBuffer);
-      DelimiterLength := 1;
-    end;
-    if LineEnd = 0 then
-      Break;
-
-    Line := Trim(Copy(FBuffer, 1, LineEnd - 1));
-    Delete(FBuffer, 1, LineEnd + DelimiterLength - 1);
-    if Line <> '' then
-      FReceivedLines.Add(Line);
-  end;
 end;
 
 procedure TDxpEngine.WaitForWorkerCommand(ACommand: TThreadMessage;

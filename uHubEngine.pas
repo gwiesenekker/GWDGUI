@@ -13,6 +13,7 @@ type
   THubEngine = class(TDraughtsEngine)
   private
     FBuffer: string;
+    FDroppingOutputLine: Boolean;
     FEngine: TExternalEngineDefinition;
     FLevelCommand: string;
     FLastWaitFailure: string;
@@ -365,13 +366,28 @@ begin
         DelimiterLength := 1;
       end;
       if LineEnd = 0 then
+      begin
+        if Length(FBuffer) > 65536 then
+        begin FBuffer := ''; FDroppingOutputLine := True; end;
         Break;
+      end;
+      if FDroppingOutputLine or (LineEnd > 65537) then
+      begin
+        Delete(FBuffer, 1, LineEnd + DelimiterLength - 1);
+        FDroppingOutputLine := False;
+        Continue;
+      end;
 
       Line := Trim(Copy(FBuffer, 1, LineEnd - 1));
       Delete(FBuffer, 1, LineEnd + DelimiterLength - 1);
       if Line <> '' then
       begin
-        FReceivedLines.Add(Line);
+        if (Pos('info ', LowerCase(Line)) <> 1) and
+          (Pos('info=', LowerCase(Line)) <> 1) then
+        begin
+          FReceivedLines.Add(Line);
+          if FReceivedLines.Count > 1024 then FReceivedLines.Delete(0);
+        end;
         if (Pos('info ', LowerCase(Line)) = 1) or
           (Pos('info=', LowerCase(Line)) = 1) then
         begin
