@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Interrupt stuck annotators and report worker errors (D13)
+
+- Request engine cancellation before waiting for annotator shutdown, including
+  while a position change is waiting for an unresponsive engine's stop fence.
+- Protect engine lifetime against shutdown races; stop draining pending commands
+  after termination. Report worker exceptions and always deliver the finished event.
+- Regress ignored stop commands, explicit failure logs, finished callbacks, clean
+  exception handling, repeated immediate shutdown and shutdown after launch failure.
+- Validation: the ignored-stop regression reproduces the old delay; expanded
+  annotator shutdown and position checks pass.
+
 ### 2026-10-25 — Make tournament PDN paths portable (T13)
 
 - Store PDN paths relative to the JSON. Moving a tournament folder keeps its PDN

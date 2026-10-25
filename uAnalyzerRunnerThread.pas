@@ -25,6 +25,7 @@ type
   private
     FCommandQueue: TThreadMessageQueue;
     FEngine: THubEngine;
+    FEngineLifetimeLock: TCriticalSection;
     FEngineDefinition: TExternalEngineDefinition;
     FLastPollTick: QWord;
     FLastPublishedPv: string;
@@ -136,6 +137,7 @@ begin
   FEngineDefinition := TExternalEngineDefinition.Create;
   FEngineDefinition.Assign(AEngineDefinition);
   FCommandQueue := TThreadMessageQueue.Create(True);
+  FEngineLifetimeLock := TCriticalSection.Create;
   FPvBaseBoard := TDraughtsBoard.Create;
   FPvLock := TCriticalSection.Create;
   FOnLog := ALogEvent;
@@ -150,6 +152,7 @@ begin
   PostShutdown;
   WaitFor;
   FEngine.Free;
+  FEngineLifetimeLock.Free;
   FPvLock.Free;
   FPvBaseBoard.Free;
   FCommandQueue.Free;
@@ -301,7 +304,7 @@ procedure TAnalyzerRunnerThread.DrainCommands;
 var
   CommandObject: TObject;
 begin
-  while FCommandQueue.TryPop(CommandObject) do
+  while not Terminated and FCommandQueue.TryPop(CommandObject) do
   begin
     try
       HandleCommand(CommandObject);
@@ -330,50 +333,67 @@ var
   Tick: QWord;
 begin
   try
-    FEngine := THubEngine.Create(FEngineDefinition);
-    FEngine.OnLog := @RuntimeLog;
-    if Assigned(FOnLog) then
-      FOnLog(Self, 'Opening ' + DisplayName + ': ' +
-        EnginePickerDisplayName(FEngineDefinition, 0));
-    if not FEngine.LaunchAndInit then
-    begin
+    try
+      if Terminated then Exit;
+      FEngineLifetimeLock.Acquire;
+      try
+        FEngine := THubEngine.Create(FEngineDefinition);
+      finally
+        FEngineLifetimeLock.Release;
+      end;
+      if Terminated then Exit;
+      FEngine.OnLog := @RuntimeLog;
       if Assigned(FOnLog) then
-        FOnLog(Self, DisplayName + ' launch failed');
-      Exit;
-    end;
-    if Assigned(FOnLog) then
-      FOnLog(Self, DisplayName + ' ready');
+        FOnLog(Self, 'Opening ' + DisplayName + ': ' +
+          EnginePickerDisplayName(FEngineDefinition, 0));
+      if not FEngine.LaunchAndInit then
+      begin
+        if Assigned(FOnLog) then
+          FOnLog(Self, DisplayName + ' launch failed');
+        Exit;
+      end;
+      if Assigned(FOnLog) then
+        FOnLog(Self, DisplayName + ' ready');
 
-    while not Terminated do
-    begin
-      if FCommandQueue.WaitPop(CommandObject, 50) then
+      while not Terminated do
       begin
-        try
-          HandleCommand(CommandObject);
-        finally
-          CommandObject.Free;
+        if FCommandQueue.WaitPop(CommandObject, 50) then
+        begin
+          try
+            HandleCommand(CommandObject);
+          finally
+            CommandObject.Free;
+          end;
+          DrainCommands;
         end;
-        DrainCommands;
+        if Terminated then
+          Break;
+        Tick := GetTickCount64;
+        if (FLastPollTick = 0) or
+          (Tick - FLastPollTick >= AnalyzerPollIntervalMs) then
+        begin
+          FLastPollTick := Tick;
+          if FEngine <> nil then
+            FEngine.PollOutput;
+        end;
       end;
-      if Terminated then
-        Break;
-      Tick := GetTickCount64;
-      if (FLastPollTick = 0) or
-        (Tick - FLastPollTick >= AnalyzerPollIntervalMs) then
-      begin
-        FLastPollTick := Tick;
-        if FEngine <> nil then
-          FEngine.PollOutput;
-      end;
+    except
+      on E: Exception do
+        if not Terminated and Assigned(FOnLog) then
+          FOnLog(Self, DisplayName + ' failed: ' + E.ClassName + ': ' + E.Message);
     end;
   finally
     if FCommandQueue <> nil then
       FCommandQueue.Close;
-    if FEngine <> nil then
-    begin
-      FEngine.OnLog := nil;
-      FEngine.Free;
-      FEngine := nil;
+    FEngineLifetimeLock.Acquire;
+    try
+      if FEngine <> nil then
+      begin
+        FEngine.OnLog := nil;
+        FreeAndNil(FEngine);
+      end;
+    finally
+      FEngineLifetimeLock.Release;
     end;
     if Assigned(FOnLog) then
       FOnLog(Self, DisplayName + ' closed');
@@ -433,9 +453,18 @@ procedure TAnalyzerRunnerThread.PostShutdown;
 var
   Command: TAnalyzerCommand;
 begin
+  Terminate;
+  // Interrupt a worker waiting for a search/stop acknowledgement. Protect the
+  // engine's lifetime while shutdown races with creation or final cleanup.
+  FEngineLifetimeLock.Acquire;
+  try
+    if FEngine <> nil then
+      FEngine.RequestStop;
+  finally
+    FEngineLifetimeLock.Release;
+  end;
   Command := TAnalyzerCommand.Create(accShutdown);
   PostCommand(Command);
-  Terminate;
 end;
 
 end.

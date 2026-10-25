@@ -6,13 +6,17 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  Classes, SysUtils,
+  Classes, SysUtils, SyncObjs, uDraughtsBoard, uGameTreeSearchRef,
   uAnalyzerRunnerThread, uEngineRegistry;
 
 type
   TRunnerObserver = class
   public
     Finished: Boolean;
+    Searching, Stopping, Failed: TEvent;
+    constructor Create;
+    destructor Destroy; override;
+    procedure Log(Sender: TObject; const MessageText: string);
     procedure RunnerFinished(Sender: TObject);
   end;
 
@@ -28,6 +32,115 @@ end;
 procedure TRunnerObserver.RunnerFinished(Sender: TObject);
 begin
   Finished := True;
+end;
+
+constructor TRunnerObserver.Create;
+begin
+  inherited Create;
+  Searching := TEvent.Create(nil, True, False, '');
+  Stopping := TEvent.Create(nil, True, False, '');
+  Failed := TEvent.Create(nil, True, False, '');
+end;
+
+destructor TRunnerObserver.Destroy;
+begin
+  Failed.Free;
+  Stopping.Free;
+  Searching.Free;
+  inherited Destroy;
+end;
+
+procedure TRunnerObserver.Log(Sender: TObject; const MessageText: string);
+begin
+  if Pos('message=go analyze', MessageText) > 0 then Searching.SetEvent;
+  if Pos('stop sent; waiting for done', MessageText) > 0 then Stopping.SetEvent;
+  if Pos('Annotator failed:', MessageText) > 0 then Failed.SetEvent;
+end;
+
+procedure FakeUnresponsiveHub;
+var
+  Line: string;
+begin
+  while not EOF(Input) do
+  begin
+    ReadLn(Line);
+    if Line = 'hub' then WriteLn('wait')
+    else if Line = 'init' then WriteLn('ready')
+    else if Line = 'quit' then Exit;
+    // Deliberately ignore both search and stop: no done fence ever arrives.
+    Flush(Output);
+  end;
+end;
+
+procedure CheckUnresponsiveSearch(ShutdownDuringStop: Boolean);
+var
+  Engine: TExternalEngineDefinition;
+  Observer: TRunnerObserver;
+  Runner: TAnalyzerRunnerThread;
+  Board: TDraughtsBoard;
+  Search: TGameTreeSearchRef;
+  Tick: QWord;
+begin
+  Engine := TExternalEngineDefinition.Create;
+  Observer := TRunnerObserver.Create;
+  Board := TDraughtsBoard.Create;
+  Runner := nil;
+  try
+    Engine.Kind := eekHub;
+    Engine.ExePath := ExpandFileName(ParamStr(0));
+    Engine.Arguments := '--unresponsive-hub';
+    Runner := TAnalyzerRunnerThread.Create(Engine, @Observer.Log, nil,
+      @Observer.RunnerFinished);
+    Runner.Start;
+    Board.LoadFromFEN(DefaultStartingFEN);
+    Search := Default(TGameTreeSearchRef);
+    Runner.PostAnalyze(DefaultStartingFEN, '', Board, 0, False, Search);
+    Check(Observer.Searching.WaitFor(5000) = wrSignaled, 'fake annotator must start searching');
+    Runner.PostAnalyze(DefaultStartingFEN, '', Board, 0, False, Search);
+    Check(Observer.Stopping.WaitFor(5000) = wrSignaled, 'second position must wait for the stop fence');
+    if ShutdownDuringStop then
+    begin
+      Tick := GetTickCount64;
+      FreeAndNil(Runner);
+      Check(GetTickCount64 - Tick < 2500, 'shutdown must interrupt the ten-second stop fence');
+      Check(Observer.Finished, 'interrupted annotator must deliver finished callback');
+    end
+    else
+    begin
+      Check(Observer.Failed.WaitFor(13000) = wrSignaled, 'stop failure must be reported with an error log');
+      Runner.WaitFor;
+      Check(Observer.Finished, 'failed annotator must deliver finished callback');
+      Check(Runner.FatalException = nil, 'command exceptions must be handled by the runner');
+    end;
+  finally
+    Runner.Free;
+    Board.Free;
+    Observer.Free;
+    Engine.Free;
+  end;
+end;
+
+procedure CheckImmediateShutdown;
+var
+  Engine: TExternalEngineDefinition;
+  Runner: TAnalyzerRunnerThread;
+  I: Integer;
+begin
+  Engine := TExternalEngineDefinition.Create;
+  try
+    Engine.Kind := eekHub;
+    Engine.ExePath := ExpandFileName(ParamStr(0));
+    Engine.Arguments := '--unresponsive-hub';
+    for I := 1 to 20 do
+    begin
+      Runner := TAnalyzerRunnerThread.Create(Engine, nil, nil, nil);
+      Runner.Start;
+      Runner.PostShutdown;
+      Runner.Free;
+    end;
+  finally
+    Engine.Free;
+  end;
 end;
 
 procedure CheckShutdownAfterRunnerFinished;
@@ -65,6 +178,14 @@ begin
 end;
 
 begin
+  if ParamStr(1) = '--unresponsive-hub' then
+  begin
+    FakeUnresponsiveHub;
+    Halt(0);
+  end;
   CheckShutdownAfterRunnerFinished;
+  CheckImmediateShutdown;
+  CheckUnresponsiveSearch(True);
+  CheckUnresponsiveSearch(False);
   Writeln('OK');
 end.
