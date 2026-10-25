@@ -527,6 +527,9 @@ var
 begin
   FGame := AGame;
   try
+    if Trim(FGame.ImportWarningsText) <> '' then
+      LogLine('warning' + #9 + 'event=' + LogField(FGame.EventName) + #9 +
+        LogField(Trim(FGame.ImportWarningsText)));
     FMoves.Clear;
     ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(FGame.MovesText)),
       FMoves);

@@ -3,6 +3,20 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Isolate malformed PDN variations instead of aborting files (P16)
+
+- Skip variations whose numbered or annotated start is outside their parent line;
+  retain the surrounding mainline, valid parent/sibling branches and later games.
+  Record per-game import warnings instead of clamping a branch to another position.
+- Diagnose unterminated and unmatched variation brackets. Respect parentheses in
+  semicolon comments when finding a variation's closing bracket.
+- Preserve warnings through streaming reads and game copies. Show counts and
+  selected-game details in the PDN list, and write database import warnings to
+  the import log while continuing to import valid mainlines.
+- Regress multiple nesting depths, bad starts, damaged brackets, comment handling,
+  buffered/streaming parity, cancellation, database continuation and GUI warnings.
+- Validation: full headless regression suite and GTK main-form checks pass.
+
 ### 2026-10-25 — Position White variations correctly when Black starts (remaining P1)
 
 - Correct numbered White-move conversion for Black-to-move FENs: move 2 follows

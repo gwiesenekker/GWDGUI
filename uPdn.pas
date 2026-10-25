@@ -16,6 +16,7 @@ type
     ResultText: string;
     StartingFEN: string;
     InitialCommentText: string;
+    ImportWarningsText: string;
     MoveAnnotationsText: string;
     MoveVariationAnnotationsText: string;
     MoveVariationsText: string;
@@ -74,6 +75,7 @@ begin
   ResultText := ASource.ResultText;
   StartingFEN := ASource.StartingFEN;
   InitialCommentText := ASource.InitialCommentText;
+  ImportWarningsText := ASource.ImportWarningsText;
   MoveAnnotationsText := ASource.MoveAnnotationsText;
   MoveVariationAnnotationsText := ASource.MoveVariationAnnotationsText;
   MoveVariationsText := ASource.MoveVariationsText;
@@ -586,13 +588,14 @@ begin
 
   VariationPly := PlyForMoveNumberAndSide(MoveNumber, Side,
     StartingSideFromFen(AStartingFEN));
-  if VariationPly > 0 then
+  if VariationPly >= 0 then
     Result := VariationPly - 1;
 end;
 
 procedure ExtractPdnMoveData(const AText: string; AMoves, AAnnotations,
   AVariations, AVariationAnnotations: TStrings; const AStartingFEN: string = '';
-  AInitialComments: TStrings = nil; APlyOffset: Integer = 0);
+  AInitialComments: TStrings = nil; APlyOffset: Integer = 0;
+  AWarnings: TStrings = nil);
 var
   I: Integer;
   LBraceDepth: Integer;
@@ -600,6 +603,13 @@ var
   LInLineComment: Boolean;
   LLastMoveIndex: Integer;
   LToken: string;
+  LVariationText: string;
+  LVariationClosed: Boolean;
+
+  procedure Warn(const AMessage: string);
+  begin
+    if AWarnings <> nil then AWarnings.Add(AMessage);
+  end;
 
   procedure ProcessToken;
   var
@@ -644,18 +654,26 @@ var
     AAnnotations[LLastMoveIndex] := LCommentText;
   end;
 
-  function ReadParenthesizedText: string;
+  function ReadParenthesizedText(out AClosed: Boolean): string;
   var
     Depth: Integer;
     InBrace: Integer;
+    InLineComment: Boolean;
   begin
     Result := '';
+    AClosed := False;
     Depth := 1;
     InBrace := 0;
+    InLineComment := False;
     Inc(I);
     while I <= Length(AText) do
     begin
-      if InBrace > 0 then
+      if InLineComment then
+      begin
+        Result += AText[I];
+        if AText[I] in [#10, #13] then InLineComment := False;
+      end
+      else if InBrace > 0 then
       begin
         if AText[I] = '{' then
           Inc(InBrace)
@@ -668,6 +686,11 @@ var
         Inc(InBrace);
         Result += AText[I];
       end
+      else if AText[I] = ';' then
+      begin
+        InLineComment := True;
+        Result += AText[I];
+      end
       else if AText[I] = '(' then
       begin
         Inc(Depth);
@@ -677,7 +700,10 @@ var
       begin
         Dec(Depth);
         if Depth = 0 then
+        begin
+          AClosed := True;
           Exit;
+        end;
         Result += AText[I];
       end
       else
@@ -707,6 +733,12 @@ var
     if LBasePly < APlyOffset then
       LBasePly := APlyOffset;
     LBasePly := InferVariationBasePly(AVariationText, AStartingFEN, LBasePly);
+    if (LBasePly < APlyOffset) or (LBasePly > LSlot) then
+    begin
+      Warn('Skipped variation after ply ' + IntToStr(LSlot) +
+        ': its numbered start lies outside its parent line.');
+      Exit;
+    end;
     LVariationAnnotations := TStringList.Create;
     LVariationMoves := TStringList.Create;
     LInitialComments := TStringList.Create;
@@ -719,7 +751,7 @@ var
     try
       ExtractPdnMoveData(AVariationText, LVariationMoves,
         LVariationAnnotations, NestedLines, NestedAnnotations, AStartingFEN,
-        LInitialComments, LBasePly);
+        LInitialComments, LBasePly, AWarnings);
       if LVariationMoves.Count = 0 then
         Exit;
       if LInitialComments.Count > 0 then
@@ -739,6 +771,12 @@ var
       end
       else
         LVariationAnnotation := '';
+      if (LBasePly < APlyOffset) or (LBasePly > LSlot) then
+      begin
+        Warn('Skipped variation after ply ' + IntToStr(LSlot) +
+          ': its annotated start lies outside its parent line.');
+        Exit;
+      end;
       AVariations.Add(EncodePdnVariationLine(LSlot, LBasePly,
         MoveListText(LVariationMoves)));
       if LVariationAnnotations.Count > 0 then
@@ -752,7 +790,10 @@ var
           Continue;
         PrefixCount := NestedBase - LBasePly;
         if (PrefixCount < 0) or (PrefixCount > LVariationMoves.Count) then
-          raise EConvertError.Create('Nested PDN variation starts outside its parent line');
+        begin
+          Warn('Skipped nested variation: its start lies outside its parent line.');
+          Continue;
+        end;
         ExtractStrings([' ', #9, #10, #13], [], PChar(NestedText), NestedMoves);
         DecodeVariationAnnotations(NestedComment, NestedMoves.Count,
           NestedMoveAnnotations);
@@ -844,7 +885,16 @@ begin
       '(':
         begin
           ProcessToken;
-          ProcessVariation(ReadParenthesizedText);
+          LVariationText := ReadParenthesizedText(LVariationClosed);
+          if LVariationClosed then ProcessVariation(LVariationText)
+          else Warn('Skipped unterminated variation after ply ' +
+            IntToStr(APlyOffset + AMoves.Count) + '.');
+        end;
+      ')':
+        begin
+          ProcessToken;
+          Warn('Ignored unmatched closing variation bracket after ply ' +
+            IntToStr(APlyOffset + AMoves.Count) + '.');
         end;
       ';':
         begin
@@ -938,6 +988,7 @@ var
   LMoves: TStringList;
   LVariationAnnotations: TStringList;
   LVariations: TStringList;
+  LWarnings: TStringList;
 begin
   if ACurrent = nil then
     Exit;
@@ -946,11 +997,13 @@ begin
   LMoves := TStringList.Create;
   LVariationAnnotations := TStringList.Create;
   LVariations := TStringList.Create;
+  LWarnings := TStringList.Create;
   try
     ExtractPdnMoveData(AMoveLines.Text, LMoves, LAnnotations, LVariations,
-      LVariationAnnotations, ACurrent.StartingFEN, LInitialComments);
+      LVariationAnnotations, ACurrent.StartingFEN, LInitialComments, 0, LWarnings);
     ACurrent.InitialCommentText := Trim(StringReplace(LInitialComments.Text,
       LineEnding, ' ', [rfReplaceAll]));
+    ACurrent.ImportWarningsText := LWarnings.Text;
     ACurrent.MovesText := MoveListText(LMoves);
     ACurrent.MoveAnnotationsText := LAnnotations.Text;
     ACurrent.MoveVariationsText := LVariations.Text;
@@ -966,6 +1019,7 @@ begin
     end;
     AMoveLines.Clear;
   finally
+    LWarnings.Free;
     LInitialComments.Free;
     LVariations.Free;
     LVariationAnnotations.Free;

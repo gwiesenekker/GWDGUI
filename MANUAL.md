@@ -440,7 +440,10 @@ tournament state when closing if unsaved tournament data exists.
 ### 8.1 Opening PDN
 
 Choose **File > Open PDN**. GWDGUI lists the games in the file with White,
-Black, event, and result. Double-click a game to load it into the main window.
+Black, event, and result. A warnings column marks games with malformed
+variations; select a marked game to see what was skipped. A variation whose
+numbered start lies outside its parent line is skipped without moving it to a
+different position. The surrounding game and later games remain available. Double-click a game to load it into the main window.
 
 The loader reconstructs the starting position, mainline, and PDN variations in
 the game tree. Invalid moves are reported with their ply so a damaged game can
@@ -479,7 +482,8 @@ Choose **Database > Create database** for a new `.sqlite` or `.db` file, or
 
 In the database window, right-click and choose **Import PDN**. The progress view
 shows imported games, errors, and duplicates, and allows the import to be
-stopped. An `.import.log` file is written beside the imported PDN file.
+stopped. An `.import.log` file is written beside the imported PDN file. It also records
+nonfatal warnings for skipped malformed variations.
 
 Use **Rebuild position summary** only when the position index needs to be
 recreated, for example after repairing or migrating a database.

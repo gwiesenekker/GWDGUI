@@ -4,8 +4,8 @@ program standalone_preservation_check;
 
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, LCLType, Controls, ComCtrls, Menus,
-  uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPvBrowser, uGuiDialogs,
+  Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, Grids, LCLType, Controls, ComCtrls, Menus,
+  uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPdnOpenDialog, uPvBrowser, uGuiDialogs,
   uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameOrchestrator;
 
 type
@@ -273,6 +273,56 @@ begin
     Moves.Free;
     Source.Free;
     Games.Free;
+  end;
+end;
+
+procedure CheckMalformedVariationWarningsInGui(AForm: TMainForm);
+var
+  Dialog: TPdnOpenDialog;
+  Source: TStringList;
+  Games: TList;
+  Grid: TStringGrid;
+  Status, Warning: TLabel;
+  FileName: string;
+  CanSelect: Boolean;
+  I: Integer;
+begin
+  FileName := GetTempFileName(GetTempDir, 'gwd');
+  Source := TStringList.Create;
+  Games := TList.Create;
+  Dialog := TPdnOpenDialog.Create(AForm);
+  try
+    Source.Text := '[Event "Warned game"]' + LineEnding +
+      '1. 32-28 18-23 (1... 20-24 {Outer} (1. 33-28 {Bad nested}) ' +
+      '2. 37-32 (2. 38-32 {Good sibling} 14-20) 14-20) 2. 37-32 *' + LineEnding +
+      '[Event "Clean game"]' + LineEnding + '1. 33-28 18-22 *';
+    Source.SaveToFile(FileName);
+    Dialog.OpenPdnFile(FileName);
+    Grid := TStringGrid(Dialog.FindComponent('PdnGames'));
+    Status := TLabel(Dialog.FindComponent('PdnImportStatus'));
+    Warning := TLabel(Dialog.FindComponent('PdnImportWarnings'));
+    Check((Grid.RowCount = 3) and (Grid.Cells[4, 1] = '1') and
+      (Grid.Cells[4, 2] = ''), 'PDN list must include both games and mark only the warned one');
+    Check(Pos('1 import warning', Status.Caption) > 0, 'PDN status must report parse warnings');
+    CanSelect := True;
+    Grid.OnSelectCell(Grid, 0, 1, CanSelect);
+    Check(Warning.Visible and (Pos('outside its parent line', Warning.Caption) > 0),
+      'selecting the affected game must explain the skipped variation');
+    Grid.OnSelectCell(Grid, 0, 2, CanSelect);
+    Check(not Warning.Visible, 'selecting a clean game must clear the previous warning');
+    LoadPdnGamesFromFile(FileName, Games);
+    AForm.LoadPdnGameToDisplay(TPdnGame(Games[0]));
+    Check((AForm.ActiveGameTree.MainlineCount = 3) and
+      (AForm.ActiveGameTree.VariationLineCount = 2),
+      'a warned game must still load its mainline and valid branches into the actual form');
+    Check(Pos('Good sibling', GameTreeToPdnText(AForm.ActiveGameTree)) > 0,
+      'opening a warned game must retain its valid annotations');
+  finally
+    Dialog.Free;
+    for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
+    Games.Free;
+    Source.Free;
+    DeleteFile(FileName);
   end;
 end;
 
@@ -766,6 +816,7 @@ begin
       CheckFrozenPvSurvivesRefresh(Form);
       CheckNestedGuiNavigation(Form);
       CheckBlackStartVariationNavigation(Form);
+      CheckMalformedVariationWarningsInGui(Form);
       CheckExportDoesNotMutate(Form);
       Game.EventName := 'Standalone test';
       Game.MovesText := '32-28 18-23';

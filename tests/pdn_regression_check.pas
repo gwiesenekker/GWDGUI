@@ -5,6 +5,15 @@ program pdn_regression_check;
 uses
   Classes, SysUtils, uDraughtsBoard, uGameDatabase, uGameMoveHistory, uPdn;
 
+type
+  TReadCollector = class
+    Games: TList;
+    StopAfter: Integer;
+    constructor Create;
+    destructor Destroy; override;
+    procedure ReadGame(AGame: TPdnGame; ABytesRead, ATotalBytes: Int64; var AStop: Boolean);
+  end;
+
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
   if not ACondition then
@@ -27,6 +36,30 @@ begin
   for I := 0 to AGames.Count - 1 do
     TObject(AGames[I]).Free;
   AGames.Clear;
+end;
+
+constructor TReadCollector.Create;
+begin
+  inherited Create;
+  Games := TList.Create;
+end;
+
+destructor TReadCollector.Destroy;
+begin
+  ClearGames(Games);
+  Games.Free;
+  inherited Destroy;
+end;
+
+procedure TReadCollector.ReadGame(AGame: TPdnGame; ABytesRead, ATotalBytes: Int64;
+  var AStop: Boolean);
+var
+  Copy: TPdnGame;
+begin
+  Copy := TPdnGame.Create;
+  Copy.AssignFrom(AGame);
+  Games.Add(Copy);
+  AStop := (StopAfter > 0) and (Games.Count >= StopAfter);
 end;
 
 procedure CheckPdnLoadAndAppend;
@@ -348,7 +381,103 @@ begin
   end;
 end;
 
+procedure CheckMalformedVariationDoesNotAbortFile;
+var
+  FileName, DbName, LogName: string;
+  Collector: TReadCollector;
+  Database: TGameDatabase;
+  Imported, Duplicates, Errors, I: Integer;
+  Lines, Variations: TStringList;
+  Games: TList;
+const
+  Malformed: array[0..5] of string = (
+    '1. 32-28 18-23 (1... 20-24 (9. 33-28) 2. 37-32 14-20) 2. 37-32 *',
+    '1. 32-28 18-23 (1... 20-24 2. 37-32 (2. 38-32 (1... 17-22) 14-20) 14-20) 2. 37-32 *',
+    '1. 32-28 (1. 33-28 {unterminated RAV}',
+    '1. 32-28 ) 18-23 *',
+    '1. 32-28 18-23 (1... 20-24 {base_ply=99}) 2. 37-32 *',
+    '1. 32-28 18-23 (1... 19-23 (1. 33-28) 2. 37-32) 2. 37-32 *');
 begin
+  FileName := GetTempFileName(GetTempDir, 'gwd-pdn');
+  DbName := FileName + '.db';
+  LogName := FileName + '.log';
+  Collector := TReadCollector.Create;
+  Database := TGameDatabase.Create;
+  Lines := TStringList.Create;
+  Variations := TStringList.Create;
+  Games := TList.Create;
+  try
+    Lines.Text := '[Event "Before"]' + LineEnding + LineEnding +
+      '1. 32-28 18-23 *' + LineEnding +
+      '[Event "Malformed nested"]' + LineEnding + LineEnding +
+      '1. 32-28 {Main start} 18-23 (1... 20-24 {Outer} ' +
+      '(1. 33-28 {Bad nested start}) 2. 37-32 ' +
+      '(2. 38-32 {Good sibling} 14-20) 14-20) 2. 37-32 {Main tail} *' + LineEnding +
+      '[Event "After"]' + LineEnding + LineEnding + '1. 33-28 18-22 *';
+    Lines.SaveToFile(FileName);
+    LoadPdnGamesFromFile(FileName, Games);
+    Check(Games.Count = 3, 'a malformed nested RAV must not abort any game in the file');
+    CheckEqual(TPdnGame(Games[1]).MovesText, '32-28 18-23 37-32',
+      'the affected game mainline must remain intact');
+    Variations.Text := TPdnGame(Games[1]).MoveVariationsText;
+    Check(Variations.Count = 2, 'the valid parent and sibling variations must survive');
+    CheckEqual(TPdnGame(Games[2]).EventName, 'After', 'later games must still load');
+    Check(Pos('outside its parent line', TPdnGame(Games[1]).ImportWarningsText) > 0,
+      'the affected game must carry a diagnostic for the rejected branch');
+    Check((TPdnGame(Games[0]).ImportWarningsText = '') and
+      (TPdnGame(Games[2]).ImportWarningsText = ''), 'warnings must not leak into adjacent games');
+    Check((Pos('Outer', TPdnGame(Games[1]).MoveVariationAnnotationsText) > 0) and
+      (Pos('Good sibling', TPdnGame(Games[1]).MoveVariationAnnotationsText) > 0) and
+      (Pos('Bad nested', TPdnGame(Games[1]).MoveVariationAnnotationsText) = 0),
+      'retain valid comments without transplanting rejected branch comments');
+    ReadPdnGamesFromFile(FileName, @Collector.ReadGame);
+    Check((Collector.Games.Count = 3) and
+      (TPdnGame(Collector.Games[1]).ImportWarningsText = TPdnGame(Games[1]).ImportWarningsText),
+      'streaming reads and copied games must retain diagnostics and continue');
+    ClearGames(Collector.Games);
+    Collector.StopAfter := 2;
+    ReadPdnGamesFromFile(FileName, @Collector.ReadGame);
+    Check(Collector.Games.Count = 2, 'streaming cancellation must still work after a warning');
+    Database.CreateDatabase(DbName);
+    Database.ImportPdnFile(FileName, Imported, Duplicates, Errors, nil, LogName);
+    Check((Imported = 3) and (Duplicates = 0) and (Errors = 0),
+      'a malformed variation must not abort database import of valid mainlines');
+    Lines.LoadFromFile(LogName);
+    Check((Pos('warning' + #9, Lines.Text) > 0) and
+      (Pos('Malformed nested', Lines.Text) > 0), 'database import log must identify the warned game');
+    // Cover malformed numbering at different depths and damaged brackets.
+    for I := Low(Malformed) to High(Malformed) do
+    begin
+      Lines.Text := '[Event "Before"]' + LineEnding + '1. 32-28 18-23 *' + LineEnding +
+        '[Event "Damaged"]' + LineEnding + Malformed[I] + LineEnding +
+        '[Event "After"]' + LineEnding + '1. 33-28 18-22 *';
+      Lines.SaveToFile(FileName);
+      LoadPdnGamesFromFile(FileName, Games);
+      Check((Games.Count = 3) and (TPdnGame(Games[1]).ImportWarningsText <> '') and
+        (TPdnGame(Games[2]).ImportWarningsText = ''),
+        'malformed RAV must stay isolated to its own game: ' + IntToStr(I));
+    end;
+    Lines.Text := '1. 32-28 18-23 (1... 20-24 ; a ) in a line comment' + LineEnding +
+      '2. 37-32 14-20) 2. 37-32 *';
+    Lines.SaveToFile(FileName);
+    LoadPdnGamesFromFile(FileName, Games);
+    Check((Games.Count = 1) and (TPdnGame(Games[0]).ImportWarningsText = ''),
+      'parentheses in line comments must not damage a valid variation');
+  finally
+    Database.Free;
+    Collector.Free;
+    ClearGames(Games);
+    Games.Free;
+    Variations.Free;
+    Lines.Free;
+    DeleteFile(FileName);
+    DeleteFile(DbName);
+    DeleteFile(LogName);
+  end;
+end;
+
+begin
+  CheckMalformedVariationDoesNotAbortFile;
   CheckPdnLoadAndAppend;
   CheckPdnGluedMoveNumbers;
   CheckPdnVariationImportExport;
