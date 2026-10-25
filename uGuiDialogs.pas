@@ -29,7 +29,7 @@ procedure ShowFormCenteredOnOwner(AForm, AOwner: TCustomForm);
 implementation
 
 uses
-  Classes, Controls, ExtCtrls, Graphics, Math, Process, StdCtrls, SysUtils;
+  Classes, Controls, ExtCtrls, Graphics, Math, Process, StdCtrls, SysUtils, uPlatformProcess;
 
 const
   DialogWidth = 400;
@@ -184,12 +184,12 @@ begin
   try
     Proc.Executable := 'xrandr';
     Proc.Parameters.Add('--query');
-    Proc.Options := [poUsePipes, poWaitOnExit];
+    Proc.Options := [poUsePipes];
     try
-      Proc.Execute;
-      if Proc.ExitStatus <> 0 then
-        Exit;
+      ExecuteAuxiliaryProcess(Proc);
       Lines.LoadFromStream(Proc.Output);
+      Proc.WaitOnExit;
+      if Proc.ExitStatus <> 0 then Exit;
     except
       Exit;
     end;

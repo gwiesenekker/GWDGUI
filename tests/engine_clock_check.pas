@@ -168,6 +168,10 @@ begin
   Check(EngineStartupTimeoutMs(Params) = 60000, 'cold engine startup default');
   AddOrUpdateParam(Params, 'gui-startup-timeout-ms', 'string', '7000', False);
   Check(EngineStartupTimeoutMs(Params) = 7000, 'per-engine startup override');
+  AddOrUpdateParam(Params, 'gui-startup-timeout-ms', 'string', '0', False);
+  Check(EngineStartupTimeoutMs(Params) = 60000, 'zero startup timeout uses the default');
+  AddOrUpdateParam(Params, 'gui-startup-timeout-ms', 'string', '-5', False);
+  Check(EngineStartupTimeoutMs(Params) = 1000, 'negative startup timeout remains bounded');
   Engine := CreateEngine('--slow-start-hub');
   try Check(Engine.LaunchAndInit, 'cold engine initialization must tolerate more than five seconds');
   finally Engine.Free; end;

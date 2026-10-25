@@ -68,11 +68,38 @@ type
   end;
 
 function CommandLineQuote(const AText: string): string;
+procedure ExecuteAuxiliaryProcess(AProcess: TProcess);
 
 implementation
 
 const LocalFdCloseOnExec = 1;
 var LaunchLock: TCriticalSection;
+
+procedure ExecuteAuxiliaryProcess(AProcess: TProcess);
+{$IFDEF UNIX}
+  procedure ProtectPipe(Stream: THandleStream);
+  begin
+    if (Stream <> nil) and
+      (fpFcntl(Stream.Handle, F_SETFD, fpFcntl(Stream.Handle, F_GETFD) or LocalFdCloseOnExec) < 0) then
+      RaiseLastOSError;
+  end;
+{$ENDIF}
+begin
+  // Waiting here would hold up engine launches for the child's whole lifetime.
+  if poWaitOnExit in AProcess.Options then
+    raise EInvalidOperation.Create('Wait for auxiliary processes after launch');
+  LaunchLock.Acquire;
+  try
+    AProcess.Execute;
+    {$IFDEF UNIX}
+    if poUsePipes in AProcess.Options then
+    begin
+      ProtectPipe(AProcess.Input); ProtectPipe(AProcess.Output);
+      ProtectPipe(AProcess.Stderr);
+    end;
+    {$ENDIF}
+  finally LaunchLock.Release; end;
+end;
 
 function CommandLineQuote(const AText: string): string;
 var I, Slashes: Integer;

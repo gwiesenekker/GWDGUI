@@ -44,6 +44,7 @@ uses
 function EngineStartupTimeoutMs(const AParams: TEngineParamArray): Integer;
 begin
   Result := StrToIntDef(EngineParamValue(AParams, 'gui-startup-timeout-ms', '60000'), 60000);
+  if Result = 0 then Result := 60000;
   if Result < 1000 then Result := 1000;
   if Result > 300000 then Result := 300000;
 end;

@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Isolate auxiliary process pipes and default zero startup timeouts
+
+- Launch the monitor-query process under the same lock as engines, protect its
+  Unix parent pipes from inheritance, and drain output before waiting outside
+  the launch lock.
+- Interpret a configured startup timeout of zero as the 60-second default.
+- Validation: real child-process checks cover auxiliary-to-engine and
+  engine-to-auxiliary pipe isolation; startup/clock regressions pass.
+
 ### 2026-10-25 — Import databases on an owned worker connection (P10)
 
 - Move parsing and database writes off the GUI thread. A worker owns its SQLite
