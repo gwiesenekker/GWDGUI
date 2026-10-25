@@ -803,6 +803,45 @@ begin
   end;
 end;
 
+procedure CheckLiteralVariationComments;
+var FileName, Exported: string; Text: TStringList; Games: TList; Root: TPdnMoveNode;
+  Game: TPdnGame;
+begin
+  FileName := GetTempFileName(GetTempDir, 'gwd-comments');
+  Text := TStringList.Create;
+  Games := TList.Create;
+  try
+    Text.Text := '1. 32-28 {close \} open \{ path \\} 18-23 ' +
+      '(1... 20-24 {base_ply=99}) ({comment-only variation}) 2. 37-32 *';
+    Text.SaveToFile(FileName);
+    LoadPdnGamesFromFile(FileName, Games);
+    Game := TPdnGame(Games[0]);
+    Check(Pos('close } open { path \', Game.MoveAnnotationsText) > 0,
+      'escaped braces and backslash must remain literal');
+    Check(Pos('comment-only variation', Game.MoveAnnotationsText) > 0,
+      'comment-only variation must retain its text');
+    Root := Game.BuildMoveTree;
+    try
+      Check(Root.Children[0].ChildCount = 2, 'literal base_ply must not relocate a legal branch');
+      CheckEqual(Root.Children[0].Children[1].AnnotationText, 'base_ply=99',
+        'legacy-looking comment must remain literal');
+    finally Root.Free; end;
+    Exported := PdnGameToText(Game);
+    Text.Text := Exported;
+    Text.SaveToFile(FileName);
+    LoadPdnGamesFromFile(FileName, Games);
+    Check(Pos('close } open { path \', TPdnGame(Games[0]).MoveAnnotationsText) > 0,
+      'escaped comment must survive a complete save/load cycle');
+    Game := TPdnGame.Create;
+    try
+      Game.StartingFEN := 'B:W31-50:B1-20';
+      Game.MovesText := '18-23 33-28';
+      Check(Pos('1... 18-23 2. 33-28', PdnGameToText(Game)) > 0,
+        'legacy writer must number White after a Black start as move two');
+    finally Game.Free; end;
+  finally ClearGames(Games); Games.Free; Text.Free; DeleteFile(FileName); end;
+end;
+
 procedure CheckMalformedVariationDoesNotAbortFile;
 var
   FileName, DbName, LogName: string;
@@ -812,12 +851,11 @@ var
   Lines, Variations: TStringList;
   Games: TList;
 const
-  Malformed: array[0..5] of string = (
+  Malformed: array[0..4] of string = (
     '1. 32-28 18-23 (1... 20-24 (9. 33-28) 2. 37-32 14-20) 2. 37-32 *',
     '1. 32-28 18-23 (1... 20-24 2. 37-32 (2. 38-32 (1... 17-22) 14-20) 14-20) 2. 37-32 *',
     '1. 32-28 (1. 33-28 {unterminated RAV}',
     '1. 32-28 ) 18-23 *',
-    '1. 32-28 18-23 (1... 20-24 {base_ply=99}) 2. 37-32 *',
     '1. 32-28 18-23 (1... 19-23 (1. 33-28) 2. 37-32) 2. 37-32 *');
 begin
   FileName := GetTempFileName(GetTempDir, 'gwd-pdn');
@@ -905,6 +943,7 @@ begin
   CheckInvalidGamesDoNotAbortImport;
   CheckDoubleLossResult;
   CheckMovetextResults;
+  CheckLiteralVariationComments;
   CheckMalformedVariationDoesNotAbortFile;
   CheckPdnLoadAndAppend;
   CheckAppendPreservesBytes;

@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Preserve literal PDN comments and Black-start numbering (P18, P12)
+
+- Stop interpreting `base_ply` or annotator-like text in comments as structural
+  metadata. Explicit compatibility records retain their own base fields.
+- Preserve comment-only variation text as a position comment with a diagnostic.
+  Escape braces/backslashes on export and honor them across stream buffers and
+  recursive variations, so comment contents cannot change game boundaries.
+- Correct White move numbers after a Black-to-move start in the legacy writer.
+- Regress literal metadata-looking comments, comment-only text, escaped delimiters
+  across save/load and legacy Black-start export. PDN/tree/filter suites pass.
+
 ### 2026-10-25 — Reject malformed moves and overlapping FEN pieces (R6, U4)
 
 - Reject whitespace within move squares, dangling capture separators and mixed

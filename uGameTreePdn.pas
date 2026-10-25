@@ -50,6 +50,8 @@ function GameTreeHasContent(AGameTree: TGameTree): Boolean;
 
 implementation
 
+uses uPdn;
+
 function GameTreeHasContent(AGameTree: TGameTree): Boolean;
 begin
   Result := False;
@@ -193,7 +195,7 @@ begin
     end;
   end;
   if Result <> '' then
-    Result := ' {' + Result + '}';
+    Result := ' {' + EscapePdnComment(Result) + '}';
 end;
 
 function NodeIsAnnotatorAlternative(APrevious, ANode: TGameTreePlyNode): Boolean;

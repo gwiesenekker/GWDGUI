@@ -64,6 +64,7 @@ procedure AppendPdnGameToFile(const AFileName: string; AGame: TPdnGame);
 procedure AppendPdnTextToFile(const AFileName, APdnText: string);
 function PdnGameToText(AGame: TPdnGame): string;
 function PdnExportResult(const AText: string): string;
+function EscapePdnComment(const Text: string): string;
 function AnnotationWithScore(const AAnnotation, AName, AScore: string): string;
 function ExtractAnnotationValue(const AAnnotation, AName: string): string;
 function AnnotationWithoutName(const AAnnotation, AName: string): string;
@@ -269,6 +270,13 @@ function PdnQuote(const AText: string): string;
 begin
   Result := StringReplace(AText, '\', '\\', [rfReplaceAll]);
   Result := StringReplace(Result, '"', '\"', [rfReplaceAll]);
+end;
+
+function EscapePdnComment(const Text: string): string;
+begin
+  Result := StringReplace(Text, '\', '\\', [rfReplaceAll]);
+  Result := StringReplace(Result, '{', '\{', [rfReplaceAll]);
+  Result := StringReplace(Result, '}', '\}', [rfReplaceAll]);
 end;
 
 function NormalizePdnResult(const AText: string): string;
@@ -621,7 +629,6 @@ function DecodePdnVariationLine(const ALine, AAnnotation: string;
   ADefaultDisplayAfterPly: Integer; out ADisplayAfterPly, ABasePly: Integer;
   out AMovesText, AVisibleAnnotation: string): Boolean;
 var
-  BaseText: string;
   FirstTab: Integer;
   SecondTab: Integer;
 begin
@@ -649,20 +656,8 @@ begin
   else
   begin
     AMovesText := Trim(ALine);
-    BaseText := ExtractAnnotationValue(AVisibleAnnotation, 'base_ply');
-    if BaseText <> '' then
-      ABasePly := StrToIntDef(BaseText, ADisplayAfterPly)
-    else if ExtractAnnotationValue(AVisibleAnnotation, 'annotator') <> '' then
-    begin
-      ABasePly := ADisplayAfterPly - 1;
-      if ABasePly < 0 then
-        ABasePly := 0;
-    end;
   end;
 
-  if Copy(AVisibleAnnotation, 1, Length(VariationAnnotationsPrefix)) <>
-    VariationAnnotationsPrefix then
-    AVisibleAnnotation := AnnotationWithoutName(AVisibleAnnotation, 'base_ply');
   Result := AMovesText <> '';
 end;
 
@@ -837,6 +832,8 @@ var
       end
       else if InBrace > 0 then
       begin
+        if (AText[I] = '\') and (I < Length(AText)) and (AText[I + 1] in ['\', '{', '}']) then
+        begin Inc(I, 2); Continue; end;
         if AText[I] = '{' then Inc(InBrace)
         else if AText[I] = '}' then Dec(InBrace);
       end
@@ -901,7 +898,15 @@ var
         LVariationAnnotations, NestedLines, NestedAnnotations, AStartingFEN,
         LInitialComments, LBasePly, AWarnings, BranchRoot);
       if LVariationMoves.Count = 0 then
+      begin
+        if LInitialComments.Count > 0 then
+        begin
+          LComment.Append(Trim(LInitialComments.Text));
+          ProcessComment;
+          Warn('Retained a comment-only variation as a position comment.');
+        end;
         Exit;
+      end;
       if LInitialComments.Count > 0 then
       begin
         LVariationAnnotation := Trim(StringReplace(LInitialComments.Text,
@@ -909,21 +914,6 @@ var
         if LVariationAnnotations[0] <> '' then
           LVariationAnnotation += '; ' + LVariationAnnotations[0];
         LVariationAnnotations[0] := LVariationAnnotation;
-      end;
-      if LVariationAnnotations.Count > 0 then
-      begin
-        LVariationAnnotation := Trim(
-          LVariationAnnotations[LVariationAnnotations.Count - 1]);
-        LBasePly := StrToIntDef(ExtractAnnotationValue(LVariationAnnotation,
-          'base_ply'), LBasePly);
-      end
-      else
-        LVariationAnnotation := '';
-      if (LBasePly < APlyOffset) or (LBasePly > LSlot) then
-      begin
-        Warn('Skipped variation after ply ' + IntToStr(LSlot) +
-          ': its annotated start lies outside its parent line.');
-        Exit;
       end;
       if (ATreeRoot <> nil) and (BranchRoot.ChildCount > 0) then
       begin
@@ -1016,8 +1006,10 @@ begin
 
     if LBraceDepth > 0 then
     begin
+      if (AText[I] = '\') and (I < Length(AText)) and (AText[I + 1] in ['\', '{', '}']) then
+      begin LComment.Append(AText[I + 1]); Inc(I, 2); Continue; end;
       J := I;
-      while (J <= Length(AText)) and not (AText[J] in ['{', '}']) do Inc(J);
+      while (J <= Length(AText)) and not (AText[J] in ['{', '}', '\']) do Inc(J);
       if J > I then
       begin
         LComment.Append(Copy(AText, I, J - I));
@@ -1243,7 +1235,7 @@ var
   Current: TPdnGame;
   MoveLines, HeaderNames: TStringList;
   MoveLine, TagText, Token: TStringBuilder;
-  Stop, InTag, InQuote, Escaped, InLineComment: Boolean;
+  Stop, InTag, InQuote, Escaped, InLineComment, CommentEscaped: Boolean;
   HasMovetext, LineHasContent, PreviousCR, ResultSeen: Boolean;
   Stream: TFileStream;
   TotalBytes: Int64;
@@ -1343,7 +1335,9 @@ var
     if BraceDepth > 0 then
     begin
       if not AHeadersOnly then MoveLine.Append(C);
-      if C = '{' then Inc(BraceDepth)
+      if CommentEscaped then CommentEscaped := False
+      else if C = '\' then CommentEscaped := True
+      else if C = '{' then Inc(BraceDepth)
       else if C = '}' then Dec(BraceDepth);
       if C = #10 then
       begin
@@ -1424,6 +1418,7 @@ begin
   InQuote := False;
   Escaped := False;
   InLineComment := False;
+  CommentEscaped := False;
   HasMovetext := False;
   LineHasContent := False;
   PreviousCR := False;
@@ -1451,7 +1446,10 @@ begin
             while (J < BytesRead) and not (Chr(Buffer[J]) in ['"', '\', ']', #10, #13]) do Inc(J);
         end
         else if BraceDepth > 0 then
-          while (J < BytesRead) and not (Chr(Buffer[J]) in ['{', '}', #10, #13]) do Inc(J)
+        begin
+          if not CommentEscaped then
+            while (J < BytesRead) and not (Chr(Buffer[J]) in ['{', '}', '\', #10, #13]) do Inc(J);
+        end
         else if InLineComment then
           while (J < BytesRead) and not (Buffer[J] in [10, 13]) do Inc(J)
         else if Chr(Buffer[I]) in [' ', #9] then
@@ -1561,7 +1559,7 @@ begin
       else
         Result += LMoves[I];
       if LAnnotations[I] <> '' then
-        Result += ' {' + LAnnotations[I] + '}';
+        Result += ' {' + EscapePdnComment(LAnnotations[I]) + '}';
     end;
   finally
     LAnnotations.Free;
@@ -1636,7 +1634,8 @@ begin
         LText += ' ';
       if LSide = dsWhite then
       begin
-        LMoveNumber := (I div 2) + 1;
+        if StartingSideFromFen(AStartingFEN) = dsBlack then LMoveNumber := ((I + 1) div 2) + 1
+        else LMoveNumber := (I div 2) + 1;
         LText += IntToStr(LMoveNumber) + '. ' + LMoves[I];
         LSide := dsBlack;
       end
@@ -1648,7 +1647,7 @@ begin
         LSide := dsWhite;
       end;
       if (I < LAnnotations.Count) and (Trim(LAnnotations[I]) <> '') then
-        LText += ' {' + Trim(LAnnotations[I]) + '}';
+        LText += ' {' + EscapePdnComment(Trim(LAnnotations[I])) + '}';
       AppendVariationsAfterPly(I + 1);
       if Length(LText) > 78 then
       begin
@@ -1741,7 +1740,7 @@ begin
     Lines.Add('[FEN "' + PdnQuote(AGame.StartingFEN) + '"]');
     Lines.Add('');
     if AGame.InitialCommentText <> '' then
-      Lines.Add('{' + AGame.InitialCommentText + '}');
+      Lines.Add('{' + EscapePdnComment(AGame.InitialCommentText) + '}');
     Lines.Text := Lines.Text + FormatMovesForPdn(AGame.MovesText,
       AGame.MoveAnnotationsText, AGame.MoveVariationsText,
       AGame.MoveVariationAnnotationsText, AGame.ResultText, AGame.StartingFEN);
