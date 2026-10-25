@@ -3,6 +3,19 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Read PDN headers outside comments and quoted values (P7)
+
+- Use one incremental reader for buffered and streaming imports. Read each tag
+  separately, including multiple tags and following moves on the same line;
+  preserve escaped quotes and brackets in values and accept tab separators.
+- Keep tag-like text inside brace and line comments in its game. Separate
+  tags-only games at repeated tags or blank lines between header blocks, retaining
+  forfeits without moves. Keep recovery at a new-line header after a damaged RAV.
+- Regress inline tags/moves, multiline comments, forfeits, escaped values and
+  UTF-8 BOMs, checking buffered/streamed results and warning parity.
+- Validation: the boundary regression fails before the fix; PDN regression,
+  recursive-tree, tree-filter and preservation checks pass.
+
 ### 2026-10-25 — Continue database import after invalid games (P8)
 
 - Validate each whole game before inserting any rows. Log and count illegal

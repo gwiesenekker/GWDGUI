@@ -381,6 +381,72 @@ begin
   end;
 end;
 
+procedure CheckPdnHeaderBoundaries;
+var
+  FileName: string;
+  Lines: TStringList;
+  Games: TList;
+  Collector: TReadCollector;
+
+  procedure LoadFixture(const Text: string; Count: Integer);
+  var
+    I: Integer;
+  begin
+    Lines.Text := Text;
+    Lines.SaveToFile(FileName);
+    LoadPdnGamesFromFile(FileName, Games);
+    ClearGames(Collector.Games);
+    ReadPdnGamesFromFile(FileName, @Collector.ReadGame);
+    Check(Games.Count = Count, 'header boundary fixture game count');
+    Check(Collector.Games.Count = Count, 'streamed header boundary game count');
+    for I := 0 to Count - 1 do
+    begin
+      CheckEqual(PdnGameToText(TPdnGame(Collector.Games[I])),
+        PdnGameToText(TPdnGame(Games[I])), 'header buffered/streamed parity');
+      CheckEqual(TPdnGame(Collector.Games[I]).ImportWarningsText,
+        TPdnGame(Games[I]).ImportWarningsText, 'header warning parity');
+    end;
+  end;
+
+begin
+  FileName := GetTempFileName(GetTempDir, 'gwd-header');
+  Lines := TStringList.Create;
+  Games := TList.Create;
+  Collector := TReadCollector.Create;
+  try
+    LoadFixture('[Event "First"] [White "A"] [Black "B"]' + LineEnding +
+      '1. 32-28 {comment' + LineEnding + '[Event "not a tag"]' + LineEnding +
+      'still comment} 18-23 ; [Event "also not a tag"]' + LineEnding +
+      '2. 37-32 *' + LineEnding + '[Event "Second"] 1. 33-28 *', 2);
+    CheckEqual(TPdnGame(Games[0]).EventName, 'First', 'separate inline tags');
+    CheckEqual(TPdnGame(Games[0]).WhiteName, 'A', 'inline White tag');
+    CheckEqual(TPdnGame(Games[0]).BlackName, 'B', 'inline Black tag');
+    CheckEqual(TPdnGame(Games[0]).MovesText, '32-28 18-23 37-32', 'tag-like comments must not split');
+    Check(Pos('[Event "not a tag"]', TPdnGame(Games[0]).MoveAnnotationsText) > 0,
+      'retain multiline comment with tag-like text');
+    CheckEqual(TPdnGame(Games[1]).MovesText, '33-28', 'inline movetext after tag');
+    LoadFixture('[Event "Forfeit"]' + LineEnding + '[Result "0-2"]' + LineEnding +
+      '[Event "Played"]' + LineEnding + '[Result "1-1"]' + LineEnding +
+      '1. 32-28 18-23 1-1', 2);
+    CheckEqual(TPdnGame(Games[0]).EventName, 'Forfeit', 'retain tags-only forfeit');
+    CheckEqual(TPdnGame(Games[0]).MovesText, '', 'forfeit has no moves');
+    CheckEqual(TPdnGame(Games[0]).ResultText, '0-2', 'forfeit keeps result');
+    LoadFixture('[White "Forfeit"]' + LineEnding + '[Result "0-2"]' +
+      LineEnding + LineEnding + '[Event "Played"]' + LineEnding + '1. 33-28 *', 2);
+    CheckEqual(TPdnGame(Games[0]).WhiteName, 'Forfeit', 'blank line separates disjoint headers');
+    LoadFixture(#$EF#$BB#$BF + '[Event' + #9 + '"Quoted ] and \"name\" \\ path"]' +
+      LineEnding + '[White "A"]' + LineEnding + LineEnding + '1. 32-28 *', 1);
+    CheckEqual(TPdnGame(Games[0]).EventName, 'Quoted ] and "name" \ path',
+      'tag quotes, brackets, escapes, tabs and BOM');
+  finally
+    Collector.Free;
+    ClearGames(Games);
+    Games.Free;
+    Lines.Free;
+    DeleteFile(FileName);
+  end;
+end;
+
 procedure CheckDatabaseWriteErrorsRemainFatal;
 var
   FileName, DbName: string;
@@ -719,6 +785,7 @@ begin
 end;
 
 begin
+  CheckPdnHeaderBoundaries;
   CheckDatabaseWriteErrorsRemainFatal;
   CheckInvalidGamesDoNotAbortImport;
   CheckDoubleLossResult;

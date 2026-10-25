@@ -248,14 +248,6 @@ begin
     Result := '0-1';
 end;
 
-function TrimPdnLine(const ALine: string): string;
-begin
-  Result := Trim(ALine);
-  if Copy(Result, 1, 3) = #$EF#$BB#$BF then
-    Delete(Result, 1, 3);
-  Result := Trim(Result);
-end;
-
 function StripPdnMoveText(const AText: string): string;
 var
   I: Integer;
@@ -1074,7 +1066,9 @@ begin
   if (AGame = nil) or (Length(ALine) < 3) or (ALine[1] <> '[') then
     Exit;
 
-  LSpace := Pos(' ', ALine);
+  LSpace := 2;
+  while (LSpace <= Length(ALine)) and
+    not (ALine[LSpace] in [' ', #9, #10, #13]) do Inc(LSpace);
   if LSpace <= 2 then
     Exit;
   LName := Copy(ALine, 2, LSpace - 2);
@@ -1175,47 +1169,40 @@ begin
   end;
 end;
 
+type
+  TPdnGameListCollector = class
+    Games: TList;
+    procedure Collect(AGame: TPdnGame; ABytesRead, ATotalBytes: Int64;
+      var AStop: Boolean);
+  end;
+
+procedure TPdnGameListCollector.Collect(AGame: TPdnGame; ABytesRead,
+  ATotalBytes: Int64; var AStop: Boolean);
+var
+  Copy: TPdnGame;
+begin
+  Copy := TPdnGame.Create;
+  try
+    Copy.AssignFrom(AGame);
+    Games.Add(Copy);
+  except
+    Copy.Free;
+    raise;
+  end;
+end;
+
 procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList);
 var
-  Current: TPdnGame;
-  I: Integer;
-  Lines: TStringList;
-  MoveLines: TStringList;
-  S: string;
+  Collector: TPdnGameListCollector;
 begin
-  if AGames = nil then
-    Exit;
+  if AGames = nil then Exit;
   ClearGameList(AGames);
-  Lines := TStringList.Create;
-  MoveLines := TStringList.Create;
-  Current := nil;
+  Collector := TPdnGameListCollector.Create;
   try
-    Lines.LoadFromFile(AFileName);
-    for I := 0 to Lines.Count - 1 do
-    begin
-      S := TrimPdnLine(Lines[I]);
-      if S = '' then
-        Continue;
-      if S[1] = '[' then
-      begin
-        if (Current <> nil) and (Trim(MoveLines.Text) <> '') then
-          AddCurrentGame(Current, MoveLines, AGames);
-        if Current = nil then
-          Current := TPdnGame.Create;
-        ParsePdnTag(S, Current);
-      end
-      else
-      begin
-        if Current = nil then
-          Current := TPdnGame.Create;
-        MoveLines.Add(S);
-      end;
-    end;
-    AddCurrentGame(Current, MoveLines, AGames);
+    Collector.Games := AGames;
+    ReadPdnGamesFromFile(AFileName, @Collector.Collect);
   finally
-    Current.Free;
-    MoveLines.Free;
-    Lines.Free;
+    Collector.Free;
   end;
 end;
 
@@ -1223,87 +1210,184 @@ procedure ReadPdnGamesFromFile(const AFileName: string;
   AOnGame: TPdnGameReadEvent);
 var
   Buffer: array[0..65535] of Byte;
-  BytesRead: Integer;
+  BytesRead, I, BraceDepth, VariationDepth: Integer;
   Current: TPdnGame;
-  I: Integer;
-  Line: string;
-  MoveLines: TStringList;
-  Stop: Boolean;
+  MoveLines, HeaderNames: TStringList;
+  MoveLine, TagText: string;
+  Stop, InTag, InQuote, Escaped, InLineComment: Boolean;
+  HasMovetext, LineHasContent, HeaderGap, PreviousCR: Boolean;
   Stream: TFileStream;
   TotalBytes: Int64;
 
-  procedure ProcessLine(const ALine: string);
-  var
-    S: string;
+  procedure EnsureGame;
   begin
-    S := TrimPdnLine(ALine);
-    if S = '' then
+    if Current = nil then Current := TPdnGame.Create;
+  end;
+
+  procedure FinishGame;
+  begin
+    if Current = nil then Exit;
+    MoveLines.Add(MoveLine);
+    MoveLine := '';
+    AddCurrentGame(Current, MoveLines, nil);
+    try
+      AOnGame(Current, Stream.Position, TotalBytes, Stop);
+    finally
+      FreeAndNil(Current);
+    end;
+    HeaderNames.Clear;
+    HasMovetext := False;
+    HeaderGap := False;
+    BraceDepth := 0;
+    VariationDepth := 0;
+  end;
+
+  procedure FinishTag;
+  var
+    NameEnd: Integer;
+    Name: string;
+  begin
+    NameEnd := 2;
+    while (NameEnd <= Length(TagText)) and
+      not (TagText[NameEnd] in [' ', #9, #10, #13, ']']) do Inc(NameEnd);
+    Name := Copy(TagText, 2, NameEnd - 2);
+    // A repeated tag or a blank line between header blocks starts a tags-only
+    // game (for example a forfeit), even when it has no movetext result.
+    if (HeaderNames.IndexOf(Name) >= 0) or
+      (HeaderGap and (HeaderNames.Count > 0)) then FinishGame;
+    if Stop then Exit;
+    EnsureGame;
+    ParsePdnTag(TagText, Current);
+    HeaderNames.Add(Name);
+    HeaderGap := False;
+    TagText := '';
+    InTag := False;
+  end;
+
+  procedure ReadChar(C: Char);
+  begin
+    if InTag then
+    begin
+      TagText += C;
+      if Escaped then Escaped := False
+      else if InQuote and (C = '\') then Escaped := True
+      else if C = '"' then InQuote := not InQuote
+      else if (C = ']') and not InQuote then FinishTag;
       Exit;
-    if S[1] = '[' then
+    end;
+    if InLineComment then
     begin
-      if (Current <> nil) and (Trim(MoveLines.Text) <> '') then
+      MoveLine += C;
+      if C = #10 then
       begin
-        AddCurrentGame(Current, MoveLines, nil);
-        if Assigned(AOnGame) then
-          AOnGame(Current, Stream.Position, TotalBytes, Stop)
-        else
-          Stop := True;
-        Current.Free;
-        Current := nil;
-        if Stop then
-          Exit;
+        InLineComment := False;
+        MoveLines.Add(MoveLine);
+        MoveLine := '';
+        LineHasContent := False;
       end;
-      if Current = nil then
-        Current := TPdnGame.Create;
-      ParsePdnTag(S, Current);
-    end
-    else
+      Exit;
+    end;
+    if BraceDepth > 0 then
     begin
-      if Current = nil then
-        Current := TPdnGame.Create;
-      MoveLines.Add(S);
+      MoveLine += C;
+      if C = '{' then Inc(BraceDepth)
+      else if C = '}' then Dec(BraceDepth);
+      if C = #10 then
+      begin
+        MoveLines.Add(MoveLine);
+        MoveLine := '';
+        LineHasContent := False;
+      end
+      else if not (C in [' ', #9]) then LineHasContent := True;
+      Exit;
+    end;
+    // Recover at a header on a new line even if a preceding RAV was unclosed.
+    // Brackets inside brace/line comments and quoted values never reach here.
+    if (C = '[') and ((VariationDepth = 0) or not LineHasContent) then
+    begin
+      if HasMovetext then FinishGame;
+      if Stop then Exit;
+      InTag := True;
+      InQuote := False;
+      Escaped := False;
+      TagText := '[';
+      LineHasContent := True;
+      Exit;
+    end;
+    if C = #10 then
+    begin
+      if not LineHasContent and (HeaderNames.Count > 0) then HeaderGap := True;
+      MoveLines.Add(MoveLine);
+      MoveLine := '';
+      LineHasContent := False;
+      Exit;
+    end;
+    if C in [' ', #9] then
+    begin
+      MoveLine += C;
+      Exit;
+    end;
+    EnsureGame;
+    MoveLine += C;
+    LineHasContent := True;
+    case C of
+      '{': BraceDepth := 1;
+      ';': InLineComment := True;
+      '(':
+        begin
+          Inc(VariationDepth);
+          HasMovetext := True;
+        end;
+      ')':
+        begin
+          if VariationDepth > 0 then Dec(VariationDepth);
+          HasMovetext := True;
+        end;
+    else
+      HasMovetext := True;
     end;
   end;
 
 begin
-  if not Assigned(AOnGame) then
-    Exit;
-
+  if not Assigned(AOnGame) then Exit;
   Current := nil;
-  Line := '';
+  MoveLine := '';
+  TagText := '';
   Stop := False;
+  InTag := False;
+  InQuote := False;
+  Escaped := False;
+  InLineComment := False;
+  HasMovetext := False;
+  LineHasContent := False;
+  HeaderGap := False;
+  PreviousCR := False;
+  BraceDepth := 0;
+  VariationDepth := 0;
   MoveLines := TStringList.Create;
-  Stream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
+  HeaderNames := TStringList.Create;
+  Stream := nil;
   try
+    Stream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
     TotalBytes := Stream.Size;
-    FillChar(Buffer, SizeOf(Buffer), 0);
+    // Accept the optional UTF-8 BOM without passing it to the token reader.
+    BytesRead := Stream.Read(Buffer, 3);
+    if (BytesRead <> 3) or (Buffer[0] <> $EF) or
+      (Buffer[1] <> $BB) or (Buffer[2] <> $BF) then Stream.Position := 0;
     repeat
       BytesRead := Stream.Read(Buffer, SizeOf(Buffer));
       for I := 0 to BytesRead - 1 do
       begin
-        if Buffer[I] = Ord(#10) then
-        begin
-          ProcessLine(Line);
-          Line := '';
-          if Stop then
-            Break;
-        end
-        else if Buffer[I] <> Ord(#13) then
-          Line += Chr(Buffer[I]);
+        if Buffer[I] = 13 then ReadChar(#10)
+        else if not ((Buffer[I] = 10) and PreviousCR) then ReadChar(Chr(Buffer[I]));
+        PreviousCR := Buffer[I] = 13;
+        if Stop then Break;
       end;
     until (BytesRead = 0) or Stop;
-
-    if (not Stop) and (Trim(Line) <> '') then
-      ProcessLine(Line);
-    if (not Stop) and (Current <> nil) then
-    begin
-      AddCurrentGame(Current, MoveLines, nil);
-      AOnGame(Current, Stream.Position, TotalBytes, Stop);
-      Current.Free;
-      Current := nil;
-    end;
+    if not Stop then FinishGame;
   finally
     Current.Free;
+    HeaderNames.Free;
     MoveLines.Free;
     Stream.Free;
   end;
