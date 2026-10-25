@@ -533,7 +533,26 @@ begin
     FMoves.Clear;
     ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(FGame.MovesText)),
       FMoves);
-    CanonicalizeMovesForImport;
+    // Validate the entire game before writing any game or position rows.
+    // Only input errors are recoverable; database and I/O failures still abort.
+    try
+      CanonicalizeMovesForImport;
+    except
+      on E: EConvertError do
+      begin
+        Inc(FErrors);
+        LogError(E.Message);
+        ReportProgress(ABytesRead, ATotalBytes, AStop);
+        Exit;
+      end;
+      on E: EInvalidOperation do
+      begin
+        Inc(FErrors);
+        LogError(E.Message);
+        ReportProgress(ABytesRead, ATotalBytes, AStop);
+        Exit;
+      end;
+    end;
     LGameHash := GameHash;
     if IsDuplicateGame(LGameHash) then
     begin
@@ -577,9 +596,7 @@ begin
     begin
       Inc(FErrors);
       LogError(E.Message);
-      raise EInvalidOperation.Create('Import stopped at first invalid game.' +
-        LineEnding + LineEnding + 'Error: ' + E.Message + LineEnding +
-        LineEnding + PdnGameToText(FGame));
+      raise;
     end;
   end;
   ReportProgress(ABytesRead, ATotalBytes, AStop);

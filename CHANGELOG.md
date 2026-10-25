@@ -3,6 +3,19 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Continue database import after invalid games (P8)
+
+- Validate each whole game before inserting any rows. Log and count illegal
+  moves and malformed FENs, then continue with the following game. Valid games
+  and duplicate detection survive errors on either side of a batch commit.
+- Keep database and file failures fatal, preserving their original exceptions
+  and transaction rollback rather than reporting them as invalid PDN.
+- Regress invalid first/late moves, invalid FENs, neighboring valid games,
+  repeated imports, persistence across the 10,000-game batch boundary and an
+  injected database failure after a partial write.
+- Validation: invalid-game regression fails before the fix; full headless suite,
+  hidden GTK main-form checks and application build pass. Rebuilt the local app.
+
 ### 2026-10-25 — Recognize double-loss PDN results (P6)
 
 - Treat `0-0` as a result, preserving it in tags, movetext and exports instead

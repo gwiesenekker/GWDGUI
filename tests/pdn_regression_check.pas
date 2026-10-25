@@ -3,7 +3,7 @@ program pdn_regression_check;
 {$mode objfpc}{$H+}
 
 uses
-  Classes, SysUtils, uDraughtsBoard, uGameDatabase, uGameMoveHistory, uPdn;
+  Classes, SysUtils, SQLDB, SQLite3Conn, uDraughtsBoard, uGameDatabase, uGameMoveHistory, uPdn;
 
 type
   TReadCollector = class
@@ -381,6 +381,140 @@ begin
   end;
 end;
 
+procedure CheckDatabaseWriteErrorsRemainFatal;
+var
+  FileName, DbName: string;
+  Lines: TStringList;
+  Games: TList;
+  Database: TGameDatabase;
+  Connection: TSQLite3Connection;
+  Transaction: TSQLTransaction;
+  Imported, Duplicates, Errors: Integer;
+  Raised: Boolean;
+begin
+  FileName := GetTempFileName(GetTempDir, 'gwd-db-error');
+  DbName := FileName + '.db';
+  Lines := TStringList.Create;
+  Games := TList.Create;
+  Database := TGameDatabase.Create;
+  Connection := TSQLite3Connection.Create(nil);
+  Transaction := TSQLTransaction.Create(nil);
+  try
+    Lines.Text := '[Event "Write failure"]' + LineEnding + '1. 32-28 18-23 *';
+    Lines.SaveToFile(FileName);
+    Database.CreateDatabase(DbName);
+    Database.Close;
+    Connection.DatabaseName := DbName;
+    Connection.Transaction := Transaction;
+    Transaction.Database := Connection;
+    Connection.Open;
+    Transaction.StartTransaction;
+    // Fail after the game row and first position were inserted.
+    Connection.ExecuteDirect('create trigger reject_position before insert on positions ' +
+      'when new.ply = 1 begin select raise(ABORT, ''injected write failure''); end');
+    Transaction.Commit;
+    Connection.Close;
+    Database.OpenDatabase(DbName);
+    Raised := False;
+    try
+      Database.ImportPdnFile(FileName, Imported, Duplicates, Errors);
+    except
+      on E: ESQLDatabaseError do
+        Raised := Pos('injected write failure', E.Message) > 0;
+    end;
+    Check(Raised, 'storage failures must propagate with their original database error');
+    Database.LoadGames(Games);
+    Check(Games.Count = 0, 'storage failure must roll back partial game and positions');
+  finally
+    Connection.Free;
+    Transaction.Free;
+    Database.Free;
+    ClearGames(Games);
+    Games.Free;
+    Lines.Free;
+    DeleteFile(FileName);
+    DeleteFile(DbName);
+  end;
+end;
+
+procedure CheckInvalidGamesDoNotAbortImport;
+var
+  FileName, DbName, LogName: string;
+  Lines: TStringList;
+  Games: TList;
+  Database: TGameDatabase;
+  Imported, Duplicates, Errors, I: Integer;
+  Game: TPdnGame;
+begin
+  FileName := GetTempFileName(GetTempDir, 'gwd-invalid');
+  DbName := FileName + '.db';
+  LogName := FileName + '.log';
+  Lines := TStringList.Create;
+  Games := TList.Create;
+  Database := TGameDatabase.Create;
+  try
+    Lines.Text := '[Event "Before"]' + LineEnding + '1. 32-28 18-23 1-1' + LineEnding +
+      '[Event "Bad late move"]' + LineEnding + '1. 32-28 18-23 2. 50-1 *' + LineEnding +
+      '[Event "Bad FEN"]' + LineEnding + '[FEN "invalid"]' + LineEnding + '1. 33-28 *' + LineEnding +
+      '[Event "After"]' + LineEnding + '1. 33-28 18-22 2-0' + LineEnding +
+      '[Event "Before"]' + LineEnding + '1. 32-28 18-23 1-1';
+    Lines.SaveToFile(FileName);
+    Database.CreateDatabase(DbName);
+    Database.ImportPdnFile(FileName, Imported, Duplicates, Errors, nil, LogName);
+    Check((Imported = 2) and (Duplicates = 1) and (Errors = 2),
+      'skip invalid games, retain valid neighbors and count duplicates');
+    Lines.LoadFromFile(LogName);
+    Check((Pos('Illegal move: 50-1', Lines.Text) > 0) and
+      (Pos('Bad late move', Lines.Text) > 0) and (Pos('Bad FEN', Lines.Text) > 0),
+      'log both rejected games and the offending move');
+    Database.Close;
+    Database.OpenDatabase(DbName);
+    Database.LoadGames(Games);
+    Check(Games.Count = 2, 'only complete valid games must persist');
+    for I := 0 to Games.Count - 1 do
+    begin
+      Game := Database.LoadGameById(TDatabaseGameInfo(Games[I]).Id);
+      try
+        Check((Game.EventName = 'Before') or (Game.EventName = 'After'),
+          'invalid games must leave no partial records');
+      finally
+        Game.Free;
+      end;
+    end;
+    Database.ImportPdnFile(FileName, Imported, Duplicates, Errors, nil, LogName);
+    Check((Imported = 0) and (Duplicates = 3) and (Errors = 2),
+      'repeat import must retain duplicate detection after skipped games');
+    // Exercise both sides of the durable 10,000-game commit boundary.
+    Lines.Clear;
+    for I := 1 to 10001 do
+    begin
+      if (I = 10000) or (I = 10001) then
+      begin
+        Lines.Add('[Event "Invalid at batch ' + IntToStr(I) + '"]');
+        Lines.Add('1. 50-1 *');
+      end;
+      Lines.Add('[Event "Batch ' + IntToStr(I) + '"]');
+      Lines.Add('1. 32-28 18-23 *');
+    end;
+    Lines.SaveToFile(FileName);
+    Database.ImportPdnFile(FileName, Imported, Duplicates, Errors);
+    Check((Imported = 10001) and (Duplicates = 0) and (Errors = 2),
+      'invalid games must not discard or stop games across a batch commit');
+    Database.Close;
+    Database.OpenDatabase(DbName);
+    Database.LoadGames(Games);
+    Check(Games.Count = 10003, 'all valid games across batches must persist');
+  finally
+    Database.Free;
+    ClearGames(Games);
+    Games.Free;
+    Lines.Free;
+    DeleteFile(FileName);
+    DeleteFile(DbName);
+    DeleteFile(LogName);
+  end;
+end;
+
 procedure CheckDoubleLossResult;
 var
   FileName, DbName: string;
@@ -585,6 +719,8 @@ begin
 end;
 
 begin
+  CheckDatabaseWriteErrorsRemainFatal;
+  CheckInvalidGamesDoNotAbortImport;
   CheckDoubleLossResult;
   CheckMovetextResults;
   CheckMalformedVariationDoesNotAbortFile;
