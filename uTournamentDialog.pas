@@ -916,7 +916,7 @@ begin
       WhiteEngines, BlackEngines, Results, Rounds);
     if PairingRound.HasRepeat and
       (ShowGuiConfirmationDialog(Self, 'Tournament',
-      'A Swiss pairing without repeated opponents is no longer possible.' +
+      'The proposed Swiss round includes repeated opponents.' +
       LineEnding + 'Continue with repeated pairing?', 'Continue', '',
       mrCancel) <> mrYes) then
       Exit;

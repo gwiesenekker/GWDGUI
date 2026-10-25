@@ -145,6 +145,8 @@ var
   Scores: array of Integer;
   Temp: Integer;
   ByeName: string;
+  Choices: array of Integer;
+  SearchBudget: Integer;
 
   function ComesBefore(AIndex, BIndex: Integer): Boolean;
   begin
@@ -198,6 +200,33 @@ var
         Result := Candidate;
       end;
     end;
+  end;
+
+  function FindNonRepeatMatching: Boolean;
+  var First, Candidate, A, B: Integer;
+  begin
+    if SearchBudget <= 0 then Exit(False);
+    Dec(SearchBudget);
+    First := 0;
+    while (First <= High(Order)) and Paired[Order[First]] do Inc(First);
+    if First > High(Order) then Exit(True);
+    A := Order[First];
+    Paired[A] := True;
+    // Score-sorted order tries nearby scores first. Backtrack before accepting
+    // a repeated opponent; a locally best pairing may strand the final pair.
+    for Candidate := First + 1 to High(Order) do
+    begin
+      B := Order[Candidate];
+      if Paired[B] or PairingAlreadyPlayed(AWhiteEngines, ABlackEngines,
+        AEngines[A], AEngines[B]) then Continue;
+      Paired[B] := True;
+      Choices[A] := B; Choices[B] := A;
+      if FindNonRepeatMatching() then Exit(True);
+      Choices[A] := -1; Choices[B] := -1;
+      Paired[B] := False;
+    end;
+    Paired[A] := False;
+    Result := False;
   end;
 
   procedure AppendBalancedPairing(AIndex, BIndex: Integer);
@@ -261,6 +290,20 @@ begin
     ByeName := AEngines[ByeIndex];
   end;
 
+  SetLength(Choices, AEngines.Count);
+  for I := 0 to High(Choices) do Choices[I] := -1;
+  SearchBudget := 200000;
+  if FindNonRepeatMatching() then
+  begin
+    for I := 0 to High(Order) do
+      if Choices[Order[I]] >= 0 then
+      begin
+        J := Choices[Order[I]];
+        AppendBalancedPairing(Order[I], J);
+        Choices[J] := -1; Choices[Order[I]] := -1;
+      end;
+  end
+  else
   for I := 0 to High(Order) do
   begin
     if Paired[Order[I]] then

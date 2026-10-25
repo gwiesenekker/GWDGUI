@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Backtrack before proposing repeated Swiss opponents (T4)
+
+- Search score-ordered nonrepeat matchings before the existing penalized fallback,
+  retaining colour balancing and bye policy. Bound search work so a pathological
+  opponent graph cannot monopolize the GUI indefinitely.
+- Describe repeated proposals accurately without claiming a proof that no other
+  pairing exists when a bounded search falls back.
+- Regress a greedy dead end with an available nonrepeat matching, unique
+  participants and a fully exhausted opponent graph.
+- Validation: greedy-repeat regression fails before the fix; pairing and GTK
+  tournament suites pass.
+
 ### 2026-10-25 — Balance round-robin colours and schedule real rounds (T3)
 
 - Generate circle pairings with alternating fixed-player colours, a virtual bye

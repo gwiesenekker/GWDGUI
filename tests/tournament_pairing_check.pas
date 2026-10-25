@@ -37,8 +37,39 @@ begin
     end;
   finally Engines.Free; end;
 end;
+procedure CheckSwissAvoidsGreedyRepeat;
+var Engines, White, Black, Results, Rounds: TStringList;
+  Pairs: TTournamentPairingArray; HasRepeat: Boolean; I: Integer; Seen: TStringList;
+begin
+  Engines := TStringList.Create; White := TStringList.Create;
+  Black := TStringList.Create; Results := TStringList.Create;
+  Rounds := TStringList.Create; Seen := TStringList.Create;
+  try
+    Engines.CommaText := 'A,B,C,D';
+    White.CommaText := 'A,B,C'; Black.CommaText := 'D,C,D';
+    Results.CommaText := '2-0,2-0,1-1'; Rounds.CommaText := '1,1,2';
+    GenerateSwissPairings(Engines, White, Black, Results, Rounds, Pairs, HasRepeat);
+    Check(not HasRepeat and (Length(Pairs) = 2), 'Swiss must backtrack before proposing an avoidable repeat');
+    for I := 0 to High(Pairs) do
+    begin
+      Check((Seen.IndexOf(Pairs[I].White) < 0) and (Seen.IndexOf(Pairs[I].Black) < 0),
+        'Swiss participants must appear once');
+      Seen.Add(Pairs[I].White); Seen.Add(Pairs[I].Black);
+      Check(((Pairs[I].White = 'A') and (Pairs[I].Black = 'C')) or
+        ((Pairs[I].White = 'C') and (Pairs[I].Black = 'A')) or
+        ((Pairs[I].White = 'B') and (Pairs[I].Black = 'D')) or
+        ((Pairs[I].White = 'D') and (Pairs[I].Black = 'B')), 'use the available nonrepeat matching');
+    end;
+    White.CommaText := 'A,A,A,B,B,C'; Black.CommaText := 'B,C,D,C,D,D';
+    Results.CommaText := '1-1,1-1,1-1,1-1,1-1,1-1';
+    GenerateSwissPairings(Engines, White, Black, Results, Rounds, Pairs, HasRepeat);
+    Check(HasRepeat and (Length(Pairs) = 2), 'an exhausted opponent graph must still produce a labelled proposal');
+  finally Seen.Free; Rounds.Free; Results.Free; Black.Free; White.Free; Engines.Free; end;
+end;
+
 var N: Integer;
 begin
+  CheckSwissAvoidsGreedyRepeat;
   for N := 2 to 12 do begin CheckRoundRobin(N, False); CheckRoundRobin(N, True); end;
   Writeln('OK');
 end.
