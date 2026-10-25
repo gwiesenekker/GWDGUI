@@ -873,7 +873,10 @@ var
     J: Integer;
   begin
     for J := 0 to ACount - 1 do
+    begin
       Board.PlayMove(AList[J], True, True);
+      AList[J] := Board.MovesPlayed[Board.MovesPlayedCount - 1];
+    end;
   end;
 
   procedure LoadStart(const AValue: string);
@@ -939,6 +942,7 @@ begin
                 raise EConvertError.Create('Cannot replay move parent');
             end;
             Board.PlayMove(ACommand.MoveText, True, True);
+            ACommand.MoveText := Board.MovesPlayed[Board.MovesPlayedCount - 1];
           end;
         gtcStoreMoveVariation:
           begin
@@ -946,6 +950,7 @@ begin
             if (Parent = nil) or not FGameTree.TryBuildBoardAtNode(Parent, Board) then
               raise EConvertError.Create('Cannot replay variation parent');
             Board.PlayMove(ACommand.MoveText, True, True);
+            ACommand.MoveText := Board.MovesPlayed[Board.MovesPlayedCount - 1];
           end;
         gtcImportBranch, gtcImportNode:
           begin
@@ -957,7 +962,10 @@ begin
             if (ACommand.CommandKind = gtcImportNode) and (Length(ACommand.ImportMoves) <> 1) then
               raise EConvertError.Create('Node import requires exactly one move');
             for ImportIndex := 0 to High(ACommand.ImportMoves) do
+            begin
               Board.PlayMove(ACommand.ImportMoves[ImportIndex].MoveText, True, True);
+              ACommand.ImportMoves[ImportIndex].MoveText := Board.MovesPlayed[Board.MovesPlayedCount - 1];
+            end;
           end;
         gtcRebuildFromInputs, gtcSetHeader:
           begin
@@ -968,6 +976,8 @@ begin
             else
               FGameTree.CopyMainlineMovesTo(Mainline);
             Replay(Mainline, Mainline.Count);
+            if (ACommand.CommandKind = gtcRebuildFromInputs) and (ACommand.MainlineInput.Moves <> nil) then
+              ACommand.MainlineInput.Moves.Assign(Mainline);
             if ACommand.CommandKind = gtcSetHeader then
             begin
               LoadStart(Fen);

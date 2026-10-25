@@ -127,7 +127,7 @@ begin
       'variation belongs to its base position, not display position');
     Check(Tree.CopyNodeMovesTo(Tree.FindBranchNode(0, 2), Moves),
       'path extraction must succeed');
-    Check(Moves.CommaText = '32-28,19-23,28x19', 'path must follow ancestry');
+    Check(Moves.CommaText = '32-28,19-23,28x19x23', 'path must follow ancestry');
     Expected.SetBeginPosition;
     for I := 0 to Moves.Count - 1 do
       Expected.PlayMove(Moves[I]);

@@ -312,6 +312,32 @@ begin
   end;
 end;
 
+procedure CheckLandingSquareCaptures;
+var Board, Copy: TDraughtsBoard; Text, Move: string; I: Integer;
+begin
+  Board := TDraughtsBoard.Create;
+  Copy := TDraughtsBoard.Create;
+  try
+    Board.LoadFromFEN('W:W32:B17,27');
+    Check(Board.TryGetLegalMove('32x21x12', Move), 'man landing-square path must be legal');
+    CheckEqual(Move, '32x12x27x17', 'landing path must resolve to internal capture notation');
+    CheckEqual(Board.PdnMoveNotation(Move), '32x12', 'unambiguous capture exports endpoints');
+    Check(not Board.IsLegalMove('32x21'), 'partial landing path must obey maximum capture');
+    Board.LoadFromFEN('W:WK30:B14,24');
+    Check(Board.TryGetLegalMove('30x19x10', Move), 'king landing-square path must be legal');
+    Check(not Board.IsLegalMove('30x15x10'), 'invalid king route must not be accepted');
+    Board.LoadFromFEN('W:WK21:B31,39,14,17,19');
+    for I := 0 to Board.LegalMoveCount - 1 do
+    begin
+      Text := Board.PdnMoveNotation(Board.LegalMoves[I]);
+      Check(Board.TryGetLegalMove(Text, Move), 'exported capture route must resolve uniquely');
+      Copy.AssignFrom(Board);
+      Copy.PlayMove(Text);
+      CheckEqual(Move, Board.LegalMoves[I], 'ambiguous captures must preserve their captured pieces');
+    end;
+  finally Copy.Free; Board.Free; end;
+end;
+
 procedure CheckDxpFractionalMinutes;
 var Board: TDraughtsBoard; Text: string;
 begin
@@ -371,6 +397,7 @@ begin
   CheckEquivalentAliasMatchesAreNotAmbiguous;
   CheckRejectedMovesPreserveBoard;
   CheckRejectedFensPreserveBoard;
+  CheckLandingSquareCaptures;
   CheckDxpFractionalMinutes;
   CheckCurrentFenRoundTrip;
   Writeln('OK');

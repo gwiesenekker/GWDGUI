@@ -3,6 +3,21 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Accept and export standard PDN capture paths (R5, P15)
+
+- Validate landing-square capture routes against the board, including flying
+  kings, blockers, capture counts and repeated victims. Preserve internal DXP
+  captured-piece notation while canonicalizing accepted actor move aliases.
+- Retain a legal landing path for each generated capture. File exports use short
+  endpoints when unique, otherwise the full disambiguating landing path.
+- Add SetUp for nonstandard starting positions and preserve double-loss results
+  in the tree writer. Compact board displays keep their internal hit mapping.
+- Regress men/kings, illegal partial/routes, ambiguous destinations, all-capture
+  round trips and actual GUI import/export. Update ancestry expectations to the
+  actor's canonical capture notation.
+- Validation: board, actor, validation, topology, runner history, preservation,
+  cursor, PDN/filter and hidden GTK main-form suites pass.
+
 ### 2026-10-25 — Guard database import with a modal progress window (P10)
 
 - Begin import only after its modal progress window is active. Stop/close requests

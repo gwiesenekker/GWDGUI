@@ -91,12 +91,13 @@ begin
     Result := '1/2-1/2'
   else if SameText(Result, '0-2') then
     Result := '0-1'
-  else if not SameText(Result, '*') then
+  else if not SameText(Result, '*') and not SameText(Result, '0-0') then
     Result := '*';
 end;
 
-function NodeMoveCaption(ANode: TGameTreePlyNode; AForceMoveNumber: Boolean;
+function NodeMoveCaption(AGameTree: TGameTree; ANode: TGameTreePlyNode; AForceMoveNumber: Boolean;
   ACompact: Boolean): string;
+var Board: TDraughtsBoard; MoveText: string;
 begin
   Result := '';
   if ANode = nil then
@@ -112,7 +113,16 @@ begin
     if not ACompact then
       Result += ' ';
   end;
-  Result += ANode.MoveText;
+  MoveText := ANode.MoveText;
+  if not ACompact and (Pos('x', MoveText) > 0) then
+  begin
+    Board := TDraughtsBoard.Create;
+    try
+      if AGameTree.TryBuildBoardAtNode(ANode.Parent, Board) then
+        MoveText := Board.PdnMoveNotation(MoveText);
+    finally Board.Free; end;
+  end;
+  Result += MoveText;
 end;
 
 function ClockSecondsCaption(ASeconds: Double): string;
@@ -455,7 +465,7 @@ begin
       (not AOptions.ShowAnnotatorFullPV) then
       LContinuation := nil;
 
-  Result := NodeMoveCaption(ANode, True, ACompact) +
+  Result := NodeMoveCaption(AGameTree, ANode, True, ACompact) +
     NodeAnnotation(ANode, AOptions);
   if APreviousPosition <> nil then
     if NodeIsAnnotatorAlternative(APreviousPosition, ANode) and
@@ -550,7 +560,7 @@ begin
     LPreviousPosition := AGameTree.Root;
     if LChild.PlyNumber > 1 then
       LPreviousPosition := AGameTree.MainlineNode[LChild.PlyNumber - 1];
-    LSegment := NodeMoveCaption(LChild, Result = '', ACompact) +
+    LSegment := NodeMoveCaption(AGameTree, LChild, Result = '', ACompact) +
       NodeAnnotation(LChild, AOptions) +
       PreviousPositionAnnotation(LPreviousPosition, LChild, AOptions);
     LMoveStart := Pos(LChild.MoveText, LSegment);
@@ -639,6 +649,7 @@ begin
     Lines.Add('[White "' + PdnQuote(AGameTree.WhiteName) + '"]');
     Lines.Add('[Black "' + PdnQuote(AGameTree.BlackName) + '"]');
     Lines.Add('[Result "' + PdnQuote(PdnExportResult(AGameTree.ResultText)) + '"]');
+    if AGameTree.StartingFEN <> DefaultStartingFEN then Lines.Add('[SetUp "1"]');
     Lines.Add('[FEN "' + PdnQuote(AGameTree.StartingFEN) + '"]');
     Lines.Add('');
     ClearRenderResult(RenderResult);

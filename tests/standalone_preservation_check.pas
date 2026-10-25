@@ -49,6 +49,23 @@ begin
   Check(DatabaseForm.Visible, 'closing during import must request cancellation, not close its owner');
 end;
 
+procedure CheckLandingCaptureImport(AForm: TMainForm);
+var Game: TPdnGame; Text: string;
+begin
+  Game := TPdnGame.Create;
+  try
+    Game.StartingFEN := 'W:W32:B17,27';
+    Game.MovesText := '32x21x12';
+    AForm.LoadPdnGameToDisplay(Game);
+    Check((AForm.ActiveGameTree.MainlineCount = 1) and
+      (AForm.ActiveGameTree.MainlineNode[1].MoveText = '32x12x27x17'),
+      'landing path must import as a validated canonical tree move');
+    Text := GameTreeToPdnText(AForm.ActiveGameTree);
+    Check((Pos('32x12x27x17', Text) = 0) and (Pos('32x12', Text) > 0) and
+      (Pos('[SetUp "1"]', Text) > 0), 'PDN export must use standard capture and setup notation');
+  finally Game.Free; end;
+end;
+
 procedure CheckModalDatabaseImport(AForm: TMainForm);
 var Form: TDatabaseForm; Probe: TDatabaseModalProbe; Database: TGameDatabase;
   FileName, DbName: string; Text: TStringList; Games: TList; I: Integer;
@@ -984,6 +1001,7 @@ begin
     try
       Check(not GameTreeHasContent(Form.ActiveGameTree),
         'untouched initial board should not prompt to save');
+      CheckLandingCaptureImport(Form);
       CheckModalDatabaseImport(Form);
       CheckParsedLiteralComments(Form);
       CheckCoalescedRunnerHistory(Form);
