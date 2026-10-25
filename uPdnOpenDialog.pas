@@ -107,6 +107,7 @@ begin
   if (ARow <= 0) or (ARow > FGames.Count) then
     Exit;
   Result := TPdnGame(FGames[ARow - 1]);
+  Result.ParseDeferredMoves;
 end;
 
 procedure TPdnOpenDialog.GridDblClick(Sender: TObject);
@@ -133,7 +134,11 @@ begin
     Warnings := TStringList.Create;
     try
       Warnings.Text := Game.ImportWarningsText;
+      FGrid.Cells[4, ARow] := '';
       if Warnings.Count > 0 then FGrid.Cells[4, ARow] := IntToStr(Warnings.Count);
+      FStatusLabel.Caption := IntToStr(FGames.Count) + ' game(s) found in ' +
+        ExtractFileName(FFileName) + ' — selected game: ' + IntToStr(Warnings.Count) +
+        ' import warning(s); other games checked on selection';
     finally Warnings.Free; end;
   end;
   FWarningLabel.Hint := FWarningLabel.Caption;
@@ -177,7 +182,8 @@ begin
       FGrid.Cells[3, Row] := Game.ResultText;
       Warnings.Text := Game.ImportWarningsText;
       Inc(WarningCount, Warnings.Count);
-      if Warnings.Count > 0 then FGrid.Cells[4, Row] := IntToStr(Warnings.Count);
+      if Game.Deferred then FGrid.Cells[4, Row] := 'On selection'
+      else if Warnings.Count > 0 then FGrid.Cells[4, Row] := IntToStr(Warnings.Count);
     end;
   finally
     Warnings.Free;
@@ -193,7 +199,7 @@ end;
 procedure TPdnOpenDialog.OpenPdnFile(const AFileName: string);
 begin
   FFileName := AFileName;
-  LoadPdnGamesFromFile(FFileName, FGames);
+  LoadPdnGamesFromFile(FFileName, FGames, True);
   PopulateGrid;
   {$IFNDEF GWDGUI_NONINTERACTIVE_TEST}
   if Owner is TCustomForm then

@@ -936,7 +936,46 @@ begin
   end;
 end;
 
+procedure CheckDeferredGameParsing;
+var Games, Eager: TList; Lines: TStringList; FileName: string;
+  Game, CopyGame: TPdnGame; Root: TPdnMoveNode; I: Integer;
 begin
+  Games := TList.Create; Eager := TList.Create; Lines := TStringList.Create;
+  CopyGame := TPdnGame.Create;
+  FileName := GetTempFileName(GetTempDir, 'gwd');
+  try
+    Lines.Text := '[Event "first"]' + LineEnding +
+      '{intro} 1.32-28 (1.34-30 20-25 (1...18-23)) 18-23 1-1' + LineEnding +
+      '[Event "second"]' + LineEnding + '[FEN "B:W31-50:B1-20"]' + LineEnding +
+      '1...16-21 {black note} 2.32-28 *';
+    Lines.SaveToFile(FileName);
+    LoadPdnGamesFromFile(FileName, Games, True);
+    LoadPdnGamesFromFile(FileName, Eager);
+    Check((Games.Count = 2) and TPdnGame(Games[0]).Deferred and TPdnGame(Games[1]).Deferred,
+      'archive listing defers every move tree');
+    Check(TPdnGame(Games[0]).ResultText = '1-1', 'deferred list retains movetext result');
+    CopyGame.AssignFrom(TPdnGame(Games[0]));
+    Root := CopyGame.BuildMoveTree;
+    try Check((Root.ChildCount = 2) and (Root.Children[1].ChildCount = 2),
+      'copied deferred game parses nested variations');
+    finally Root.Free; end;
+    Check(TPdnGame(Games[0]).Deferred, 'parsing a copy leaves original deferred');
+    for I := 0 to Games.Count - 1 do
+    begin
+      Game := TPdnGame(Games[I]);
+      Game.ParseDeferredMoves;
+      Check(not Game.Deferred, 'selection parses its deferred game');
+      CheckEqual(PdnGameToText(Game), PdnGameToText(TPdnGame(Eager[I])),
+        'deferred and eager parse produce identical complete games');
+    end;
+  finally
+    ClearGames(Games); ClearGames(Eager); Games.Free; Eager.Free;
+    Lines.Free; CopyGame.Free; DeleteFile(FileName);
+  end;
+end;
+
+begin
+  CheckDeferredGameParsing;
   CheckPdnResultBoundaries;
   CheckPdnHeaderBoundaries;
   CheckDatabaseWriteErrorsRemainFatal;

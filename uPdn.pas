@@ -30,10 +30,12 @@ type
 
   TPdnGame = class
   private
+    FDeferredMoveText: string;
     FParsedRoot: TPdnMoveNode;
     FParsedSignature: string;
     FHasResultTag: Boolean;
     FValidatedSignature: string;
+    function GetDeferred: Boolean;
     function TreeDataSignature: string;
   public
     EventName: string;
@@ -50,6 +52,8 @@ type
     MovesText: string;
     constructor Create;
     destructor Destroy; override;
+    procedure ParseDeferredMoves;
+    property Deferred: Boolean read GetDeferred;
     function BuildMoveTree: TPdnMoveNode;
     procedure ValidateMoveTree;
     procedure AddImportWarning(const Text: string);
@@ -59,7 +63,8 @@ type
   TPdnGameReadEvent = procedure(AGame: TPdnGame; ABytesRead,
     ATotalBytes: Int64; var AStop: Boolean) of object;
 
-procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList);
+procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList;
+  ADeferMoves: Boolean = False);
 procedure LoadPdnGamesFromText(const AText: string; AGames: TList);
 procedure ReadPdnGamesFromFile(const AFileName: string;
   AOnGame: TPdnGameReadEvent; AHeadersOnly: Boolean = False);
@@ -187,6 +192,7 @@ begin
   FreeAndNil(FParsedRoot);
   if ASource.FParsedRoot <> nil then FParsedRoot := ASource.FParsedRoot.Clone;
   FParsedSignature := ASource.FParsedSignature;
+  FDeferredMoveText := ASource.FDeferredMoveText;
   EventName := ASource.EventName;
   TournamentId := ASource.TournamentId;
   WhiteName := ASource.WhiteName;
@@ -239,6 +245,7 @@ var
   end;
 
 begin
+  ParseDeferredMoves;
   if FValidatedSignature = TreeDataSignature then Exit;
   Root := BuildMoveTree;
   Board := TDraughtsBoard.Create;
@@ -1171,15 +1178,32 @@ begin
   end;
 end;
 
+function TPdnGame.GetDeferred: Boolean;
+begin Result := FDeferredMoveText <> ''; end;
+
+procedure TPdnGame.ParseDeferredMoves;
+var Lines: TStringList; Current: TPdnGame;
+begin
+  if not Deferred then Exit;
+  Lines := TStringList.Create;
+  try
+    Lines.Text := FDeferredMoveText;
+    Current := Self;
+    AddCurrentGame(Current, Lines, nil);
+    FDeferredMoveText := '';
+  finally Lines.Free; end;
+end;
+
 procedure ReadPdnGamesInternal(const AFileName: string;
   AOnGame: TPdnGameReadEvent; AOwnedGames: TList; AHeadersOnly: Boolean;
-  AStream: TStream = nil); forward;
+  AStream: TStream = nil; ADeferMoves: Boolean = False); forward;
 
-procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList);
+procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList;
+  ADeferMoves: Boolean);
 begin
   if AGames = nil then Exit;
   ClearGameList(AGames);
-  ReadPdnGamesInternal(AFileName, nil, AGames, False);
+  ReadPdnGamesInternal(AFileName, nil, AGames, False, nil, ADeferMoves);
 end;
 
 procedure LoadPdnGamesFromText(const AText: string; AGames: TList);
@@ -1194,7 +1218,7 @@ end;
 
 procedure ReadPdnGamesInternal(const AFileName: string;
   AOnGame: TPdnGameReadEvent; AOwnedGames: TList; AHeadersOnly: Boolean;
-  AStream: TStream);
+  AStream: TStream; ADeferMoves: Boolean);
 var
   Buffer: array[0..65535] of Byte;
   BytesRead, I, J, BraceDepth, VariationDepth: Integer;
@@ -1217,7 +1241,12 @@ var
     if Current = nil then Exit;
     if not AHeadersOnly then MoveLines.Add(MoveLine.ToString);
     MoveLine.Clear;
-    if not AHeadersOnly then AddCurrentGame(Current, MoveLines, nil)
+    if not AHeadersOnly then
+    begin
+      if ADeferMoves then
+      begin Current.FDeferredMoveText := MoveLines.Text; MoveLines.Clear; end
+      else AddCurrentGame(Current, MoveLines, nil);
+    end
     else MoveLines.Clear;
     if AOwnedGames <> nil then
     begin
@@ -1252,7 +1281,10 @@ var
     if not AHeadersOnly then MoveLine.Append(Value);
     HasMovetext := True;
     if (VariationDepth = 0) and IsPdnResultToken(CleanMoveToken(Value)) then
+    begin
       ResultSeen := True;
+      if not Current.FHasResultTag then Current.ResultText := NormalizePdnResult(CleanMoveToken(Value));
+    end;
   end;
 
   procedure FinishTag;
@@ -1657,6 +1689,7 @@ function TPdnGame.BuildMoveTree: TPdnMoveNode;
 var Moves, Annotations, Variations, VariationAnnotations: TStringList;
     Text: string;
 begin
+  ParseDeferredMoves;
   if (FParsedRoot = nil) or (FParsedSignature <> TreeDataSignature) then
   begin
     FreeAndNil(FParsedRoot);
@@ -1760,6 +1793,7 @@ var
 begin
   Result := '';
   if AGame = nil then Exit;
+  AGame.ParseDeferredMoves;
   Lines := TStringList.Create;
   Mainline := TStringList.Create;
   Output := TStringBuilder.Create;

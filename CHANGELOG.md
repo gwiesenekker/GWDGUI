@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Defer archive move trees until selection (F2)
+
+- List PDN headers/results while retaining each game's raw movetext, then build
+  its recursive tree only when selected. Copying or exporting a deferred game
+  preserves and resolves its complete content.
+- Mark unselected warnings as pending rather than implying those games have
+  already been validated; show the selected game's warnings after parsing.
+- Regress deferred/eager equivalence, nested branches, Black starts, movetext
+  results, copy isolation and actual GUI warning selection.
+- Validation: PDN and GTK suites pass. On the same 10 MB / 1,000-game fixture,
+  listing takes 21 ms versus 84 ms for eager parsing on this host.
+
 ### 2026-10-25 — Remove drifted compatibility helpers (C1/C2)
 
 - Remove the unused pairing selector, White-only text history adapter, obsolete

@@ -551,14 +551,15 @@ begin
     Status := TLabel(Dialog.FindComponent('PdnImportStatus'));
     Warning := TLabel(Dialog.FindComponent('PdnImportWarnings'));
     Check((Grid.RowCount = 3) and (Grid.Cells[4, 1] = '1') and
-      (Grid.Cells[4, 2] = ''), 'PDN list must include both games and mark only the warned one');
+      (Grid.Cells[4, 2] = 'On selection'), 'PDN list checks selected game and defers the other game');
     Check(Pos('1 import warning', Status.Caption) > 0, 'PDN status must report parse warnings');
     CanSelect := True;
     Grid.OnSelectCell(Grid, 0, 1, CanSelect);
     Check(Warning.Visible and (Pos('outside its parent line', Warning.Caption) > 0),
       'selecting the affected game must explain the skipped variation');
     Grid.OnSelectCell(Grid, 0, 2, CanSelect);
-    Check(not Warning.Visible, 'selecting a clean game must clear the previous warning');
+    Check(not Warning.Visible and (Grid.Cells[4, 2] = ''),
+      'selecting a clean game must clear its pending warning marker and the previous warning');
     LoadPdnGamesFromFile(FileName, Games);
     AForm.LoadPdnGameToDisplay(TPdnGame(Games[0]));
     Check((AForm.ActiveGameTree.MainlineCount = 3) and
