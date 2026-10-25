@@ -1191,6 +1191,33 @@ begin
   end;
 end;
 
+procedure CheckUnfingerprintedProjection(const Fixture: string);
+var Dialog, Resumed: TTournamentDialog; Grid: TStringGrid;
+  Document: TJSONObject; PdnPath: string;
+begin
+  Dialog := TTournamentDialog.Create(nil); Resumed := TTournamentDialog.Create(nil);
+  try
+    Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    AddTournamentPairingRow(Grid, 'White', 'Black', 1);
+    Dialog.SaveTournamentToFile(Fixture);
+    Dialog.SetSelectedResult('1-1');
+    PdnPath := Dialog.PdnFileName;
+    Document := TJSONObject(GetJSON(FileContents(Fixture)));
+    try
+      Document.Delete('pdn_published_hash');
+      WriteContents(Fixture, Document.AsJSON);
+    finally Document.Free; end;
+    Resumed.LoadTournamentFromFile(Fixture);
+    Resumed.SaveTournamentToFile(Fixture);
+    Check(Resumed.PdnFileName = PdnPath, 'identical old projection is adopted without a fork');
+    Check(Pos('Preserved', Resumed.Caption) = 0, 'identical old projection has no preservation warning');
+    // A same-size edit must still be detected; mtime granularity cannot bypass ownership.
+    WriteContents(PdnPath, StringReplace(FileContents(PdnPath), 'White', 'Other', []));
+    Resumed.SetSelectedResult('1-1');
+    Check(Resumed.PdnFileName <> PdnPath, 'same-size external edits are preserved');
+  finally Resumed.Free; Dialog.Free; end;
+end;
+
 procedure CheckExternalPdnEdits(const Fixture: string);
 var Dialog, Resumed: TTournamentDialog; Grid: TStringGrid;
   PdnPath, Edited: string;
@@ -1299,6 +1326,7 @@ begin
       CheckNewProjectionPreservesExistingPdn(IncludeTrailingPathDelimiter(TestDirectory) + 'collision.json');
       CheckProjectionAvoidsExistingDirectory(IncludeTrailingPathDelimiter(TestDirectory) + 'directory.json');
       CheckEngineArgumentIdentity(IncludeTrailingPathDelimiter(TestDirectory) + 'argument-identities.json');
+      CheckUnfingerprintedProjection(IncludeTrailingPathDelimiter(TestDirectory) + 'old-fingerprint.json');
       CheckExternalPdnEdits(IncludeTrailingPathDelimiter(TestDirectory) + 'external-edits.json');
       CheckIndependentLegacyIdentities(IncludeTrailingPathDelimiter(TestDirectory) + 'legacy-identities.json');
       CheckLegacyMigrationCollision(IncludeTrailingPathDelimiter(TestDirectory) + 'legacy-collision.json');

@@ -34,6 +34,7 @@ type
     FPdnFileName: string;
     FPdnFileOwned: Boolean;
     FPdnPublishedHash: string;
+    FVerifiedPdnFingerprint: string;
     FStorageNotice: string;
     FTournamentId: string;
     FStorageError: string;
@@ -695,6 +696,7 @@ begin
   FPdnFileName := '';
   FPdnFileOwned := False;
   FPdnPublishedHash := '';
+  FVerifiedPdnFingerprint := '';
   FStorageNotice := '';
   FLegacyPdnFileName := '';
   Result := True;
@@ -730,8 +732,12 @@ begin
   FStorageError := '';
   try
     EnsureStoragePaths;
-    SaveTournamentSnapshot(FFileName);
-    WritePdnProjection;
+    try
+      WritePdnProjection;
+    finally
+      // JSON remains authoritative even when publication of its PDN fails.
+      SaveTournamentSnapshot(FFileName);
+    end;
   except
     on E: Exception do
     begin
@@ -785,8 +791,9 @@ end;
 procedure TTournamentDialog.WritePdnProjection;
 var
   Row: Integer;
-  PdnText: string;
+  PdnText, PublishedText, ActualHash, Fingerprint: string;
   Output: TStringStream;
+  OwnedContent: Boolean;
 begin
   Output := TStringStream.Create('');
   try
@@ -806,24 +813,42 @@ begin
     Exit;
   FPdnWriteLock.Acquire;
   try
-    if FPdnFileOwned and
-      (not TournamentPdnMatchesId(FPdnFileName, FTournamentId) or
-       (FPdnPublishedHash = '') or
-       (SHA1Print(SHA1File(FPdnFileName)) <> FPdnPublishedHash)) then
+    PublishedText := Trim(PdnText) + LineEnding;
+    if FPdnFileOwned then
     begin
-      FStorageNotice := 'Preserved changed PDN: ' + ExtractFileName(FPdnFileName);
-      FLegacyPdnFileName := FPdnFileName;
-      FPdnFileOwned := False;
-      FPdnPublishedHash := '';
-      FPdnFileName := UnusedTournamentPdnPath(FPdnFileName);
-      SaveTournamentSnapshot(FFileName);
+      OwnedContent := False;
+      if FileExists(FPdnFileName) then
+      begin
+        ActualHash := SHA1Print(SHA1File(FPdnFileName));
+        Fingerprint := FPdnFileName + '|' + ActualHash;
+        if FPdnPublishedHash = '' then
+        begin
+          // Older snapshots had no fingerprint. Exact projection equality plus
+          // the tournament identity safely establishes the first fingerprint.
+          OwnedContent := (ActualHash = SHA1Print(SHA1String(PublishedText))) and
+            TournamentPdnMatchesId(FPdnFileName, FTournamentId);
+        end
+        else
+          OwnedContent := (ActualHash = FPdnPublishedHash) and
+            ((FVerifiedPdnFingerprint = Fingerprint) or
+             TournamentPdnMatchesId(FPdnFileName, FTournamentId));
+      end;
+      if not OwnedContent then
+      begin
+        if FPdnPublishedHash = '' then
+          FStorageNotice := 'Preserved unverified prior PDN: ' + ExtractFileName(FPdnFileName)
+        else
+          FStorageNotice := 'Preserved changed PDN: ' + ExtractFileName(FPdnFileName);
+        FLegacyPdnFileName := FPdnFileName;
+        FPdnFileOwned := False;
+        FPdnPublishedHash := '';
+        FPdnFileName := UnusedTournamentPdnPath(FPdnFileName);
+      end;
     end;
-    WriteTextFileAtomically(FPdnFileName, Trim(PdnText) + LineEnding, FPdnFileOwned);
-    FPdnPublishedHash := SHA1Print(SHA1String(Trim(PdnText) + LineEnding));
+    WriteTextFileAtomically(FPdnFileName, PublishedText, FPdnFileOwned);
+    FPdnPublishedHash := SHA1Print(SHA1String(PublishedText));
     FPdnFileOwned := True;
-    // Publish the fingerprint only after the PDN succeeds. A failed JSON update
-    // causes conservative preservation of the unrecognized file on recovery.
-    SaveTournamentSnapshot(FFileName);
+    FVerifiedPdnFingerprint := FPdnFileName + '|' + FPdnPublishedHash;
   finally
     FPdnWriteLock.Release;
   end;
@@ -1310,7 +1335,7 @@ end;
 
 procedure TTournamentDialog.SaveTournamentToFile(const AFileName: string);
 var
-  OldJson, OldPdn, RecoveryDirectory: string;
+  OldJson, OldPdn, OldHash, OldVerified, RecoveryDirectory: string;
   OldOwned, Relocate: Boolean;
   I: Integer;
   Running: TTournamentRunningGame;
@@ -1326,6 +1351,8 @@ begin
   OldJson := FFileName;
   OldPdn := FPdnFileName;
   OldOwned := FPdnFileOwned;
+  OldHash := FPdnPublishedHash;
+  OldVerified := FVerifiedPdnFingerprint;
   RecoveryDirectory := IncludeTrailingPathDelimiter(ExpandFileName(
     IncludeTrailingPathDelimiter(GetAppConfigDir(False)) + 'tournaments'));
   Relocate := (OldJson <> '') and
@@ -1339,13 +1366,20 @@ begin
         ExpandFileName(AFileName), '.pdn'));
       FPdnFileOwned := False;
     end;
-    SaveTournamentSnapshot(AFileName);
-    WritePdnProjection;
+    FFileName := ExpandFileName(AFileName);
+    EnsureStoragePaths;
+    try
+      WritePdnProjection;
+    finally
+      SaveTournamentSnapshot(AFileName);
+    end;
   except
     // A failed Save As must leave the recoverable source and its identity intact.
     FFileName := OldJson;
     FPdnFileName := OldPdn;
     FPdnFileOwned := OldOwned;
+    FPdnPublishedHash := OldHash;
+    FVerifiedPdnFingerprint := OldVerified;
     raise;
   end;
   if Relocate then
@@ -1534,6 +1568,7 @@ begin
       FTournamentId := GUIDToString(Id);
     end;
     FPdnPublishedHash := Data.Get('pdn_published_hash', '');
+    FVerifiedPdnFingerprint := '';
     FStorageNotice := '';
     FPdnFileName := Data.Get('pdn_file_name', ChangeFileExt(ExpandFileName(AFileName), '.pdn'));
     if (FPdnFileName <> '') and not FilenameIsAbsolute(FPdnFileName) then

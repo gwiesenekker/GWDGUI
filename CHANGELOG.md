@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Publish one tournament snapshot per save (F9/T22)
+
+- Write JSON once after attempting PDN publication, including the durable row
+  state when PDN publication fails. Restore Save As fingerprints on failure.
+- Cache verified ownership by path and content hash to avoid reparsing unchanged
+  PDNs. Keep hashing on every save to detect same-size edits within one timestamp.
+- Adopt an identical older projection without a fingerprint; preserve mismatches
+  with an accurate notice instead of claiming they were necessarily edited.
+- Validation: GTK tournament preservation suite passes; the 1,000-game / 10 KB
+  benchmark takes 236 ms on this host, with same-size edit protection regressed.
+
 ### 2026-10-25 — Avoid replaying database PDN storage and migrate duplicate identities (F8/P22)
 
 - Store the complete parsed tree without replaying a board for every stored node;
