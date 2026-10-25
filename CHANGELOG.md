@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Make an invalid displayed position visible (U5)
+
+- Show a clear window-title diagnostic and blank the board when a corrupt node
+  cannot be replayed. Disable Auto Play, cancel analysis and avoid refreshing
+  dependent views from the previous board; navigation remains available.
+- Restore the board and clear the diagnostic when a valid node is selected.
+- Validation: GTK regression deliberately bypasses the actor to create corrupt
+  legacy state, navigates into it, then returns to the valid root.
+
 ### 2026-10-25 — Preserve external tournament PDN edits (T16)
 
 - Persist the fingerprint of the last published PDN and verify it before replacing

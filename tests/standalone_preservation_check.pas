@@ -49,6 +49,24 @@ begin
   Check(DatabaseForm.Visible, 'closing during import must request cancellation, not close its owner');
 end;
 
+procedure CheckInvalidDisplayIsVisible(AForm: TMainForm);
+var Memo: TMemo; Key: Word; Board: TDraughtsBoardControl;
+begin
+  AForm.LoadStandaloneFen(DefaultStartingFEN);
+  // Deliberately bypass the actor to simulate corrupt persisted/legacy state.
+  AForm.ActiveGameTree.RecordMainlineMove(1, '1-50');
+  Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+  Key := VK_RIGHT; Memo.OnKeyDown(Memo, Key, []); // following -> root
+  Key := VK_RIGHT; Memo.OnKeyDown(Memo, Key, []); // root -> corrupt node
+  Check(Pos('Cannot display the selected position', AForm.Caption) > 0,
+    'invalid board selection must have a visible diagnostic');
+  Board := TDraughtsBoardControl(AForm.FindComponent('MainBoard'));
+  Check((Board <> nil) and (Board.Board = nil), 'stale board must not look like the selected position');
+  Key := VK_LEFT; Memo.OnKeyDown(Memo, Key, []);
+  Check((Pos('Cannot display', AForm.Caption) = 0) and (Board.Board <> nil),
+    'returning to a valid node restores the board and clears its diagnostic');
+end;
+
 procedure CheckEvaluationDisplay;
 var Control: TScoreHistoryControl; Score: Double;
 begin
@@ -1064,6 +1082,7 @@ begin
     try
       Check(not GameTreeHasContent(Form.ActiveGameTree),
         'untouched initial board should not prompt to save');
+      CheckInvalidDisplayIsVisible(Form);
       CheckEvaluationDisplay;
       CheckNodeDataImport(Form);
       CheckLandingCaptureImport(Form);

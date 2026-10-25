@@ -366,6 +366,7 @@ type
     FVariationHits: TMoveVariationHitArray;
 
     FVariationBrowseMoves: string;
+    FDisplayBoardFailed: Boolean;
     FWhiteClockLabel: TLabel;
     FWhitePlayerEdit: TEdit;
     procedure ApplyBoardFlipped;
@@ -5427,10 +5428,22 @@ end;
 
 procedure TMainForm.UpdateBoardFromBrowseState(AGameTree: TGameTree);
 begin
-  if not TryBuildDisplayedBoard(AGameTree, FBoard) then
+  FDisplayBoardFailed := not TryBuildDisplayedBoard(AGameTree, FBoard);
+  if FDisplayBoardFailed then
+  begin
+    Caption := 'GWDGUI - Cannot display the selected position';
+    ClearHumanMoveSelection;
+    CancelAnalyzerSearch;
+    if FBoardControl <> nil then FBoardControl.Board := nil;
+    if FAutoPlayButton <> nil then FAutoPlayButton.Enabled := False;
     Exit;
+  end;
+  Caption := 'GWDGUI - International Polish Draughts';
   if FBoardControl <> nil then
+  begin
+    FBoardControl.Board := FBoard;
     FBoardControl.Invalidate;
+  end;
   UpdateDatabaseSearchPositionFromTree(AGameTree);
 end;
 
@@ -7213,6 +7226,7 @@ begin
   LGameTree := ActiveGameTree;
   LGame := SelectedDisplayedGame;
   LInfo := DisplayedBoardInfo(LGameTree, LGame);
+  if FDisplayBoardFailed then Exit;
 
   UpdateAutoPlayButtonState;
 
