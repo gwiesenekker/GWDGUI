@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Reject malformed moves and overlapping FEN pieces (R6, U4)
+
+- Reject whitespace within move squares, dangling capture separators and mixed
+  separator types instead of normalizing malformed input into a legal move.
+- Accept whitespace around FEN ranges and a terminal period; reject duplicate or
+  overlapping squares atomically. Regenerate moves when side-to-move is changed.
+- Keep empty-side positions available for terminal-position analysis.
+- Validation: expanded board regression suite passes.
+
 ### 2026-10-25 — Accept and export standard PDN capture paths (R5, P15)
 
 - Validate landing-square capture routes against the board, including flying

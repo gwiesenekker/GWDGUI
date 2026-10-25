@@ -34,6 +34,7 @@ type
     function GetMovesPlayedCount: Integer;
     function GetSquare(Index: Integer): TDraughtsPieceKind;
     procedure SetSquare(Index: Integer; Value: TDraughtsPieceKind);
+    procedure SetSideToMove(Value: TDraughtsSide);
     procedure AddLegalMove(const ANotation: string; ACaptureCount: Integer; const APdnPath: string = '');
     procedure AddManQuietMoves(ASquare: Integer);
     procedure AddKingQuietMoves(ASquare: Integer);
@@ -69,7 +70,7 @@ type
     procedure CopyMovesPlayedTo(ATarget: TStrings);
 
     property Squares[Index: Integer]: TDraughtsPieceKind read GetSquare write SetSquare; default;
-    property SideToMove: TDraughtsSide read FSideToMove write FSideToMove;
+    property SideToMove: TDraughtsSide read FSideToMove write SetSideToMove;
     property StartingFEN: string read FStartingFEN write LoadFromFEN;
     property MovesPlayed[AIndex: Integer]: string read GetMovePlayed;
     property MovesPlayedCount: Integer read GetMovesPlayedCount;
@@ -195,22 +196,24 @@ begin
   DashPos := Pos('-', ARange);
   if DashPos = 0 then
   begin
-    Square := StrToInt(ARange);
+    Square := StrToInt(Trim(ARange));
     if (Square < Low(ABoard)) or (Square > High(ABoard)) then
       raise EConvertError.CreateFmt('FEN square out of range: %d', [Square]);
+    if ABoard[Square] <> pkEmpty then raise EConvertError.CreateFmt('Duplicate FEN square: %d', [Square]);
     ABoard[Square] := APiece;
   end
   else
   begin
-    FirstSquare := StrToInt(Copy(ARange, 1, DashPos - 1));
-    LastSquare := StrToInt(Copy(ARange, DashPos + 1, MaxInt));
+    FirstSquare := StrToInt(Trim(Copy(ARange, 1, DashPos - 1)));
+    LastSquare := StrToInt(Trim(Copy(ARange, DashPos + 1, MaxInt)));
     if FirstSquare > LastSquare then
       raise EConvertError.CreateFmt('Invalid FEN range: %s', [ARange]);
     for Square := FirstSquare to LastSquare do
     begin
       if (Square < Low(ABoard)) or (Square > High(ABoard)) then
         raise EConvertError.CreateFmt('FEN square out of range: %d', [Square]);
-      ABoard[Square] := APiece;
+      if ABoard[Square] <> pkEmpty then raise EConvertError.CreateFmt('Duplicate FEN square: %d', [Square]);
+    ABoard[Square] := APiece;
     end;
   end;
 end;
@@ -219,26 +222,31 @@ function ExtractMoveSquares(const AMove: string; ASquares: TStrings): Boolean;
 var
   I: Integer;
   LToken: string;
+  Separator, Current: Char;
 begin
   ASquares.Clear;
   LToken := '';
+  Separator := #0;
   for I := 1 to Length(AMove) do
   begin
     if AMove[I] in ['0'..'9'] then
       LToken := LToken + AMove[I]
     else if AMove[I] in ['-', 'x', 'X'] then
     begin
-      if LToken = '' then
-        Exit(False);
+      Current := AMove[I];
+      if Current = 'X' then Current := 'x';
+      if (Separator <> #0) and (Current <> Separator) then Exit(False);
+      Separator := Current;
+      if LToken = '' then Exit(False);
       ASquares.Add(LToken);
       LToken := '';
     end
-    else if AMove[I] > ' ' then
+    else
       Exit(False);
   end;
 
-  if LToken <> '' then
-    ASquares.Add(LToken);
+  if LToken = '' then Exit(False);
+  ASquares.Add(LToken);
   Result := ASquares.Count >= 2;
 end;
 
@@ -402,6 +410,13 @@ begin
   GenerateLegalMoves;
 end;
 
+procedure TDraughtsBoard.SetSideToMove(Value: TDraughtsSide);
+begin
+  if FSideToMove = Value then Exit;
+  FSideToMove := Value;
+  GenerateLegalMoves;
+end;
+
 procedure TDraughtsBoard.Clear;
 begin
   ClearBoard(FSquares);
@@ -432,6 +447,8 @@ begin
   for I := Low(LBoard) to High(LBoard) do
     LBoard[I] := pkEmpty;
   LPieceList := Trim(AFEN);
+  if (LPieceList <> '') and (LPieceList[Length(LPieceList)] = '.') then
+    Delete(LPieceList, Length(LPieceList), 1);
   LPart := NextToken(LPieceList, ':');
   if Length(LPart) <> 1 then
     raise EConvertError.CreateFmt('Invalid FEN side-to-move field: %s', [LPart]);

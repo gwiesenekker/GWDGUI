@@ -312,6 +312,28 @@ begin
   end;
 end;
 
+procedure CheckStrictMoveAndFenParsing;
+var Board: TDraughtsBoard; Saved: string; Raised: Boolean;
+begin
+  Board := TDraughtsBoard.Create;
+  try
+    Check(not Board.IsLegalMove('3 2-28'), 'whitespace inside square numbers must not form another move');
+    Board.LoadFromFEN('W:W26:B21');
+    Check(not Board.IsLegalMove('26-17x21'), 'mixed move separators must not normalize into a capture');
+    Check(not Board.IsLegalMove('26x17x'), 'trailing capture separator must not be accepted');
+    Board.LoadFromFEN('W:W31 - 35:B1.');
+    Check(Board[33] = pkWhiteMan, 'spaced FEN ranges and terminal period');
+    Saved := Board.CurrentFEN;
+    Raised := False;
+    try Board.LoadFromFEN('W:W32:B32'); except on E: EConvertError do Raised := True; end;
+    Check(Raised and (Board.CurrentFEN = Saved), 'overlapping FEN colors must fail atomically');
+    Board.SetBeginPosition;
+    Board.SideToMove := dsBlack;
+    Check(Board.IsLegalMove('18-23') and not Board.IsLegalMove('32-28'),
+      'changing side to move must regenerate legal moves');
+  finally Board.Free; end;
+end;
+
 procedure CheckLandingSquareCaptures;
 var Board, Copy: TDraughtsBoard; Text, Move: string; I: Integer;
 begin
@@ -397,6 +419,7 @@ begin
   CheckEquivalentAliasMatchesAreNotAmbiguous;
   CheckRejectedMovesPreserveBoard;
   CheckRejectedFensPreserveBoard;
+  CheckStrictMoveAndFenParsing;
   CheckLandingSquareCaptures;
   CheckDxpFractionalMinutes;
   CheckCurrentFenRoundTrip;
