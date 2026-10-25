@@ -2,7 +2,7 @@ program engine_clock_check;
 {$mode objfpc}{$H+}
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Classes, SysUtils, uEngineBase, uHubEngine, uEngineRegistry,
+  Classes, SysUtils, uEngineBase, uEngineParamsJson, uHubEngine, uEngineRegistry,
   uDraughtsBoard, uGameMoveHistory, uGameOrchestrator;
 
 type
@@ -50,7 +50,10 @@ begin
       WriteLn('wait');
     end
     else if Line = 'init' then
-      WriteLn('ready')
+    begin
+      if Mode = '--slow-start-hub' then Sleep(5200);
+      WriteLn('ready');
+    end
     else if Pos('pos ', Line) = 1 then
     begin
       if Pos('18-23', Line) > 0 then
@@ -116,6 +119,18 @@ begin
     Check(Pos('inc=0.600', Text) > 0, 'Hub level must receive the active increment');
     Check(Pos('message=level moves=0', Text) = 0, 'Hub must never receive moves=0');
   finally Game.Free; end;
+end;
+
+procedure CheckStartupTimeout;
+var Engine: THubEngine; Params: TEngineParamArray;
+begin
+  Params := nil;
+  Check(EngineStartupTimeoutMs(Params) = 60000, 'cold engine startup default');
+  AddOrUpdateParam(Params, 'gui-startup-timeout-ms', 'string', '7000', False);
+  Check(EngineStartupTimeoutMs(Params) = 7000, 'per-engine startup override');
+  Engine := CreateEngine('--slow-start-hub');
+  try Check(Engine.LaunchAndInit, 'cold engine initialization must tolerate more than five seconds');
+  finally Engine.Free; end;
 end;
 
 procedure CheckClockedThink(const Mode: string; Side: TDraughtsSide;
@@ -338,6 +353,7 @@ begin
     CheckClockedThink('--long-hub', dsWhite, 2, 0, False)
   else
   begin
+    CheckStartupTimeout;
     CheckTypedClockCompatibility;
     CheckHubLevel;
     CheckClockedThink('--silent-hub', dsWhite, 0.002, 0, True);

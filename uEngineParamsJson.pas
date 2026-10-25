@@ -20,6 +20,7 @@ procedure AddOrUpdateParam(var AParams: TEngineParamArray; const AName,
   AType, AValue: string; AKeepExistingValue: Boolean);
 function EngineParamValue(const AParams: TEngineParamArray; const AName,
   ADefault: string): string;
+function EngineStartupTimeoutMs(const AParams: TEngineParamArray): Integer;
 function EngineLaunchArgumentParamName(AKind: TExternalEngineKind): string;
 function EngineParamsFileName(const AEngineFileName: string): string;
 function EngineParamShouldSendToHub(const AName: string): Boolean;
@@ -39,6 +40,13 @@ implementation
 
 uses
   Classes, FPJSON, JSONParser, SysUtils;
+
+function EngineStartupTimeoutMs(const AParams: TEngineParamArray): Integer;
+begin
+  Result := StrToIntDef(EngineParamValue(AParams, 'gui-startup-timeout-ms', '60000'), 60000);
+  if Result < 1000 then Result := 1000;
+  if Result > 300000 then Result := 300000;
+end;
 
 function ParamIndexByName(const AParams: TEngineParamArray;
   const AName: string): Integer;
@@ -271,6 +279,7 @@ var
   ProtocolText: string;
   RoleText: string;
 begin
+  AddOrUpdateParam(AParams, 'gui-startup-timeout-ms', 'string', '60000', True);
   if (AEngine <> nil) and (AEngine.Kind = eekDxp) then
     ProtocolText := 'dxp'
   else

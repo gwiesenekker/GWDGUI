@@ -798,8 +798,7 @@ begin
     ChangeState(esInitializing, 'process launched; sending hub handshake');
 
     SendLine('hub');
-    WaitForLine('id ', 1000, Line);
-    if not WaitForLine('wait', 2000, Line) then
+    if not WaitForLine('wait', EngineStartupTimeoutMs(FParams), Line) then
       Log('hub wait not received before init; reason=' + FLastWaitFailure);
     SendHubParams;
 
@@ -809,7 +808,7 @@ begin
         SendLine(InitLines[I]);
 
     ChangeState(esWaitingForReady, 'init sent; waiting for ready');
-    Result := WaitForLine('ready', 5000, Line);
+    Result := WaitForLine('ready', EngineStartupTimeoutMs(FParams), Line);
     if Result then
     begin
       FStopFailed := False;

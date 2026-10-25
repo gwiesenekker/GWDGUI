@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Allow configurable cold engine startup (D9)
+
+- Use a 60-second Hub handshake/ready and DXP acceptance default, configurable
+  per engine as `gui-startup-timeout-ms` (bounded to 1–300 seconds).
+- Wait for Hub's handshake completion directly instead of imposing an additional
+  optional-ID delay. Existing cancellation and process-exit checks remain active.
+- Regress the parameter override and an engine taking over five seconds to initialize.
+- Validation: expanded clock/launch suite passes.
+
 ### 2026-10-25 — Bind DXP locally and protect listener lifetimes (D8, A7)
 
 - Bind listeners to the configured host (loopback by default), including the

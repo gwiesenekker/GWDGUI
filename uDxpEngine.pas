@@ -49,6 +49,7 @@ type
     FBoard: TDraughtsBoard;
     FBuffer: string;
     FEngine: TExternalEngineDefinition;
+    FParams: TEngineParamArray;
     FEngineSide: TDraughtsSide;
     FDxpSupportsFischer: Boolean;
     FGameIncrementSeconds: Double;
@@ -219,7 +220,6 @@ type
 const
   DxpLaunchListenTimeoutMs = 5000;
   DxpLaunchSocketTimeoutMs = 120000;
-  DxpGameAcceptedTimeoutMs = 10000;
   DxpWorkerWaitPollMs = 1000;
   DxpWorkerWaitLogMs = 10000;
 
@@ -536,6 +536,7 @@ begin
   inherited Create(EnginePickerDisplayName(AEngine, 0));
   FEngine := TExternalEngineDefinition.Create;
   FEngine.Assign(AEngine);
+  LoadEngineParamsFromJson(EngineParamsFileName(FEngine.ExePath), 'dxp', FParams);
   EngineName := FEngine.IdText;
   if EngineName = '' then
     EngineName := ChangeFileExt(FEngine.ExecutableName, '');
@@ -1313,7 +1314,7 @@ begin
   SendPacket(PacketName, GameReq);
   FGameStarted := True;
   ChangeState(esWaitingForDone, 'waiting for DXP_GAMEACC');
-  if not WaitForGameAccepted(DxpGameAcceptedTimeoutMs) then
+  if not WaitForGameAccepted(EngineStartupTimeoutMs(FParams)) then
   begin
     ChangeState(esError, 'timeout waiting for DXP_GAMEACC');
     raise EInvalidOperation.Create('DXP engine did not accept the game');
