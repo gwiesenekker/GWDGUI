@@ -4,7 +4,8 @@ program game_tree_pdn_filter_check;
 
 uses
   Classes, SysUtils, uDraughtsBoard, uGameOrchestrator, uGameTree, uGameTreeBuilder,
-  uGameTreePdn, uGameTreeSearchRef, uPvSnapshot, uTreeTestUtils;
+  uGameTreePdn, uGameTreeSearchRef, uPvSnapshot, uTreeTestUtils, uPdn,
+  uGameTreeNodeData;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -529,7 +530,7 @@ begin
     Text := GameTreeToPdnTextEx(GameTree, Options);
     CheckContains(Text, '[Event "Export Event"]',
       'full PDN export should include header');
-    CheckContains(Text, '(1... 18-23 {A: 0.10})',
+    CheckContains(Text, '(1... 18-23 {A: 0.10}',
       'full PDN export should include stored variation');
   finally
     Moves.Free;
@@ -537,7 +538,80 @@ begin
   end;
 end;
 
+procedure CheckNodeDataRoundTrip;
+var
+  Tree: TGameTree;
+  Data: TGameTreeNodeData;
+  Games: TList;
+  Lines: TStringList;
+  Root: TPdnMoveNode;
+  Game: TPdnGame;
+  Text, FileName: string;
+  I, Cycle: Integer;
 begin
+  Tree := TGameTree.Create;
+  Games := TList.Create;
+  Lines := TStringList.Create;
+  FileName := GetTempFileName(GetTempDir, 'gwd');
+  try
+    Tree.BeginRebuild('node-data', 'Metadata', 'White', 'Black', '*',
+      'W:W31-50:B1-20');
+    Tree.RecordMainlineMove(1, '32-28');
+    Tree.RecordMainlineMove(2, '16-21');
+    AddFixtureBranch(Tree, 1, '18-23 37-32', 'variation');
+    Data := Default(TGameTreeNodeData);
+    Data.CommentText := 'literal {braces} and \ path';
+    Data.EnginePV := '18-23 37-32'; Data.EngineScore := '0.12';
+    Data.EnginePVDepth := '19'; Data.EnginePVTimeText := '1.25';
+    Data.AnnotatorPV := '20-24 34-29'; Data.AnnotatorScore := '-0.20';
+    Data.AnnotatorPVDepth := '21'; Data.AnnotatorPVTimeText := '2.5';
+    Data.AutoPlayPV := '17-22'; Data.OriginText := 'engine';
+    Data.HasClockInfo := True; Data.HasMoveTime := True;
+    Data.SecondsUsed := 1.25; Data.WhiteRemainingSeconds := 298.75;
+    Data.BlackRemainingSeconds := 300; Data.WhiteUsedSeconds := 1.25;
+    Check(Tree.RestoreNodeData(Tree.MainlineNode[1].NodeId, Data), 'restore fixture');
+    Check(Tree.RestoreNodeData(Tree.Root.NodeId, Data), 'root fixture');
+    Check(Tree.RestoreNodeData(Tree.FindBranchNode(0, 1).NodeId, Data), 'branch fixture');
+    Text := GameTreeToPdnTextEx(Tree, DefaultGameTreePdnRenderOptions);
+    for Cycle := 1 to 3 do
+    begin
+      Lines.Text := Text; Lines.SaveToFile(FileName);
+      LoadPdnGamesFromFile(FileName, Games);
+      Check(Games.Count = 1, 'metadata remains one game');
+      Game := TPdnGame(Games[0]);
+      Root := Game.BuildMoveTree;
+      try
+        Check(Root.HasNodeData, 'root metadata survives');
+        Check(Root.Children[0].HasNodeData, 'mainline metadata survives');
+        Check(Root.Children[0].ChildCount = 2, 'only real variations survive');
+        Check(Root.Children[0].Children[1].HasNodeData, 'branch metadata survives');
+        Check(Root.Children[0].Children[1].Children[0].MoveText = '37-32',
+          'branch continuation survives');
+        Check(EncodeNodeData(Root.Children[0].NodeData, '') = EncodeNodeData(Data, ''),
+          'all typed data survive repeated legacy export');
+      finally Root.Free; end;
+      Text := PdnGameToText(Game);
+      for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
+      Games.Clear;
+    end;
+    Text := StringReplace(Text, 'literal \{braces\}', 'edited', []);
+    Lines.Text := Text; Lines.SaveToFile(FileName);
+    LoadPdnGamesFromFile(FileName, Games);
+    Game := TPdnGame(Games[0]); Root := Game.BuildMoveTree;
+    try
+      Check(not Root.HasNodeData, 'edited root comment wins over stale metadata');
+      Check(Pos('edited', Root.AnnotationText) > 0, 'edited root text retained');
+      Check(Pos('edited', Game.ImportWarningsText) > 0, 'stale metadata reported');
+    finally Root.Free; end;
+  finally
+    DeleteFile(FileName);
+    for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
+    Lines.Free; Games.Free; Tree.Free;
+  end;
+end;
+
+begin
+  CheckNodeDataRoundTrip;
   CheckTransientPvSnapshot;
   CheckGameTreeIds;
   CheckStableRebuildNodeIds;

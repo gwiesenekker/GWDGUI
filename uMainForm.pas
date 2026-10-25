@@ -4298,6 +4298,14 @@ var
   procedure ImportChildren(Source: TPdnMoveNode; ParentId: Int64);
   var I: Integer; Command: TGameTreeCommand; ErrorText: string;
   begin
+    if Source.HasNodeData then
+    begin
+      Command := Actor.CreateRestoreNodeDataCommand(ParentId, Source.NodeData);
+      try
+        if not ExecuteGameTreeCommand(Actor, Command, ErrorText) then
+          AGame.AddImportWarning('Cannot restore node data: ' + ErrorText);
+      finally Command.Free; end;
+    end;
     for I := 0 to Source.ChildCount - 1 do
     begin
       Command := Actor.CreateImportNodeCommand(ParentId,

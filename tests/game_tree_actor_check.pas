@@ -6,7 +6,7 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  Classes, SysUtils,
+  Classes, SysUtils, Math, uGameTreeNodeData,
   uDraughtsBoard, uGameTree, uGameTreeActor, uGameTreeBuilder,
   uGameTreeSearchRef, uPdn, uGameOrchestrator, uTreeTestUtils;
 
@@ -1382,7 +1382,38 @@ begin
   end;
 end;
 
+procedure CheckRestoreNodeData;
+var
+  Actor: TGameTreeActor;
+  Command: TGameTreeCommand;
+  Data: TGameTreeNodeData;
+  Rev: Int64;
 begin
+  Actor := TGameTreeActor.Create;
+  try
+    Data := Default(TGameTreeNodeData);
+    Data.CommentText := 'restored'; Data.EnginePV := '32-28';
+    Command := Actor.CreateRestoreNodeDataCommand(Actor.GameTree.Root.NodeId, Data);
+    Data.CommentText := 'changed caller';
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted, 'valid node metadata accepted');
+      Check(Actor.GameTree.Root.CommentText = 'restored', 'command owns metadata copy');
+    finally Command.Free; end;
+    Rev := Actor.Revision;
+    Command := Actor.CreateRestoreNodeDataCommand(-1, Data);
+    try Actor.ExecuteCommand(Command); Check(not Command.Accepted, 'missing target rejected');
+    finally Command.Free; end;
+    Data.SecondsUsed := NaN;
+    Command := Actor.CreateRestoreNodeDataCommand(Actor.GameTree.Root.NodeId, Data);
+    try Actor.ExecuteCommand(Command); Check(not Command.Accepted, 'nonfinite clocks rejected');
+    finally Command.Free; end;
+    Check(Actor.Revision = Rev, 'rejected metadata leaves tree unchanged');
+  finally Actor.Free; end;
+end;
+
+begin
+  CheckRestoreNodeData;
   CheckFreshGameTreeDefaults;
   CheckActorCommands;
   CheckQueuedActorCommands;

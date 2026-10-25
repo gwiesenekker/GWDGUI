@@ -5,7 +5,7 @@ unit uPdn;
 interface
 
 uses
-  Classes, Contnrs, SysUtils, uDraughtsBoard;
+  Classes, Contnrs, SysUtils, uDraughtsBoard, uGameTreeNodeData;
 
 type
   TPdnMoveNode = class
@@ -16,6 +16,8 @@ type
     function GetChildCount: Integer;
   public
     MoveText, AnnotationText: string;
+    HasNodeData: Boolean;
+    NodeData: TGameTreeNodeData;
     constructor Create;
     destructor Destroy; override;
     function AddMove(const Text: string; AsContinuation: Boolean): TPdnMoveNode;
@@ -65,6 +67,7 @@ procedure AppendPdnTextToFile(const AFileName, APdnText: string);
 function PdnGameToText(AGame: TPdnGame): string;
 function PdnExportResult(const AText: string): string;
 function EscapePdnComment(const Text: string): string;
+function NormalizePdnComment(const Text: string): string;
 function AnnotationWithScore(const AAnnotation, AName, AScore: string): string;
 function ExtractAnnotationValue(const AAnnotation, AName: string): string;
 function AnnotationWithoutName(const AAnnotation, AName: string): string;
@@ -131,6 +134,8 @@ begin
   for I := 0 to Source.ChildCount - 1 do
   begin
     Child := AddMove(Source.Children[I].MoveText, False);
+    if Source.Children[I].HasNodeData then
+    begin Child.HasNodeData := True; Child.NodeData := Source.Children[I].NodeData; end;
     if Child.AnnotationText = '' then Child.AnnotationText := Source.Children[I].AnnotationText
     else if (Source.Children[I].AnnotationText <> '') and
       (Child.AnnotationText <> Source.Children[I].AnnotationText) then
@@ -145,6 +150,8 @@ begin
   try
     Result.MoveText := MoveText;
     Result.AnnotationText := AnnotationText;
+    Result.HasNodeData := HasNodeData;
+    Result.NodeData := NodeData;
     Result.MergeChildren(Self);
   except Result.Free; raise; end;
 end;
@@ -270,6 +277,13 @@ function PdnQuote(const AText: string): string;
 begin
   Result := StringReplace(AText, '\', '\\', [rfReplaceAll]);
   Result := StringReplace(Result, '"', '\"', [rfReplaceAll]);
+end;
+
+function NormalizePdnComment(const Text: string): string;
+begin
+  Result := StringReplace(Text, #13#10, #10, [rfReplaceAll]);
+  Result := StringReplace(Result, #13, #10, [rfReplaceAll]);
+  Result := Trim(StringReplace(Result, #10, ' ', [rfReplaceAll]));
 end;
 
 function EscapePdnComment(const Text: string): string;
@@ -796,13 +810,31 @@ var
 
   procedure ProcessComment;
   var
-    LCommentText: string;
+    LCommentText, Projection, Actual: string;
+    Data: TGameTreeNodeData;
+    Target: TPdnMoveNode;
   begin
-    LCommentText := Trim(StringReplace(StringReplace(LComment.ToString, #13, ' ',
-      [rfReplaceAll]), #10, ' ', [rfReplaceAll]));
+    LCommentText := NormalizePdnComment(LComment.ToString);
     LComment.Clear;
-    if LCommentText = '' then
+    if LCommentText = '' then Exit;
+    if DecodeNodeData(LCommentText, Data, Projection) then
+    begin
+      Target := nil;
+      if LLastMoveIndex >= 0 then Actual := AAnnotations[LLastMoveIndex]
+      else if AInitialComments <> nil then Actual := AInitialComments.Text
+      else Actual := '';
+      if NormalizePdnComment(Actual) <> NormalizePdnComment(Projection) then
+      begin Warn('Ignored node data whose visible comment was edited.'); Exit; end;
+      if ATreeRoot <> nil then Target := Positions[LLastMoveIndex + 1];
+      if Target <> nil then
+      begin Target.HasNodeData := True; Target.NodeData := Data; Target.AnnotationText := Data.CommentText; end;
+      if LLastMoveIndex >= 0 then AAnnotations[LLastMoveIndex] := Data.CommentText
+      else if AInitialComments <> nil then
+      begin AInitialComments.Clear; if Data.CommentText <> '' then AInitialComments.Add(Data.CommentText); end;
       Exit;
+    end;
+    if Copy(LCommentText, 1, 11) = '[%gwd-node ' then
+      Warn('Malformed node-data comment retained as text.');
     if (LLastMoveIndex < 0) or (LLastMoveIndex >= AAnnotations.Count) then
     begin
       if AInitialComments <> nil then
@@ -1722,32 +1754,114 @@ end;
 
 function PdnGameToText(AGame: TPdnGame): string;
 var
-  Lines: TStringList;
+  Lines, Mainline: TStringList;
+  Root: TPdnMoveNode;
+  Board: TDraughtsBoard;
+  Output: TStringBuilder;
+  FirstSide: TDraughtsSide;
+  BoardValid: Boolean;
+  I: Integer;
+
+  procedure WriteAnnotation(Node: TPdnMoveNode);
+  begin
+    if Node.AnnotationText <> '' then
+      Output.Append(' {' + EscapePdnComment(Node.AnnotationText) + '}');
+    if Node.HasNodeData then
+      Output.Append(' {' + EncodeNodeData(Node.NodeData, Node.AnnotationText) + '}');
+  end;
+
+  procedure WriteSequence(Parent, Node: TPdnMoveNode; Before: TDraughtsBoard;
+    Ply: Integer; IsMainline, Siblings, PositionValid, ForceNumber: Boolean);
+  var Next: TDraughtsBoard; Side: TDraughtsSide; Number, J: Integer;
+    Text: string; NextValid: Boolean;
+  begin
+    Side := FirstSide;
+    if Odd(Ply) then Side := OppositeSide(Side);
+    Number := (Ply + Ord(FirstSide = dsBlack)) div 2 + 1;
+    if (Side = dsWhite) or ForceNumber then
+    begin
+      Output.Append(IntToStr(Number));
+      if Side = dsWhite then Output.Append('. ') else Output.Append('... ');
+    end;
+    Text := Node.MoveText;
+    if PositionValid then Text := Before.PdnMoveNotation(Text);
+    Output.Append(Text);
+    WriteAnnotation(Node);
+    if Siblings then
+      for J := 1 to Parent.ChildCount - 1 do
+      begin
+        Output.Append(' (');
+        WriteSequence(Parent, Parent.Children[J], Before, Ply, False, False, PositionValid, True);
+        Output.Append(')');
+      end;
+    Next := TDraughtsBoard.Create;
+    try
+      Next.AssignFrom(Before);
+      NextValid := PositionValid;
+      if NextValid then
+        try Next.PlayMove(Node.MoveText, False, True);
+        except
+          on E: EInvalidOperation do NextValid := False;
+          on E: EConvertError do NextValid := False;
+        end;
+      if IsMainline and (Ply + 1 >= Mainline.Count) then
+      begin
+        for J := 0 to Node.ChildCount - 1 do
+        begin
+          Output.Append(' (');
+          WriteSequence(Node, Node.Children[J], Next, Ply + 1, False, False, NextValid, True);
+          Output.Append(')');
+        end;
+      end
+      else if Node.ChildCount > 0 then
+      begin
+        Output.Append(' ');
+        WriteSequence(Node, Node.Children[0], Next, Ply + 1, IsMainline, True, NextValid, False);
+      end;
+    finally Next.Free; end;
+  end;
+
 begin
   Result := '';
-  if AGame = nil then
-    Exit;
+  if AGame = nil then Exit;
   Lines := TStringList.Create;
+  Mainline := TStringList.Create;
+  Output := TStringBuilder.Create;
+  Board := TDraughtsBoard.Create;
+  Root := nil;
   try
     Lines.Add('[Event "' + PdnQuote(AGame.EventName) + '"]');
-    if AGame.TournamentId <> '' then
-      Lines.Add('[TournamentId "' + PdnQuote(AGame.TournamentId) + '"]');
+    if AGame.TournamentId <> '' then Lines.Add('[TournamentId "' + PdnQuote(AGame.TournamentId) + '"]');
     Lines.Add('[White "' + PdnQuote(AGame.WhiteName) + '"]');
     Lines.Add('[Black "' + PdnQuote(AGame.BlackName) + '"]');
     Lines.Add('[Result "' + PdnQuote(PdnExportResult(AGame.ResultText)) + '"]');
-    if Trim(AGame.StartingFEN) <> DefaultPdnFen then
-      Lines.Add('[SetUp "1"]');
+    if Trim(AGame.StartingFEN) <> DefaultPdnFen then Lines.Add('[SetUp "1"]');
     Lines.Add('[FEN "' + PdnQuote(AGame.StartingFEN) + '"]');
     Lines.Add('');
-    if AGame.InitialCommentText <> '' then
-      Lines.Add('{' + EscapePdnComment(AGame.InitialCommentText) + '}');
-    Lines.Text := Lines.Text + FormatMovesForPdn(AGame.MovesText,
-      AGame.MoveAnnotationsText, AGame.MoveVariationsText,
-      AGame.MoveVariationAnnotationsText, AGame.ResultText, AGame.StartingFEN);
-    Result := Lines.Text;
-  finally
-    Lines.Free;
-  end;
+    Root := AGame.BuildMoveTree;
+    ExtractStrings([' ', #9, #10, #13], [], PChar(AGame.MovesText), Mainline);
+    BoardValid := True;
+    try Board.LoadFromFEN(AGame.StartingFEN);
+    except on E: EConvertError do begin Board.SetBeginPosition; BoardValid := False; end; end;
+    FirstSide := Board.SideToMove;
+    WriteAnnotation(Root);
+    if (Mainline.Count > 0) and (Root.ChildCount > 0) then
+    begin
+      if Output.Length > 0 then Output.Append(' ');
+      WriteSequence(Root, Root.Children[0], Board, 0, True, True, BoardValid, True);
+    end
+    else
+      for I := 0 to Root.ChildCount - 1 do
+      begin
+        if Output.Length > 0 then Output.Append(' ');
+        Output.Append('(');
+        WriteSequence(Root, Root.Children[I], Board, 0, False, False, BoardValid, True);
+        Output.Append(')');
+      end;
+    if Output.Length > 0 then Output.Append(' ');
+    Output.Append(PdnExportResult(AGame.ResultText));
+    Result := Lines.Text + Output.ToString + LineEnding;
+  finally Root.Free; Board.Free; Output.Free; Mainline.Free; Lines.Free; end;
 end;
 
 end.

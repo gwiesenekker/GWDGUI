@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Preserve typed node analysis through PDN (P15)
+
+- Save PVs, scores, depths, timings and clocks in a versioned PDN comment
+  extension, and restore them through the actor onto their original nodes.
+  Keep readable annotations and real nested variations; analysis previews no
+  longer become ordinary variations on every save/load cycle.
+- Preserve typed data in parsed-tree copies and the legacy PDN writer. An edited
+  visible comment takes precedence over stale metadata, with an import warning.
+- Regress repeated file and actual GTK form round trips, root and nested node
+  data, full clock values, escaped comments and invalid restoration commands.
+- Validation: focused PDN, actor, tree and GTK suites and mutation audit pass.
+
 ### 2026-10-25 — Pause safely on finished-game capture errors (T5)
 
 - Catch capture/serialization failures, mark finished rows inactive, and retain a

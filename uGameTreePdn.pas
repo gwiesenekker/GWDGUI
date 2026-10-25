@@ -50,7 +50,7 @@ function GameTreeHasContent(AGameTree: TGameTree): Boolean;
 
 implementation
 
-uses uPdn;
+uses uPdn, uGameTreeNodeData;
 
 function GameTreeHasContent(AGameTree: TGameTree): Boolean;
 begin
@@ -161,9 +161,10 @@ begin
 end;
 
 function NodeAnnotation(ANode: TGameTreePlyNode;
-  const AOptions: TGameTreePdnRenderOptions): string;
+  const AOptions: TGameTreePdnRenderOptions; AForFile: Boolean = False): string;
 var
-  LClockText: string;
+  LClockText, Projection: string;
+  Data: TGameTreeNodeData;
 begin
   Result := '';
   if ANode = nil then
@@ -194,8 +195,34 @@ begin
       Result += LClockText;
     end;
   end;
-  if Result <> '' then
-    Result := ' {' + EscapePdnComment(Result) + '}';
+  Projection := Result;
+  if Result <> '' then Result := ' {' + EscapePdnComment(Result) + '}';
+  if AForFile then
+  begin
+    Data := ANode.NodeData;
+    if not AOptions.ShowEngineScore then Data.EngineScore := '';
+    if not AOptions.ShowAnnotatorScore then Data.AnnotatorScore := '';
+    if not AOptions.ShowEngineFullPV then
+      if AOptions.ShowEnginePVMove then Data.EnginePV := FirstPvMove(Data.EnginePV)
+      else Data.EnginePV := '';
+    if not AOptions.ShowAnnotatorFullPV then
+      if AOptions.ShowAnnotatorPVMove then Data.AnnotatorPV := FirstPvMove(Data.AnnotatorPV)
+      else Data.AnnotatorPV := '';
+    if Data.EnginePV = '' then
+    begin Data.EnginePVDepth := ''; Data.EnginePVTimeText := ''; end;
+    if Data.AnnotatorPV = '' then
+    begin Data.AnnotatorPVDepth := ''; Data.AnnotatorPVTimeText := ''; end;
+    if not AOptions.ShowClocks then
+    begin
+      Data.HasClockInfo := False; Data.HasMoveTime := False; Data.SecondsUsed := 0;
+      Data.WhiteRemainingSeconds := 0; Data.BlackRemainingSeconds := 0;
+      Data.WhiteUsedSeconds := 0; Data.BlackUsedSeconds := 0;
+    end;
+    if (Data.CommentText <> '') or (Data.OriginText <> '') or (Data.EnginePV <> '') or
+      (Data.EngineScore <> '') or (Data.AnnotatorPV <> '') or (Data.AnnotatorScore <> '') or
+      (Data.AutoPlayPV <> '') or Data.HasClockInfo or Data.HasMoveTime then
+      Result += ' {' + EncodeNodeData(Data, Projection) + '}';
+  end;
 end;
 
 function NodeIsAnnotatorAlternative(APrevious, ANode: TGameTreePlyNode): Boolean;
@@ -417,7 +444,7 @@ begin
       Continue;
     if (ABasePlyFilter >= 0) and (ANode.PlyNumber <> ABasePlyFilter) then
       Continue;
-    if NodeIsAnnotatorAlternative(ANode, LChild) and
+    if ACompact and NodeIsAnnotatorAlternative(ANode, LChild) and
       (not AOptions.ShowAnnotatorPVMove) and
       (not AOptions.ShowAnnotatorFullPV) then
       Continue;
@@ -463,14 +490,14 @@ begin
 
   LContinuation := FindContinuationChild(ANode);
   if APreviousPosition <> nil then
-    if NodeIsAnnotatorAlternative(APreviousPosition, ANode) and
+    if ACompact and NodeIsAnnotatorAlternative(APreviousPosition, ANode) and
       (not AOptions.ShowAnnotatorFullPV) then
       LContinuation := nil;
 
   Result := NodeMoveCaption(AGameTree, ANode, True, ACompact) +
-    NodeAnnotation(ANode, AOptions);
+    NodeAnnotation(ANode, AOptions, not ACompact);
   if APreviousPosition <> nil then
-    if NodeIsAnnotatorAlternative(APreviousPosition, ANode) and
+    if ACompact and NodeIsAnnotatorAlternative(APreviousPosition, ANode) and
       AOptions.ShowAnnotatorScore and (not AOptions.HideAnnotations) and
       (Trim(APreviousPosition.AnnotatorScore) <> '') and
       (Trim(ANode.AnnotatorScore) = '') then
@@ -529,6 +556,7 @@ var
     LBaseOffset: Integer;
     LVariationText: string;
   begin
+    if not ACompact then Exit; // File exports store analysis as node data, never as real RAVs.
     if (not AShowMove) and (not AShowFull) then
       Exit;
     if Result = '' then
@@ -550,7 +578,7 @@ begin
   if (AGameTree = nil) or (AGameTree.Root = nil) then
     Exit;
 
-  Result := Trim(NodeAnnotation(AGameTree.Root, AOptions));
+  Result := Trim(NodeAnnotation(AGameTree.Root, AOptions, not ACompact));
   for I := 1 to AGameTree.MainlineCount do
   begin
     LChild := AGameTree.MainlineNode[I];
@@ -563,7 +591,7 @@ begin
     if LChild.PlyNumber > 1 then
       LPreviousPosition := AGameTree.MainlineNode[LChild.PlyNumber - 1];
     LSegment := NodeMoveCaption(AGameTree, LChild, Result = '', ACompact) +
-      NodeAnnotation(LChild, AOptions) +
+      NodeAnnotation(LChild, AOptions, not ACompact) +
       PreviousPositionAnnotation(LPreviousPosition, LChild, AOptions);
     LMoveStart := Pos(LChild.MoveText, LSegment);
     if LMoveStart > 0 then

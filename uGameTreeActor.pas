@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Contnrs, SysUtils,
-  uGameTree, uGameTreeBuilder, uGameTreeSearchRef, uThreadMessageQueue, uGameMoveHistory;
+  uGameTree, uGameTreeBuilder, uGameTreeSearchRef, uThreadMessageQueue, uGameMoveHistory, uGameTreeNodeData;
 
 type
   TGameTreeMoveSource = (
@@ -31,7 +31,8 @@ type
     gtcStoreMoveVariation,
     gtcClearBranches,
     gtcRebuildFromInputs,
-    gtcSetHeader
+    gtcSetHeader,
+    gtcRestoreNodeData
   );
 
   TGameTreeSearchState = (
@@ -72,6 +73,7 @@ type
     AnnotationText: string;
     ImportMoves: TGameTreeImportMoves;
     MoveSource: TGameTreeMoveSource;
+    NodeData: TGameTreeNodeData;
     HeaderInput: TGameTreeHeaderInput;
     MainlineInput: TGameTreeMainlineInput;
     EnginePvInput: TGameTreePvInput;
@@ -188,6 +190,7 @@ type
       out ASearchId: Int64): TGameTreeCommand; overload;
     function CreateStartSearchCommand(ANodeId: Int64;
       out ASearch: TGameTreeSearchRef): TGameTreeCommand; overload;
+    function CreateRestoreNodeDataCommand(ANodeId: Int64; const Data: TGameTreeNodeData): TGameTreeCommand;
     function CreateImportNodeCommand(AParentNodeId: Int64;
       const AMoveText, AAnnotationText: string): TGameTreeCommand;
     function CreateImportBranchCommand(AParentNodeId: Int64;
@@ -214,7 +217,7 @@ type
 implementation
 
 uses
-  uDraughtsBoard;
+  uDraughtsBoard, Math;
 
 function TGameTreeSearchRecord.SearchRef: TGameTreeSearchRef;
 begin
@@ -239,7 +242,8 @@ const
     'game-tree-store-move-variation',
     'game-tree-clear-branches',
     'game-tree-rebuild-from-inputs',
-    'game-tree-set-header'
+    'game-tree-set-header',
+    'game-tree-restore-node-data'
   );
 begin
   inherited Create(CommandNames[AKind]);
@@ -561,6 +565,14 @@ begin
   Result := CreateCommand(gtcRecordAutoPlayPV);
   Result.NodeId := ANodeId;
   Result.PvText := Trim(APV);
+end;
+
+function TGameTreeActor.CreateRestoreNodeDataCommand(ANodeId: Int64;
+  const Data: TGameTreeNodeData): TGameTreeCommand;
+begin
+  Result := CreateCommand(gtcRestoreNodeData);
+  Result.NodeId := ANodeId;
+  Result.NodeData := Data;
 end;
 
 function TGameTreeActor.CreateRecordEnginePVCommand(ANodeId: Int64;
@@ -1038,6 +1050,18 @@ begin
   InvalidateRebuildSignature := False;
 
   case ACommand.CommandKind of
+    gtcRestoreNodeData:
+      begin
+        if IsNan(ACommand.NodeData.SecondsUsed) or IsInfinite(ACommand.NodeData.SecondsUsed) or
+          IsNan(ACommand.NodeData.WhiteRemainingSeconds) or IsInfinite(ACommand.NodeData.WhiteRemainingSeconds) or
+          IsNan(ACommand.NodeData.BlackRemainingSeconds) or IsInfinite(ACommand.NodeData.BlackRemainingSeconds) or
+          IsNan(ACommand.NodeData.WhiteUsedSeconds) or IsInfinite(ACommand.NodeData.WhiteUsedSeconds) or
+          IsNan(ACommand.NodeData.BlackUsedSeconds) or IsInfinite(ACommand.NodeData.BlackUsedSeconds) then
+        begin Reject(ACommand, 'node metadata contains non-finite clock data'); Exit; end;
+        if not FGameTree.RestoreNodeData(ACommand.NodeId, ACommand.NodeData) then
+        begin Reject(ACommand, 'node metadata target does not exist'); Exit; end;
+        AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
+      end;
     gtcAddMainlineMove:
       begin
         Node := FGameTree.RecordMainlineMove(ACommand.PlyNumber,

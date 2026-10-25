@@ -9,7 +9,7 @@ uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, Grids, LCLType, Controls, ComCtrls, Menus,
   uDatabaseForm, uGameDatabase, uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPdnOpenDialog, uPvBrowser, uGuiDialogs,
-  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameOrchestrator, uTreeTestUtils;
+  uGameTreeNodeData, uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameOrchestrator, uTreeTestUtils;
 
 type
   TDatabaseModalProbe = class
@@ -47,6 +47,44 @@ begin
   DatabaseForm.OpenDatabase(ForbiddenPath);
   DatabaseForm.Close;
   Check(DatabaseForm.Visible, 'closing during import must request cancellation, not close its owner');
+end;
+
+procedure CheckNodeDataImport(AForm: TMainForm);
+var Data: TGameTreeNodeData; Game: TPdnGame; Games: TList;
+  Lines: TStringList; FileName, Text: string; I, Cycle: Integer;
+begin
+  Data := Default(TGameTreeNodeData);
+  Data.CommentText := 'user note'; Data.EnginePV := '32-28 16-21';
+  Data.EngineScore := '0.15'; Data.EnginePVDepth := '20';
+  Data.AnnotatorPV := '34-30'; Data.AnnotatorPVDepth := '22';
+  Data.HasMoveTime := True; Data.SecondsUsed := 1.75;
+  Text := '[Event "node data"]' + LineEnding +
+    '{user note} {' + EncodeNodeData(Data, 'user note') + '} 1.32-28 ' +
+    '(1.34-30 20-25 (1...18-23 {user note} {' + EncodeNodeData(Data, 'user note') + '})) *';
+  Games := TList.Create; Lines := TStringList.Create;
+  FileName := GetTempFileName(GetTempDir, 'gwd');
+  try
+    for Cycle := 1 to 3 do
+    begin
+      Lines.Text := Text; Lines.SaveToFile(FileName);
+      LoadPdnGamesFromFile(FileName, Games);
+      Check(Games.Count = 1, 'GUI round trip remains one game');
+      Game := TPdnGame(Games[0]);
+      AForm.LoadPdnGameToDisplay(Game);
+      Check(EncodeNodeData(AForm.ActiveGameTree.Root.NodeData, '') =
+        EncodeNodeData(Data, ''), 'GUI imports complete root analysis');
+      Check(AForm.ActiveGameTree.Root.ChildCount = 2, 'GUI preserves real root variations');
+      Check(AForm.ActiveGameTree.Root.Children[1].ChildCount = 2, 'GUI preserves nested alternatives');
+      Check(EncodeNodeData(AForm.ActiveGameTree.Root.Children[1].Children[1].NodeData, '') =
+        EncodeNodeData(Data, ''), 'GUI imports nested node analysis');
+      Text := GameTreeToPdnText(AForm.ActiveGameTree);
+      for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
+      Games.Clear;
+    end;
+  finally
+    for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
+    DeleteFile(FileName); Lines.Free; Games.Free;
+  end;
 end;
 
 procedure CheckLandingCaptureImport(AForm: TMainForm);
@@ -1001,6 +1039,7 @@ begin
     try
       Check(not GameTreeHasContent(Form.ActiveGameTree),
         'untouched initial board should not prompt to save');
+      CheckNodeDataImport(Form);
       CheckLandingCaptureImport(Form);
       CheckModalDatabaseImport(Form);
       CheckParsedLiteralComments(Form);

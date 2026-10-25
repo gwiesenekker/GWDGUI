@@ -5,7 +5,7 @@ unit uGameTree;
 interface
 
 uses
-  Classes, Contnrs, SysUtils, uDraughtsBoard, uGameOrchestrator, uGameMoveHistory;
+  Classes, Contnrs, SysUtils, uDraughtsBoard, uGameOrchestrator, uGameMoveHistory, uGameTreeNodeData;
 
 type
   TGameTreePlyNode = class
@@ -39,10 +39,12 @@ type
     constructor Create;
     {$WARN 3018 ON}
     function AddChild: TGameTreePlyNode;
+    function GetNodeData: TGameTreeNodeData;
     function GetChild(AIndex: Integer): TGameTreePlyNode;
     function GetChildCount: Integer;
   public
     destructor Destroy; override;
+    property NodeData: TGameTreeNodeData read GetNodeData;
     property AutoPlayPV: string read FAutoPlayPV;
     property AnnotatorPV: string read FAnnotatorPV;
     property AnnotatorPVDepth: string read FAnnotatorPVDepth;
@@ -148,6 +150,7 @@ type
     function GetBranchPath(AIndex: Integer): TGameTreeBranchPath;
     function GetBranchCount: Integer;
     function FindBranchNode(AIndex, APly: Integer): TGameTreePlyNode;
+    function RestoreNodeData(ANodeId: Int64; const Data: TGameTreeNodeData): Boolean;
     function RecordCompletedMoveData(APly: Integer; const AData: TGameMoveData): Boolean;
     constructor Create;
     destructor Destroy; override;
@@ -264,6 +267,54 @@ begin
     Result := dsBlack
   else
     Result := dsWhite;
+end;
+
+function TGameTreePlyNode.GetNodeData: TGameTreeNodeData;
+begin
+  Result.CommentText := FCommentText;
+  Result.OriginText := FOriginText;
+  Result.EnginePV := FEnginePV;
+  Result.EngineScore := FEngineScore;
+  Result.EnginePVDepth := FEnginePVDepth;
+  Result.EnginePVTimeText := FEnginePVTimeText;
+  Result.AnnotatorPV := FAnnotatorPV;
+  Result.AnnotatorScore := FAnnotatorScore;
+  Result.AnnotatorPVDepth := FAnnotatorPVDepth;
+  Result.AnnotatorPVTimeText := FAnnotatorPVTimeText;
+  Result.AutoPlayPV := FAutoPlayPV;
+  Result.HasClockInfo := FHasClockInfo;
+  Result.HasMoveTime := FHasMoveTime;
+  Result.SecondsUsed := FSecondsUsed;
+  Result.WhiteRemainingSeconds := FWhiteRemainingSeconds;
+  Result.BlackRemainingSeconds := FBlackRemainingSeconds;
+  Result.WhiteUsedSeconds := FWhiteUsedSeconds;
+  Result.BlackUsedSeconds := FBlackUsedSeconds;
+end;
+
+function TGameTree.RestoreNodeData(ANodeId: Int64; const Data: TGameTreeNodeData): Boolean;
+var Node: TGameTreePlyNode;
+begin
+  Node := FindNodeById(ANodeId);
+  Result := Node <> nil;
+  if not Result then Exit;
+  Node.FCommentText := Data.CommentText;
+  Node.FOriginText := Data.OriginText;
+  Node.FEnginePV := Data.EnginePV;
+  Node.FEngineScore := Data.EngineScore;
+  Node.FEnginePVDepth := Data.EnginePVDepth;
+  Node.FEnginePVTimeText := Data.EnginePVTimeText;
+  Node.FAnnotatorPV := Data.AnnotatorPV;
+  Node.FAnnotatorScore := Data.AnnotatorScore;
+  Node.FAnnotatorPVDepth := Data.AnnotatorPVDepth;
+  Node.FAnnotatorPVTimeText := Data.AnnotatorPVTimeText;
+  Node.FAutoPlayPV := Data.AutoPlayPV;
+  Node.FHasClockInfo := Data.HasClockInfo;
+  Node.FHasMoveTime := Data.HasMoveTime;
+  Node.FSecondsUsed := Data.SecondsUsed;
+  Node.FWhiteRemainingSeconds := Data.WhiteRemainingSeconds;
+  Node.FBlackRemainingSeconds := Data.BlackRemainingSeconds;
+  Node.FWhiteUsedSeconds := Data.WhiteUsedSeconds;
+  Node.FBlackUsedSeconds := Data.BlackUsedSeconds;
 end;
 
 constructor TGameTreePlyNode.Create;
