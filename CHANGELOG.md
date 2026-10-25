@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Guard database import with a modal progress window (P10)
+
+- Begin import only after its modal progress window is active. Stop/close requests
+  cancel safely; database browse/open/search/repair routes cannot reenter the
+  connection or commit its active batch while progress messages are processed.
+- Keep the importing form alive until its callback returns; clear queued work and
+  restore normal interaction after success, cancellation or failure.
+- Regress modal entry, attempted browse/database replacement and close cancellation
+  in the actual GUI, verifying only the first game is retained on cancellation.
+- Validation: hidden GTK main-form suite passes.
+
 ### 2026-10-25 — Append PDN without rewriting the archive (P11)
 
 - Append the new record through an append-mode handle and flush it, reading only

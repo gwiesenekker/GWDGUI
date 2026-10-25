@@ -26,6 +26,9 @@ type
     FGameSortDescending: Boolean;
     FGamesGrid: TStringGrid;
     FImportCancel: Boolean;
+    FImportBusy: Boolean;
+    FImportFileName, FImportFailure: string;
+    FImported, FDuplicates, FErrors: Integer;
     FImportProgressBar: TProgressBar;
     FImportProgressForm: TForm;
     FImportProgressLabel: TLabel;
@@ -54,6 +57,7 @@ type
       ADuplicates, AErrors: Integer; var ACancel: Boolean);
     procedure ImportProgressCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure ImportPdnClick(Sender: TObject);
+    procedure RunModalImport(Data: PtrInt);
     procedure OptimizePositionSearchClick(Sender: TObject);
     procedure PopulateGamesGridFromList(const AStatusText: string);
     procedure PopulateGamesGrid;
@@ -74,6 +78,7 @@ type
     procedure CreateDatabase(const AFileName: string);
     procedure OpenDatabase(const AFileName: string);
     procedure SearchCurrentPosition;
+    procedure ImportPdnFile(const AFileName: string);
     procedure SetSearchFEN(const AFEN: string);
     property OnGameSelected: TDatabaseGameSelectedEvent read FOnGameSelected
       write FOnGameSelected;
@@ -368,6 +373,8 @@ end;
 procedure TDatabaseForm.FormCloseHandler(Sender: TObject;
   var CloseAction: TCloseAction);
 begin
+  if FImportBusy then
+  begin FImportCancel := True; CloseAction := caNone; Exit; end;
   CloseAction := caHide;
 end;
 
@@ -381,7 +388,7 @@ var
   SpeedBytesPerSecond: Double;
   SpeedMbPerMinute: Double;
 begin
-  ACancel := FImportCancel;
+  ACancel := FImportCancel or Application.Terminated;
   if FImportProgressForm = nil then
     Exit;
 
@@ -411,7 +418,7 @@ begin
       ATotalBytes / 1048576, SpeedMbPerMinute,
       FormatImportDuration(ElapsedSeconds), EtaText]);
   Application.ProcessMessages;
-  ACancel := FImportCancel;
+  ACancel := FImportCancel or Application.Terminated;
 end;
 
 procedure TDatabaseForm.ImportProgressCloseQuery(Sender: TObject;
@@ -430,6 +437,7 @@ end;
 
 procedure TDatabaseForm.CreateDatabase(const AFileName: string);
 begin
+  if FImportBusy then Exit;
   FDatabase.CreateDatabase(AFileName);
   Caption := 'Database - ' + ExtractFileName(AFileName);
   PopulateGamesGrid;
@@ -438,6 +446,7 @@ end;
 
 procedure TDatabaseForm.OpenDatabase(const AFileName: string);
 begin
+  if FImportBusy then Exit;
   FDatabase.OpenDatabase(AFileName);
   Caption := 'Database - ' + ExtractFileName(AFileName);
   PopulateGamesGrid;
@@ -446,6 +455,7 @@ end;
 
 procedure TDatabaseForm.SetSearchFEN(const AFEN: string);
 begin
+  if FImportBusy then Exit;
   FFenEdit.Text := AFEN;
   UpdateBoardFromFen;
 end;
@@ -521,6 +531,7 @@ var
   Limit: Integer;
   TotalMatches: Integer;
 begin
+  if FImportBusy then Exit;
   Limit := GameDisplayLimit;
   FDatabase.LoadGames(FGameInfos, Limit, FWhiteFilterEdit.Text,
     FBlackFilterEdit.Text, FEventFilterEdit.Text, FPlayerFilterEdit.Text,
@@ -701,6 +712,7 @@ var
   ProbeCount: Integer;
   TotalGames: Integer;
 begin
+  if FImportBusy then Exit;
   if FSearchButton <> nil then
     FSearchButton.Enabled := False;
   FStatusLabel.Caption := 'Searching...';
@@ -768,6 +780,7 @@ end;
 
 procedure TDatabaseForm.SearchCurrentPosition;
 begin
+  if FImportBusy then Exit;
   PerformSearch(False);
 end;
 
@@ -800,78 +813,86 @@ begin
   ShowFormCenteredOnOwner(FPositionSetupForm, Self);
 end;
 
-procedure TDatabaseForm.ImportPdnClick(Sender: TObject);
-var
-  Dialog: TOpenDialog;
-  Duplicates: Integer;
-  Errors: Integer;
-  Imported: Integer;
-  LButton: TButton;
-  LogFileName: string;
+procedure TDatabaseForm.RunModalImport(Data: PtrInt);
 begin
+  try
+    try
+      FDatabase.ImportPdnFile(FImportFileName, FImported, FDuplicates, FErrors,
+        @ImportProgress, ChangeFileExt(FImportFileName, '.import.log'));
+    except
+      on E: Exception do FImportFailure := E.Message;
+    end;
+  finally
+    FImportBusy := False;
+    FImportProgressForm.OnCloseQuery := nil;
+    FImportProgressForm.ModalResult := mrOK;
+  end;
+end;
+
+procedure TDatabaseForm.ImportPdnFile(const AFileName: string);
+var Button: TButton;
+begin
+  if FImportBusy then Exit;
+  FImportFileName := AFileName;
+  FImportCancel := False;
+  FImportFailure := '';
+  FImported := 0; FDuplicates := 0; FErrors := 0;
+  FImportStartTick := GetTickCount64;
+  FImportProgressForm := TForm.Create(Self);
+  FImportBusy := True;
+  try
+    FImportProgressForm.Caption := 'Import PDN';
+    FImportProgressForm.Position := poOwnerFormCenter;
+    FImportProgressForm.PopupParent := Self;
+    FImportProgressForm.BorderStyle := bsDialog;
+    FImportProgressForm.SetBounds(0, 0, 720, 140);
+    FImportProgressForm.OnCloseQuery := @ImportProgressCloseQuery;
+    FImportProgressLabel := TLabel.Create(FImportProgressForm);
+    FImportProgressLabel.Parent := FImportProgressForm;
+    FImportProgressLabel.SetBounds(12, 12, 688, 24);
+    FImportProgressLabel.Caption := 'Preparing import...';
+    FImportProgressBar := TProgressBar.Create(FImportProgressForm);
+    FImportProgressBar.Parent := FImportProgressForm;
+    FImportProgressBar.SetBounds(12, 42, 688, 22);
+    FImportProgressBar.Min := 0;
+    FImportProgressBar.Max := 1000;
+    Button := TButton.Create(FImportProgressForm);
+    Button.Parent := FImportProgressForm;
+    Button.SetBounds(610, 78, 90, 30);
+    Button.Caption := 'Stop';
+    Button.OnClick := @StopImportClick;
+    // Start only after ShowModal has disabled other windows. Its close action
+    // requests cancellation; it cannot destroy the importer on its own stack.
+    Application.QueueAsyncCall(@RunModalImport, 0);
+    FImportProgressForm.ShowModal;
+  finally
+    Application.RemoveAsyncCalls(Self);
+    FImportBusy := False;
+    FreeAndNil(FImportProgressForm);
+    FImportProgressBar := nil;
+    FImportProgressLabel := nil;
+  end;
+  if FImportFailure <> '' then raise EInvalidOperation.Create(FImportFailure);
+  PopulateGamesGrid;
+  if FImportCancel then FStatusLabel.Caption := 'Stopped after importing '
+  else FStatusLabel.Caption := 'Imported ';
+  FStatusLabel.Caption := FStatusLabel.Caption + IntToStr(FImported) + ' game(s), errors ' + IntToStr(FErrors) +
+    ', duplicates ' + IntToStr(FDuplicates) + '; log ' +
+    ExtractFileName(ChangeFileExt(AFileName, '.import.log'));
+end;
+
+procedure TDatabaseForm.ImportPdnClick(Sender: TObject);
+var Dialog: TOpenDialog;
+begin
+  if FImportBusy then Exit;
   Dialog := TOpenDialog.Create(Self);
   try
     Dialog.Title := 'Import PDN';
     Dialog.Filter := 'PDN files|*.pdn|All files|*';
-    if not Dialog.Execute then
-      Exit;
-    try
-      LogFileName := ChangeFileExt(Dialog.FileName, '.import.log');
-      FImportCancel := False;
-      FImportStartTick := GetTickCount64;
-      FImportProgressForm := TForm.Create(Self);
-      try
-        FImportProgressForm.Caption := 'Import PDN';
-        FImportProgressForm.Position := poDesigned;
-        FImportProgressForm.BorderStyle := bsDialog;
-        FImportProgressForm.Width := 720;
-        FImportProgressForm.Height := 140;
-        FImportProgressForm.OnCloseQuery := @ImportProgressCloseQuery;
-
-        FImportProgressLabel := TLabel.Create(FImportProgressForm);
-        FImportProgressLabel.Parent := FImportProgressForm;
-        FImportProgressLabel.SetBounds(12, 12, 688, 24);
-        FImportProgressLabel.Caption := 'Preparing import...';
-
-        FImportProgressBar := TProgressBar.Create(FImportProgressForm);
-        FImportProgressBar.Parent := FImportProgressForm;
-        FImportProgressBar.SetBounds(12, 42, 688, 22);
-        FImportProgressBar.Min := 0;
-        FImportProgressBar.Max := 1000;
-
-        LButton := TButton.Create(FImportProgressForm);
-        LButton.Parent := FImportProgressForm;
-        LButton.SetBounds(610, 78, 90, 30);
-        LButton.Caption := 'Stop';
-        LButton.OnClick := @StopImportClick;
-
-        ShowFormCenteredOnOwner(FImportProgressForm, Self);
-        FDatabase.ImportPdnFile(Dialog.FileName, Imported, Duplicates, Errors,
-          @ImportProgress, LogFileName);
-      finally
-        FreeAndNil(FImportProgressForm);
-        FImportProgressBar := nil;
-        FImportProgressLabel := nil;
-      end;
-      PopulateGamesGrid;
-      if FImportCancel then
-        FStatusLabel.Caption := 'Stopped after importing ' +
-          IntToStr(Imported) + ' game(s), errors ' + IntToStr(Errors) +
-          ', duplicates ' + IntToStr(Duplicates) + '; log ' +
-          ExtractFileName(LogFileName)
-      else
-        FStatusLabel.Caption := 'Imported ' + IntToStr(Imported) +
-          ' game(s), errors ' + IntToStr(Errors) +
-          ', duplicates ' + IntToStr(Duplicates) + '; log ' +
-          ExtractFileName(LogFileName);
-    except
-      on E: Exception do
-        ShowGuiTextDialog(Self, 'Import PDN',
-          E.Message + LineEnding + LineEnding + 'Import log: ' + LogFileName);
-    end;
-  finally
-    Dialog.Free;
-  end;
+    if not Dialog.Execute then Exit;
+    try ImportPdnFile(Dialog.FileName);
+    except on E: Exception do ShowGuiTextDialog(Self, 'Import PDN', E.Message); end;
+  finally Dialog.Free; end;
 end;
 
 procedure TDatabaseForm.OptimizePositionSearchClick(Sender: TObject);
@@ -879,6 +900,7 @@ var
   ElapsedSeconds: Double;
   StartTick: QWord;
 begin
+  if FImportBusy then Exit;
   if ShowGuiConfirmationDialog(Self, 'Rebuild position summary',
     'Rebuild the continuation summary used for position search?' + LineEnding +
     'This is normally only needed as a repair action.',

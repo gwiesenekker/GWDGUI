@@ -8,10 +8,16 @@ program standalone_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, Grids, LCLType, Controls, ComCtrls, Menus,
-  uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPdnOpenDialog, uPvBrowser, uGuiDialogs,
+  uDatabaseForm, uGameDatabase, uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPdnOpenDialog, uPvBrowser, uGuiDialogs,
   uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameOrchestrator, uTreeTestUtils;
 
 type
+  TDatabaseModalProbe = class
+    DatabaseForm: TDatabaseForm;
+    ForbiddenPath: string;
+    Called: Boolean;
+    procedure Run(Data: PtrInt);
+  end;
   TTestExceptionReporter = class
     procedure Report(Sender: TObject; E: Exception);
   end;
@@ -30,6 +36,56 @@ begin
   begin
     WriteLn('FAIL: ', AMessage);
     Halt(1);
+  end;
+end;
+
+procedure TDatabaseModalProbe.Run(Data: PtrInt);
+begin
+  Called := True;
+  Check(Application.ModalLevel > 0, 'database import must be modal before work starts');
+  DatabaseForm.SearchCurrentPosition;
+  DatabaseForm.OpenDatabase(ForbiddenPath);
+  DatabaseForm.Close;
+  Check(DatabaseForm.Visible, 'closing during import must request cancellation, not close its owner');
+end;
+
+procedure CheckModalDatabaseImport(AForm: TMainForm);
+var Form: TDatabaseForm; Probe: TDatabaseModalProbe; Database: TGameDatabase;
+  FileName, DbName: string; Text: TStringList; Games: TList; I: Integer;
+begin
+  FileName := GetTempFileName(GetTempDir, 'gwd-modal');
+  DbName := FileName + '.db';
+  Text := TStringList.Create;
+  Games := TList.Create;
+  Form := TDatabaseForm.Create(AForm);
+  Probe := TDatabaseModalProbe.Create;
+  Database := TGameDatabase.Create;
+  try
+    Text.Text := '[Event "One"] 1. 32-28 18-23 *' + LineEnding +
+      '[Event "Two"] 1. 33-28 18-22 *';
+    Text.SaveToFile(FileName);
+    Form.CreateDatabase(DbName);
+    Form.Show;
+    Probe.DatabaseForm := Form;
+    Probe.ForbiddenPath := DbName + '.must-not-open';
+    Application.QueueAsyncCall(@Probe.Run, 0);
+    Form.ImportPdnFile(FileName);
+    Check(Probe.Called and not FileExists(Probe.ForbiddenPath),
+      'reentrant actions must not replace the database during import');
+    Database.OpenDatabase(DbName);
+    Database.LoadGames(Games);
+    Check(Games.Count = 1, 'close cancellation must retain exactly the first imported game');
+  finally
+    Application.RemoveAsyncCalls(Probe);
+    for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
+    Database.Free;
+    Form.Free;
+    Probe.Free;
+    Games.Free;
+    Text.Free;
+    DeleteFile(FileName);
+    DeleteFile(ChangeFileExt(FileName, '.import.log'));
+    DeleteFile(DbName);
   end;
 end;
 
@@ -928,6 +984,7 @@ begin
     try
       Check(not GameTreeHasContent(Form.ActiveGameTree),
         'untouched initial board should not prompt to save');
+      CheckModalDatabaseImport(Form);
       CheckParsedLiteralComments(Form);
       CheckCoalescedRunnerHistory(Form);
       CheckStandaloneMainlineCanBeExtended(Form);
