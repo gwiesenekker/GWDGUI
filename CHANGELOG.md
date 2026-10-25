@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Distinguish tournament engine configurations (T19)
+
+- Include arguments, initialization/INI settings and DXP endpoint settings in
+  engine identity. Preserve these fields when saving the registry; arguments
+  were previously read but omitted on save.
+- Upgrade an old identity only when it uniquely identifies a definition. Refuse
+  ambiguous legacy keys rather than silently selecting the first variant.
+- Regress same-executable fast/slow definitions through setup and tournament
+  save/load, parameter differences, old-key ambiguity and existing reorder cases.
+- Validation: GTK tournament regression suite passes.
+
 ### 2026-10-25 — Validate DXP bindings and preserve literal Hub paths (D8/D18)
 
 - Resolve localhost to loopback before binding and reject other nonnumeric listen

@@ -72,6 +72,7 @@ procedure AddEngineReservationKeys(AEngine: TExternalEngineDefinition;
   AKeys: TStrings);
 function EnginesJsonFileName: string;
 function EngineIdentityKey(AEngine: TExternalEngineDefinition): string;
+function FindEngineByIdentityKey(AEngines: TExternalEngineList; const Key: string): TExternalEngineDefinition;
 function EnginePickerDisplayName(AEngine: TExternalEngineDefinition;
   ASlotIndex: Integer): string;
 procedure LoadExternalEngines(const AFileName: string; AEngines: TExternalEngineList);
@@ -80,7 +81,7 @@ procedure SaveExternalEngines(const AFileName: string; AEngines: TExternalEngine
 implementation
 
 uses
-  JSONParser;
+  JSONParser, SHA1;
 
 constructor TExternalEngineDefinition.Create;
 begin
@@ -280,15 +281,40 @@ begin
     'engines.json';
 end;
 
-function EngineIdentityKey(AEngine: TExternalEngineDefinition): string;
+function LegacyEngineIdentityKey(AEngine: TExternalEngineDefinition): string;
 begin
-  Result := '';
-  if AEngine = nil then
-    Exit;
-
+  if AEngine = nil then Exit('');
   Result := LowerCase(AEngine.KindText) + '|' +
-    LowerCase(ExpandFileName(AEngine.ExePath)) + '|' +
-    LowerCase(AEngine.IdText);
+    LowerCase(ExpandFileName(AEngine.ExePath)) + '|' + LowerCase(AEngine.IdText);
+end;
+
+function EngineIdentityKey(AEngine: TExternalEngineDefinition): string;
+var Path, Configuration: string;
+begin
+  if AEngine = nil then Exit('');
+  Path := ExpandFileName(AEngine.ExePath);
+  {$IFDEF MSWINDOWS}Path := LowerCase(Path);{$ENDIF}
+  Configuration := Path + #0 + AEngine.IdText + #0 + AEngine.Arguments + #0 +
+    AEngine.InitText + #0 + AEngine.IniFileName + #0 + AEngine.IniContent + #0 +
+    LowerCase(AEngine.DxpHost) + #0 + IntToStr(AEngine.DxpPort) + #0 + IntToStr(Ord(AEngine.DxpRole));
+  Result := LegacyEngineIdentityKey(AEngine) + '|cfg2:' + SHA1Print(SHA1String(Configuration));
+end;
+
+function FindEngineByIdentityKey(AEngines: TExternalEngineList;
+  const Key: string): TExternalEngineDefinition;
+var I: Integer;
+begin
+  Result := nil;
+  if (AEngines = nil) or (Key = '') then Exit;
+  for I := 0 to AEngines.Count - 1 do
+    if EngineIdentityKey(AEngines[I]) = Key then Exit(AEngines[I]);
+  // A pre-configuration key can be upgraded only when it identifies one definition.
+  for I := 0 to AEngines.Count - 1 do
+    if LegacyEngineIdentityKey(AEngines[I]) = Key then
+    begin
+      if Result <> nil then Exit(nil);
+      Result := AEngines[I];
+    end;
 end;
 
 procedure AddEngineReservationKeys(AEngine: TExternalEngineDefinition;
@@ -355,6 +381,8 @@ begin
   Result.HubId := AObject.Get('hub_id', '');
   Result.DxpId := AObject.Get('dxp_id', '');
   Result.Arguments := AObject.Get('arguments', '');
+  Result.IniFileName := AObject.Get('ini_file_name', '');
+  Result.IniContent := AObject.Get('ini_content', '');
   Result.InitText := AObject.Get('init', Result.InitText);
   Result.DxpHost := AObject.Get('dxp_host', Result.DxpHost);
   Result.DxpPort := AObject.Get('dxp_port', Result.DxpPort);
@@ -384,6 +412,9 @@ begin
   Result.Add('hub_id', AEngine.HubId);
   Result.Add('dxp_id', AEngine.DxpId);
   Result.Add('kind', LowerCase(AEngine.KindText));
+  Result.Add('arguments', AEngine.Arguments);
+  if AEngine.IniFileName <> '' then Result.Add('ini_file_name', AEngine.IniFileName);
+  if AEngine.IniContent <> '' then Result.Add('ini_content', AEngine.IniContent);
   Result.Add('init', AEngine.InitText);
   Result.Add('dxp_host', AEngine.DxpHost);
   Result.Add('dxp_port', AEngine.DxpPort);

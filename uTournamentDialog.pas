@@ -872,7 +872,7 @@ begin
 end;
 
 function TTournamentDialog.EngineForRow(ARow: Integer; White: Boolean): TExternalEngineDefinition;
-var Key: string; I, Col: Integer; RecordData: TTournamentGameRecord;
+var Key: string; Col: Integer; RecordData: TTournamentGameRecord;
 begin
   Result := nil;
   RecordData := GameRecord(ARow);
@@ -886,8 +886,10 @@ begin
       else RecordData.BlackEngineKey := EngineIdentityKey(Result);
     Exit;
   end;
-  for I := 0 to FEngines.Count - 1 do
-    if EngineIdentityKey(FEngines[I]) = Key then Exit(FEngines[I]);
+  Result := FindEngineByIdentityKey(FEngines, Key);
+  if Result <> nil then
+    if White then RecordData.WhiteEngineKey := EngineIdentityKey(Result)
+    else RecordData.BlackEngineKey := EngineIdentityKey(Result);
 end;
 
 function TTournamentDialog.EngineKeyForName(const AName: string): string;
@@ -1498,9 +1500,12 @@ begin
     if (SelectedKeys <> nil) and (SelectedKeys.JSONType = jtArray) then
     begin
       for KeyIndex := 0 to SelectedKeys.Count - 1 do
-        for I := 0 to FEngineCheckList.Items.Count - 1 do
-          if EngineIdentityKey(TExternalEngineDefinition(FEngineCheckList.Items.Objects[I])) =
-            TJSONArray(SelectedKeys).Strings[KeyIndex] then FEngineCheckList.Checked[I] := True;
+      begin
+        Engine := FindEngineByIdentityKey(FEngines, TJSONArray(SelectedKeys).Strings[KeyIndex]);
+        if Engine <> nil then
+          for I := 0 to FEngineCheckList.Items.Count - 1 do
+            if FEngineCheckList.Items.Objects[I] = Engine then FEngineCheckList.Checked[I] := True;
+      end;
     end
     else if (Engines <> nil) and (Engines.JSONType = jtArray) then
       for I := 0 to TJSONArray(Engines).Count - 1 do

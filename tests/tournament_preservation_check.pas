@@ -1121,6 +1121,42 @@ begin
   end;
 end;
 
+procedure CheckEngineArgumentIdentity(const Fixture: string);
+var Engines: TExternalEngineList; Fast, Slow: TExternalEngineDefinition;
+  Dialog, Reloaded: TTournamentDialog; Grid: TStringGrid; Setup: TGameSetup;
+  Config, SavedConfig, LegacyKey: string; HadConfig: Boolean;
+begin
+  Config := EnginesJsonFileName; HadConfig := FileExists(Config);
+  if HadConfig then SavedConfig := FileContents(Config);
+  Engines := TExternalEngineList.Create; Dialog := nil; Reloaded := nil;
+  try
+    Fast := TExternalEngineDefinition.Create; Fast.Kind := eekHub;
+    Fast.HubId := 'Same engine'; Fast.ExePath := '/tmp/gwd-test-same-engine'; Fast.Arguments := '--level fast';
+    Slow := TExternalEngineDefinition.Create; Slow.Assign(Fast); Slow.Arguments := '--level slow';
+    Engines.Add(Fast); Engines.Add(Slow);
+    Check(EngineIdentityKey(Fast) <> EngineIdentityKey(Slow), 'arguments distinguish tournament engine identities');
+    LegacyKey := LowerCase(Fast.KindText) + '|' + LowerCase(ExpandFileName(Fast.ExePath)) + '|' + LowerCase(Fast.IdText);
+    Check(FindEngineByIdentityKey(Engines, LegacyKey) = nil, 'ambiguous legacy key must not silently choose the first engine');
+    SaveExternalEngines(Config, Engines);
+    Dialog := TTournamentDialog.Create(nil);
+    Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    AddTournamentPairingRow(Grid, EnginePickerDisplayName(Fast, 1), EnginePickerDisplayName(Slow, 2), 1);
+    Check(Dialog.GameSetupForRow(1, Setup), 'argument variants resolve in game setup');
+    Check((Setup.WhiteEngine.Arguments = '--level fast') and (Setup.BlackEngine.Arguments = '--level slow'),
+      'same executable must launch distinct argument variants');
+    Dialog.SaveTournamentToFile(Fixture);
+    Reloaded := TTournamentDialog.Create(nil); Reloaded.LoadTournamentFromFile(Fixture);
+    Check(Reloaded.GameSetupForRow(1, Setup), 'argument variants survive tournament reload');
+    Check((Setup.WhiteEngine.Arguments = '--level fast') and (Setup.BlackEngine.Arguments = '--level slow'),
+      'reloaded game must not collapse two variants');
+    Slow.Arguments := Fast.Arguments; Slow.InitText := 'set-param name=Threads value=2';
+    Check(EngineIdentityKey(Fast) <> EngineIdentityKey(Slow), 'initialization parameters distinguish definitions');
+  finally
+    Reloaded.Free; Dialog.Free; Engines.Free;
+    if HadConfig then WriteContents(Config, SavedConfig) else DeleteFile(Config);
+  end;
+end;
+
 procedure CheckExternalPdnEdits(const Fixture: string);
 var Dialog, Resumed: TTournamentDialog; Grid: TStringGrid;
   PdnPath, Edited: string;
@@ -1227,6 +1263,7 @@ begin
       CheckMovedOwnedProjection(IncludeTrailingPathDelimiter(TestDirectory) + 'owned-collision.json');
       CheckNewProjectionPreservesExistingPdn(IncludeTrailingPathDelimiter(TestDirectory) + 'collision.json');
       CheckProjectionAvoidsExistingDirectory(IncludeTrailingPathDelimiter(TestDirectory) + 'directory.json');
+      CheckEngineArgumentIdentity(IncludeTrailingPathDelimiter(TestDirectory) + 'argument-identities.json');
       CheckExternalPdnEdits(IncludeTrailingPathDelimiter(TestDirectory) + 'external-edits.json');
       CheckIndependentLegacyIdentities(IncludeTrailingPathDelimiter(TestDirectory) + 'legacy-identities.json');
       CheckLegacyMigrationCollision(IncludeTrailingPathDelimiter(TestDirectory) + 'legacy-collision.json');
