@@ -1,6 +1,9 @@
 program standalone_preservation_check;
 
 {$mode objfpc}{$H+}
+{$IFNDEF GWDGUI_NONINTERACTIVE_TEST}
+  {$FATAL Build this test with its .lpi project to enable noninteractive dialogs}
+{$ENDIF}
 
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}

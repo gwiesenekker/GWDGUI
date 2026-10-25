@@ -29,3 +29,7 @@ network*.json
 # Local machine-specific engine configuration
 engines.json
 *.params.json
+
+# Numbered local engine configurations and executables
+/engine[0-9]*
+/endgine[0-9]*

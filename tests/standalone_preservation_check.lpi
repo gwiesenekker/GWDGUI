@@ -21,5 +21,6 @@
     <Version Value="11"/>
     <Target><Filename Value="standalone_preservation_check"/></Target>
     <SearchPaths><OtherUnitFiles Value=".."/></SearchPaths>
+    <Other><CustomOptions Value="-dGWDGUI_NONINTERACTIVE_TEST"/></Other>
   </CompilerOptions>
 </CONFIG>

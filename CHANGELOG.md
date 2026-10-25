@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Make Lazarus regression builds portable and noninteractive (C5, C3)
+
+- Store the noninteractive define in all three test projects and reject builds
+  without it, preventing hidden confirmation dialogs from hanging the tests.
+- Build isolated project copies with ordinary Lazarus 3.0-compatible options;
+  remove dependence on `--opt` and verify the requested executable exists.
+- Ignore numbered local engine configurations/executables without moving or
+  deleting them, preventing accidental staging of large local files.
+- Validation: lifecycle and both GTK suites build and pass through the new helper.
+
 ### 2026-10-25 — Explain rejected PDN branches (P20)
 
 - Validate a selected PDN's recursive tree lazily and show illegal-move/subtree

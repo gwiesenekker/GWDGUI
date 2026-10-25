@@ -21,5 +21,6 @@
     <Version Value="11"/>
     <Target><Filename Value="running_game_lifecycle_check"/></Target>
     <SearchPaths><OtherUnitFiles Value=".."/></SearchPaths>
+    <Other><CustomOptions Value="-dGWDGUI_NONINTERACTIVE_TEST"/></Other>
   </CompilerOptions>
 </CONFIG>
