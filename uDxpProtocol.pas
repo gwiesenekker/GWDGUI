@@ -148,7 +148,7 @@ begin
   if ABoard = nil then
     Exit;
 
-  GameTime := Round(AGameMinutes);
+  GameTime := Trunc(AGameMinutes);
   if GameTime <= 0 then
     GameTime := 1;
 

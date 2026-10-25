@@ -74,6 +74,27 @@ begin
   end;
 end;
 
+procedure CheckHubLevel;
+var Game: TGameOrchestrator; Engine: THubEngine; Clock: TTimeControl; Text: string;
+begin
+  Game := TGameOrchestrator.Create;
+  try
+    Engine := CreateEngine('--fast-hub');
+    Game.Engine[dsWhite] := Engine;
+    Check(Engine.LaunchAndInit, 'level fixture launch');
+    Clock := DefaultTimeControl;
+    Clock.MovesPerPeriod := 0;
+    Clock.IncrementSeconds := 0.6;
+    Game.TimeControl := Clock;
+    Game.NewGame(DefaultStartingFEN);
+    Game.PlayNextMove;
+    Text := Engine.StateLog.Text;
+    Check(Pos('message=level time=', Text) > 0, 'sudden-death level must omit moves');
+    Check(Pos('inc=0.600', Text) > 0, 'Hub level must receive the active increment');
+    Check(Pos('message=level moves=0', Text) = 0, 'Hub must never receive moves=0');
+  finally Game.Free; end;
+end;
+
 procedure CheckClockedThink(const Mode: string; Side: TDraughtsSide;
   Minutes, Increment: Double; ExpectedTimeout: Boolean);
 var
@@ -294,6 +315,7 @@ begin
     CheckClockedThink('--long-hub', dsWhite, 2, 0, False)
   else
   begin
+    CheckHubLevel;
     CheckClockedThink('--silent-hub', dsWhite, 0.002, 0, True);
     CheckClockedThink('--silent-hub', dsBlack, 0.002, 0, True);
     CheckClockedThink('--fast-hub', dsWhite, 2, 0, False);

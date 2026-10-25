@@ -312,6 +312,18 @@ begin
   end;
 end;
 
+procedure CheckDxpFractionalMinutes;
+var Board: TDraughtsBoard; Text: string;
+begin
+  Board := TDraughtsBoard.Create;
+  try
+    Text := DxpBuildGameReqPacket(Board, dsWhite, 1.5, 0, 'Test');
+    CheckEqual(Copy(Text, 37, 3), '001', 'DXP fractional minutes must not round up');
+    Text := DxpBuildGameReqPacket(Board, dsWhite, 0.5, 0, 'Test');
+    CheckEqual(Copy(Text, 37, 3), '001', 'DXP minimum integer minute');
+  finally Board.Free; end;
+end;
+
 procedure CheckCurrentFenRoundTrip;
 const
   Positions: array[0..4] of string = (
@@ -359,6 +371,7 @@ begin
   CheckEquivalentAliasMatchesAreNotAmbiguous;
   CheckRejectedMovesPreserveBoard;
   CheckRejectedFensPreserveBoard;
+  CheckDxpFractionalMinutes;
   CheckCurrentFenRoundTrip;
   Writeln('OK');
 end.

@@ -1036,8 +1036,9 @@ end;
 procedure THubEngine.DoSetClockInfo(AMovesRemaining: Integer; ARemainingSeconds,
   ATotalUsedSeconds: Double);
 begin
-  FLevelCommand := 'level moves=' + IntToStr(AMovesRemaining) +
-    ' time=' + HubSeconds(ARemainingSeconds);
+  FLevelCommand := 'level';
+  if AMovesRemaining > 0 then FLevelCommand += ' moves=' + IntToStr(AMovesRemaining);
+  FLevelCommand += ' time=' + HubSeconds(ARemainingSeconds);
   Log('level stored; message=' + FLevelCommand);
 end;
 

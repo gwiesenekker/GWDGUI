@@ -387,8 +387,15 @@ end;
 
 function TGameOrchestrator.BuildLevelMessage(ASide: TDraughtsSide): string;
 begin
-  Result := 'level moves=' + IntToStr(GetMovesRemaining(ASide)) +
-    ' time=' + FormatHubSeconds(FRemainingSeconds[ASide]);
+  Result := 'level';
+  if GetMovesRemaining(ASide) > 0 then
+    Result += ' moves=' + IntToStr(GetMovesRemaining(ASide));
+  Result += ' time=' + FormatHubSeconds(FRemainingSeconds[ASide]);
+  if (FTimeControl.IncrementSeconds > 0) and
+    ((FTimeControl.IncrementMode = cimFromStart) or
+     ((FTimeControl.MovesPerPeriod > 0) and
+      (FTotalMovesBySide[ASide] + 1 >= FTimeControl.MovesPerPeriod))) then
+    Result += ' inc=' + FormatHubSeconds(FTimeControl.IncrementSeconds);
 end;
 
 function TGameOrchestrator.GetMovesRemaining(ASide: TDraughtsSide): Integer;
@@ -537,6 +544,7 @@ begin
       '; total_used_seconds=' + FormatHubSeconds(FUsedSeconds[LSide]));
     LEngine.SetClockInfo(GetMovesRemaining(LSide), FRemainingSeconds[LSide],
       FUsedSeconds[LSide]);
+    LEngine.ReceiveMessage(BuildLevelMessage(LSide));
 
     LAvailableSeconds := FRemainingSeconds[LSide];
     if (FTimeControl.IncrementMode = cimFromStart) or

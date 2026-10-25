@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Send accurate engine clock controls (D6, D7)
+
+- Truncate DXP whole-minute controls instead of rounding fractional minutes up,
+  retaining the protocol's one-minute minimum.
+- Omit Hub `moves` for sudden death and send the currently applicable increment,
+  including the GUI's delayed-increment policy, before each search.
+- Regress fractional DXP controls and actual Hub level messages alongside the
+  existing timeout, period-boundary, delayed-increment and history checks.
+- Validation: DXP rounding regression fails before the fix; board and clock suites pass.
+
 ### 2026-10-25 — Reuse storage for empty tournament resets (T18)
 
 - Keep the storage identity/path when clearing or recreating a tournament with
