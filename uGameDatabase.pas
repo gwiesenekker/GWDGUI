@@ -42,7 +42,6 @@ type
     procedure CommitActiveTransaction;
     function ContinuationSummaryAvailable: Boolean;
     procedure CreateImportIndexes;
-    procedure DropImportIndexes;
     procedure EnsureContinuationTable;
     procedure EnsureContinuationState;
     procedure EnsureGameHashColumns;
@@ -691,14 +690,6 @@ begin
   ExecuteSql('create index if not exists idx_positions_game on positions(game_id)');
 end;
 
-procedure TGameDatabase.DropImportIndexes;
-begin
-  ExecuteSql('drop index if exists idx_positions_key');
-  ExecuteSql('drop index if exists idx_positions_search');
-  ExecuteSql('drop index if exists idx_positions_game');
-  ExecuteSql('drop index if exists idx_positions_game_search');
-end;
-
 procedure TGameDatabase.EnsureContinuationTable;
 begin
   ExecuteSql(
@@ -864,7 +855,7 @@ begin
       // Commit invalidation before any import rows can become durable (including
       // progress callbacks which may query and commit the active transaction).
       ExecuteSql('update database_state set summary_dirty=1 where id=1');
-      DropImportIndexes;
+      // Keep search and game-position indexes available throughout the import.
       CommitActiveTransaction;
       StartTransactionIfNeeded;
       Importer.Run(AFileName);

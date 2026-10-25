@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Retain database indexes through interrupted imports (P9)
+
+- Keep the position-search and game-position indexes active throughout imports,
+  so cancellation, failed recovery or process exit cannot leave them missing.
+  Opening older interrupted databases still recreates any missing indexes.
+- Extend regressions to inspect all import/search indexes during progress and
+  after failed summary rebuilds, abrupt committed-batch exit and abrupt exit with
+  an additional uncommitted game. Verify the final game and its positions roll
+  back while earlier batches survive and their statistics recover correctly.
+- Validation: the index-preservation regression fails before the fix; full
+  headless suite, both GTK suites and application build pass. Rebuilt the local app.
+
 ### 2026-10-25 — Track and recover database summary freshness (P9)
 
 - Persist a summary freshness flag before imports and invalidate it atomically

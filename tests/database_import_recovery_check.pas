@@ -9,6 +9,7 @@ type
   TImportObserver = class
     Database: TGameDatabase;
     CrashAfterBatch: Boolean;
+    CrashAt: Integer;
     CancelAfter: Integer;
     RebuildDuringImport: Boolean;
     Calls: Integer;
@@ -58,6 +59,8 @@ begin
   end;
 end;
 
+procedure CheckIndexes(const FileName: string); forward;
+
 procedure TImportObserver.Progress(ABytesRead, ATotalBytes: Int64;
   AImported, ADuplicates, AErrors: Integer; var ACancel: Boolean);
 begin
@@ -65,10 +68,11 @@ begin
   // Halt bypasses importer cleanup, database destruction and summary rebuild.
   if CrashAfterBatch then
   begin
-    if AImported = 10000 then Halt(73);
+    if AImported = CrashAt then Halt(73);
     Exit;
   end;
   CheckStats(Database, AImported);
+  CheckIndexes(Database.FileName);
   if RebuildDuringImport and (AImported = 1) then
     Database.RebuildContinuationSummary;
   if CancelAfter > 0 then ACancel := AImported >= CancelAfter;
@@ -141,6 +145,14 @@ begin
   end;
 end;
 
+procedure CheckIndexes(const FileName: string);
+begin
+  Check(Scalar(FileName, 'select count(*) from sqlite_master where type=''index'' and name in (' +
+    '''idx_games_hash'', ''idx_games_white'', ''idx_games_black'', ''idx_games_event'', ' +
+    '''idx_positions_search'', ''idx_positions_game'')') = 6,
+    'all import/search indexes must exist during import and after interruption');
+end;
+
 procedure CheckLiveSummary(const DbName, PdnName: string);
 var
   Database: TGameDatabase;
@@ -210,6 +222,7 @@ begin
     Check(Scalar(DbName, 'select sum(game_count) from continuations where next_move=''32-28''') = 1,
       'failed rebuild must roll back deletion and retain the prior summary');
     CheckStats(Database, 2);
+    CheckIndexes(DbName);
     RawSQL(DbName, 'drop trigger reject_summary');
     Database.Close;
     Database.OpenDatabase(DbName);
@@ -242,6 +255,7 @@ begin
     Child.Options := [poWaitOnExit];
     Child.Execute;
     Check(Child.ExitStatus = 73, 'child must exit abruptly just after a committed import batch');
+    CheckIndexes(DbName);
     Check(Scalar(DbName, 'select count(*) from games') = 10001,
       'the committed batch must survive abrupt process exit');
     Check(Scalar(DbName, 'select summary_dirty from database_state where id=1') = 1,
@@ -256,6 +270,31 @@ begin
     RawSQL(DbName, 'update continuations set game_count=999999');
     Database.OpenDatabase(DbName);
     CheckStats(Database, 10000);
+    CheckIndexes(DbName);
+    Database.Close;
+    // Recovery of old interrupted imports must also restore missing indexes.
+    RawSQL(DbName, 'drop index idx_positions_search');
+    RawSQL(DbName, 'drop index idx_positions_game');
+    Database.OpenDatabase(DbName);
+    CheckIndexes(DbName);
+    Database.Close;
+    // Kill with one additional game still uncommitted after the durable batch.
+    WriteGames(PdnName, 'Uncommitted', 10001, '1-1');
+    Child.Parameters.Clear;
+    Child.Parameters.Add('--crash-import');
+    Child.Parameters.Add(DbName);
+    Child.Parameters.Add(PdnName);
+    Child.Parameters.Add('10001');
+    Child.Execute;
+    Check(Child.ExitStatus = 73, 'child must exit with an uncommitted partial batch');
+    CheckIndexes(DbName);
+    Check(Scalar(DbName, 'select count(*) from games') = 20001,
+      'interruption must retain committed batches and roll back the final game');
+    Check(Scalar(DbName, 'select count(*) from positions') = 60003,
+      'the uncommitted game must not leave partial position rows');
+    Database.OpenDatabase(DbName);
+    CheckStats(Database, 20000);
+    CheckIndexes(DbName);
   finally
     Child.Free;
     Database.Free;
@@ -274,6 +313,7 @@ begin
     Observer := TImportObserver.Create;
     Observer.Database := Database;
     Observer.CrashAfterBatch := True;
+    Observer.CrashAt := StrToIntDef(ParamStr(4), 10000);
     Database.OpenDatabase(ParamStr(2));
     Database.ImportPdnFile(ParamStr(3), Imported, Duplicates, Errors, @Observer.Progress);
     Halt(74);
