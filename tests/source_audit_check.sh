@@ -18,3 +18,21 @@ if [[ -n "$violations" ]]; then
   echo "$violations"
   exit 1
 fi
+
+# The model owns child nodes; import/rebuild must not regain line-index state.
+adapter_violations="$(
+  rg -n 'TGameTreeVariationLine|FVariationLines|RebuildVariationLines|GameTreeVariationLineInput|StoreVariationLine|FindVariationNode|TryLocateVariationNode' \
+    "$ROOT_DIR/uGameTree.pas" "$ROOT_DIR/uGameTreeActor.pas" \
+    "$ROOT_DIR/uGameTreeBuilder.pas" "$ROOT_DIR/uGameTreePdn.pas" \
+    "$ROOT_DIR/uMainForm.pas" || true
+)"
+if [[ -n "$adapter_violations" ]]; then
+  echo "Retired variation-line adapter reintroduced:"
+  echo "$adapter_violations"
+  exit 1
+fi
+
+if rg -n 'DecodePdnVariationLine|MoveVariationsText|MoveVariationAnnotationsText' "$ROOT_DIR/uMainForm.pas"; then
+  echo "The GUI must consume parsed PDN nodes, not legacy flattened fields."
+  exit 1
+fi

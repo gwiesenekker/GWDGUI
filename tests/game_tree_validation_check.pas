@@ -38,6 +38,36 @@ begin
     Command.Free;
   end;
 end;
+procedure CheckLiteralNodeImport;
+var
+  Actor: TGameTreeActor;
+  Command: TGameTreeCommand;
+  ParentId, ChildId: Int64;
+begin
+  Actor := TGameTreeActor.Create;
+  try
+    Execute(Actor, Actor.CreateAppendMainlineMoveCommand('32-28', gmsHuman));
+    ParentId := Actor.GameTree.MainlineNode[1].NodeId;
+    RejectUnchanged(Actor, Actor.CreateImportNodeCommand(ParentId, '20-24 38-32', 'bad'));
+    RejectUnchanged(Actor, Actor.CreateImportNodeCommand(High(Int64), '20-24', 'bad'));
+    RejectUnchanged(Actor, Actor.CreateImportNodeCommand(ParentId, '1-50', 'bad'));
+    Command := Actor.CreateImportNodeCommand(ParentId, '20-24', '@pdn-annotations:broken');
+    Actor.ExecuteCommand(Command);
+    Check(Command.Accepted, 'literal node comment must not be parsed as an array');
+    ChildId := Command.CreatedNodeId;
+    Command.Free;
+    Check((Actor.GameTree.FindNodeById(ChildId).Parent.NodeId = ParentId) and
+      (Actor.GameTree.FindNodeById(ChildId).CommentText = '@pdn-annotations:broken'),
+      'node import must retain parent identity and exact literal comment');
+    Command := Actor.CreateImportNodeCommand(ParentId, '20-24', '@pdn-annotations:broken');
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted and not Command.TreeChanged and (Command.CreatedNodeId = ChildId),
+        'repeated node import must reuse the same child without changing data');
+    finally Command.Free; end;
+  finally Actor.Free; end;
+end;
+
 procedure CheckRebuildKeepsOnlySurvivingParents;
 var
   Actor: TGameTreeActor;
@@ -91,6 +121,7 @@ var
   Header: TGameTreeHeaderInput;
   NodeId: Int64;
 begin
+  CheckLiteralNodeImport;
   CheckRebuildKeepsOnlySurvivingParents;
   Actor := TGameTreeActor.Create;
   Moves := TStringList.Create;

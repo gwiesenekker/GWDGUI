@@ -665,8 +665,7 @@ type
     procedure TournamentSelectGame(Sender: TObject; AGame: TObject);
     procedure TournamentStartGame(Sender: TObject; const ASetup: TGameSetup;
       const ATitlePrefix: string; out AGame: TObject);
-    procedure ImportPdnBranches(AGameTree: TGameTree;
-      const AVariationsText, AVariationAnnotationsText: string);
+    procedure ImportPdnTree(AGameTree: TGameTree; AGame: TPdnGame);
     procedure UpdateBoardInfo;
     procedure RefreshDisplayFromGameTree(AGameTree: TGameTree;
       AForceViews: Boolean);
@@ -4029,8 +4028,7 @@ begin
     FStandaloneEventName := LEventName;
     ClearVariationExploration;
     FTreeCursor.Select(FGameTree, FGameTree.Root);
-    ImportPdnBranches(FGameTree, AGame.MoveVariationsText,
-      AGame.MoveVariationAnnotationsText);
+    ImportPdnTree(FGameTree, AGame);
     ClearDisplayedPvCache(LBoard, CurrentMoveCount);
     FViewedGameId := -1;
     if FGamesListBox <> nil then
@@ -4289,44 +4287,35 @@ begin
   ClearVariationExploration;
 end;
 
-procedure TMainForm.ImportPdnBranches(AGameTree: TGameTree;
-  const AVariationsText, AVariationAnnotationsText: string);
+procedure TMainForm.ImportPdnTree(AGameTree: TGameTree; AGame: TPdnGame);
 var
-  I, BasePly, DisplayPly: Integer;
-  BranchText, Annotation, ErrorText, RawAnnotation: string;
-  Lines, Annotations: TStringList;
   Actor: TGameTreeActor;
-  ParentNode: TGameTreePlyNode;
-  Command: TGameTreeCommand;
-begin
-  if AGameTree = nil then Exit;
-  Actor := ActorForGameTree(AGameTree);
-  if Actor = nil then Exit;
-  ClearTreeBranches(AGameTree);
-  Lines := TStringList.Create;
-  Annotations := TStringList.Create;
-  try
-    Lines.Text := AVariationsText;
-    Annotations.Text := AVariationAnnotationsText;
-    for I := 0 to Lines.Count - 1 do
+  ParsedRoot: TPdnMoveNode;
+
+  procedure ImportChildren(Source: TPdnMoveNode; ParentId: Int64);
+  var I: Integer; Command: TGameTreeCommand; ErrorText: string;
+  begin
+    for I := 0 to Source.ChildCount - 1 do
     begin
-      RawAnnotation := '';
-      if I < Annotations.Count then RawAnnotation := Annotations[I];
-      if not DecodePdnVariationLine(Lines[I], RawAnnotation, I,
-        DisplayPly, BasePly, BranchText, Annotation) then Continue;
-      if BasePly = 0 then ParentNode := AGameTree.Root
-      else ParentNode := AGameTree.MainlineNode[BasePly];
-      if ParentNode = nil then Continue;
-      Command := Actor.CreateImportBranchCommand(ParentNode.NodeId, BranchText, Annotation);
+      Command := Actor.CreateImportNodeCommand(ParentId,
+        Source.Children[I].MoveText, Source.Children[I].AnnotationText);
       try
-        ExecuteGameTreeCommand(Actor, Command, ErrorText);
+        if ExecuteGameTreeCommand(Actor, Command, ErrorText) then
+          ImportChildren(Source.Children[I], Command.CreatedNodeId);
       finally Command.Free; end;
     end;
-    RefreshDisplayFromGameTree(AGameTree, True);
-  finally
-    Annotations.Free;
-    Lines.Free;
   end;
+
+begin
+  if (AGameTree = nil) or (AGame = nil) then Exit;
+  Actor := ActorForGameTree(AGameTree);
+  if Actor = nil then Exit;
+  ParsedRoot := AGame.BuildMoveTree;
+  try
+    ClearTreeBranches(AGameTree);
+    ImportChildren(ParsedRoot, AGameTree.Root.NodeId);
+    RefreshDisplayFromGameTree(AGameTree, True);
+  finally ParsedRoot.Free; end;
 end;
 
 function TMainForm.EngineSupportsMcts(AEngine: TExternalEngineDefinition): Boolean;

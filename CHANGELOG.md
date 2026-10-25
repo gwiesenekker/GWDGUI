@@ -3,6 +3,23 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Import PDN recursively from parsed nodes (G7)
+
+- Build ordered move nodes during PDN parsing, including nested variations at
+  their actual parents. Preserve the first continuation even if a RAV appears
+  before it; attach leading variation comments to the variation's first move.
+- Import these nodes recursively through validated parent-node commands. Remove
+  the GUI's flattened-variation decoder and its display/base/index bookkeeping.
+- Deep-copy parsed trees for game copies and callers. Keep old database-field
+  conversion confined to the PDN boundary, with cache invalidation after edits.
+- Regress nested White/Black alternatives, Black-start captures, malformed
+  branches, early RAVs, legal replay of every path, copy isolation and old records.
+  Enforce adapter retirement in the source audit.
+- Import each parsed node with a literal-comment command. Regress marker-like
+  comments that previously caused a valid branch to be skipped or reinterpreted.
+- Validation: full headless suite, both GTK suites and the large tournament save
+  check pass; the new parser/tree test also passes with heap leak checking enabled.
+
 ### 2026-10-25 — Remove stored variation lines and indexed mutation (G7)
 
 - Remove the model's variation-line table, line-owned annotations/origin, builder

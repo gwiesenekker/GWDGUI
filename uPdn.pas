@@ -5,10 +5,32 @@ unit uPdn;
 interface
 
 uses
-  Classes, SysUtils, uDraughtsBoard;
+  Classes, Contnrs, SysUtils, uDraughtsBoard;
 
 type
+  TPdnMoveNode = class
+  private
+    FParent: TPdnMoveNode;
+    FChildren: TObjectList;
+    function GetChild(I: Integer): TPdnMoveNode;
+    function GetChildCount: Integer;
+  public
+    MoveText, AnnotationText: string;
+    constructor Create;
+    destructor Destroy; override;
+    function AddMove(const Text: string; AsContinuation: Boolean): TPdnMoveNode;
+    procedure MergeChildren(Source: TPdnMoveNode);
+    function Clone: TPdnMoveNode;
+    property Parent: TPdnMoveNode read FParent;
+    property ChildCount: Integer read GetChildCount;
+    property Children[I: Integer]: TPdnMoveNode read GetChild;
+  end;
+
   TPdnGame = class
+  private
+    FParsedRoot: TPdnMoveNode;
+    FParsedSignature: string;
+    function TreeDataSignature: string;
   public
     EventName: string;
     WhiteName: string;
@@ -22,6 +44,8 @@ type
     MoveVariationsText: string;
     MovesText: string;
     constructor Create;
+    destructor Destroy; override;
+    function BuildMoveTree: TPdnMoveNode;
     procedure AssignFrom(ASource: TPdnGame);
   end;
 
@@ -55,6 +79,82 @@ const
   DefaultPdnFen = 'W:W31-50:B1-20';
   VariationAnnotationsPrefix = '@pdn-annotations:';
 
+constructor TPdnMoveNode.Create;
+begin
+  inherited Create;
+  FChildren := TObjectList.Create(True);
+end;
+
+destructor TPdnMoveNode.Destroy;
+begin
+  FChildren.Free;
+  inherited Destroy;
+end;
+
+function TPdnMoveNode.GetChild(I: Integer): TPdnMoveNode;
+begin
+  Result := TPdnMoveNode(FChildren[I]);
+end;
+
+function TPdnMoveNode.GetChildCount: Integer;
+begin
+  Result := FChildren.Count;
+end;
+
+function TPdnMoveNode.AddMove(const Text: string; AsContinuation: Boolean): TPdnMoveNode;
+var I: Integer;
+begin
+  Result := nil;
+  for I := 0 to ChildCount - 1 do
+    if Children[I].MoveText = NormalizeMoveNotation(Text) then
+    begin Result := Children[I]; Break; end;
+  if Result = nil then
+  begin
+    Result := TPdnMoveNode.Create;
+    Result.FParent := Self;
+    Result.MoveText := NormalizeMoveNotation(Text);
+    FChildren.Add(Result);
+  end;
+  if AsContinuation then FChildren.Move(FChildren.IndexOf(Result), 0);
+end;
+
+procedure TPdnMoveNode.MergeChildren(Source: TPdnMoveNode);
+var I: Integer; Child: TPdnMoveNode;
+begin
+  if Source = nil then Exit;
+  for I := 0 to Source.ChildCount - 1 do
+  begin
+    Child := AddMove(Source.Children[I].MoveText, False);
+    if Child.AnnotationText = '' then Child.AnnotationText := Source.Children[I].AnnotationText
+    else if (Source.Children[I].AnnotationText <> '') and
+      (Child.AnnotationText <> Source.Children[I].AnnotationText) then
+      Child.AnnotationText += '; ' + Source.Children[I].AnnotationText;
+    Child.MergeChildren(Source.Children[I]);
+  end;
+end;
+
+function TPdnMoveNode.Clone: TPdnMoveNode;
+begin
+  Result := TPdnMoveNode.Create;
+  try
+    Result.MoveText := MoveText;
+    Result.AnnotationText := AnnotationText;
+    Result.MergeChildren(Self);
+  except Result.Free; raise; end;
+end;
+
+function TPdnGame.TreeDataSignature: string;
+begin
+  Result := StartingFEN + #0 + MovesText + #0 + MoveAnnotationsText + #0 +
+    InitialCommentText + #0 + MoveVariationsText + #0 + MoveVariationAnnotationsText;
+end;
+
+destructor TPdnGame.Destroy;
+begin
+  FParsedRoot.Free;
+  inherited Destroy;
+end;
+
 constructor TPdnGame.Create;
 begin
   inherited Create;
@@ -69,6 +169,10 @@ procedure TPdnGame.AssignFrom(ASource: TPdnGame);
 begin
   if ASource = nil then
     Exit;
+  if ASource = Self then Exit;
+  FreeAndNil(FParsedRoot);
+  if ASource.FParsedRoot <> nil then FParsedRoot := ASource.FParsedRoot.Clone;
+  FParsedSignature := ASource.FParsedSignature;
   EventName := ASource.EventName;
   WhiteName := ASource.WhiteName;
   BlackName := ASource.BlackName;
@@ -595,7 +699,7 @@ end;
 procedure ExtractPdnMoveData(const AText: string; AMoves, AAnnotations,
   AVariations, AVariationAnnotations: TStrings; const AStartingFEN: string = '';
   AInitialComments: TStrings = nil; APlyOffset: Integer = 0;
-  AWarnings: TStrings = nil);
+  AWarnings: TStrings = nil; ATreeRoot: TPdnMoveNode = nil);
 var
   I: Integer;
   LBraceDepth: Integer;
@@ -605,6 +709,7 @@ var
   LToken: string;
   LVariationText: string;
   LVariationClosed: Boolean;
+  Positions: array of TPdnMoveNode;
 
   procedure Warn(const AMessage: string);
   begin
@@ -631,6 +736,11 @@ var
       AMoves.Add(NormalizeMoveNotation(LCleanToken));
       AAnnotations.Add('');
       LLastMoveIndex := AMoves.Count - 1;
+      if ATreeRoot <> nil then
+      begin
+        SetLength(Positions, AMoves.Count + 1);
+        Positions[AMoves.Count] := Positions[AMoves.Count - 1].AddMove(LCleanToken, True);
+      end;
     end;
   end;
 
@@ -652,6 +762,7 @@ var
     if AAnnotations[LLastMoveIndex] <> '' then
       LCommentText := AAnnotations[LLastMoveIndex] + '; ' + LCommentText;
     AAnnotations[LLastMoveIndex] := LCommentText;
+    if ATreeRoot <> nil then Positions[LLastMoveIndex + 1].AnnotationText := LCommentText;
   end;
 
   function ReadParenthesizedText(out AClosed: Boolean): string;
@@ -724,6 +835,7 @@ var
     CombinedMoves, CombinedAnnotations: TStringList;
     J, K, NestedDisplay, NestedBase, PrefixCount: Integer;
     NestedText, NestedComment: string;
+    BranchRoot: TPdnMoveNode;
   begin
     if (AVariations = nil) or (AVariationAnnotations = nil) then
       Exit;
@@ -739,6 +851,8 @@ var
         ': its numbered start lies outside its parent line.');
       Exit;
     end;
+    BranchRoot := nil;
+    if ATreeRoot <> nil then BranchRoot := TPdnMoveNode.Create;
     LVariationAnnotations := TStringList.Create;
     LVariationMoves := TStringList.Create;
     LInitialComments := TStringList.Create;
@@ -751,7 +865,7 @@ var
     try
       ExtractPdnMoveData(AVariationText, LVariationMoves,
         LVariationAnnotations, NestedLines, NestedAnnotations, AStartingFEN,
-        LInitialComments, LBasePly, AWarnings);
+        LInitialComments, LBasePly, AWarnings, BranchRoot);
       if LVariationMoves.Count = 0 then
         Exit;
       if LInitialComments.Count > 0 then
@@ -776,6 +890,11 @@ var
         Warn('Skipped variation after ply ' + IntToStr(LSlot) +
           ': its annotated start lies outside its parent line.');
         Exit;
+      end;
+      if (ATreeRoot <> nil) and (BranchRoot.ChildCount > 0) then
+      begin
+        BranchRoot.Children[0].AnnotationText := LVariationAnnotations[0];
+        Positions[LBasePly - APlyOffset].MergeChildren(BranchRoot);
       end;
       AVariations.Add(EncodePdnVariationLine(LSlot, LBasePly,
         MoveListText(LVariationMoves)));
@@ -812,6 +931,7 @@ var
         NestedMoves.Clear;
       end;
     finally
+      BranchRoot.Free;
       CombinedAnnotations.Free;
       CombinedMoves.Free;
       NestedMoveAnnotations.Free;
@@ -835,6 +955,8 @@ begin
   if (AMoves = nil) or (AAnnotations = nil) then
     Exit;
 
+  SetLength(Positions, 1);
+  Positions[0] := ATreeRoot;
   LBraceDepth := 0;
   LComment := '';
   LInLineComment := False;
@@ -999,8 +1121,10 @@ begin
   LVariations := TStringList.Create;
   LWarnings := TStringList.Create;
   try
+    FreeAndNil(ACurrent.FParsedRoot);
+    ACurrent.FParsedRoot := TPdnMoveNode.Create;
     ExtractPdnMoveData(AMoveLines.Text, LMoves, LAnnotations, LVariations,
-      LVariationAnnotations, ACurrent.StartingFEN, LInitialComments, 0, LWarnings);
+      LVariationAnnotations, ACurrent.StartingFEN, LInitialComments, 0, LWarnings, ACurrent.FParsedRoot);
     ACurrent.InitialCommentText := Trim(StringReplace(LInitialComments.Text,
       LineEnding, ' ', [rfReplaceAll]));
     ACurrent.ImportWarningsText := LWarnings.Text;
@@ -1008,10 +1132,12 @@ begin
     ACurrent.MoveAnnotationsText := LAnnotations.Text;
     ACurrent.MoveVariationsText := LVariations.Text;
     ACurrent.MoveVariationAnnotationsText := LVariationAnnotations.Text;
+    ACurrent.FParsedRoot.AnnotationText := ACurrent.InitialCommentText;
     if Trim(ACurrent.StartingFEN) = '' then
       ACurrent.StartingFEN := DefaultPdnFen;
     if Trim(ACurrent.ResultText) = '' then
       ACurrent.ResultText := '*';
+    ACurrent.FParsedSignature := ACurrent.TreeDataSignature;
     if AGames <> nil then
     begin
       AGames.Add(ACurrent);
@@ -1347,6 +1473,41 @@ begin
   finally
     Lines.Free;
   end;
+end;
+
+function TPdnGame.BuildMoveTree: TPdnMoveNode;
+var Moves, Annotations, Variations, VariationAnnotations: TStringList;
+    Text: string;
+begin
+  if (FParsedRoot = nil) or (FParsedSignature <> TreeDataSignature) then
+  begin
+    FreeAndNil(FParsedRoot);
+    FParsedRoot := TPdnMoveNode.Create;
+    Moves := TStringList.Create;
+    Annotations := TStringList.Create;
+    Variations := TStringList.Create;
+    VariationAnnotations := TStringList.Create;
+    try
+      try
+        // Backward compatibility for games constructed from old database fields.
+        Text := FormatMovesForPdn(MovesText, MoveAnnotationsText, MoveVariationsText,
+          MoveVariationAnnotationsText, '*', StartingFEN);
+        ExtractPdnMoveData(Text, Moves, Annotations, Variations, VariationAnnotations,
+          StartingFEN, nil, 0, nil, FParsedRoot);
+        FParsedRoot.AnnotationText := InitialCommentText;
+        FParsedSignature := TreeDataSignature;
+      except
+        FreeAndNil(FParsedRoot);
+        raise;
+      end;
+    finally
+      VariationAnnotations.Free;
+      Variations.Free;
+      Annotations.Free;
+      Moves.Free;
+    end;
+  end;
+  Result := FParsedRoot.Clone;
 end;
 
 function PdnGameToText(AGame: TPdnGame): string;

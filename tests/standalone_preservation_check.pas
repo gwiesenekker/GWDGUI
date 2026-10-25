@@ -61,6 +61,37 @@ begin
   end;
 end;
 
+procedure CheckParsedLiteralComments(AForm: TMainForm);
+var
+  FileName: string;
+  Lines: TStringList;
+  Games: TList;
+  I: Integer;
+  Node: TGameTreePlyNode;
+begin
+  FileName := GetTempFileName(GetTempDir, 'gwd-literal');
+  Lines := TStringList.Create;
+  Games := TList.Create;
+  try
+    Lines.Text := '[Event "Literal comments"]' + LineEnding +
+      '1.32-28 {@pdn-annotations:not json} 18-23 ' +
+      '(1...20-24 {@pdn-annotations:["literal"]} 2.38-32) 2.37-32 *';
+    Lines.SaveToFile(FileName);
+    LoadPdnGamesFromFile(FileName, Games);
+    Check(Games.Count = 1, 'literal comment fixture');
+    AForm.LoadPdnGameToDisplay(TPdnGame(Games[0]));
+    Check(AForm.ActiveGameTree.MainlineNode[1].CommentText = '@pdn-annotations:not json',
+      'mainline literal marker must stay a comment');
+    Node := AForm.ActiveGameTree.FindChildByMove(AForm.ActiveGameTree.MainlineNode[1], '20-24');
+    Check(Node <> nil, 'literal comment syntax must not suppress a valid branch');
+    Check(Node.CommentText = '@pdn-annotations:["literal"]',
+      'recursive import must not reinterpret literal comments as annotation arrays');
+  finally
+    for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
+    Games.Free; Lines.Free; DeleteFile(FileName);
+  end;
+end;
+
 procedure CheckCoalescedRunnerHistory(AForm: TMainForm);
 var
   WhiteEngine, BlackEngine: TExternalEngineDefinition;
@@ -882,6 +913,7 @@ begin
     try
       Check(not GameTreeHasContent(Form.ActiveGameTree),
         'untouched initial board should not prompt to save');
+      CheckParsedLiteralComments(Form);
       CheckCoalescedRunnerHistory(Form);
       CheckStandaloneMainlineCanBeExtended(Form);
       CheckCompletedGameKeepsOfficialMainline(Form);
