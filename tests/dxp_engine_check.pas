@@ -40,6 +40,18 @@ begin
     Stream.WriteBuffer(Text[1], Length(Text));
     if Reason = 'C' then
       Exit; // Crash/disconnect immediately after accepting the game.
+    if Reason = 'O' then
+    begin
+      Text := 'M00001333022919' + #0;
+      Stream.WriteBuffer(Text[1], Length(Text));
+      Text := ReadPacket(Stream);
+      Check((Text <> '') and (Text[1] = 'M'), 'reordered captures must allow the next opponent move');
+      Text := 'M0000051000' + #0; Stream.WriteBuffer(Text[1], Length(Text));
+      Text := ReadPacket(Stream);
+      Check((Text <> '') and (Text[1] = 'E'), 'ordered-history fixture must shut down normally');
+      Text := 'E00' + #0; Stream.WriteBuffer(Text[1], Length(Text));
+      Exit;
+    end;
     if Reason = 'S' then
     begin
       Text := ReadPacket(Stream); // Silent until the GUI ends the timed-out game.
@@ -193,6 +205,28 @@ begin
   end;
 end;
 
+procedure CheckUnorderedCaptureHistory;
+var Definition: TExternalEngineDefinition; Game: TGameOrchestrator;
+  Engine: TDxpEngine; Port: Word;
+begin
+  Port := AvailablePort; Definition := TExternalEngineDefinition.Create;
+  Game := TGameOrchestrator.Create;
+  try
+    Definition.Kind := eekDxp; Definition.DxpId := 'Capture-order DXP';
+    Definition.DxpRole := derListen; Definition.DxpHost := '127.0.0.1'; Definition.DxpPort := Port;
+    Definition.ExePath := ExpandFileName(ParamStr(0));
+    Definition.Arguments := '--peer ' + IntToStr(Port) + ' O';
+    Engine := TDxpEngine.Create(Definition); Game.Engine[dsBlack] := Engine;
+    Check(Engine.LaunchAndInit, 'capture-order peer initializes');
+    Game.NewGame('B:W19,29,45,46:B13,5');
+    Check(Game.PlayNextMove <> '', 'reordered capture is accepted');
+    Check(Game.MovesPlayedText = '13x33x19x29', 'orchestrator stores the canonical capture');
+    Game.PlayMove('46-41', dsWhite, 0, 'human');
+    Check(Game.PlayNextMove = '5-10', 'next DXP turn survives a reordered capture set');
+    Check(Game.State = gosRunning, 'reordered capture history must not end the game');
+  finally Game.Free; Definition.Free; end;
+end;
+
 procedure CheckSilentPeerLosesOnTime;
 var
   Definition: TExternalEngineDefinition;
@@ -249,6 +283,7 @@ begin
   CheckGameEndClaim('1', dsWhite, '0-2');
   CheckGameEndClaim('1', dsBlack, '2-0');
   CheckDisconnectedPeerFailsPromptly;
+  CheckUnorderedCaptureHistory;
   CheckSilentPeerLosesOnTime;
   WriteLn('OK');
 end.

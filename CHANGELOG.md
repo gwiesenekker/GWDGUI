@@ -3,6 +3,14 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Compare DXP captures independently of square order (D16)
+
+- Compare source, destination and the captured-square multiset for exchanged DXP
+  moves. Keep changed captures, changed destinations and shortened histories rejected.
+- Regress a real TCP peer sending a capture in reverse square order, then playing
+  its next turn after the GUI has stored the canonical move.
+- Validation: board/history and TCP DXP regression checks pass.
+
 ### 2026-10-25 — Keep capture paths after playing a move (R8)
 
 - Keep newly generated PDN capture paths alongside legal moves; clear both lists

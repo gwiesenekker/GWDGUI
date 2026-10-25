@@ -54,7 +54,7 @@ begin
     (ACurrent.Count <= AExchanged.Count + 1);
   if not Result then Exit;
   for I := 0 to AExchanged.Count - 1 do
-    if NormalizeMoveNotation(AExchanged[I]) <> NormalizeMoveNotation(ACurrent[I]) then Exit(False);
+    if not SameMoveIgnoringCaptureOrder(AExchanged[I], ACurrent[I]) then Exit(False);
   AHasOpponentMove := ACurrent.Count > AExchanged.Count;
 end;
 

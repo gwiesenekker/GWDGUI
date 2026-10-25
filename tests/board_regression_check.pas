@@ -82,6 +82,16 @@ begin
     Check(not DxpHistoryMatches(Exchanged, Current, HasMove), 'changed prefix rejected');
     Exchanged[0] := '032-028'; Current[0] := '32-28';
     Check(DxpHistoryMatches(Exchanged, Current, HasMove), 'equivalent notation matches');
+    Exchanged[0] := '13x33x29x19'; Current[0] := '13x33x19x29';
+    Current.Add('42-37');
+    Check(DxpHistoryMatches(Exchanged, Current, HasMove) and HasMove,
+      'DXP captured-square order is immaterial before the next opponent move');
+    Current[0] := '13x33x19x28';
+    Check(not DxpHistoryMatches(Exchanged, Current, HasMove), 'different captured sets remain divergent');
+    Current[0] := '13x34x19x29';
+    Check(not DxpHistoryMatches(Exchanged, Current, HasMove), 'different destinations remain divergent');
+    Current[0] := '13x33';
+    Check(not DxpHistoryMatches(Exchanged, Current, HasMove), 'unspecified capture set cannot match an exchanged DXP capture');
   finally Current.Free; Exchanged.Free; end;
 end;
 

@@ -82,6 +82,7 @@ function SquareToRowCol(ASquare: Integer; out ARow, ACol: Integer): Boolean;
 function RowColToSquare(ARow, ACol: Integer): Integer;
 function OppositeSide(ASide: TDraughtsSide): TDraughtsSide;
 function PieceColor(APiece: TDraughtsPieceKind): TPieceColor;
+function SameMoveIgnoringCaptureOrder(const A, B: string): Boolean;
 function NormalizeMoveNotation(const AMove: string): string;
 
 implementation
@@ -343,6 +344,23 @@ begin
     CanonicalSquares.Free;
     AliasSquares.Free;
   end;
+end;
+
+function SameMoveIgnoringCaptureOrder(const A, B: string): Boolean;
+var Left, Right: TStringList; L, R: string;
+begin
+  L := NormalizeMoveNotation(A); R := NormalizeMoveNotation(B);
+  if (L = '') or (R = '') then Exit(False);
+  if L = R then Exit(True);
+  Result := False;
+  if (Pos('x', L) = 0) or (Pos('x', R) = 0) then Exit;
+  Left := TStringList.Create; Right := TStringList.Create;
+  try
+    if not ExtractMoveSquares(L, Left) or not ExtractMoveSquares(R, Right) then Exit;
+    if (Left.Count < 3) or (Right.Count <> Left.Count) then Exit;
+    Result := (Left[0] = Right[0]) and (Left[1] = Right[1]) and
+      SameCapturedSquaresIgnoringOrder(Left, Right);
+  finally Left.Free; Right.Free; end;
 end;
 
 constructor TDraughtsBoard.Create;
