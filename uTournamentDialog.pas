@@ -1180,7 +1180,11 @@ begin
     raise EConvertError.Create('Invalid manual tournament result');
   GameRecord(FGrid.Row).OverrideResult(AResultText);
   FGrid.Cells[TournamentColResult, FGrid.Row] := GameRecord(FGrid.Row).EffectiveResult;
-  FGrid.Cells[TournamentColReason, FGrid.Row] := 'Manual result';
+  if GameRecord(FGrid.Row).ManualResult <> '' then
+    FGrid.Cells[TournamentColReason, FGrid.Row] := 'Manual result'
+  else if GameRecord(FGrid.Row).PlayedResult <> '' then
+    FGrid.Cells[TournamentColReason, FGrid.Row] := 'Played result'
+  else FGrid.Cells[TournamentColReason, FGrid.Row] := '';
   UpdateCrossTable;
   AutoSaveTournament;
 end;

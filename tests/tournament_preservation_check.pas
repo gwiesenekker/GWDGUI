@@ -75,6 +75,9 @@ begin
     Dialog.SetSelectedResult('1-1');
     Check(Grid.Cells[TournamentColReason, 1] = 'Manual result',
       'manual override must always have an explicit reason');
+    Dialog.SetSelectedResult('*');
+    Check(Grid.Cells[TournamentColResult, 1] = '2-0', 'clearing an override restores its played result');
+    Dialog.SetSelectedResult('1-1');
     Dialog.GameStopped(Game);
     Check(Grid.Cells[TournamentColResult, 1] = '1-1',
       'duplicate completion must not overwrite a manual override');

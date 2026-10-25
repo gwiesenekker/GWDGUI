@@ -90,6 +90,10 @@ begin
     Check(TPdnGame(Games[0]).MovesText = '32-28 18-23 37-32', 'mainline preservation');
     Check(Pos('Nested', TPdnGame(Games[0]).MoveVariationAnnotationsText) > 0,
       'nested commentary preservation');
+    Reloaded.OverrideResult('*');
+    Check((Reloaded.ManualResult = '') and (Reloaded.EffectiveResult = '2-0'),
+      'star clears a manual override and restores the played result');
+    Reloaded.OverrideResult('1-1');
     Reloaded.Reschedule;
     Check((Reloaded.Attempt = 2) and not Reloaded.HasRecord,
       'rescheduling must begin an empty new attempt');

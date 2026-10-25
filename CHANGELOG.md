@@ -3,6 +3,14 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Let star clear a tournament manual override (T15)
+
+- Treat manual `*` as clearing the override, restoring the played result when
+  available and returning an unplayed row to pending otherwise. Clear the manual
+  reason consistently instead of persisting a blocking unknown override.
+- Regress record-level clearing and the actual grid's played-result restoration.
+- Validation: tournament record and GTK tournament suites pass.
+
 ### 2026-10-25 — Backtrack before proposing repeated Swiss opponents (T4)
 
 - Search score-ordered nonrepeat matchings before the existing penalized fallback,

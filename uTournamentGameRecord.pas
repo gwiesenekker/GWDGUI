@@ -97,7 +97,8 @@ end;
 
 procedure TTournamentGameRecord.OverrideResult(const AResult: string);
 begin
-  FManualResult := AResult;
+  if Trim(AResult) = '*' then FManualResult := ''
+  else FManualResult := AResult;
 end;
 
 procedure TTournamentGameRecord.Reschedule;
