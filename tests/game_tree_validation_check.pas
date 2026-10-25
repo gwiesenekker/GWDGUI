@@ -38,6 +38,39 @@ begin
     Command.Free;
   end;
 end;
+procedure CheckTypedBranchImport;
+var
+  Actor: TGameTreeActor;
+  Data: TGameTreeImportMoves;
+  Command: TGameTreeCommand;
+  ParentId: Int64;
+  Node: TGameTreePlyNode;
+begin
+  Actor := TGameTreeActor.Create;
+  try
+    Execute(Actor, Actor.CreateAppendMainlineMoveCommand('32-28', gmsHuman));
+    ParentId := Actor.GameTree.MainlineNode[1].NodeId;
+    Data := nil;
+    RejectUnchanged(Actor, Actor.CreateImportBranchCommand(ParentId, Data));
+    SetLength(Data, 2);
+    Data[0].MoveText := '20-24';
+    Data[0].AnnotationText := '@pdn-annotations:literal';
+    Data[1].MoveText := '46-41';
+    RejectUnchanged(Actor, Actor.CreateImportBranchCommand(ParentId, Data));
+    Check(Actor.GameTree.BranchCount = 0, 'late invalid move must not leak a valid prefix');
+    Data[1].MoveText := '38-32';
+    Data[1].AnnotationText := 'Inner comment';
+    Command := Actor.CreateImportBranchCommand(ParentId, Data);
+    Data[0].MoveText := '1-50';
+    Data[1].AnnotationText := 'Changed source';
+    Execute(Actor, Command);
+    Node := Actor.GameTree.FindChildByMove(Actor.GameTree.MainlineNode[1], '20-24');
+    Check((Node.CommentText = '@pdn-annotations:literal') and
+      (Node.Children[0].CommentText = 'Inner comment'),
+      'typed command must own its move/annotation records and preserve literal comments');
+  finally Actor.Free; end;
+end;
+
 procedure CheckLiteralNodeImport;
 var
   Actor: TGameTreeActor;
@@ -121,6 +154,7 @@ var
   Header: TGameTreeHeaderInput;
   NodeId: Int64;
 begin
+  CheckTypedBranchImport;
   CheckLiteralNodeImport;
   CheckRebuildKeepsOnlySurvivingParents;
   Actor := TGameTreeActor.Create;
@@ -142,10 +176,6 @@ begin
       '32-28', '', gmsHuman));
     RejectUnchanged(Actor, Actor.CreateStoreMoveVariationCommand(
       Actor.GameTree.MainlineNode[1].NodeId, '37-32', gmsHuman));
-    RejectUnchanged(Actor, ImportBranch(Actor, 1,
-      '20-24 37-32', '@pdn-annotations:["wrong count"]', gmsHuman));
-    RejectUnchanged(Actor, ImportBranch(Actor, 1,
-      '20-24', '@pdn-annotations:broken', gmsHuman));
     Execute(Actor, ImportBranch(Actor, 1,
       '20-24 37-32', '', gmsHuman));
     NodeId := Actor.GameTree.FindBranchNode(0, 2).NodeId;
@@ -163,8 +193,6 @@ begin
     TextToMoveList('32-28', Moves);
     RejectUnchanged(Actor, ImportBranch(Actor, 1,
       '19-23 46-41', 'bad variation'));
-    RejectUnchanged(Actor, ImportBranch(Actor, 1,
-      '20-24', '@pdn-annotations:["too", "many"]'));
     Header.StartingFEN := 'B:W99:B1';
     RejectUnchanged(Actor, Actor.CreateSetHeaderCommand(Header));
     Header.StartingFEN := 'B:W31-50:B1-20';

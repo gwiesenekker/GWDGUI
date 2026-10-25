@@ -41,6 +41,12 @@ type
     gssFailed
   );
 
+  TGameTreeImportMove = record
+    MoveText: string;
+    AnnotationText: string;
+  end;
+  TGameTreeImportMoves = array of TGameTreeImportMove;
+
   TGameTreeCommand = class;
 
   TGameTreeSearchRecord = class
@@ -64,6 +70,7 @@ type
     SearchId: Int64;
     MoveText: string;
     AnnotationText: string;
+    ImportMoves: TGameTreeImportMoves;
     MoveSource: TGameTreeMoveSource;
     HeaderInput: TGameTreeHeaderInput;
     MainlineInput: TGameTreeMainlineInput;
@@ -184,7 +191,7 @@ type
     function CreateImportNodeCommand(AParentNodeId: Int64;
       const AMoveText, AAnnotationText: string): TGameTreeCommand;
     function CreateImportBranchCommand(AParentNodeId: Int64;
-      const AMovesText, AAnnotationText: string;
+      const AMoves: TGameTreeImportMoves;
       ASource: TGameTreeMoveSource = gmsUnknown): TGameTreeCommand;
 
     procedure ExecuteCommand(ACommand: TGameTreeCommand);
@@ -207,7 +214,7 @@ type
 implementation
 
 uses
-  uDraughtsBoard, uPdn;
+  uDraughtsBoard;
 
 function TGameTreeSearchRecord.SearchRef: TGameTreeSearchRef;
 begin
@@ -781,18 +788,21 @@ end;
 
 function TGameTreeActor.CreateImportNodeCommand(AParentNodeId: Int64;
   const AMoveText, AAnnotationText: string): TGameTreeCommand;
+var Moves: TGameTreeImportMoves;
 begin
-  Result := CreateImportBranchCommand(AParentNodeId, AMoveText, AAnnotationText);
+  SetLength(Moves, 1);
+  Moves[0].MoveText := AMoveText;
+  Moves[0].AnnotationText := AAnnotationText;
+  Result := CreateImportBranchCommand(AParentNodeId, Moves);
   Result.CommandKind := gtcImportNode;
 end;
 
 function TGameTreeActor.CreateImportBranchCommand(AParentNodeId: Int64;
-  const AMovesText, AAnnotationText: string; ASource: TGameTreeMoveSource): TGameTreeCommand;
+  const AMoves: TGameTreeImportMoves; ASource: TGameTreeMoveSource): TGameTreeCommand;
 begin
   Result := CreateCommand(gtcImportBranch);
   Result.NodeId := AParentNodeId;
-  Result.MoveText := AMovesText;
-  Result.AnnotationText := AAnnotationText;
+  Result.ImportMoves := Copy(AMoves);
   Result.MoveSource := ASource;
 end;
 
@@ -853,9 +863,9 @@ end;
 function TGameTreeActor.ValidateMoveCommand(ACommand: TGameTreeCommand): Boolean;
 var
   Board: TDraughtsBoard;
-  Moves, Mainline, Annotations: TStringList;
+  Mainline: TStringList;
   Parent: TGameTreePlyNode;
-  Ply: Integer;
+  Ply, ImportIndex: Integer;
   Fen: string;
 
   procedure Replay(AList: TStrings; ACount: Integer);
@@ -899,9 +909,7 @@ begin
     gtcRebuildFromInputs, gtcSetHeader]) then
     Exit;
   Board := TDraughtsBoard.Create;
-  Moves := TStringList.Create;
   Mainline := TStringList.Create;
-  Annotations := TStringList.Create;
   try
     try
       case ACommand.CommandKind of
@@ -944,15 +952,12 @@ begin
             Parent := FGameTree.FindNodeById(ACommand.NodeId);
             if (Parent = nil) or not FGameTree.TryBuildBoardAtNode(Parent, Board) then
               raise EConvertError.Create('Cannot replay import parent');
-            if ACommand.CommandKind = gtcImportNode then
-              Board.PlayMove(ACommand.MoveText, True, True)
-            else
-            begin
-              TextToMoveList(ACommand.MoveText, Moves);
-              if Moves.Count = 0 then raise EConvertError.Create('Branch has no moves');
-              Replay(Moves, Moves.Count);
-              DecodeVariationAnnotations(ACommand.AnnotationText, Moves.Count, Annotations);
-            end;
+            if Length(ACommand.ImportMoves) = 0 then
+              raise EConvertError.Create('Branch has no moves');
+            if (ACommand.CommandKind = gtcImportNode) and (Length(ACommand.ImportMoves) <> 1) then
+              raise EConvertError.Create('Node import requires exactly one move');
+            for ImportIndex := 0 to High(ACommand.ImportMoves) do
+              Board.PlayMove(ACommand.ImportMoves[ImportIndex].MoveText, True, True);
           end;
         gtcRebuildFromInputs, gtcSetHeader:
           begin
@@ -978,16 +983,13 @@ begin
       end;
     end;
   finally
-    Annotations.Free;
     Mainline.Free;
-    Moves.Free;
     Board.Free;
   end;
 end;
 
 procedure TGameTreeActor.ExecuteCommand(ACommand: TGameTreeCommand);
 var
-  ImportMoves, ImportAnnotations: TStringList;
   ImportIndex: Integer;
   ImportChild: TGameTreePlyNode;
   Changed: Boolean;
@@ -1089,40 +1091,23 @@ begin
     gtcImportBranch, gtcImportNode:
       begin
         Node := FGameTree.FindNodeById(ACommand.NodeId);
-        ImportMoves := TStringList.Create;
-        ImportAnnotations := TStringList.Create;
-        try
-          if ACommand.CommandKind = gtcImportNode then
+        Changed := False;
+        for ImportIndex := 0 to High(ACommand.ImportMoves) do
+        begin
+          ImportChild := FGameTree.FindChildByMove(Node, ACommand.ImportMoves[ImportIndex].MoveText);
+          if ImportChild = nil then
           begin
-            ImportMoves.Add(ACommand.MoveText);
-            ImportAnnotations.Add(ACommand.AnnotationText);
-          end
-          else
-          begin
-            TextToMoveList(ACommand.MoveText, ImportMoves);
-            DecodeVariationAnnotations(ACommand.AnnotationText, ImportMoves.Count, ImportAnnotations);
+            ImportChild := FGameTree.RecordBranchMove(Node, ACommand.ImportMoves[ImportIndex].MoveText);
+            Changed := True;
+            FGameTree.SetNodeOrigin(ImportChild, MoveSourceOriginText(ACommand.MoveSource));
           end;
-          Changed := False;
-          for ImportIndex := 0 to ImportMoves.Count - 1 do
-          begin
-            ImportChild := FGameTree.FindChildByMove(Node, ImportMoves[ImportIndex]);
-            if ImportChild = nil then
-            begin
-              ImportChild := FGameTree.RecordBranchMove(Node, ImportMoves[ImportIndex]);
-              Changed := True;
-              FGameTree.SetNodeOrigin(ImportChild, MoveSourceOriginText(ACommand.MoveSource));
-            end;
-            Changed := FGameTree.RecordNodeAnnotation(ImportChild,
-              ImportAnnotations[ImportIndex]) or Changed;
-            Node := ImportChild;
-          end;
-          ACommand.CreatedNodeId := Node.NodeId;
-          ACommand.Accepted := True;
-          if Changed then AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
-        finally
-          ImportAnnotations.Free;
-          ImportMoves.Free;
+          Changed := FGameTree.RecordNodeAnnotation(ImportChild,
+            ACommand.ImportMoves[ImportIndex].AnnotationText) or Changed;
+          Node := ImportChild;
         end;
+        ACommand.CreatedNodeId := Node.NodeId;
+        ACommand.Accepted := True;
+        if Changed then AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
       end;
     gtcStartSearch:
       begin

@@ -36,3 +36,8 @@ if rg -n 'DecodePdnVariationLine|MoveVariationsText|MoveVariationAnnotationsText
   echo "The GUI must consume parsed PDN nodes, not legacy flattened fields."
   exit 1
 fi
+
+if rg -n 'DecodeVariationAnnotations|EncodeVariationAnnotations|DecodePdnVariationLine' "$ROOT_DIR/uGameTreeActor.pas"; then
+  echo "Game-tree commands must accept typed moves and literal node annotations."
+  exit 1
+fi

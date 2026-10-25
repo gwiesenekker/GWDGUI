@@ -10,13 +10,33 @@ implementation
 uses uGameTreeBuilder, uPdn;
 function ImportBranch(Actor: TGameTreeActor; BasePly: Integer;
   const Moves, Annotation: string; Source: TGameTreeMoveSource): TGameTreeCommand;
-var Parent: TGameTreePlyNode; Id: Int64;
+var
+  Parent: TGameTreePlyNode;
+  Id: Int64;
+  Words, Annotations: TStringList;
+  I: Integer;
+  Data: TGameTreeImportMoves;
 begin
   Id := 0;
   if BasePly = 0 then Parent := Actor.GameTree.Root
   else Parent := Actor.GameTree.MainlineNode[BasePly];
   if Parent <> nil then Id := Parent.NodeId;
-  Result := Actor.CreateImportBranchCommand(Id, Moves, Annotation, Source);
+  Words := TStringList.Create;
+  Annotations := TStringList.Create;
+  try
+    TextToMoveList(Moves, Words);
+    DecodeVariationAnnotations(Annotation, Words.Count, Annotations);
+    SetLength(Data, Words.Count);
+    for I := 0 to Words.Count - 1 do
+    begin
+      Data[I].MoveText := Words[I];
+      Data[I].AnnotationText := Annotations[I];
+    end;
+    Result := Actor.CreateImportBranchCommand(Id, Data, Source);
+  finally
+    Annotations.Free;
+    Words.Free;
+  end;
 end;
 procedure AddFixtureBranch(Tree: TGameTree; BasePly: Integer;
   const MovesText, Annotation: string);

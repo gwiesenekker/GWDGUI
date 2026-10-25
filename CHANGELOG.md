@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Make batch import commands use typed move records (G7)
+
+- Replace flattened move text plus encoded annotation arrays in actor imports
+  with copied move/comment records. Node imports use the same literal data path.
+  The actor and builder no longer depend on the PDN decoder.
+- Preflight the whole typed branch before mutation. Empty batches, missing
+  parents and late illegal moves fail without creating a partial prefix.
+- Regress command-owned input copies and marker-like literal comments in batch
+  imports, and enforce the decoder boundary in the source audit.
+- Validation: expanded actor validation, full headless suite, GTK main-form
+  checks and the full application build pass.
+
 ### 2026-10-25 — Import PDN recursively from parsed nodes (G7)
 
 - Build ordered move nodes during PDN parsing, including nested variations at

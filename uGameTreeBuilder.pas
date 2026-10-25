@@ -63,7 +63,7 @@ procedure RecordGameTreeAnalysis(AGameTree: TGameTree;
   const AEnginePV, AAnnotatorPV: TGameTreePvInput);
 implementation
 
-uses uPdn, uDraughtsBoard;
+uses uDraughtsBoard;
 
 procedure TextToMoveList(const AMovesText: string; AMoves: TStrings);
 begin
