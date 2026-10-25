@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SyncObjs, SysUtils,
-  uDraughtsBoard, uEngineBase, uEngineRegistry, uGameTreeSearchRef,
+  uCancellationToken, uDraughtsBoard, uEngineBase, uEngineRegistry, uGameTreeSearchRef,
   uHubEngine, uPvSnapshot, uThreadMessageQueue;
 
 type
@@ -26,6 +26,7 @@ type
     FCommandQueue: TThreadMessageQueue;
     FEngine: THubEngine;
     FEngineLifetimeLock: TCriticalSection;
+    FStopToken: TCancellationToken;
     FEngineDefinition: TExternalEngineDefinition;
     FLastPollTick: QWord;
     FLastPublishedPv: string;
@@ -138,6 +139,7 @@ begin
   FEngineDefinition.Assign(AEngineDefinition);
   FCommandQueue := TThreadMessageQueue.Create(True);
   FEngineLifetimeLock := TCriticalSection.Create;
+  FStopToken := TCancellationToken.Create;
   FPvBaseBoard := TDraughtsBoard.Create;
   FPvLock := TCriticalSection.Create;
   FOnLog := ALogEvent;
@@ -153,6 +155,7 @@ begin
   WaitFor;
   FEngine.Free;
   FEngineLifetimeLock.Free;
+  FStopToken.Free;
   FPvLock.Free;
   FPvBaseBoard.Free;
   FCommandQueue.Free;
@@ -338,6 +341,7 @@ begin
       FEngineLifetimeLock.Acquire;
       try
         FEngine := THubEngine.Create(FEngineDefinition);
+        FEngine.StopToken := FStopToken;
       finally
         FEngineLifetimeLock.Release;
       end;
@@ -454,6 +458,7 @@ var
   Command: TAnalyzerCommand;
 begin
   Terminate;
+  FStopToken.Cancel;
   // Interrupt a worker waiting for a search/stop acknowledgement. Protect the
   // engine's lifetime while shutdown races with creation or final cleanup.
   FEngineLifetimeLock.Acquire;

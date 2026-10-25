@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Preserve annotator cancellation through launch (D15)
+
+- Give each analyzer runner a persistent cancellation token, assign it when its
+  engine is created, and cancel it before requesting shutdown. Launch checks it
+  before starting a process; handshake waits already observe the same token.
+- Regress shutdown from the Opening callback against a silent launch, exactly
+  between the runner's termination check and engine initialization.
+- Validation: launch-window regression fails before the fix; analyzer shutdown
+  suite passes, including stop-fence interruption and immediate shutdown races.
+
 ### 2026-10-25 — Publish safely on Unicode paths and filesystems without hard links (C4, C6)
 
 - Use explicit wide-character Windows create/rename/delete calls for UTF-8 paths.

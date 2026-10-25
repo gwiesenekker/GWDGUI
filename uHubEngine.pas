@@ -774,6 +774,7 @@ var
   Line: string;
 begin
   Result := False;
+  if StopRequested then Exit;
   Args := TStringList.Create;
   InitLines := TStringList.Create;
   try
@@ -788,6 +789,7 @@ begin
     if Trim(FEngine.IniFileName) <> '' then
       Log('wrote expanded INI/config file; file=' + FEngine.IniFileName);
     FStopping := False;
+    if StopRequested then Exit;
     Log('launch; executable=' + FEngine.ExePath);
     ChangeState(esLaunching, 'starting hub process');
     FProcess.Start(FEngine.ExePath, Args, ExtractFilePath(FEngine.ExePath));

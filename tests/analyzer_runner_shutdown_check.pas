@@ -13,6 +13,8 @@ type
   TRunnerObserver = class
   public
     Finished: Boolean;
+    StopOnOpening: Boolean;
+    Runner: TAnalyzerRunnerThread;
     Searching, Stopping, Failed: TEvent;
     constructor Create;
     destructor Destroy; override;
@@ -52,6 +54,11 @@ end;
 
 procedure TRunnerObserver.Log(Sender: TObject; const MessageText: string);
 begin
+  if StopOnOpening and (Pos('Opening ', MessageText) = 1) then
+  begin
+    StopOnOpening := False;
+    Runner.PostShutdown;
+  end;
   if Pos('message=go analyze', MessageText) > 0 then Searching.SetEvent;
   if Pos('stop sent; waiting for done', MessageText) > 0 then Stopping.SetEvent;
   if Pos('Annotator failed:', MessageText) > 0 then Failed.SetEvent;
@@ -64,6 +71,7 @@ begin
   while not EOF(Input) do
   begin
     ReadLn(Line);
+    if (ParamStr(1) = '--silent-launch-hub') and (Line <> 'quit') then Continue;
     if Line = 'hub' then WriteLn('wait')
     else if Line = 'init' then WriteLn('ready')
     else if Line = 'quit' then Exit;
@@ -118,6 +126,27 @@ begin
     Observer.Free;
     Engine.Free;
   end;
+end;
+
+procedure CheckShutdownAtLaunch;
+var Engine: TExternalEngineDefinition; Observer: TRunnerObserver;
+  Runner: TAnalyzerRunnerThread; Tick: QWord;
+begin
+  Engine := TExternalEngineDefinition.Create;
+  Observer := TRunnerObserver.Create;
+  Runner := nil;
+  try
+    Engine.Kind := eekHub;
+    Engine.ExePath := ExpandFileName(ParamStr(0));
+    Engine.Arguments := '--silent-launch-hub';
+    Observer.StopOnOpening := True;
+    Runner := TAnalyzerRunnerThread.Create(Engine, @Observer.Log, nil, @Observer.RunnerFinished);
+    Observer.Runner := Runner;
+    Tick := GetTickCount64;
+    Runner.Start;
+    Runner.WaitFor;
+    Check(GetTickCount64 - Tick < 2500, 'shutdown before launch must not be erased by initialization');
+  finally Runner.Free; Observer.Free; Engine.Free; end;
 end;
 
 procedure CheckImmediateShutdown;
@@ -178,11 +207,12 @@ begin
 end;
 
 begin
-  if ParamStr(1) = '--unresponsive-hub' then
+  if (ParamStr(1) = '--unresponsive-hub') or (ParamStr(1) = '--silent-launch-hub') then
   begin
     FakeUnresponsiveHub;
     Halt(0);
   end;
+  CheckShutdownAtLaunch;
   CheckShutdownAfterRunnerFinished;
   CheckImmediateShutdown;
   CheckUnresponsiveSearch(True);
