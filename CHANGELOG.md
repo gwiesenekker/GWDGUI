@@ -3,6 +3,19 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Build large tournament saves in linear passes (F5)
+
+- Stream JSON arrays/objects, the combined PDN and each game's movetext instead
+  of repeatedly copying their growing text. Keep the complete authoritative
+  records, readable JSON, immediate atomic saves and existing failure handling.
+- Regress nested JSON types, Unicode/escaping, full large-game comments and the
+  final record in a 1,000-game tournament. Add an optional two-second autosave
+  check (`tests/run_tournament_checks.sh --performance`).
+- The 1,000-game, 10 KB-per-game fixture fell from 3,773 ms to about 270 ms here.
+  Disk writes still occur synchronously; this change removes the measured growth
+  problem without delaying recovery saves.
+- Validation: full headless suite, both GTK suites and the large-save check pass.
+
 ### 2026-10-25 — Adjudicate flag fall before granting the next period (D14)
 
 - Check the current period's clock before adding the next period's allowance.

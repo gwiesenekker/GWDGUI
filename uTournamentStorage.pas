@@ -3,10 +3,59 @@ unit uTournamentStorage;
 interface
 uses FPJSON;
 function ReadTournamentDocument(const AFileName: string): TJSONObject;
+function TournamentDocumentText(AData: TJSONData): string;
 function TournamentPdnTag(const AName, AValue: string): string;
 function UnusedTournamentPdnPath(const ACandidate: string): string;
 implementation
 uses Classes, SysUtils, JSONParser, uTournamentTypes, uTournamentResults;
+
+function TournamentDocumentText(AData: TJSONData): string;
+var
+  Output: TMemoryStream;
+
+  procedure WriteText(const Text: RawByteString);
+  begin
+    if Text <> '' then Output.WriteBuffer(Text[1], Length(Text));
+  end;
+
+  procedure WriteValue(Value: TJSONData; Depth: Integer);
+  var
+    I: Integer;
+    IsObject: Boolean;
+  begin
+    if Value = nil then
+      WriteText('null')
+    else if Value.JSONType in [jtObject, jtArray] then
+    begin
+      IsObject := Value.JSONType = jtObject;
+      if IsObject then WriteText('{') else WriteText('[');
+      for I := 0 to Value.Count - 1 do
+      begin
+        if I > 0 then WriteText(',');
+        WriteText(LineEnding + StringOfChar(' ', (Depth + 1) * 2));
+        if IsObject then
+          WriteText('"' + StringToJSONString(TJSONObject(Value).Names[I]) + '": ');
+        WriteValue(Value.Items[I], Depth + 1);
+      end;
+      if Value.Count > 0 then
+        WriteText(LineEnding + StringOfChar(' ', Depth * 2));
+      if IsObject then WriteText('}') else WriteText(']');
+    end
+    else
+      WriteText(Value.AsJSON);
+  end;
+
+begin
+  Output := TMemoryStream.Create;
+  try
+    WriteValue(AData, 0);
+    WriteText(LineEnding);
+    SetLength(Result, Output.Size);
+    if Output.Size > 0 then Move(Output.Memory^, Result[1], Output.Size);
+  finally
+    Output.Free;
+  end;
+end;
 
 function UnusedTournamentPdnPath(const ACandidate: string): string;
 var

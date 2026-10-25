@@ -3,7 +3,7 @@ program tournament_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, Grids, ExtCtrls, CheckLst, Controls, FPJSON, JSONParser, uGuiDialogs,
-  uTournamentDialog, uTournamentGridModel, uMainForm, uGameSetupForm,
+  uTournamentStorage, uTournamentDialog, uTournamentGridModel, uMainForm, uGameSetupForm,
   uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uPdn;
 
 procedure Check(Condition: Boolean; const MessageText: string);
@@ -788,6 +788,64 @@ begin
   end;
 end;
 
+procedure CheckLargeTournamentSave(const Target: string);
+var
+  Data, Game, RecordData: TJSONObject;
+  Games: TJSONArray;
+  Dialog: TTournamentDialog;
+  Payload, Pdn, SavedPdn: string;
+  I: Integer;
+  Tick, Elapsed: QWord;
+begin
+  Data := TJSONObject.Create;
+  Dialog := TTournamentDialog.Create(nil);
+  SavedPdn := '';
+  try
+    Data.Add('tournament_name', 'Large tournament');
+    Games := TJSONArray.Create;
+    Data.Add('games', Games);
+    Payload := StringOfChar('x', 10000);
+    Pdn := '[Result "1-0"]' + LineEnding + LineEnding +
+      '1. 32-28 {' + Payload + '} 1-0';
+    for I := 1 to 1000 do
+    begin
+      Game := TJSONObject.Create;
+      Games.Add(Game);
+      Game.Add('game', I);
+      Game.Add('round', I);
+      Game.Add('white', 'White');
+      Game.Add('black', 'Black');
+      Game.Add('result', '2-0');
+      RecordData := TJSONObject.Create;
+      Game.Add('record', RecordData);
+      RecordData.Add('pdn', Pdn);
+      RecordData.Add('played_result', '2-0');
+    end;
+    WriteContents(Target, Data.AsJSON);
+    Dialog.LoadTournamentFromFile(Target);
+    Check(Dialog.StorageError = '', 'large fixture must load successfully');
+    SavedPdn := Dialog.PdnFileName;
+    Tick := GetTickCount64;
+    Dialog.SetSelectedResult('1-1');
+    Elapsed := GetTickCount64 - Tick;
+    Check(Dialog.StorageError = '', 'large autosave must succeed');
+    WriteLn('1000 games, 10 KB each: autosave ', Elapsed, ' ms');
+    Check(Elapsed < 2000, 'large autosave must stay below the two-second regression limit');
+    Data.Free;
+    Data := TJSONObject(GetJSON(FileContents(Target)));
+    Games := TJSONArray(Data.Find('games'));
+    Check((Games.Count = 1000) and
+      (TJSONObject(TJSONObject(Games[999]).Find('record')).Get('pdn', '') = Pdn),
+      'large save must retain the full last game in authoritative JSON');
+    Check(Pos(Payload, FileContents(SavedPdn)) > 0, 'large projection must retain full comments');
+  finally
+    Data.Free;
+    Dialog.Free;
+    DeleteFile(Target);
+    DeleteFile(SavedPdn);
+  end;
+end;
+
 procedure CheckNewProjectionPreservesExistingPdn(const Fixture: string);
 var
   Dialog, Reloaded, Resumed: TTournamentDialog;
@@ -945,6 +1003,10 @@ begin
   OtherFile := IncludeTrailingPathDelimiter(TestDirectory) + 'other.json';
   try
     try
+      if ParamStr(1) = '--performance' then
+      begin
+        CheckLargeTournamentSave(IncludeTrailingPathDelimiter(TestDirectory) + 'large.json');
+      end;
       WriteFixture(Fixture, 'Original');
       WriteFixture(OtherFile, 'Other');
       CheckCompletionIsAppliedOnce(Fixture);

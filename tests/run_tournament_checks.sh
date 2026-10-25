@@ -11,4 +11,4 @@ if ! lazbuild --no-write-project --ws=gtk2 --opt=-dGWDGUI_NONINTERACTIVE_TEST --
   exit 1
 fi
 cd "$OUT_DIR"
-XDG_CONFIG_HOME="$OUT_DIR/recovery" "$OUT_DIR/tournament_preservation_check"
+XDG_CONFIG_HOME="$OUT_DIR/recovery" "$OUT_DIR/tournament_preservation_check" "$@"

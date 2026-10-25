@@ -1,11 +1,30 @@
 program tournament_record_check;
 {$mode objfpc}{$H+}
-uses Classes, SysUtils, FPJSON, uTournamentGameRecord, uPdn;
+uses Classes, SysUtils, FPJSON, JSONParser, uTournamentStorage, uTournamentGameRecord, uPdn;
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
   if not Condition then
     raise Exception.Create(MessageText);
 end;
+procedure CheckStreamedDocument;
+var
+  Data, ReadBack: TJSONData;
+  Text: string;
+begin
+  SetMultiByteConversionCodePage(CP_UTF8);
+  Data := GetJSON('{"name":"Gérard \"test\"", "path":"C:\\Games",' +
+    '"nested":[null,true,false,-1.5,{"line\\key":"comment\nnext\tcolumn"}]}');
+  ReadBack := nil;
+  try
+    Text := TournamentDocumentText(Data);
+    ReadBack := GetJSON(UTF8String(Text));
+    Check(Data.AsJSON = ReadBack.AsJSON, 'streamed JSON must preserve types, escaping and Unicode');
+  finally
+    ReadBack.Free;
+    Data.Free;
+  end;
+end;
+
 var
   RecordData, Reloaded: TTournamentGameRecord;
   Wrapper: TJSONObject;
@@ -14,6 +33,7 @@ var
   PdnText, FileName: string;
   I: Integer;
 begin
+  CheckStreamedDocument;
   RecordData := TTournamentGameRecord.Create;
   Reloaded := TTournamentGameRecord.Create;
   Lines := TStringList.Create;

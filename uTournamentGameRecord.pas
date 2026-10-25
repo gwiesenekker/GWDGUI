@@ -128,6 +128,7 @@ function TTournamentGameRecord.RenderPdn(const ATournamentId, AEvent, ARound,
   AGameNo, AWhite, ABlack, AFen: string): string;
 var
   Lines, Headers: TStringList;
+  Output: TStringStream;
   I, FirstMoveLine: Integer;
   MovesText, OldResult, NewResult: string;
 
@@ -146,6 +147,7 @@ begin
     Exit;
   Lines := TStringList.Create;
   Headers := TStringList.Create;
+  Output := TStringStream.Create('');
   try
     Lines.Text := FPdn;
     FirstMoveLine := 0;
@@ -179,10 +181,9 @@ begin
       SetTag('ResultSource', 'standings')
     else
       SetTag('ResultSource', 'played');
-    MovesText := '';
     for I := FirstMoveLine to Lines.Count - 1 do
-      MovesText += Lines[I] + LineEnding;
-    MovesText := Trim(MovesText);
+      Output.WriteString(Lines[I] + LineEnding);
+    MovesText := Trim(Output.DataString);
     OldResult := PdnExportResult(FPlayedResult);
     // The generated tree export ends with its result token when it is known.
     if (FPlayedResult <> '') and EndsText(OldResult, MovesText) and
@@ -194,6 +195,7 @@ begin
     MovesText += NewResult;
     Result := Headers.Text + LineEnding + MovesText + LineEnding;
   finally
+    Output.Free;
     Headers.Free;
     Lines.Free;
   end;

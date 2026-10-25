@@ -750,15 +750,21 @@ procedure TTournamentDialog.WritePdnProjection;
 var
   Row: Integer;
   PdnText: string;
+  Output: TStringStream;
 begin
-  PdnText := '';
-  for Row := 1 to FGrid.RowCount - 1 do
-    if TournamentGridHasPairingAtRow(FGrid, Row) and
-      not SameText(FGrid.Cells[TournamentColReason, Row], 'Bye') then
-      PdnText += GameRecord(Row).RenderPdn(FTournamentId,
-        FTournamentNameEdit.Text, FGrid.Cells[TournamentColRound, Row],
-        FGrid.Cells[TournamentColGame, Row], FGrid.Cells[TournamentColWhite, Row],
-        FGrid.Cells[TournamentColBlack, Row], FStartingFENEdit.Text) + LineEnding;
+  Output := TStringStream.Create('');
+  try
+    for Row := 1 to FGrid.RowCount - 1 do
+      if TournamentGridHasPairingAtRow(FGrid, Row) and
+        not SameText(FGrid.Cells[TournamentColReason, Row], 'Bye') then
+        Output.WriteString(GameRecord(Row).RenderPdn(FTournamentId,
+          FTournamentNameEdit.Text, FGrid.Cells[TournamentColRound, Row],
+          FGrid.Cells[TournamentColGame, Row], FGrid.Cells[TournamentColWhite, Row],
+          FGrid.Cells[TournamentColBlack, Row], FStartingFENEdit.Text) + LineEnding);
+    PdnText := Output.DataString;
+  finally
+    Output.Free;
+  end;
   if (Trim(PdnText) = '') and
     (not FPdnFileOwned or not FileExists(FPdnFileName)) then
     Exit;
@@ -1274,7 +1280,6 @@ var
   Game: TJSONObject;
   Games: TJSONArray;
   I: Integer;
-  Lines: TStringList;
   NextPdnFileName: string;
 begin
   NextPdnFileName := FPdnFileName;
@@ -1329,15 +1334,9 @@ begin
         Games.Add(Game);
       end;
 
-    Lines := TStringList.Create;
-    try
-      Lines.Text := Data.FormatJSON([], 2) + LineEnding;
-      WriteTextFileAtomically(AFileName, Lines.Text);
-      FFileName := ExpandFileName(AFileName);
-      FPdnFileName := NextPdnFileName;
-    finally
-      Lines.Free;
-    end;
+    WriteTextFileAtomically(AFileName, TournamentDocumentText(Data));
+    FFileName := ExpandFileName(AFileName);
+    FPdnFileName := NextPdnFileName;
   finally
     Data.Free;
   end;
