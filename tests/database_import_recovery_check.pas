@@ -351,7 +351,7 @@ begin
       Check(Matches = 2, 'either-player filter uses Unicode folding');
     finally FreeItems(Items); Items.Free; end;
     Database.Close;
-    Check(Scalar(DbName, 'pragma user_version') = 4, 'complete schema version persisted');
+    Check(Scalar(DbName, 'pragma user_version') = 5, 'complete schema version persisted');
     RawSQL(DbName, 'alter table games drop column full_pdn');
     RawSQL(DbName, 'pragma user_version=0');
     Database.OpenDatabase(DbName);
@@ -359,7 +359,7 @@ begin
     try Check(Game.MovesText = '32-28 18-23', 'legacy migration preserves canonical moves');
     finally Game.Free; end;
     Database.Close;
-    Check(Scalar(DbName, 'pragma user_version') = 4, 'legacy schema migrated');
+    Check(Scalar(DbName, 'pragma user_version') = 5, 'legacy schema migrated');
     Raised := False;
     try Database.CreateDatabase(DbName); except on E: EInvalidOperation do Raised := True; end;
     Check(Raised, 'create must not silently append to an existing database');
@@ -370,6 +370,49 @@ begin
     Check(Raised, 'future database schema must be refused');
     Database.Close;
     Check(Scalar(DbName, 'pragma user_version') = 99, 'future version remains unchanged');
+  finally Lines.Free; Database.Free; end;
+end;
+
+procedure CheckLegacyDuplicates(const DbName, PdnName: string);
+var Database: TGameDatabase; Lines: TStringList; Game: TPdnGame;
+  Imported, Duplicates, Errors: Integer; LegacyText: string;
+begin
+  Database := TGameDatabase.Create; Lines := TStringList.Create;
+  try
+    Lines.Text := '[Event "old"]' + LineEnding + '1.32-28 18-23 *';
+    Lines.SaveToFile(PdnName); Database.CreateDatabase(DbName);
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
+    Game := Database.LoadGameById(1);
+    try LegacyText := PdnGameToText(Game); finally Game.Free; end;
+    Database.Close;
+    // Reproduce a v4 row with a prior complete-game identity and plaintext PDN.
+    RawSQL(DbName, 'update games set hash_version=0, game_hash_lo=123, game_hash_hi=456, full_pdn=' + QuotedStr(LegacyText));
+    Database.OpenDatabase(DbName);
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
+    Check((Imported = 0) and (Duplicates = 1), 'v4 identity is recognized and upgraded');
+    Database.Close;
+    Check(Scalar(DbName, 'select hash_version from games where id=1') = 5, 'duplicate identity upgraded');
+    // Reproduce a v3 row, which has canonical moves and annotations but no full PDN.
+    RawSQL(DbName, 'update games set hash_version=0, game_hash_lo=789, full_pdn=null');
+    Database.OpenDatabase(DbName);
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
+    Check((Imported = 0) and (Duplicates = 1), 'v3 identity is recognized');
+    Database.Close;
+    RawSQL(DbName, 'update games set hash_version=0, game_hash_lo=790, full_pdn=null');
+    Database.OpenDatabase(DbName);
+    Lines.Text := '[Event "old"]' + LineEnding + '{new note} 1.32-28 (1.34-30) 18-23 *';
+    Lines.SaveToFile(PdnName);
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
+    Check((Imported = 1) and (Duplicates = 0), 'legacy match must retain new notes and variations');
+    Lines.Text := '[Event "large"]' + LineEnding + '{' + StringOfChar('a', 20000) + '} 1.32-28 *';
+    Lines.SaveToFile(PdnName);
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
+    Database.Close;
+    Check(Scalar(DbName, 'select length(full_pdn) from games where event=''large''') < 1000,
+      'complete storage compresses repeated comment data');
+    Database.OpenDatabase(DbName); Game := Database.LoadGameById(3);
+    try Check(Pos(StringOfChar('a', 20000), PdnGameToText(Game)) > 0, 'compressed full comment reloads');
+    finally Game.Free; end;
   finally Lines.Free; Database.Free; end;
 end;
 
@@ -393,6 +436,8 @@ begin
   PdnName := GetTempFileName(GetTempDir, 'gwd-recovery');
   DbName := PdnName + '.db';
   try
+    CheckLegacyDuplicates(DbName, PdnName);
+    DeleteFile(DbName);
     CheckCompleteGameStorage(DbName, PdnName);
     DeleteFile(DbName);
     CheckLiveSummary(DbName, PdnName);

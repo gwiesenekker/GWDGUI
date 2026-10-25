@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Avoid replaying database PDN storage and migrate duplicate identities (F8/P22)
+
+- Store the complete parsed tree without replaying a board for every stored node;
+  public PDN exports continue to resolve captures with validated positions.
+- Compress complete stored PDNs when smaller, while retaining plaintext and legacy
+  loading. Schema 5 prevents older applications from misreading compressed rows.
+- Match legacy duplicate candidates by complete content and upgrade their identity
+  lazily. Newly supplied comments and variations remain distinct games.
+- Validation: interrupted-import, compressed comment/tree reload, v3/v4 duplicate
+  migration, changed-content and schema compatibility regressions pass.
+
 ### 2026-10-25 — Keep node metadata compact and readable (P21/P15)
 
 - Replace duplicated base64 JSON with a compact readable extension; ordinary

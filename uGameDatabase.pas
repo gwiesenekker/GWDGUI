@@ -82,7 +82,35 @@ type
 
 implementation
 
-uses SQLite3Dyn, ctypes, UnicodeData;
+uses SQLite3Dyn, ctypes, UnicodeData, ZStream, Base64;
+
+function PackStoredPdn(const Text: string): string;
+var Buffer: TStringStream; Compressor: TCompressionStream;
+begin
+  Buffer := TStringStream.Create('');
+  try
+    Compressor := TCompressionStream.Create(clDefault, Buffer);
+    try
+      if Text <> '' then Compressor.WriteBuffer(Text[1], Length(Text));
+    finally Compressor.Free; end;
+    Result := 'gwd-zlib1:' + EncodeStringBase64(Buffer.DataString);
+    if Length(Result) >= Length(Text) then Result := Text;
+  finally Buffer.Free; end;
+end;
+
+function UnpackStoredPdn(const Text: string): string;
+var Buffer, Output: TStringStream; Decompressor: TDecompressionStream;
+begin
+  Result := Text;
+  if Copy(Text, 1, 10) <> 'gwd-zlib1:' then Exit;
+  Buffer := TStringStream.Create(DecodeStringBase64(Copy(Text, 11, MaxInt)));
+  Output := TStringStream.Create('');
+  try
+    Decompressor := TDecompressionStream.Create(Buffer);
+    try Output.CopyFrom(Decompressor, 0); finally Decompressor.Free; end;
+    Result := Output.DataString;
+  finally Output.Free; Buffer.Free; end;
+end;
 
 function FoldUtf8(const Text: string): string;
 var Lowered: UnicodeString;
@@ -135,6 +163,7 @@ type
     procedure ImportGame(AGame: TPdnGame; ABytesRead, ATotalBytes: Int64;
       var AStop: Boolean);
     function IsDuplicateGame(const AGameHash: THash128): Boolean;
+    function IsLegacyDuplicate: Boolean;
     procedure InsertPosition(APly: Integer; const ANextMove: string);
     procedure LogDuplicate(const AGameHash: THash128);
     procedure LogError(const AMessage: string);
@@ -376,8 +405,8 @@ begin
   FMoves := TStringList.Create;
   FGameInsertQuery := FDatabase.Query;
   FGameInsertQuery.SQL.Text :=
-    'insert into games(game_hash_lo, game_hash_hi, white, black, event, result, starting_fen, moves_text, annotations_text, full_pdn, ply_count) ' +
-    'values(:game_hash_lo, :game_hash_hi, :white, :black, :event, :result, :starting_fen, :moves_text, :annotations_text, :full_pdn, :ply_count)';
+    'insert into games(game_hash_lo, game_hash_hi, white, black, event, result, starting_fen, moves_text, annotations_text, full_pdn, ply_count, hash_version) ' +
+    'values(:game_hash_lo, :game_hash_hi, :white, :black, :event, :result, :starting_fen, :moves_text, :annotations_text,  :full_pdn, :ply_count, 5)';
   FHashQuery := FDatabase.Query;
   FHashQuery.SQL.Text :=
     'select id from games where game_hash_lo = :game_hash_lo and game_hash_hi = :game_hash_hi limit 1';
@@ -485,7 +514,7 @@ function TDatabasePdnImporter.GameHash: THash128;
 var
   LHashText: string;
 begin
-  LHashText := 'gwdgui-db-v4-complete-game' + #10 + FFullPdn;
+  LHashText := 'gwdgui-db-v5-complete-game' + #10 + FFullPdn;
   Result := Fnv1a128Value(LHashText);
 end;
 
@@ -499,6 +528,66 @@ begin
     Result := not FHashQuery.EOF;
   finally
     FHashQuery.Close;
+  end;
+end;
+
+function TDatabasePdnImporter.IsLegacyDuplicate: Boolean;
+var Q, Update: TSQLQuery; Games: TList; Candidate: TPdnGame;
+  Canonical: string; I: Integer; Hash: THash128;
+begin
+  Result := False;
+  Q := FDatabase.Query; Games := TList.Create; Canonical := '';
+  try
+    Q.SQL.Text := 'select * from games where hash_version < 5 and white=:white and black=:black and event=:event and result=:result and ply_count=:ply_count';
+    Q.ParamByName('white').AsUTF8String := FGame.WhiteName;
+    Q.ParamByName('black').AsUTF8String := FGame.BlackName;
+    Q.ParamByName('event').AsUTF8String := FGame.EventName;
+    Q.ParamByName('result').AsUTF8String := FGame.ResultText;
+    Q.ParamByName('ply_count').AsInteger := FMoves.Count;
+    Q.Open;
+    while not Q.EOF do
+    begin
+      Candidate := nil;
+      try
+        if Q.FieldByName('full_pdn').AsUTF8String <> '' then
+        begin
+          LoadPdnGamesFromText(UnpackStoredPdn(Q.FieldByName('full_pdn').AsUTF8String), Games);
+          if Games.Count <> 1 then raise EConvertError.Create('Invalid legacy stored game');
+          Candidate := TPdnGame(Games[0]); Games.Clear;
+        end
+        else
+        begin
+          Candidate := TPdnGame.Create;
+          Candidate.WhiteName := Q.FieldByName('white').AsUTF8String;
+          Candidate.BlackName := Q.FieldByName('black').AsUTF8String;
+          Candidate.EventName := Q.FieldByName('event').AsUTF8String;
+          Candidate.ResultText := Q.FieldByName('result').AsUTF8String;
+          Candidate.StartingFEN := Q.FieldByName('starting_fen').AsUTF8String;
+          Candidate.MovesText := Q.FieldByName('moves_text').AsUTF8String;
+          Candidate.MoveAnnotationsText := Q.FieldByName('annotations_text').AsUTF8String;
+        end;
+        // Only legacy candidates need a replay. Compare complete content, so an
+        // old moves-only identity cannot discard newly supplied notes/branches.
+        if Canonical = '' then Canonical := PdnGameToText(FGame);
+        if PdnGameToText(Candidate) = Canonical then
+        begin
+          Hash := GameHash; Update := FDatabase.Query;
+          try
+            Update.SQL.Text := 'update games set game_hash_lo=:lo, game_hash_hi=:hi, hash_version=5, full_pdn=:pdn where id=:id';
+            Update.ParamByName('lo').AsLargeInt := Hash.Lo;
+            Update.ParamByName('hi').AsLargeInt := Hash.Hi;
+            Update.ParamByName('pdn').AsUTF8String := PackStoredPdn(FFullPdn);
+            Update.ParamByName('id').AsInteger := Q.FieldByName('id').AsInteger;
+            Update.ExecSQL;
+          finally Update.Free; end;
+          Exit(True);
+        end;
+      finally Candidate.Free; end;
+      Q.Next;
+    end;
+  finally
+    for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
+    Games.Free; Q.Free;
   end;
 end;
 
@@ -567,9 +656,9 @@ begin
         Exit;
       end;
     end;
-    FFullPdn := PdnGameToText(FGame);
+    FFullPdn := PdnGameToStorageText(FGame);
     LGameHash := GameHash;
-    if IsDuplicateGame(LGameHash) then
+    if IsDuplicateGame(LGameHash) or IsLegacyDuplicate then
     begin
       Inc(FDuplicates);
       LogDuplicate(LGameHash);
@@ -588,7 +677,7 @@ begin
     FGameInsertQuery.ParamByName('starting_fen').AsUTF8String := FGame.StartingFEN;
     FGameInsertQuery.ParamByName('moves_text').AsUTF8String := Trim(StringReplace(FMoves.Text, LineEnding, ' ', [rfReplaceAll]));
     FGameInsertQuery.ParamByName('annotations_text').AsUTF8String := FGame.MoveAnnotationsText;
-    FGameInsertQuery.ParamByName('full_pdn').AsUTF8String := FFullPdn;
+    FGameInsertQuery.ParamByName('full_pdn').AsUTF8String := PackStoredPdn(FFullPdn);
     FGameInsertQuery.ParamByName('ply_count').AsInteger := FMoves.Count;
     FGameInsertQuery.ExecSQL;
 
@@ -819,7 +908,7 @@ begin
   try
     Q.SQL.Text := 'pragma user_version';
     Q.Open;
-    if Q.Fields[0].AsInteger > 4 then
+    if Q.Fields[0].AsInteger > 5 then
       raise EInvalidOperation.Create('This database was created by a newer GWDGUI version');
     Q.Close;
     Q.SQL.Text :=
@@ -834,8 +923,10 @@ begin
     EnsureGameHashColumns;
     if not TableColumnExists('games', 'full_pdn') then
       ExecuteSql('alter table games add column full_pdn text');
-    // user_version 4 adds complete PDN storage; legacy rows retain their data.
-    ExecuteSql('pragma user_version=4');
+    if not TableColumnExists('games', 'hash_version') then
+      ExecuteSql('alter table games add column hash_version integer not null default 0');
+    ExecuteSql('create index if not exists games_legacy_candidates on games(white, black, event, result, ply_count) where hash_version < 5');
+    ExecuteSql('pragma user_version=5');
     Q.SQL.Text :=
       'create table if not exists positions (' +
       'id integer primary key autoincrement,' +
@@ -1092,7 +1183,7 @@ begin
     begin
       Games := TList.Create;
       try
-        LoadPdnGamesFromText(Q.FieldByName('full_pdn').AsUTF8String, Games);
+        LoadPdnGamesFromText(UnpackStoredPdn(Q.FieldByName('full_pdn').AsUTF8String), Games);
         if Games.Count <> 1 then
           raise EConvertError.Create('Stored database game is not a single PDN game');
         Result := TPdnGame(Games[0]);

@@ -71,6 +71,7 @@ procedure ReadPdnGamesFromFile(const AFileName: string;
 procedure AppendPdnGameToFile(const AFileName: string; AGame: TPdnGame);
 procedure AppendPdnTextToFile(const AFileName, APdnText: string);
 function PdnGameToText(AGame: TPdnGame): string;
+function PdnGameToStorageText(AGame: TPdnGame): string;
 function PdnExportResult(const AText: string): string;
 function EscapePdnComment(const Text: string): string;
 function NormalizePdnComment(const Text: string): string;
@@ -1717,7 +1718,7 @@ begin
   Result := FParsedRoot.Clone;
 end;
 
-function PdnGameToText(AGame: TPdnGame): string;
+function RenderPdnGame(AGame: TPdnGame; StandardNotation: Boolean): string;
 var
   Lines, Mainline: TStringList;
   Root: TPdnMoveNode;
@@ -1763,10 +1764,14 @@ var
         WriteSequence(Parent, Parent.Children[J], Before, Ply, False, False, PositionValid, True);
         Output.Append(')');
       end;
-    Next := TDraughtsBoard.Create;
+    Next := nil;
     try
-      Next.AssignFrom(Before);
       NextValid := PositionValid;
+      if NextValid then
+      begin
+        Next := TDraughtsBoard.Create;
+        Next.AssignFrom(Before);
+      end;
       if NextValid then
         try Next.PlayMove(Node.MoveText, False, True);
         except
@@ -1810,7 +1815,7 @@ begin
     Lines.Add('');
     Root := AGame.BuildMoveTree;
     ExtractStrings([' ', #9, #10, #13], [], PChar(AGame.MovesText), Mainline);
-    BoardValid := True;
+    BoardValid := StandardNotation;
     try Board.LoadFromFEN(AGame.StartingFEN);
     except on E: EConvertError do begin Board.SetBeginPosition; BoardValid := False; end; end;
     FirstSide := Board.SideToMove;
@@ -1832,6 +1837,16 @@ begin
     Output.Append(PdnExportResult(AGame.ResultText));
     Result := Lines.Text + Output.ToString + LineEnding;
   finally Root.Free; Board.Free; Output.Free; Mainline.Free; Lines.Free; end;
+end;
+
+function PdnGameToText(AGame: TPdnGame): string;
+begin Result := RenderPdnGame(AGame, True); end;
+
+function PdnGameToStorageText(AGame: TPdnGame): string;
+begin
+  // Internal storage retains the parsed notation; public exports still validate
+  // positions and resolve ambiguous captures to standard PDN paths.
+  Result := RenderPdnGame(AGame, False);
 end;
 
 end.
