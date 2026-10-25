@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Contnrs, SysUtils,
-  uGameTree, uGameTreeBuilder, uGameTreeSearchRef, uThreadMessageQueue;
+  uGameTree, uGameTreeBuilder, uGameTreeSearchRef, uThreadMessageQueue, uGameMoveHistory;
 
 type
   TGameTreeMoveSource = (
@@ -592,6 +592,7 @@ begin
   if ACommand = nil then
     Exit;
 
+  ACommand.MainlineInput.MoveData := Copy(AMainline.MoveData);
   ACommand.MainlineInput.RecordClock := AMainline.RecordClock;
   ACommand.MainlineInput.WhiteRemainingSeconds :=
     AMainline.WhiteRemainingSeconds;
@@ -721,6 +722,7 @@ begin
 
   AddStrings(ACommand.MainlineInput.Moves);
   AddStrings(ACommand.MainlineInput.Annotations);
+  AddLine(GameMoveDataSignature(ACommand.MainlineInput.MoveData));
   AddLine(BoolText(ACommand.MainlineInput.RecordClock));
   AddLine(SecondsText(ACommand.MainlineInput.WhiteRemainingSeconds));
   AddLine(SecondsText(ACommand.MainlineInput.BlackRemainingSeconds));
@@ -1428,6 +1430,7 @@ begin
             ACommand.MainlineInput.BlackRemainingSeconds,
             ACommand.MainlineInput.WhiteUsedSeconds,
             ACommand.MainlineInput.BlackUsedSeconds);
+        RecordGameTreeCompletedMoves(FGameTree, ACommand.MainlineInput.MoveData);
         RecordGameTreeAnalysis(FGameTree, ACommand.EnginePvInput,
           GameTreePvInput(False, 0, '', ''));
         AcceptTreeMutation(ACommand, InvalidateRebuildSignature);
@@ -1645,6 +1648,8 @@ begin
             Changed := True;
           end;
         end;
+        Changed := RecordGameTreeCompletedMoves(FGameTree,
+          ACommand.MainlineInput.MoveData) or Changed;
         ACommand.Accepted := True;
         if Changed then
           AcceptTreeMutation(ACommand, InvalidateRebuildSignature);

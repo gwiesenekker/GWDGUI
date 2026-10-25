@@ -5,7 +5,7 @@ unit uGameTreeBuilder;
 interface
 
 uses
-  Classes, SysUtils, uGameOrchestrator, uGameTree;
+  Classes, SysUtils, uGameMoveHistory, uGameOrchestrator, uGameTree;
 
 type
   TGameTreeVariationPlyCallback = procedure(AGameTree: TGameTree;
@@ -36,6 +36,7 @@ type
     Moves: TStrings;
     Annotations: TStrings;
     RecordClock: Boolean;
+    MoveData: TGameMoveDataArray;
     WhiteRemainingSeconds: Double;
     BlackRemainingSeconds: Double;
     WhiteUsedSeconds: Double;
@@ -81,6 +82,8 @@ procedure BeginGameTreeRebuild(AGameTree: TGameTree;
   const AHeader: TGameTreeHeaderInput);
 procedure RecordGameTreeMainline(AGameTree: TGameTree;
   const AMainline: TGameTreeMainlineInput);
+function RecordGameTreeCompletedMoves(AGameTree: TGameTree;
+  const AMoves: TGameMoveDataArray): Boolean;
 procedure RecordGameTreeAnalysis(AGameTree: TGameTree;
   const AEnginePV, AAnnotatorPV: TGameTreePvInput);
 procedure RecordGameTreeVariationLine(AGameTree: TGameTree;
@@ -90,7 +93,7 @@ procedure RecordGameTreeVariationAnnotatorPV(AGameTree: TGameTree;
 
 implementation
 
-uses uPdn;
+uses uPdn, uDraughtsBoard;
 
 procedure TextToMoveList(const AMovesText: string; AMoves: TStrings);
 begin
@@ -135,6 +138,7 @@ function GameTreeMainlineInput(AMoves, AAnnotations: TStrings;
   ARecordClock: Boolean; AWhiteRemainingSeconds, ABlackRemainingSeconds,
   AWhiteUsedSeconds, ABlackUsedSeconds: Double): TGameTreeMainlineInput;
 begin
+  Result.MoveData := nil;
   Result.Moves := AMoves;
   Result.Annotations := AAnnotations;
   Result.RecordClock := ARecordClock;
@@ -218,6 +222,23 @@ begin
     AGameTree.RecordClockState(LMoveCount,
       AMainline.WhiteRemainingSeconds, AMainline.BlackRemainingSeconds,
       AMainline.WhiteUsedSeconds, AMainline.BlackUsedSeconds);
+  RecordGameTreeCompletedMoves(AGameTree, AMainline.MoveData);
+end;
+
+function RecordGameTreeCompletedMoves(AGameTree: TGameTree;
+  const AMoves: TGameMoveDataArray): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  if AGameTree = nil then Exit;
+  for I := 0 to Length(AMoves) - 1 do
+  begin
+    if I >= AGameTree.MainlineCount then Break;
+    if NormalizeMoveNotation(AGameTree.MainlineNode[I + 1].MoveText) <>
+      NormalizeMoveNotation(AMoves[I].MoveText) then Break;
+    if AGameTree.RecordCompletedMoveData(I + 1, AMoves[I]) then Result := True;
+  end;
 end;
 
 procedure RecordGameTreeAnalysis(AGameTree: TGameTree;

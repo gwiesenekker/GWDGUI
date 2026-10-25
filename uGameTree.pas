@@ -5,7 +5,7 @@ unit uGameTree;
 interface
 
 uses
-  Classes, Contnrs, SysUtils, uDraughtsBoard, uGameOrchestrator;
+  Classes, Contnrs, SysUtils, uDraughtsBoard, uGameOrchestrator, uGameMoveHistory;
 
 type
   TGameTreePlyNode = class
@@ -24,6 +24,8 @@ type
     FEnginePVTimeText: string;
     FEngineScore: string;
     FHasClockInfo: Boolean;
+    FHasMoveTime: Boolean;
+    FSecondsUsed: Double;
     FMoveNumber: Integer;
     FMoveText: string;
     FNodeId: Int64;
@@ -56,6 +58,8 @@ type
     property EnginePVTimeText: string read FEnginePVTimeText;
     property EngineScore: string read FEngineScore;
     property HasClockInfo: Boolean read FHasClockInfo;
+    property HasMoveTime: Boolean read FHasMoveTime;
+    property SecondsUsed: Double read FSecondsUsed;
     property MoveNumber: Integer read FMoveNumber;
     property MoveText: string read FMoveText;
     property NodeId: Int64 read FNodeId;
@@ -149,6 +153,7 @@ type
       AAnnotationText: string): Boolean;
     function FindVariationNodeByKey(const AVariationKey: string): TGameTreePlyNode;
   public
+    function RecordCompletedMoveData(APly: Integer; const AData: TGameMoveData): Boolean;
     constructor Create;
     destructor Destroy; override;
     procedure Clear;
@@ -576,6 +581,40 @@ begin
   RecordTimeControl(ATimeControl.MovesPerPeriod,
     ATimeControl.MinutesPerPeriod, ATimeControl.IncrementSeconds,
     IncrementModeCaption(ATimeControl.IncrementMode));
+end;
+
+function TGameTree.RecordCompletedMoveData(APly: Integer;
+  const AData: TGameMoveData): Boolean;
+var
+  Node, ParentNode: TGameTreePlyNode;
+begin
+  Result := False;
+  Node := GetMainlineNode(APly);
+  if (Node = nil) or
+    (NormalizeMoveNotation(Node.MoveText) <> NormalizeMoveNotation(AData.MoveText)) then Exit;
+  Result := not Node.FHasMoveTime or (Node.FSecondsUsed <> AData.SecondsUsed);
+  Node.FHasMoveTime := True;
+  Node.FSecondsUsed := AData.SecondsUsed;
+  if AData.HasClockInfo then
+  begin
+    Result := Result or not Node.HasClockInfo or
+      (Node.WhiteRemainingSeconds <> AData.WhiteRemainingSeconds) or
+      (Node.BlackRemainingSeconds <> AData.BlackRemainingSeconds) or
+      (Node.WhiteUsedSeconds <> AData.WhiteUsedSeconds) or
+      (Node.BlackUsedSeconds <> AData.BlackUsedSeconds);
+    SetNodeClockState(Node, AData.WhiteRemainingSeconds, AData.BlackRemainingSeconds,
+      AData.WhiteUsedSeconds, AData.BlackUsedSeconds);
+  end;
+  ParentNode := Node.Parent;
+  if (ParentNode <> nil) and (AData.PrincipalVariation <> '') then
+  begin
+    Result := Result or (ParentNode.EnginePV <> AData.PrincipalVariation) or
+      (ParentNode.EngineScore <> AData.PvScore) or
+      (ParentNode.EnginePVDepth <> AData.PvDepth) or
+      (ParentNode.EnginePVTimeText <> AData.PvTimeText);
+    UpdateNodePV(ParentNode, True, AData.PvScore, AData.PrincipalVariation,
+      AData.PvDepth, AData.PvTimeText);
+  end;
 end;
 
 procedure TGameTree.RecordClockState(APlyNumber: Integer;

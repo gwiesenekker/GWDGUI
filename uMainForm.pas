@@ -13,7 +13,7 @@ uses
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
   uGuiDialogs, uDatabaseForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
   uGameTreePdn, uGameTreeCursor, uGameTreeSearchRef, uGameTreeView, uPositionSetupForm,
-  uPreferences, uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm;
+  uPreferences, uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm, uGameMoveHistory;
 
 type
   TIntArray = array of Integer;
@@ -38,6 +38,7 @@ type
     StatusText: string;
     MovesText: string;
     AnnotationsText: string;
+    MoveData: TGameMoveDataArray;
     State: TGameOrchestratorState;
     PrincipalVariation: string;
     PvScore: string;
@@ -1175,6 +1176,7 @@ begin
   AInput.StatusText := Trim(LSnapshot.LastError);
   AInput.MovesText := LSnapshot.MovesPlayedText;
   AInput.AnnotationsText := LSnapshot.MoveAnnotationsText;
+  AInput.MoveData := LSnapshot.MoveData;
   AInput.State := LSnapshot.State;
   AInput.PrincipalVariation := LSnapshot.PrincipalVariation;
   AInput.PvScore := LSnapshot.PvScore;
@@ -5166,6 +5168,7 @@ begin
     Result := GameTreeMainlineInput(AMoves, AAnnotations, True,
       AInput.WhiteRemainingSeconds, AInput.BlackRemainingSeconds,
       AInput.WhiteUsedSeconds, AInput.BlackUsedSeconds);
+  Result.MoveData := Copy(AInput.MoveData);
 end;
 
 function TMainForm.RunningSnapshotPvInput(
@@ -5199,6 +5202,7 @@ begin
     IntToStr(Ord(AInput.State)) + #10 +
     AInput.MovesText + #10 +
     AInput.AnnotationsText + #10 +
+    GameMoveDataSignature(AInput.MoveData) + #10 +
     SecondsSignature(AInput.WhiteRemainingSeconds) + #10 +
     SecondsSignature(AInput.BlackRemainingSeconds) + #10 +
     SecondsSignature(AInput.WhiteUsedSeconds) + #10 +

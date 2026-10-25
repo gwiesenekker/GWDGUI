@@ -5,7 +5,7 @@ program standalone_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, Grids, LCLType, Controls, ComCtrls, Menus,
-  uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPdnOpenDialog, uPvBrowser, uGuiDialogs,
+  uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPdnOpenDialog, uPvBrowser, uGuiDialogs,
   uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameOrchestrator;
 
 type
@@ -39,6 +39,76 @@ begin
     if (AForm.Components[I] is TTimer) and
       Assigned(TTimer(AForm.Components[I]).OnTimer) then
       TTimer(AForm.Components[I]).OnTimer(nil);
+end;
+
+procedure FakeHistoryHub(const MoveText: string);
+var
+  Line: string;
+begin
+  while not EOF(Input) do
+  begin
+    ReadLn(Line);
+    if Line = 'hub' then WriteLn('wait')
+    else if Line = 'init' then WriteLn('ready')
+    else if Line = 'go think' then
+    begin
+      WriteLn('info depth=17 time=0.12 score=0.42 pv="' + MoveText + '"');
+      WriteLn('done move=' + MoveText);
+    end
+    else if Line = 'stop' then WriteLn('done')
+    else if Line = 'quit' then Exit;
+    Flush(Output);
+  end;
+end;
+
+procedure CheckCoalescedRunnerHistory(AForm: TMainForm);
+var
+  WhiteEngine, BlackEngine: TExternalEngineDefinition;
+  Setup: TGameSetup;
+  Game: TRunningGame;
+  Tick: QWord;
+  Text: string;
+begin
+  WhiteEngine := TExternalEngineDefinition.Create;
+  BlackEngine := TExternalEngineDefinition.Create;
+  Game := nil;
+  try
+    WhiteEngine.Kind := eekHub;
+    WhiteEngine.ExePath := ExpandFileName(ParamStr(0));
+    WhiteEngine.Arguments := '--history-white';
+    BlackEngine.Assign(WhiteEngine);
+    BlackEngine.Arguments := '--history-black';
+    Setup := Default(TGameSetup);
+    Setup.WhitePlayer := pkRegistered;
+    Setup.BlackPlayer := pkRegistered;
+    Setup.WhiteEngine := WhiteEngine;
+    Setup.BlackEngine := BlackEngine;
+    Setup.StartingFEN := 'W:W32:B23';
+    Setup.TimeControl := DefaultTimeControl;
+    Game := AForm.StartGameFromSetup(Setup);
+    // Let both moves finish before draining any GUI snapshots.
+    Tick := GetTickCount64;
+    while not Game.Runner.Finished and (GetTickCount64 - Tick < 5000) do Sleep(10);
+    Check(Game.Runner.Finished, 'short fake-engine game must finish without GUI updates');
+    DrainGuiEvents(AForm);
+    Check((Game.GameTree.MainlineCount = 2) and (Game.ResultText = '0-2'),
+      'coalesced snapshots must recover both moves and the final result');
+    Check((Game.GameTree.Root.EnginePV = '32-28') and
+      (Game.GameTree.MainlineNode[1].EnginePV = '23x32'),
+      'coalescing must preserve both completed engine searches');
+    Check(Game.GameTree.MainlineNode[1].HasClockInfo and
+      Game.GameTree.MainlineNode[2].HasClockInfo and
+      Game.GameTree.MainlineNode[1].HasMoveTime and
+      Game.GameTree.MainlineNode[2].HasMoveTime,
+      'coalescing must preserve times and both clocks at every move');
+    Text := GameTreeToPdnText(Game.GameTree);
+    Check((Pos('emt:', Text) > 0) and (Pos('clk:', Text) > 0),
+      'completed runner history must remain exportable');
+  finally
+    if Game <> nil then AForm.RemoveGame(Game);
+    BlackEngine.Free;
+    WhiteEngine.Free;
+  end;
 end;
 
 procedure CheckStandaloneSurvivesRunningGame(AForm: TMainForm;
@@ -798,6 +868,14 @@ var
   Game: TPdnGame;
   Reporter: TTestExceptionReporter;
 begin
+  if ParamStr(1) = '--history-white' then
+  begin
+    FakeHistoryHub('32-28'); Halt(0);
+  end;
+  if ParamStr(1) = '--history-black' then
+  begin
+    FakeHistoryHub('23x32'); Halt(0);
+  end;
   RequireDerivedFormResource := False;
   Application.Initialize;
   Reporter := TTestExceptionReporter.Create;
@@ -808,6 +886,7 @@ begin
     try
       Check(not GameTreeHasContent(Form.ActiveGameTree),
         'untouched initial board should not prompt to save');
+      CheckCoalescedRunnerHistory(Form);
       CheckStandaloneMainlineCanBeExtended(Form);
       CheckCompletedGameKeepsOfficialMainline(Form);
       CheckUnexpectedDialogsAbort;

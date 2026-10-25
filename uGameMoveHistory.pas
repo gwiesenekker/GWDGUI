@@ -55,7 +55,38 @@ type
     property Items[AIndex: Integer]: TGameMove read GetItem; default;
   end;
 
+function GameMoveDataSignature(const AData: TGameMoveDataArray): string;
+
 implementation
+
+function GameMoveDataSignature(const AData: TGameMoveDataArray): string;
+var
+  I: Integer;
+
+  procedure Add(const Value: string);
+  begin
+    Result += IntToStr(Length(Value)) + ':' + Value;
+  end;
+
+begin
+  Result := '';
+  for I := 0 to Length(AData) - 1 do
+  begin
+    Add(AData[I].MoveText);
+    Add(IntToStr(Ord(AData[I].Side)));
+    Add(FloatToStr(AData[I].SecondsUsed));
+    Add(AData[I].Annotation);
+    Add(AData[I].PrincipalVariation);
+    Add(AData[I].PvScore);
+    Add(AData[I].PvDepth);
+    Add(AData[I].PvTimeText);
+    Add(BoolToStr(AData[I].HasClockInfo, True));
+    Add(FloatToStr(AData[I].WhiteRemainingSeconds));
+    Add(FloatToStr(AData[I].BlackRemainingSeconds));
+    Add(FloatToStr(AData[I].WhiteUsedSeconds));
+    Add(FloatToStr(AData[I].BlackUsedSeconds));
+  end;
+end;
 
 constructor TGameMoveHistory.Create;
 begin

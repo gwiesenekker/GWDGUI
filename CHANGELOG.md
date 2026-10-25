@@ -3,6 +3,19 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Apply complete runner history to game-tree nodes (M1, consumer)
+
+- Attach each completed search to its parent position, and each move's elapsed
+  time and post-move clocks to that move's node. Keep live clocks separate.
+- Apply history during batched append, full rebuild and same-position updates;
+  include metadata in rebuild/update signatures and copy command-owned arrays.
+- Export per-move elapsed time with clock annotations.
+- Regress batched updates, metadata-only rebuilds, command-copy isolation and live
+  versus historical clocks. A real two-engine game finishes before any GUI update
+  to verify that coalescing preserves both searches, move times and clocks.
+- Validation: the GUI regression fails with the history bridge omitted; the full
+  headless suite and expanded GTK main-form checks pass with it connected.
+
 ### 2026-10-25 — Carry complete move data in runner snapshots (M1, producer)
 
 - Capture each completed move's analysis, score, depth, search time, seconds used

@@ -136,6 +136,8 @@ begin
     ', B=' + ClockSecondsCaption(ANode.BlackRemainingSeconds) +
     '; used: W=' + ClockSecondsCaption(ANode.WhiteUsedSeconds) +
     ', B=' + ClockSecondsCaption(ANode.BlackUsedSeconds);
+  if ANode.HasMoveTime then
+    Result += '; emt: ' + ClockSecondsCaption(ANode.SecondsUsed);
 end;
 
 function FirstPvMove(const APv: string): string;
