@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Import databases on an owned worker connection (P10)
+
+- Move parsing and database writes off the GUI thread. A worker owns its SQLite
+  connection and publishes locked progress snapshots; the modal dialog polls them.
+- Remove nested message processing from progress callbacks. Keep reentry guards,
+  immediate Stop/close cancellation and durable completed games before reconnecting.
+- Validation: independent thread completion/error/cancellation checks and the GTK
+  modal reentry/cancellation regression pass.
+
 ### 2026-10-25 — Publish one tournament snapshot per save (F9/T22)
 
 - Write JSON once after attempting PDN publication, including the durable row

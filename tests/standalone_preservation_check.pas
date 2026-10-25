@@ -164,8 +164,8 @@ begin
   Probe := TDatabaseModalProbe.Create;
   Database := TGameDatabase.Create;
   try
-    Text.Text := '[Event "One"] 1. 32-28 18-23 *' + LineEnding +
-      '[Event "Two"] 1. 33-28 18-22 *';
+    for I := 1 to 5000 do
+      Text.Add('[Event "Game ' + IntToStr(I) + '"] 1.32-28 18-23 *');
     Text.SaveToFile(FileName);
     Form.CreateDatabase(DbName);
     Form.Show;
@@ -177,7 +177,8 @@ begin
       'reentrant actions must not replace the database during import');
     Database.OpenDatabase(DbName);
     Database.LoadGames(Games);
-    Check(Games.Count = 1, 'close cancellation must retain exactly the first imported game');
+    Check((Games.Count >= 1) and (Games.Count < 5000),
+      'close cancellation must stop the worker and retain completed games');
   finally
     Application.RemoveAsyncCalls(Probe);
     for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;

@@ -7,7 +7,7 @@ interface
 uses
   Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
   Grids, Math, Menus, StdCtrls, SysUtils, uBoardControl, uDraughtsBoard,
-  uGameDatabase, uGuiDialogs, uPdn, uPositionSetupForm, uPreferences;
+  uGameDatabase, uDatabaseImportWorker, uGuiDialogs, uPdn, uPositionSetupForm, uPreferences;
 
 type
   TDatabaseGameSelectedEvent = procedure(Sender: TObject; AGame: TPdnGame) of object;
@@ -33,6 +33,8 @@ type
     FImportProgressForm: TForm;
     FImportProgressLabel: TLabel;
     FImportStartTick: QWord;
+    FImportWorker: TDatabaseImportWorker;
+    FImportTimer: TTimer;
     FOnGameSelected: TDatabaseGameSelectedEvent;
     FPreferences: TGuiPreferences;
     FPlayerFilterEdit: TEdit;
@@ -57,7 +59,7 @@ type
       ADuplicates, AErrors: Integer; var ACancel: Boolean);
     procedure ImportProgressCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure ImportPdnClick(Sender: TObject);
-    procedure RunModalImport(Data: PtrInt);
+    procedure PollImport(Sender: TObject);
     procedure OptimizePositionSearchClick(Sender: TObject);
     procedure PopulateGamesGridFromList(const AStatusText: string);
     procedure PopulateGamesGrid;
@@ -417,20 +419,20 @@ begin
       [AImported, AErrors, ADuplicates, ABytesRead / 1048576,
       ATotalBytes / 1048576, SpeedMbPerMinute,
       FormatImportDuration(ElapsedSeconds), EtaText]);
-  Application.ProcessMessages;
-  ACancel := FImportCancel or Application.Terminated;
 end;
 
 procedure TDatabaseForm.ImportProgressCloseQuery(Sender: TObject;
   var CanClose: Boolean);
 begin
   FImportCancel := True;
+  if FImportWorker <> nil then FImportWorker.RequestCancel;
   CanClose := False;
 end;
 
 procedure TDatabaseForm.StopImportClick(Sender: TObject);
 begin
   FImportCancel := True;
+  if FImportWorker <> nil then FImportWorker.RequestCancel;
   if FImportProgressLabel <> nil then
     FImportProgressLabel.Caption := 'Stopping import...';
 end;
@@ -813,26 +815,27 @@ begin
   ShowFormCenteredOnOwner(FPositionSetupForm, Self);
 end;
 
-procedure TDatabaseForm.RunModalImport(Data: PtrInt);
+procedure TDatabaseForm.PollImport(Sender: TObject);
+var State: TDatabaseImportState; Cancel: Boolean;
 begin
-  try
-    try
-      FDatabase.ImportPdnFile(FImportFileName, FImported, FDuplicates, FErrors,
-        @ImportProgress, ChangeFileExt(FImportFileName, '.import.log'));
-    except
-      on E: Exception do FImportFailure := E.Message;
-    end;
-  finally
-    FImportBusy := False;
-    FImportProgressForm.OnCloseQuery := nil;
-    FImportProgressForm.ModalResult := mrOK;
-  end;
+  State := FImportWorker.Snapshot;
+  ImportProgress(State.BytesRead, State.TotalBytes, State.Imported,
+    State.Duplicates, State.Errors, Cancel);
+  if Cancel then FImportWorker.RequestCancel;
+  if not State.Done then Exit;
+  FImportTimer.Enabled := False;
+  FImported := State.Imported; FDuplicates := State.Duplicates; FErrors := State.Errors;
+  FImportFailure := State.Failure;
+  FImportProgressForm.OnCloseQuery := nil;
+  FImportProgressForm.ModalResult := mrOK;
 end;
 
 procedure TDatabaseForm.ImportPdnFile(const AFileName: string);
-var Button: TButton;
+var Button: TButton; DatabaseName: string;
 begin
   if FImportBusy then Exit;
+  DatabaseName := FDatabase.FileName;
+  if DatabaseName = '' then raise EInvalidOperation.Create('No database is open');
   FImportFileName := AFileName;
   FImportCancel := False;
   FImportFailure := '';
@@ -861,16 +864,27 @@ begin
     Button.SetBounds(610, 78, 90, 30);
     Button.Caption := 'Stop';
     Button.OnClick := @StopImportClick;
-    // Start only after ShowModal has disabled other windows. Its close action
-    // requests cancellation; it cannot destroy the importer on its own stack.
-    Application.QueueAsyncCall(@RunModalImport, 0);
+    FDatabase.Close;
+    FImportWorker := TDatabaseImportWorker.Create(DatabaseName, AFileName);
+    FImportTimer := TTimer.Create(FImportProgressForm);
+    FImportTimer.Interval := 50;
+    FImportTimer.OnTimer := @PollImport;
+    FImportWorker.Start;
     FImportProgressForm.ShowModal;
   finally
-    Application.RemoveAsyncCalls(Self);
+    if FImportTimer <> nil then FImportTimer.Enabled := False;
+    if FImportWorker <> nil then
+    begin
+      FImportWorker.RequestCancel;
+      FImportWorker.WaitFor;
+      FreeAndNil(FImportWorker);
+    end;
+    FImportTimer := nil;
     FImportBusy := False;
     FreeAndNil(FImportProgressForm);
     FImportProgressBar := nil;
     FImportProgressLabel := nil;
+    FDatabase.OpenDatabase(DatabaseName);
   end;
   if FImportFailure <> '' then raise EInvalidOperation.Create(FImportFailure);
   PopulateGamesGrid;
