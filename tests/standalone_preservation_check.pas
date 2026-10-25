@@ -6,7 +6,7 @@ uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, Grids, LCLType, Controls, ComCtrls, Menus,
   uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPdnOpenDialog, uPvBrowser, uGuiDialogs,
-  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameOrchestrator;
+  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameOrchestrator, uTreeTestUtils;
 
 type
   TTestExceptionReporter = class
@@ -260,16 +260,12 @@ begin
     Memo.OnKeyDown(Memo, Key, []);
     CheckBoard('32-28 20-24 38-32 18-22');
     ClickText('38-32');
-    SelectedId := AForm.ActiveGameTree.FindVariationNode(1, 2).NodeId;
-    // The shared node survives, but its first compatibility path no longer
-    // contains it. Selection must follow identity rather than that old address.
-    AForm.ActiveGameTree.StoreVariationLineAtIndex(1, 2, 1, '20-24', 'Outer reply', Changed);
-    TextToMoveList('20-24', Moves);
-    RecordGameTreeVariationLine(AForm.ActiveGameTree,
-      GameTreeVariationLineInput(AForm.ActiveGameTree.VariationLine[1], 1, Moves, nil));
+    SelectedId := AForm.ActiveGameTree.FindBranchNode(1, 2).NodeId;
+    // Remove one leaf while the selected shared parent survives in another path.
+    AForm.ActiveGameTree.RemoveBranch(AForm.ActiveGameTree.FindBranchNode(1, 3));
     BeforeText := GameTreeToPdnText(AForm.ActiveGameTree);
-    Check(AForm.ActiveGameTree.FindVariationNode(2, 2).NodeId = SelectedId,
-      'fixture must retain the selected shared node through another path');
+    Check(AForm.ActiveGameTree.FindBranchNode(1, 2).NodeId = SelectedId,
+      'fixture must retain the selected shared node through its surviving child');
     Key := VK_LEFT;
     Memo.OnKeyDown(Memo, Key, []);
     CheckBoard('32-28 20-24');
@@ -383,7 +379,7 @@ begin
     LoadPdnGamesFromFile(FileName, Games);
     AForm.LoadPdnGameToDisplay(TPdnGame(Games[0]));
     Check((AForm.ActiveGameTree.MainlineCount = 3) and
-      (AForm.ActiveGameTree.VariationLineCount = 2),
+      (AForm.ActiveGameTree.BranchCount = 2),
       'a warned game must still load its mainline and valid branches into the actual form');
     Check(Pos('Good sibling', GameTreeToPdnText(AForm.ActiveGameTree)) > 0,
       'opening a warned game must retain its valid annotations');
@@ -432,7 +428,7 @@ begin
   Check((Tree.MainlineCount = 1) and (Tree.MainlineNode[1].MoveText = '32-28'),
     'a move from a pasted position must start the standalone mainline');
   ClickBoardMove(AForm, 18, 23);
-  Check((Tree.MainlineCount = 2) and (Tree.VariationLineCount = 0),
+  Check((Tree.MainlineCount = 2) and (Tree.BranchCount = 0),
     'successive standalone moves must extend the same mainline');
   Game := TPdnGame.Create;
   try
@@ -443,7 +439,7 @@ begin
     Key := VK_LEFT;
     Memo.OnKeyDown(Memo, Key, []);
     ClickBoardMove(AForm, 37, 32);
-    Check((Tree.MainlineCount = 3) and (Tree.VariationLineCount = 0),
+    Check((Tree.MainlineCount = 3) and (Tree.BranchCount = 0),
       'a move at the explicitly selected last ply must extend an unfinished PDN');
     ClickBoardMove(AForm, 12, 18);
     Check(Tree.MainlineCount = 4, 'editing must continue at the new mainline tip');
@@ -579,10 +575,10 @@ begin
     Game.MovesText := '32-28 18-23';
     Game.MoveVariationsText := EncodePdnVariationLine(2, 1, '20-24 38-32 18-22');
     AForm.LoadPdnGameToDisplay(Game);
-    Check(AForm.ActiveGameTree.FindVariationNode(0, 3) <> nil,
+    Check(AForm.ActiveGameTree.FindBranchNode(0, 3) <> nil,
       'tree-window fixture must materialize its variation: ' +
       GameTreeToPdnText(AForm.ActiveGameTree));
-    Target := AForm.ActiveGameTree.FindVariationNode(0, 3).NodeId;
+    Target := AForm.ActiveGameTree.FindBranchNode(0, 3).NodeId;
     TMenuItem(AForm.FindComponent('ShowGameTree')).OnClick(nil);
     Window := TForm(AForm.FindComponent('GameTreeWindow'));
     Check(Window <> nil, 'tree window must open');
@@ -624,7 +620,7 @@ begin
     // A frozen tree view may still contain rows for a branch removed by a command.
     Actor := TGameTreeActor.Create(AForm.ActiveGameTree, False);
     try
-      Command := Actor.CreateClearStoredVariationsCommand;
+      Command := Actor.CreateClearBranchesCommand;
       try
         Actor.ExecuteCommand(Command);
         Check(Command.Accepted, 'remove tree-window branch fixture');

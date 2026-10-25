@@ -3,6 +3,21 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Remove stored variation lines and indexed mutation (G7)
+
+- Remove the model's variation-line table, line-owned annotations/origin, builder
+  rematerialization and rebuild-command line payloads. Nodes own all branch data.
+- Import validated moves under an explicit parent node ID. Creating/exploring a
+  move finds or creates one child directly; clearing branches follows structure.
+- Remove branch indices from memo hits, selection and highlighting. Analysis
+  supplied with a rebuild targets a node ID rather than a remapped line index.
+- Keep only read-only branch inspection paths, derived on demand from children:
+  they are not stored game state and cannot be used to rebuild or mutate a line.
+- Migrate regression fixtures to structural imports/removals and node metadata;
+  retain coverage for malformed imports, shared prefixes, subtree removal,
+  immutable selections, repeated imports, clocks, analysis and save/load cycles.
+- Validation: full headless regression suite and hidden GTK main-form checks pass.
+
 ### 2026-10-25 — Preserve live subtrees during mainline rebuilds (G7)
 
 - Stop copying and replaying stored variation lines during rebuilds. Update the

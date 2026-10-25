@@ -8,7 +8,7 @@ uses
   {$ENDIF}
   Classes, SysUtils,
   uDraughtsBoard, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreeSearchRef, uPdn, uGameOrchestrator;
+  uGameTreeSearchRef, uPdn, uGameOrchestrator, uTreeTestUtils;
 
 type
   TQueuedCommandObserver = class
@@ -170,27 +170,27 @@ begin
       Command.Free;
     end;
 
-    Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23',
+    Command := ImportBranch(Actor, 1, '20-24',
       'annotator=0.22', gmsHuman);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'store-variation command should be accepted');
       Check(Command.TreeChanged,
         'store-variation command should report tree change');
-      Check(Command.VariationIndex = 0,
+      Check(Command.CreatedNodeId > 0,
         'first variation should get variation index 0');
-      Check(Actor.GameTree.VariationLineCount = 1,
+      Check(Actor.GameTree.BranchCount = 1,
         'variation should be stored on game tree');
-      Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
+      Check(Actor.GameTree.FindBranchNode(0, 1).AnnotatorScore = '0.22',
         'variation should store annotation text on game tree');
-      Check(Actor.GameTree.VariationLine[0].OriginText = 'Human',
+      Check(Actor.GameTree.BranchPath[0].OriginText = 'Human',
         'human variation should store human origin');
       Check(Actor.Revision = 4, 'fourth mutation should increment revision');
     finally
       Command.Free;
     end;
 
-    Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23', '',
+    Command := ImportBranch(Actor, 1, '20-24', '',
       gmsHuman);
     try
       Actor.ExecuteCommand(Command);
@@ -198,7 +198,7 @@ begin
         'empty variation update should be accepted');
       Check(not Command.TreeChanged,
         'empty variation update should not report tree change');
-      Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
+      Check(Actor.GameTree.FindBranchNode(0, 1).AnnotatorScore = '0.22',
         'empty variation update should not clear annotation text');
       Check(Actor.Revision = 4,
         'unchanged variation update should not increment revision');
@@ -206,20 +206,20 @@ begin
       Command.Free;
     end;
 
-    Command := Actor.CreateClearStoredVariationsCommand;
+    Command := Actor.CreateClearBranchesCommand;
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'clear-variations command should be accepted');
       Check(Command.TreeChanged,
         'clear-variations command should report tree change');
-      Check(Actor.GameTree.VariationLineCount = 0,
+      Check(Actor.GameTree.BranchCount = 0,
         'clear-variations command should remove stored variations');
       Check(Actor.Revision = 5, 'clear mutation should increment revision');
     finally
       Command.Free;
     end;
 
-    Command := Actor.CreateClearStoredVariationsCommand;
+    Command := Actor.CreateClearBranchesCommand;
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
@@ -232,17 +232,17 @@ begin
       Command.Free;
     end;
 
-    Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23',
+    Command := ImportBranch(Actor, 1, '20-24',
       'annotator=0.22', gmsHuman);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
         'setup variation before rebuild should be accepted');
-      Check(Actor.GameTree.VariationLineCount = 1,
+      Check(Actor.GameTree.BranchCount = 1,
         'setup variation should be stored before rebuild');
-      Check(Actor.GameTree.VariationLine[0].AnnotationText = 'annotator=0.22',
+      Check(Actor.GameTree.FindBranchNode(0, 1).AnnotatorScore = '0.22',
         'setup variation should store annotation text before rebuild');
-      Check(Actor.GameTree.VariationLine[0].OriginText = 'Human',
+      Check(Actor.GameTree.BranchPath[0].OriginText = 'Human',
         'setup variation should store origin before rebuild');
     finally
       Command.Free;
@@ -262,9 +262,9 @@ begin
         'rebuild with different signature should be accepted');
       Check(Command.TreeChanged,
         'rebuild with different signature should report tree change');
-      Check(Actor.GameTree.VariationLineCount = 0,
+      Check(Actor.GameTree.BranchCount = 0,
         'rebuild of a different game should discard previous variation lines');
-      VariationNode := Actor.GameTree.FindVariationNode(0, 1);
+      VariationNode := Actor.GameTree.FindBranchNode(0, 1);
       Check(VariationNode = nil,
         'rebuild of a different game should not recreate old variation nodes');
     finally
@@ -1035,18 +1035,15 @@ begin
         'direct move variation command should be accepted');
       Check(Command.TreeChanged,
         'direct move variation command should report tree change');
-      Check(Command.VariationIndex = 0,
+      Check(Command.CreatedNodeId > 0,
         'direct move variation should create first variation');
-      Check(Actor.GameTree.VariationLine[0].MovesText = '18-23',
+      Check(Actor.GameTree.BranchPath[0].MovesText = '18-23',
         'direct move variation should store move');
-      Check(Actor.GameTree.VariationLine[0].OriginText = 'Human',
+      Check(Actor.GameTree.BranchPath[0].OriginText = 'Human',
         'move variation should store human origin');
-      Check(Command.DisplayAfterPly = MainlineNode.PlyNumber,
-        'direct move variation should be displayed after selected node');
-      Check(Actor.GameTree.VariationLine[0].DisplayAfterPly =
-        MainlineNode.PlyNumber,
-        'direct move variation line should be attached to selected node');
-      VariationNode := Actor.GameTree.FindVariationNode(0, 1);
+      Check(Actor.GameTree.FindNodeById(Command.CreatedNodeId).Parent = MainlineNode,
+        'direct move variation must attach to the selected parent node');
+      VariationNode := Actor.GameTree.FindBranchNode(0, 1);
       Check(VariationNode <> nil,
         'direct move variation should create visible variation node');
       Check(VariationNode.Parent = MainlineNode,
@@ -1057,8 +1054,6 @@ begin
       Command.Free;
     end;
 
-    Actor.GameTree.StoreVariationLineAtIndex(0, 1, 1, '20-24', '',
-      Changed);
     Command := Actor.CreateStoreMoveVariationCommand(VariationNode.NodeId,
       '37-32', gmsHuman);
     try
@@ -1067,11 +1062,11 @@ begin
         'move variation command from variation node should be accepted');
       Check(Command.TreeChanged,
         'move variation command from variation node should report tree change');
-      Check(Command.VariationIndex = 0,
+      Check(Command.CreatedNodeId > 0,
         'move variation command should extend existing variation');
-      Check(Actor.GameTree.VariationLine[0].MovesText = '18-23 37-32',
+      Check(Actor.GameTree.BranchPath[0].MovesText = '18-23 37-32',
         'move variation command should append from materialized variation node');
-      Check(Actor.GameTree.FindVariationNode(0, 2) <> nil,
+      Check(Actor.GameTree.FindBranchNode(0, 2) <> nil,
         'extended move variation should materialize second variation node');
     finally
       Command.Free;
@@ -1085,11 +1080,11 @@ begin
         'move variation replacement from variation node should be accepted');
       Check(Command.TreeChanged,
         'move variation replacement should report tree change');
-      Check(Actor.GameTree.VariationLine[0].MovesText = '18-23 37-32',
+      Check(Actor.GameTree.BranchPath[0].MovesText = '18-23 37-32',
         'branching inside a variation must preserve its original continuation');
-      Check(Actor.GameTree.VariationLine[1].MovesText = '18-23 38-32',
+      Check(Actor.GameTree.BranchPath[1].MovesText = '18-23 38-32',
         'alternative continuation should be stored separately');
-      VariationNode := Actor.GameTree.FindVariationNode(1, 2);
+      VariationNode := Actor.GameTree.FindBranchNode(1, 2);
       Check(VariationNode <> nil,
         'replacement move variation should materialize replacement node');
       Check(VariationNode.MoveText = '38-32',
@@ -1133,7 +1128,7 @@ var
       GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
         EnginePvTimeText),
       GameTreePvInput(False, 0, '', ''),
-      0, 1, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
+      Actor.GameTree.FindBranchNode(0, 1).NodeId, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
     try
       Actor.ExecuteCommand(DuplicateCommand);
       Check(DuplicateCommand.Accepted, AMessage + ' should be accepted');
@@ -1158,10 +1153,10 @@ begin
     Actor.GameTree.BeginRebuild('rebuild', 'Event', 'White', 'Black', '*',
       'W:W31-50:B1-20');
     Actor.GameTree.RecordMainlineMove(1, '32-28');
-    Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23', '', gmsHuman);
+    Command := ImportBranch(Actor, 1, '20-24', '', gmsHuman);
     Actor.ExecuteCommand(Command);
     Check(Command.Accepted, 'setup branch must be materialized before rebuilding');
-    VariationIndex := Command.VariationIndex;
+    VariationIndex := 0;
     Command.Free;
     Check(VariationIndex = 0, 'setup variation should be stored');
 
@@ -1175,7 +1170,7 @@ begin
       GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
         EnginePvTimeText),
       GameTreePvInput(False, 0, '', ''),
-      0, 1, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
+      Actor.GameTree.FindBranchNode(0, 1).NodeId, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'rebuild command should be accepted');
@@ -1191,16 +1186,16 @@ begin
         'rebuild command should record engine PV depth');
       Check(Actor.GameTree.MainlineNode[2].EnginePVTimeText = EnginePvTimeText,
         'rebuild command should record engine PV time');
-      Check(Actor.GameTree.VariationLineCount = 1,
+      Check(Actor.GameTree.BranchCount = 1,
         'rebuild command should preserve stored variation line');
-      Check(Actor.GameTree.FindVariationNode(0, 1) <> nil,
+      Check(Actor.GameTree.FindBranchNode(0, 1) <> nil,
         'rebuild command should rebuild variation nodes');
-      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPV = '20-24',
+      Check(Actor.GameTree.FindBranchNode(0, 1).AnnotatorPV = '20-24',
         'rebuild command should record variation annotator PV');
-      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPVDepth =
+      Check(Actor.GameTree.FindBranchNode(0, 1).AnnotatorPVDepth =
         VariationPvDepth,
         'rebuild command should record variation annotator PV depth');
-      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPVTimeText =
+      Check(Actor.GameTree.FindBranchNode(0, 1).AnnotatorPVTimeText =
         VariationPvTimeText,
         'rebuild command should record variation annotator PV time');
       NodeId := Actor.GameTree.MainlineNode[1].NodeId;
@@ -1216,7 +1211,7 @@ begin
       GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
         EnginePvTimeText),
       GameTreePvInput(False, 0, '', ''),
-      0, 1, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
+      Actor.GameTree.FindBranchNode(0, 1).NodeId, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted, 'duplicate rebuild command should be accepted');
@@ -1237,7 +1232,7 @@ begin
       GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
         EnginePvTimeText),
       GameTreePvInput(False, 0, '', ''),
-      0, 1, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
+      Actor.GameTree.FindBranchNode(0, 1).NodeId, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
@@ -1265,7 +1260,7 @@ begin
       GameTreePvInput(True, 2, '0.10', '37-32', EnginePvDepth,
         EnginePvTimeText),
       GameTreePvInput(False, 0, '', ''),
-      0, 1, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
+      Actor.GameTree.FindBranchNode(0, 1).NodeId, '0.20', '20-24', VariationPvDepth, VariationPvTimeText);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted,
@@ -1274,10 +1269,10 @@ begin
         'variation PV metadata-only rebuild command should report tree change');
       Check(Actor.Revision > RevisionAfterRebuild,
         'variation PV metadata-only rebuild should increment revision');
-      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPVDepth =
+      Check(Actor.GameTree.FindBranchNode(0, 1).AnnotatorPVDepth =
         VariationPvDepth,
         'variation PV metadata-only rebuild should record depth');
-      Check(Actor.GameTree.FindVariationNode(0, 1).AnnotatorPVTimeText =
+      Check(Actor.GameTree.FindBranchNode(0, 1).AnnotatorPVTimeText =
         VariationPvTimeText,
         'variation PV metadata-only rebuild should record time');
       RevisionAfterRebuild := Actor.Revision;

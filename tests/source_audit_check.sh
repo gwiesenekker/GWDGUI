@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." >/dev/null && pwd -P)"
-MUTATION_PATTERN='\.RecordCompletedMoveData\(|\.RecordMainlineMove\(|\.RecordMainlineAnnotation\(|\.StoreVariationLine\(|\.StoreVariationLineAtIndex\(|\.ClearStoredVariations\(|\.BeginRebuild\(|\.SetHeader\(|\.SetGameState\(|\.SetClockState\(|\.SetNodeClockState\(|\.RecordClockState\(|\.RecordTimeControl\(|\.RecordEnginePV\(|\.RecordAnnotatorPV\(|\.RecordEnginePVForNodeId\(|\.RecordAnnotatorPVForNodeId\(|\.TrimMainlineToCount\(|\.RemoveMainlineFrom\(|\.RemoveStoredVariationLineAtIndex\('
+MUTATION_PATTERN='\.RecordBranchMove\(|\.RecordNodeAnnotation\(|\.SetNodeOrigin\(|\.ClearBranches\(|\.RemoveBranch\(|\.RecordCompletedMoveData\(|\.RecordMainlineMove\(|\.RecordMainlineAnnotation\(|\.BeginRebuild\(|\.SetHeader\(|\.SetGameState\(|\.SetClockState\(|\.SetNodeClockState\(|\.RecordClockState\(|\.RecordTimeControl\(|\.RecordEnginePV\(|\.RecordAnnotatorPV\(|\.RecordEnginePVForNodeId\(|\.RecordAnnotatorPVForNodeId\(|\.TrimMainlineToCount\(|\.RemoveMainlineFrom\('
 
 echo "==> source_audit_check"
 

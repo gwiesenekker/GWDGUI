@@ -3,7 +3,7 @@ program game_tree_validation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameOrchestrator, uDraughtsBoard;
+  uGameTreePdn, uGameOrchestrator, uDraughtsBoard, uTreeTestUtils;
 procedure Check(Value: Boolean; const MessageText: string);
 begin
   if not Value then raise Exception.Create(MessageText);
@@ -45,13 +45,13 @@ var
   Header: TGameTreeHeaderInput;
   KeptId: Int64;
 
-  procedure Rebuild(const Text: string; APvIndex: Integer = -1);
+  procedure Rebuild(const Text: string; AnalysisNodeId: Int64 = 0);
   begin
     TextToMoveList(Text, Moves);
     Execute(Actor, Actor.CreateRebuildFromInputsCommand(Header,
       GameTreeMainlineInput(Moves, nil, False, 0, 0, 0, 0),
       GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', ''),
-      APvIndex, 1, '0.75', '38-32'));
+      AnalysisNodeId, '0.75', '38-32'));
   end;
 begin
   Actor := TGameTreeActor.Create;
@@ -60,22 +60,22 @@ begin
     Header := GameTreeHeaderInput('carry', 'carry', '', '', '*', '', False,
       DefaultTimeControl);
     Rebuild('32-28 18-23 37-32 12-18');
-    Execute(Actor, Actor.CreateStoreVariationLineCommand(4, 3, '13-18', '', gmsHuman));
-    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+    Execute(Actor, ImportBranch(Actor, 3, '13-18', '', gmsHuman));
+    Execute(Actor, ImportBranch(Actor, 1,
       '20-24 38-32', '', gmsHuman));
-    KeptId := Actor.GameTree.FindVariationNode(1, 1).NodeId;
-    Rebuild('32-28 18-23', 1);
+    KeptId := Actor.GameTree.FindChildByMove(Actor.GameTree.MainlineNode[1], '20-24').NodeId;
+    Rebuild('32-28 18-23', KeptId);
     Check((Actor.GameTree.MainlineCount = 2) and
-      (Actor.GameTree.VariationLineCount = 1),
+      (Actor.GameTree.BranchCount = 1),
       'shorter reload must discard only branches whose parent no longer exists');
-    Check((Actor.GameTree.FindVariationNode(0, 1).NodeId = KeptId) and
-      (Actor.GameTree.FindVariationNode(0, 1).AnnotatorScore = '0.75'),
+    Check((Actor.GameTree.FindBranchNode(0, 1).NodeId = KeptId) and
+      (Actor.GameTree.FindBranchNode(0, 1).AnnotatorScore = '0.75'),
       'surviving branch identity and explicit PV target must survive index remapping');
-    Execute(Actor, Actor.CreateStoreVariationLineCommand(3, 2,
+    Execute(Actor, ImportBranch(Actor, 2,
       '38-32', '', gmsHuman));
     Rebuild('32-28 19-23');
-    Check((Actor.GameTree.VariationLineCount = 1) and
-      (Actor.GameTree.FindVariationNode(0, 1).NodeId = KeptId),
+    Check((Actor.GameTree.BranchCount = 1) and
+      (Actor.GameTree.FindBranchNode(0, 1).NodeId = KeptId),
       'changing a parent path must not transplant its branches to the replacement');
   finally
     Moves.Free;
@@ -105,19 +105,19 @@ begin
     Execute(Actor, Actor.CreateRecordAnnotatorPVCommand(
       Actor.GameTree.MainlineNode[1].NodeId, '0.5', '19-23'));
     RejectUnchanged(Actor, Actor.CreateAddMainlineMoveCommand(1, '19-23', gmsHuman));
-    RejectUnchanged(Actor, Actor.CreateStoreVariationLineCommand(1, 1,
+    RejectUnchanged(Actor, ImportBranch(Actor, 1,
       '19-23 46-41', 'must not leak', gmsHuman));
-    RejectUnchanged(Actor, Actor.CreateStoreVariationLineCommand(10, 10,
+    RejectUnchanged(Actor, ImportBranch(Actor, 10,
       '32-28', '', gmsHuman));
     RejectUnchanged(Actor, Actor.CreateStoreMoveVariationCommand(
       Actor.GameTree.MainlineNode[1].NodeId, '37-32', gmsHuman));
-    RejectUnchanged(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+    RejectUnchanged(Actor, ImportBranch(Actor, 1,
       '20-24 37-32', '@pdn-annotations:["wrong count"]', gmsHuman));
-    RejectUnchanged(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+    RejectUnchanged(Actor, ImportBranch(Actor, 1,
       '20-24', '@pdn-annotations:broken', gmsHuman));
-    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+    Execute(Actor, ImportBranch(Actor, 1,
       '20-24 37-32', '', gmsHuman));
-    NodeId := Actor.GameTree.FindVariationNode(0, 2).NodeId;
+    NodeId := Actor.GameTree.FindBranchNode(0, 2).NodeId;
     RejectUnchanged(Actor, Actor.CreateStoreMoveVariationCommand(NodeId, '32-28', gmsHuman));
     Execute(Actor, Actor.CreateStoreMoveVariationCommand(NodeId, '14-20', gmsHuman));
     Header := GameTreeHeaderInput('invalid', 'must not replace', '', '', '2-0',
@@ -130,18 +130,10 @@ begin
       GameTreeMainlineInput(Moves, nil, False, 0, 0, 0, 0),
       GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', '')));
     TextToMoveList('32-28', Moves);
-    Command := Actor.CreateRebuildFromInputsCommand(Header,
-      GameTreeMainlineInput(Moves, nil, False, 0, 0, 0, 0),
-      GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', ''));
-    Command.RebuildVariationLines.Add(TGameTreeVariationLine.Create(1, 1,
+    RejectUnchanged(Actor, ImportBranch(Actor, 1,
       '19-23 46-41', 'bad variation'));
-    RejectUnchanged(Actor, Command);
-    Command := Actor.CreateRebuildFromInputsCommand(Header,
-      GameTreeMainlineInput(Moves, nil, False, 0, 0, 0, 0),
-      GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', ''));
-    Command.RebuildVariationLines.Add(TGameTreeVariationLine.Create(1, 1,
+    RejectUnchanged(Actor, ImportBranch(Actor, 1,
       '20-24', '@pdn-annotations:["too", "many"]'));
-    RejectUnchanged(Actor, Command);
     Header.StartingFEN := 'B:W99:B1';
     RejectUnchanged(Actor, Actor.CreateSetHeaderCommand(Header));
     Header.StartingFEN := 'B:W31-50:B1-20';

@@ -8,9 +8,6 @@ uses
   Classes, SysUtils, uGameMoveHistory, uGameOrchestrator, uGameTree;
 
 type
-  TGameTreeVariationPlyCallback = procedure(AGameTree: TGameTree;
-    AVariation: TGameTreeVariationLine; AVariationIndex,
-    AVariationPly: Integer) of object;
   TGameTreePvInput = record
     RecordPV: Boolean;
     BasePly: Integer;
@@ -42,21 +39,6 @@ type
     WhiteUsedSeconds: Double;
     BlackUsedSeconds: Double;
   end;
-  TGameTreeVariationLineInput = record
-    Variation: TGameTreeVariationLine;
-    VariationIndex: Integer;
-    Moves: TStrings;
-    BeforeMove: TGameTreeVariationPlyCallback;
-  end;
-  TGameTreeVariationPvInput = record
-    Variation: TGameTreeVariationLine;
-    VariationIndex: Integer;
-    VariationPly: Integer;
-    Score: string;
-    PV: string;
-    Depth: string;
-    TimeText: string;
-  end;
 
 procedure TextToMoveList(const AMovesText: string; AMoves: TStrings);
 function GameTreePvInput(ARecordPV: Boolean; ABasePly: Integer;
@@ -71,13 +53,6 @@ function GameTreeHeaderInput(const ASignature, AEventName, AWhiteName,
 function GameTreeMainlineInput(AMoves, AAnnotations: TStrings;
   ARecordClock: Boolean; AWhiteRemainingSeconds, ABlackRemainingSeconds,
   AWhiteUsedSeconds, ABlackUsedSeconds: Double): TGameTreeMainlineInput;
-function GameTreeVariationLineInput(AVariation: TGameTreeVariationLine;
-  AVariationIndex: Integer; AMoves: TStrings;
-  ABeforeMove: TGameTreeVariationPlyCallback): TGameTreeVariationLineInput;
-function GameTreeVariationPvInput(AVariation: TGameTreeVariationLine;
-  AVariationIndex, AVariationPly: Integer; const AScore,
-  APV: string; const ADepth: string = '';
-  const ATimeText: string = ''): TGameTreeVariationPvInput;
 procedure BeginGameTreeRebuild(AGameTree: TGameTree;
   const AHeader: TGameTreeHeaderInput);
 procedure RecordGameTreeMainline(AGameTree: TGameTree;
@@ -86,11 +61,6 @@ function RecordGameTreeCompletedMoves(AGameTree: TGameTree;
   const AMoves: TGameMoveDataArray): Boolean;
 procedure RecordGameTreeAnalysis(AGameTree: TGameTree;
   const AEnginePV, AAnnotatorPV: TGameTreePvInput);
-procedure RecordGameTreeVariationLine(AGameTree: TGameTree;
-  const AVariationLine: TGameTreeVariationLineInput);
-procedure RecordGameTreeVariationAnnotatorPV(AGameTree: TGameTree;
-  const AVariationPV: TGameTreeVariationPvInput);
-
 implementation
 
 uses uPdn, uDraughtsBoard;
@@ -146,30 +116,6 @@ begin
   Result.BlackRemainingSeconds := ABlackRemainingSeconds;
   Result.WhiteUsedSeconds := AWhiteUsedSeconds;
   Result.BlackUsedSeconds := ABlackUsedSeconds;
-end;
-
-function GameTreeVariationLineInput(AVariation: TGameTreeVariationLine;
-  AVariationIndex: Integer; AMoves: TStrings;
-  ABeforeMove: TGameTreeVariationPlyCallback): TGameTreeVariationLineInput;
-begin
-  Result.Variation := AVariation;
-  Result.VariationIndex := AVariationIndex;
-  Result.Moves := AMoves;
-  Result.BeforeMove := ABeforeMove;
-end;
-
-function GameTreeVariationPvInput(AVariation: TGameTreeVariationLine;
-  AVariationIndex, AVariationPly: Integer; const AScore,
-  APV: string; const ADepth: string; const ATimeText: string
-  ): TGameTreeVariationPvInput;
-begin
-  Result.Variation := AVariation;
-  Result.VariationIndex := AVariationIndex;
-  Result.VariationPly := AVariationPly;
-  Result.Score := AScore;
-  Result.PV := APV;
-  Result.Depth := ADepth;
-  Result.TimeText := ATimeText;
 end;
 
 procedure BeginGameTreeRebuild(AGameTree: TGameTree;
@@ -253,70 +199,6 @@ begin
   if AAnnotatorPV.RecordPV and (Trim(AAnnotatorPV.PV) <> '') then
     AGameTree.RecordAnnotatorPV(AAnnotatorPV.BasePly, AAnnotatorPV.Score,
       AAnnotatorPV.PV, AAnnotatorPV.Depth, AAnnotatorPV.TimeText);
-end;
-
-procedure RecordGameTreeVariationLine(AGameTree: TGameTree;
-  const AVariationLine: TGameTreeVariationLineInput);
-var
-  I: Integer;
-  LParentNode: TGameTreePlyNode;
-  LVariationNode: TGameTreePlyNode;
-  Annotations: TStringList;
-begin
-  if (AGameTree = nil) or (AVariationLine.Variation = nil) or
-    (AVariationLine.Moves = nil) then
-    Exit;
-  if AVariationLine.Moves.Count = 0 then
-    Exit;
-
-  if AVariationLine.Variation.BasePly <= 0 then
-    LParentNode := AGameTree.Root
-  else
-    LParentNode := AGameTree.MainlineNode[
-      AVariationLine.Variation.BasePly];
-  if LParentNode = nil then
-    Exit;
-
-  Annotations := TStringList.Create;
-  try
-    DecodeVariationAnnotations(AVariationLine.Variation.AnnotationText,
-      AVariationLine.Moves.Count, Annotations);
-    LVariationNode := nil;
-    for I := 0 to AVariationLine.Moves.Count - 1 do
-    begin
-      if Assigned(AVariationLine.BeforeMove) then
-        AVariationLine.BeforeMove(AGameTree, AVariationLine.Variation,
-          AVariationLine.VariationIndex, I + 1);
-      LVariationNode := AGameTree.RecordVariationMove(LParentNode,
-        AVariationLine.Variation.BasePly,
-        AVariationLine.Variation.DisplayAfterPly,
-        AVariationLine.VariationIndex, I + 1, AVariationLine.Moves[I]);
-      LParentNode := LVariationNode;
-      if Annotations[I] <> '' then
-        AGameTree.RecordVariationAnnotation(AVariationLine.Variation.BasePly,
-          AVariationLine.Variation.DisplayAfterPly,
-          AVariationLine.VariationIndex, I + 1, Annotations[I]);
-    end;
-    AGameTree.TrimVariationLine(AVariationLine.Variation.BasePly,
-      AVariationLine.Variation.DisplayAfterPly,
-      AVariationLine.VariationIndex, AVariationLine.Moves.Count);
-
-  finally
-    Annotations.Free;
-  end;
-end;
-
-procedure RecordGameTreeVariationAnnotatorPV(AGameTree: TGameTree;
-  const AVariationPV: TGameTreeVariationPvInput);
-begin
-  if (AGameTree = nil) or (AVariationPV.Variation = nil) or
-    (Trim(AVariationPV.PV) = '') then
-    Exit;
-
-  AGameTree.RecordVariationAnnotatorPV(AVariationPV.Variation.BasePly,
-    AVariationPV.Variation.DisplayAfterPly, AVariationPV.VariationIndex,
-    AVariationPV.VariationPly, AVariationPV.Score, AVariationPV.PV,
-    AVariationPV.Depth, AVariationPV.TimeText);
 end;
 
 end.

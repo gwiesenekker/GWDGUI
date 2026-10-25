@@ -4,7 +4,7 @@ program game_tree_pdn_filter_check;
 
 uses
   Classes, SysUtils, uDraughtsBoard, uGameOrchestrator, uGameTree, uGameTreeBuilder,
-  uGameTreePdn, uGameTreeSearchRef, uPvSnapshot;
+  uGameTreePdn, uGameTreeSearchRef, uPvSnapshot, uTreeTestUtils;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -61,13 +61,11 @@ begin
     Check(GameTreeA.FindNodeById(Node.NodeId) = Node,
       'mainline node id should resolve to node');
 
-    VariationIndex := GameTreeA.StoreVariationLine(2, 1,
-      '16-21 37-32', '');
-    Check(VariationIndex >= 0, 'variation line should be stored');
-    VariationNode := GameTreeA.RecordVariationMove(Node, 1, 2,
-      VariationIndex, 1, '16-21');
+    AddFixtureBranch(GameTreeA, 1, '16-21 37-32', '');
+    VariationIndex := 0;
+    VariationNode := GameTreeA.FindBranchNode(0, 1);
     Check(VariationNode <> nil, 'variation node should be created');
-    Check(GameTreeA.FindVariationNode(VariationIndex, 1) = VariationNode,
+    Check(GameTreeA.FindBranchNode(VariationIndex, 1) = VariationNode,
       'variation node should resolve by variation index and ply');
     Check(GameTreeA.FindNodeById(VariationNode.NodeId) = VariationNode,
       'variation node id should resolve to node');
@@ -154,17 +152,15 @@ begin
     Check(GameTree.FindNodeById(SecondId) = nil,
       'old changed node id should no longer resolve');
 
-    VariationIndex := GameTree.StoreVariationLine(1, 1, '20-24 34-29', '');
+    AddFixtureBranch(GameTree, 1, '20-24 34-29', '');
+    VariationIndex := GameTree.BranchCount - 1;
     TextToMoveList('20-24 34-29', VariationMoves);
-    RecordGameTreeVariationLine(GameTree,
-      GameTreeVariationLineInput(GameTree.VariationLine[VariationIndex],
-      VariationIndex, VariationMoves, nil));
-    VariationId := GameTree.FindVariationNode(VariationIndex, 1).NodeId;
 
-    RecordGameTreeVariationLine(GameTree,
-      GameTreeVariationLineInput(GameTree.VariationLine[VariationIndex],
-      VariationIndex, VariationMoves, nil));
-    Check(GameTree.FindVariationNode(VariationIndex, 1).NodeId = VariationId,
+    VariationId := GameTree.FindBranchNode(VariationIndex, 1).NodeId;
+    AddFixtureBranch(GameTree, 1, '20-24 34-29', '');
+
+
+    Check(GameTree.FindBranchNode(VariationIndex, 1).NodeId = VariationId,
       'same variation move should preserve node id');
   finally
     VariationMoves.Free;
@@ -428,21 +424,19 @@ begin
     GameTree.RecordMainlineMove(1, '32-28');
     GameTree.RecordMainlineMove(2, '16-21');
 
-    VariationIndex := GameTree.StoreVariationLine(1, 1, '18-23',
+    AddFixtureBranch(GameTree, 1, '18-23',
       'annotator=0.10');
+    VariationIndex := GameTree.BranchCount - 1;
     TextToMoveList('18-23', Moves);
-    RecordGameTreeVariationLine(GameTree,
-      GameTreeVariationLineInput(GameTree.VariationLine[VariationIndex],
-      VariationIndex, Moves, nil));
 
-    VariationIndex := GameTree.StoreVariationLine(1, 1, '20-24',
+
+    AddFixtureBranch(GameTree, 1, '20-24',
       'annotator=0.20');
+    VariationIndex := GameTree.BranchCount - 1;
     TextToMoveList('20-24', Moves);
-    RecordGameTreeVariationLine(GameTree,
-      GameTreeVariationLineInput(GameTree.VariationLine[VariationIndex],
-      VariationIndex, Moves, nil));
 
-    Check(GameTree.VariationLineCount = 2,
+
+    Check(GameTree.BranchCount = 2,
       'same-ply variations should be stored as separate lines');
 
     Options := DefaultGameTreePdnRenderOptions;
@@ -494,11 +488,10 @@ begin
       'Black', '*', 'W:W31-50:B1-20');
     GameTree.RecordMainlineMove(1, '32-28');
 
-    VariationIndex := GameTree.StoreVariationLine(1, 1, '18-23', 'note');
+    AddFixtureBranch(GameTree, 1, '18-23', 'note');
+    VariationIndex := GameTree.BranchCount - 1;
     TextToMoveList('18-23', Moves);
-    RecordGameTreeVariationLine(GameTree,
-      GameTreeVariationLineInput(GameTree.VariationLine[VariationIndex],
-      VariationIndex, Moves, nil));
+
 
     Options := DefaultGameTreePdnRenderOptions;
     Text := RenderWithOptions(GameTree, Options);
@@ -526,12 +519,11 @@ begin
     GameTree.RecordMainlineMove(1, '32-28');
     GameTree.RecordMainlineMove(2, '16-21');
 
-    VariationIndex := GameTree.StoreVariationLine(1, 1, '18-23',
+    AddFixtureBranch(GameTree, 1, '18-23',
       'annotator=0.10');
+    VariationIndex := GameTree.BranchCount - 1;
     TextToMoveList('18-23', Moves);
-    RecordGameTreeVariationLine(GameTree,
-      GameTreeVariationLineInput(GameTree.VariationLine[VariationIndex],
-      VariationIndex, Moves, nil));
+
 
     Options := DefaultGameTreePdnRenderOptions;
     Text := GameTreeToPdnTextEx(GameTree, Options);

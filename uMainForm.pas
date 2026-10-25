@@ -23,7 +23,6 @@ type
     BeforeMove: Boolean;
     Start: Integer;
     Length: Integer;
-    VariationIndex: Integer;
     VariationPly: Integer;
     BasePly: Integer;
     MovesText: string;
@@ -198,7 +197,7 @@ type
     function SnapshotPvSignatureMatches(const ASignature: string): Boolean;
     function SnapshotSyncSignatureMatches(const ASignature: string): Boolean;
     function State: TGameOrchestratorState;
-    function VariationLineCount: Integer;
+    function BranchCount: Integer;
     function WhiteNameText: string;
     procedure AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
     procedure AssignSetupTo(out ASetup: TGameSetup);
@@ -396,8 +395,6 @@ type
       ): TGameTree;
     function PublishRunnerSnapshotToGameTree(AGame: TRunningGame;
       ASnapshot: TGameRunnerSnapshot): TGameTree;
-    procedure ApplyVariationBrowsePly(AVariationIndex, AVariationPly: Integer;
-      AGameTree: TGameTree);
     procedure ApplyAnnotatorVariationBrowsePly(ABasePly, AVariationPly: Integer;
       const AMovesText: string; AGameTree: TGameTree);
     procedure BoardMouseDown(Sender: TObject; Button: TMouseButton;
@@ -414,9 +411,6 @@ type
       const AHeader: TGameTreeHeaderInput;
       const AMainline: TGameTreeMainlineInput;
       const AEnginePV, AAnnotatorPV: TGameTreePvInput;
-      AVariationPvIndex, AVariationPvPly: Integer;
-      const AVariationPvScore, AVariationPvText, AVariationPvDepth,
-      AVariationPvTimeText: string;
       out AErrorText: string): Boolean;
     function SetGameTreeHeader(AActor: TGameTreeActor;
       const AHeader: TGameTreeHeaderInput; out AErrorText: string): Boolean;
@@ -451,11 +445,7 @@ type
       AGameTree: TGameTree; ANodeId: Int64; const AScore,
       APrincipalVariation, ADepth, ATimeText: string;
       out AErrorText: string): Boolean;
-    function ClearGameTreeStoredVariations(AActor: TGameTreeActor): Boolean;
-    function StoreGameTreeVariationLine(AActor: TGameTreeActor;
-      ADisplayAfterPly, ABasePly: Integer; const AMovesText,
-      AAnnotationText: string; ASource: TGameTreeMoveSource;
-      out AErrorText: string; AApplyResult: Boolean = True): Boolean;
+    function ClearGameTreeBranches(AActor: TGameTreeActor): Boolean;
     function TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
       out AActor: TGameTreeActor; out AGameTree: TGameTree;
       out ANode: TGameTreePlyNode): Boolean;
@@ -503,13 +493,13 @@ type
     function CanAcceptHumanBoardMove: Boolean;
     function HasLegalDisplayedMove: Boolean;
     function GetBrowseBasePly: Integer;
-    function GetBrowseVariationIndex: Integer;
+    function GetBrowsingBranch: Boolean;
     function GetBrowseVariationPly: Integer;
     property BrowseBasePly: Integer read GetBrowseBasePly;
-    property BrowseVariationIndex: Integer read GetBrowseVariationIndex;
+    property BrowsingBranch: Boolean read GetBrowsingBranch;
     property BrowseVariationPly: Integer read GetBrowseVariationPly;
     procedure ClearHumanMoveSelection;
-    procedure ClearStoredTreeVariations(AGameTree: TGameTree);
+    procedure ClearTreeBranches(AGameTree: TGameTree);
     procedure ClearVariationExploration;
     function ApplyGameMoveMemoCaretBrowse: Boolean;
     procedure CopyGameTreePdnClick(Sender: TObject);
@@ -521,8 +511,6 @@ type
     procedure StopSelectedGame(Sender: TObject);
     function CurrentMoveCount: Integer;
     function CurrentVariationMoveCount(AGameTree: TGameTree): Integer;
-    function VariationNodeMoveCount(AGameTree: TGameTree;
-      AVariationIndex: Integer): Integer;
     function GameTreeMainlineMovesText(AGameTree: TGameTree): string;
     function DisplayedMovesText(AGameTree: TGameTree): string;
     function DisplayedMoveContext(AGameTree: TGameTree;
@@ -677,15 +665,8 @@ type
     procedure TournamentSelectGame(Sender: TObject; AGame: TObject);
     procedure TournamentStartGame(Sender: TObject; const ASetup: TGameSetup;
       const ATitlePrefix: string; out AGame: TObject);
-    function TreeVariationLineByIndex(AIndex: Integer;
-      AGameTree: TGameTree): TGameTreeVariationLine;
-    procedure LoadTreeVariationsFromLegacyText(AGameTree: TGameTree;
+    procedure ImportPdnBranches(AGameTree: TGameTree;
       const AVariationsText, AVariationAnnotationsText: string);
-    function FindTreeVariationByDisplayAfterPly(ADisplayAfterPly: Integer;
-      AGameTree: TGameTree): Integer;
-    function StoreTreeVariation(ADisplayAfterPly, ABasePly: Integer;
-      const AMovesText, AAnnotationText: string;
-      AGameTree: TGameTree; AApplyResult: Boolean = True): Boolean;
     procedure UpdateBoardInfo;
     procedure RefreshDisplayFromGameTree(AGameTree: TGameTree;
       AForceViews: Boolean);
@@ -1085,10 +1066,10 @@ begin
   Result := FGameTree.GameState;
 end;
 
-function TRunningGame.VariationLineCount: Integer;
+function TRunningGame.BranchCount: Integer;
 begin
   if FGameTree <> nil then
-    Result := FGameTree.VariationLineCount
+    Result := FGameTree.BranchCount
   else
     Result := 0;
 end;
@@ -2124,16 +2105,6 @@ begin
       FBlackPlayerEdit.Text);
 end;
 
-function TMainForm.TreeVariationLineByIndex(AIndex: Integer;
-  AGameTree: TGameTree): TGameTreeVariationLine;
-begin
-  Result := nil;
-  if (AGameTree = nil) or (AIndex < 0) or
-    (AIndex >= AGameTree.VariationLineCount) then
-    Exit;
-  Result := AGameTree.VariationLine[AIndex];
-end;
-
 function TMainForm.AppendGameTreeMainlineMove(AActor: TGameTreeActor;
   AGameTree: TGameTree; const AMove: string; ASource: TGameTreeMoveSource;
   out ACreatedNodeId: Int64; out AErrorText: string): Boolean;
@@ -2182,9 +2153,7 @@ end;
 
 function TMainForm.RebuildGameTreeFromInputs(AActor: TGameTreeActor;
   const AHeader: TGameTreeHeaderInput; const AMainline: TGameTreeMainlineInput;
-  const AEnginePV, AAnnotatorPV: TGameTreePvInput; AVariationPvIndex,
-  AVariationPvPly: Integer; const AVariationPvScore,
-  AVariationPvText, AVariationPvDepth, AVariationPvTimeText: string;
+  const AEnginePV, AAnnotatorPV: TGameTreePvInput;
   out AErrorText: string): Boolean;
 var
   Command: TGameTreeCommand;
@@ -2198,9 +2167,7 @@ begin
   end;
 
   Command := AActor.CreateRebuildFromInputsCommand(AHeader, AMainline,
-    AEnginePV, AAnnotatorPV, AVariationPvIndex, AVariationPvPly,
-    AVariationPvScore, AVariationPvText, AVariationPvDepth,
-    AVariationPvTimeText);
+    AEnginePV, AAnnotatorPV);
   try
     Result := ExecuteAndApplyGameTreeCommand(AActor, AActor.GameTree,
       Command, False, AErrorText);
@@ -2485,7 +2452,7 @@ begin
   end;
 end;
 
-function TMainForm.ClearGameTreeStoredVariations(AActor: TGameTreeActor): Boolean;
+function TMainForm.ClearGameTreeBranches(AActor: TGameTreeActor): Boolean;
 var
   Command: TGameTreeCommand;
   LErrorText: string;
@@ -2494,38 +2461,10 @@ begin
   if AActor = nil then
     Exit;
 
-  Command := AActor.CreateClearStoredVariationsCommand;
+  Command := AActor.CreateClearBranchesCommand;
   try
     Result := ExecuteAndApplyGameTreeCommand(AActor, AActor.GameTree, Command,
       False, LErrorText);
-  finally
-    Command.Free;
-  end;
-end;
-
-function TMainForm.StoreGameTreeVariationLine(AActor: TGameTreeActor;
-  ADisplayAfterPly, ABasePly: Integer; const AMovesText,
-  AAnnotationText: string; ASource: TGameTreeMoveSource;
-  out AErrorText: string; AApplyResult: Boolean): Boolean;
-var
-  Command: TGameTreeCommand;
-begin
-  Result := False;
-  AErrorText := '';
-  if (AActor = nil) or (ADisplayAfterPly < 0) or (ABasePly < 0) then
-  begin
-    AErrorText := 'invalid variation line target';
-    Exit;
-  end;
-
-  Command := AActor.CreateStoreVariationLineCommand(ADisplayAfterPly,
-    ABasePly, AMovesText, AAnnotationText, ASource);
-  try
-    if AApplyResult then
-      Result := ExecuteAndApplyGameTreeCommand(AActor, AActor.GameTree,
-        Command, False, AErrorText)
-    else
-      Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
   finally
     Command.Free;
   end;
@@ -2726,7 +2665,7 @@ begin
     Result := RebuildGameTreeFromInputs(Actor, LHeader,
       GameTreeMainlineInput(LMoves, LAnnotations, False, 0, 0, 0, 0),
       GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', ''),
-      -1, 0, '', '', '', '', LErrorText);
+      LErrorText);
   finally
     LAnnotations.Free;
     LMoves.Free;
@@ -2792,7 +2731,7 @@ begin
       LTip := LGameTree.MainlineNode[LGameTree.MainlineCount];
     // Only an unfinished mainline can grow. A completed game's result and
     // official move sequence remain intact while exploring continuations.
-    if (BrowseVariationIndex < 0) and
+    if (not BrowsingBranch) and
       (CurrentDisplayedGameTreeNode(LGameTree) = LTip) and
       (ResultForTree(LGameTree) = '*') and (LState <> gosGameOver) then
     begin
@@ -3002,7 +2941,7 @@ begin
     Exit;
   end;
   if (Trim(FVariationBrowseMoves) <> '') or
-    ((BrowseVariationIndex >= 0) and (BrowseVariationPly > 0)) then
+    BrowsingBranch then
   begin
     ShowGuiOkDialog(Self, 'Auto Play',
       'Press Escape to leave variation browsing first.');
@@ -4090,7 +4029,7 @@ begin
     FStandaloneEventName := LEventName;
     ClearVariationExploration;
     FTreeCursor.Select(FGameTree, FGameTree.Root);
-    LoadTreeVariationsFromLegacyText(FGameTree, AGame.MoveVariationsText,
+    ImportPdnBranches(FGameTree, AGame.MoveVariationsText,
       AGame.MoveVariationAnnotationsText);
     ClearDisplayedPvCache(LBoard, CurrentMoveCount);
     FViewedGameId := -1;
@@ -4113,35 +4052,6 @@ begin
     Result := dsBlack
   else
     Result := dsWhite;
-end;
-
-procedure TMainForm.ApplyVariationBrowsePly(AVariationIndex,
-  AVariationPly: Integer; AGameTree: TGameTree);
-var
-  LGameTree: TGameTree;
-  LMoveCount: Integer;
-  VariationLine: TGameTreeVariationLine;
-begin
-  ClearHumanMoveSelection;
-  LGameTree := AGameTree;
-  if LGameTree = nil then
-    Exit;
-  VariationLine := TreeVariationLineByIndex(AVariationIndex, LGameTree);
-  if VariationLine = nil then
-    Exit;
-  LMoveCount := VariationNodeMoveCount(LGameTree, AVariationIndex);
-  if LMoveCount = 0 then Exit;
-  if AVariationPly < 0 then AVariationPly := 0;
-  if AVariationPly > LMoveCount then AVariationPly := LMoveCount;
-  ClearVariationExploration;
-  if AVariationPly < LMoveCount then
-    FTreeCursor.SelectBefore(LGameTree,
-      LGameTree.FindVariationNode(AVariationIndex, AVariationPly + 1))
-  else
-    FTreeCursor.Select(LGameTree,
-      LGameTree.FindVariationNode(AVariationIndex, AVariationPly));
-
-  RefreshDisplayFromGameTree(LGameTree, False);
 end;
 
 procedure TMainForm.ApplyAnnotatorVariationBrowsePly(ABasePly,
@@ -4198,75 +4108,35 @@ begin
 end;
 
 function TMainForm.GetBrowseBasePly: Integer;
-var
-  Tree: TGameTree;
-  Node: TGameTreePlyNode;
-  Base, Display, Index, Ply: Integer;
+var Node: TGameTreePlyNode;
 begin
-  Tree := ActiveGameTree;
-  Node := FTreeCursor.Resolve(Tree);
+  Node := FTreeCursor.Resolve(ActiveGameTree);
   if FTreeCursor.Following or (Node = nil) then Exit(-1);
-  if (FVariationBrowseMoves = '') and
-    Tree.TryLocateVariationNode(Node, Base, Display, Index, Ply) then
-    Exit(Base);
   Result := Node.PlyNumber;
 end;
 
-function TMainForm.GetBrowseVariationIndex: Integer;
-var
-  Tree: TGameTree;
-  Node: TGameTreePlyNode;
-  Base, Display, Index, Ply: Integer;
+function TMainForm.GetBrowsingBranch: Boolean;
+var Tree: TGameTree; Node: TGameTreePlyNode;
 begin
-  Result := -1;
   Tree := ActiveGameTree;
   Node := FTreeCursor.Resolve(Tree);
-  if FTreeCursor.Following or (Node = nil) or (FVariationBrowseMoves <> '') then Exit;
-  if Tree.TryLocateVariationNode(Node, Base, Display, Index, Ply) then
-    Result := Index;
+  Result := (Tree <> nil) and (Node <> nil) and not FTreeCursor.Following and
+    not Tree.IsMainlineNode(Node);
 end;
 
 function TMainForm.GetBrowseVariationPly: Integer;
-var
-  Tree: TGameTree;
-  Node: TGameTreePlyNode;
-  Base, Display, Index, Ply: Integer;
 begin
-  if FVariationBrowseMoves <> '' then Exit(FPreviewPly);
-  Result := 0;
-  Tree := ActiveGameTree;
-  Node := FTreeCursor.Resolve(Tree);
-  if FTreeCursor.Following or (Node = nil) then Exit;
-  if Tree.TryLocateVariationNode(Node, Base, Display, Index, Ply) then
-    Result := Ply;
+  Result := FPreviewPly;
 end;
 
 function TMainForm.CurrentVariationMoveCount(AGameTree: TGameTree): Integer;
-var
-  LMoves: TStringList;
+var Moves: TStringList;
 begin
-  if Trim(FVariationBrowseMoves) <> '' then
-  begin
-    LMoves := TStringList.Create;
-    try
-      TextToMoveList(FVariationBrowseMoves, LMoves);
-      Exit(LMoves.Count);
-    finally
-      LMoves.Free;
-    end;
-  end;
-  Result := VariationNodeMoveCount(AGameTree, BrowseVariationIndex);
-end;
-
-function TMainForm.VariationNodeMoveCount(AGameTree: TGameTree;
-  AVariationIndex: Integer): Integer;
-begin
-  Result := 0;
-  if AGameTree = nil then
-    Exit;
-
-  while AGameTree.FindVariationNode(AVariationIndex, Result + 1) <> nil do
-    Inc(Result);
+  Moves := TStringList.Create;
+  try
+    TextToMoveList(FVariationBrowseMoves, Moves);
+    Result := Moves.Count;
+  finally Moves.Free; end;
 end;
 
 function TMainForm.GameTreeMainlineMovesText(AGameTree: TGameTree): string;
@@ -4409,96 +4279,54 @@ begin
   RefreshDisplayFromGameTree(FGameTree, True);
 end;
 
-procedure TMainForm.ClearStoredTreeVariations(AGameTree: TGameTree);
+procedure TMainForm.ClearTreeBranches(AGameTree: TGameTree);
 var
   Actor: TGameTreeActor;
 begin
   SetLength(FVariationHits, 0);
   Actor := ActorForGameTree(AGameTree);
-  ClearGameTreeStoredVariations(Actor);
+  ClearGameTreeBranches(Actor);
   ClearVariationExploration;
 end;
 
-procedure TMainForm.LoadTreeVariationsFromLegacyText(AGameTree: TGameTree;
+procedure TMainForm.ImportPdnBranches(AGameTree: TGameTree;
   const AVariationsText, AVariationAnnotationsText: string);
 var
-  I: Integer;
-  AnnotationText: string;
-  BasePly: Integer;
-  DisplayAfterPly: Integer;
-  Lines: TStringList;
-  LStoredAny: Boolean;
-  MovesText: string;
-  RawAnnotationText: string;
-  AnnotationLines: TStringList;
+  I, BasePly, DisplayPly: Integer;
+  BranchText, Annotation, ErrorText, RawAnnotation: string;
+  Lines, Annotations: TStringList;
+  Actor: TGameTreeActor;
+  ParentNode: TGameTreePlyNode;
+  Command: TGameTreeCommand;
 begin
-  if AGameTree = nil then
-    Exit;
-
-  ClearStoredTreeVariations(AGameTree);
+  if AGameTree = nil then Exit;
+  Actor := ActorForGameTree(AGameTree);
+  if Actor = nil then Exit;
+  ClearTreeBranches(AGameTree);
   Lines := TStringList.Create;
-  AnnotationLines := TStringList.Create;
+  Annotations := TStringList.Create;
   try
-    LStoredAny := False;
     Lines.Text := AVariationsText;
-    AnnotationLines.Text := AVariationAnnotationsText;
+    Annotations.Text := AVariationAnnotationsText;
     for I := 0 to Lines.Count - 1 do
-      if Trim(Lines[I]) <> '' then
-      begin
-        RawAnnotationText := '';
-        if I < AnnotationLines.Count then
-          RawAnnotationText := Trim(AnnotationLines[I]);
-        if DecodePdnVariationLine(Lines[I], RawAnnotationText, I,
-          DisplayAfterPly, BasePly, MovesText, AnnotationText) then
-          if StoreTreeVariation(DisplayAfterPly, BasePly, MovesText,
-            AnnotationText, AGameTree, False) then
-            LStoredAny := True;
-      end;
-    if LStoredAny then
-      RefreshDisplayFromGameTree(AGameTree, True);
+    begin
+      RawAnnotation := '';
+      if I < Annotations.Count then RawAnnotation := Annotations[I];
+      if not DecodePdnVariationLine(Lines[I], RawAnnotation, I,
+        DisplayPly, BasePly, BranchText, Annotation) then Continue;
+      if BasePly = 0 then ParentNode := AGameTree.Root
+      else ParentNode := AGameTree.MainlineNode[BasePly];
+      if ParentNode = nil then Continue;
+      Command := Actor.CreateImportBranchCommand(ParentNode.NodeId, BranchText, Annotation);
+      try
+        ExecuteGameTreeCommand(Actor, Command, ErrorText);
+      finally Command.Free; end;
+    end;
+    RefreshDisplayFromGameTree(AGameTree, True);
   finally
-    AnnotationLines.Free;
+    Annotations.Free;
     Lines.Free;
   end;
-end;
-
-function TMainForm.FindTreeVariationByDisplayAfterPly(
-  ADisplayAfterPly: Integer; AGameTree: TGameTree): Integer;
-begin
-  Result := -1;
-  if AGameTree <> nil then
-    Result := AGameTree.FindStoredVariationByDisplayAfterPly(
-      ADisplayAfterPly);
-end;
-
-function TMainForm.StoreTreeVariation(ADisplayAfterPly, ABasePly: Integer;
-  const AMovesText, AAnnotationText: string; AGameTree: TGameTree;
-  AApplyResult: Boolean): Boolean;
-var
-  Actor: TGameTreeActor;
-  LErrorText: string;
-  LExisting: TGameTreeVariationLine;
-begin
-  Result := False;
-  if (ADisplayAfterPly < 0) or (ABasePly < 0) or (AGameTree = nil) then
-    Exit;
-
-  LExisting := TreeVariationLineByIndex(
-    AGameTree.FindStoredVariationByDisplayAfterPly(ADisplayAfterPly),
-    AGameTree);
-  if (LExisting <> nil) and
-    (LExisting.DisplayAfterPly = ADisplayAfterPly) and
-    (LExisting.BasePly = ABasePly) and
-    (Trim(LExisting.MovesText) = Trim(AMovesText)) and
-    (Trim(LExisting.AnnotationText) = Trim(AAnnotationText)) then
-    Exit;
-
-  Actor := ActorForGameTree(AGameTree);
-  if Actor = nil then
-    Exit;
-
-  Result := StoreGameTreeVariationLine(Actor, ADisplayAfterPly, ABasePly,
-    AMovesText, AAnnotationText, gmsUnknown, LErrorText, AApplyResult);
 end;
 
 function TMainForm.EngineSupportsMcts(AEngine: TExternalEngineDefinition): Boolean;
@@ -4617,7 +4445,7 @@ begin
     Exit;
   if not (AInput.State in [gosStopped, gosGameOver]) then
     Exit;
-  if AGame.VariationLineCount > 0 then
+  if AGame.BranchCount > 0 then
     Exit(True);
 
   LMoves := TStringList.Create;
@@ -5058,7 +4886,6 @@ begin
     FVariationHits[I].BeforeMove := LRenderResult.VariationBeforeMoves[I];
     FVariationHits[I].Start := LRenderResult.VariationStarts[I];
     FVariationHits[I].Length := LRenderResult.VariationLengths[I];
-    FVariationHits[I].VariationIndex := LRenderResult.VariationIndexes[I];
     FVariationHits[I].VariationPly := LRenderResult.VariationPlies[I];
     FVariationHits[I].BasePly := LRenderResult.VariationBasePlies[I];
     FVariationHits[I].MovesText := LRenderResult.VariationMovesTexts[I];
@@ -5256,7 +5083,7 @@ begin
     RunningSnapshotHeaderInput(LInput),
     RunningSnapshotMainlineInput(LInput, nil, nil, True),
     GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', ''),
-    -1, 0, '', '', '', '', LErrorText);
+    LErrorText);
 end;
 
 procedure TMainForm.UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
@@ -5425,7 +5252,7 @@ begin
       RunningSnapshotHeaderInput(LInput),
       RunningSnapshotMainlineInput(LInput, LMoves, LAnnotations, True),
       RunningSnapshotPvInput(LInput, True),
-      GameTreePvInput(False, 0, '', ''), -1, 0, '', '', '', '', LErrorText) then
+      GameTreePvInput(False, 0, '', ''), LErrorText) then
       AGame.RememberSnapshotSyncSignature(LSyncSignature);
   finally
     LAnnotations.Free;
@@ -5466,24 +5293,20 @@ begin
     LHighlightPly := CurrentMoveCount;
 
   if (FHighlightedGameMovePly = LHighlightPly) and
-    (BrowseVariationIndex < 0) and (Trim(FVariationBrowseMoves) = '') then
+    (not BrowsingBranch) and (Trim(FVariationBrowseMoves) = '') then
     Exit;
-  if (BrowseVariationIndex >= 0) or (Trim(FVariationBrowseMoves) <> '') then
-  begin
-    for I := 0 to High(FVariationHits) do
-      if (FVariationHits[I].VariationPly = BrowseVariationPly) and
-        (((Trim(FVariationBrowseMoves) <> '') and
-          (FVariationHits[I].BasePly = BrowseBasePly) and
-          (FVariationHits[I].MovesText = FVariationBrowseMoves)) or
-         ((Trim(FVariationBrowseMoves) = '') and
-          (FVariationHits[I].VariationIndex = BrowseVariationIndex))) then
-      begin
-        FGameMoveMemo.SelStart := FVariationHits[I].Start;
-        FGameMoveMemo.SelLength := FVariationHits[I].Length;
-        FHighlightedGameMovePly := -2;
-        Exit;
-      end;
-  end;
+  for I := 0 to High(FVariationHits) do
+    if ((FVariationBrowseMoves = '') and not FVariationHits[I].BeforeMove and
+      (FVariationHits[I].NodeId > 0) and (FVariationHits[I].NodeId = FTreeCursor.NodeId)) or
+      ((FVariationBrowseMoves <> '') and (FVariationHits[I].MovesText = FVariationBrowseMoves) and
+      (FVariationHits[I].BasePly = BrowseBasePly) and
+      (FVariationHits[I].VariationPly = FPreviewPly)) then
+    begin
+      FGameMoveMemo.SelStart := FVariationHits[I].Start;
+      FGameMoveMemo.SelLength := FVariationHits[I].Length;
+      FHighlightedGameMovePly := -2;
+      Exit;
+    end;
   if (LHighlightPly > 0) and (LHighlightPly <= Length(FGameMoveStarts)) then
   begin
     FGameMoveMemo.SelStart := FGameMoveStarts[LHighlightPly - 1];
@@ -5989,13 +5812,6 @@ begin
   AppendFlag(Result, AOptions.ShowAnnotatorFullPV);
   AppendFlag(Result, AOptions.ShowAnnotatorScore);
   Result += 'main=' + IntToStr(AGameTree.MainlineCount) + '|';
-  Result += 'vars=' + IntToStr(AGameTree.VariationLineCount) + '|';
-  for I := 0 to AGameTree.VariationLineCount - 1 do
-    Result += IntToStr(AGameTree.VariationLine[I].DisplayAfterPly) + ':' +
-      IntToStr(AGameTree.VariationLine[I].BasePly) + ':' +
-      AGameTree.VariationLine[I].MovesText + ':' +
-      AGameTree.VariationLine[I].AnnotationText + ':' +
-      AGameTree.VariationLine[I].OriginText + '|';
   AppendNode(Result, AGameTree.Root);
 end;
 
@@ -6111,9 +5927,7 @@ begin
         ApplyAnnotatorVariationBrowsePly(FVariationHits[I].BasePly,
           FVariationHits[I].VariationPly, FVariationHits[I].MovesText,
           LGameTree)
-      else
-        ApplyVariationBrowsePly(FVariationHits[I].VariationIndex,
-          FVariationHits[I].VariationPly, LGameTree);
+;
       HighlightGameMoveTextSelection(True, LGameTree);
       Result := True;
       Exit;
@@ -6311,7 +6125,6 @@ procedure TMainForm.HighlightGameMoveTextSelection(AFocusMemo: Boolean;
   AGameTree: TGameTree);
 var
   I: Integer;
-  VariationLine: TGameTreeVariationLine;
 begin
   if FGameMoveMemo = nil then
     Exit;
@@ -6329,21 +6142,16 @@ begin
         Exit;
       end;
   end;
-  VariationLine := TreeVariationLineByIndex(BrowseVariationIndex, AGameTree);
-  if (VariationLine <> nil) and (VariationLine.BasePly = BrowseBasePly) and
-    (BrowseVariationPly > 0) then
-  begin
-    for I := 0 to High(FVariationHits) do
-      if (FVariationHits[I].VariationIndex = BrowseVariationIndex) and
-        (FVariationHits[I].VariationPly = BrowseVariationPly) then
-      begin
-        FGameMoveMemo.SelStart := FVariationHits[I].Start;
-        FGameMoveMemo.SelLength := FVariationHits[I].Length;
-        if AFocusMemo and Visible and CanFocus and FGameMoveMemo.CanFocus then
-          FGameMoveMemo.SetFocus;
-        Exit;
-      end;
-  end;
+  for I := 0 to High(FVariationHits) do
+    if (FVariationHits[I].NodeId = FTreeCursor.NodeId) and
+      (FVariationHits[I].NodeId > 0) and not FVariationHits[I].BeforeMove then
+    begin
+      FGameMoveMemo.SelStart := FVariationHits[I].Start;
+      FGameMoveMemo.SelLength := FVariationHits[I].Length;
+      if AFocusMemo and Visible and CanFocus and FGameMoveMemo.CanFocus then
+        FGameMoveMemo.SetFocus;
+      Exit;
+    end;
   if (BrowseBasePly > 0) and (BrowseBasePly <= Length(FGameMoveStarts)) then
   begin
     FGameMoveMemo.SelStart := FGameMoveStarts[BrowseBasePly - 1];

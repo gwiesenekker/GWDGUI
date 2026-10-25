@@ -32,7 +32,6 @@ type
     VariationNodeIds: TGameTreePdnNodeIdArray;
     VariationBeforeMoves: TGameTreePdnBoolArray;
     VariationLengths: TGameTreePdnIntArray;
-    VariationIndexes: TGameTreePdnIntArray;
     VariationPlies: TGameTreePdnIntArray;
     VariationBasePlies: TGameTreePdnIntArray;
     VariationMovesTexts: TGameTreePdnStringArray;
@@ -56,7 +55,7 @@ begin
   Result := False;
   if AGameTree = nil then
     Exit;
-  Result := (AGameTree.MainlineCount > 0) or (AGameTree.VariationLineCount > 0) or
+  Result := (AGameTree.MainlineCount > 0) or (AGameTree.BranchCount > 0) or
     (AGameTree.StartingFEN <> DefaultStartingFEN) or
     (AGameTree.ResultText <> '*') or (AGameTree.EventName <> '?') or
     (AGameTree.WhiteName <> 'White') or (AGameTree.BlackName <> 'Black') or
@@ -303,7 +302,7 @@ begin
         AddInt(ARenderResult.VariationStarts,
           ABaseOffset + 1 + LSegmentOffset + LMoveStart - 1);
         AddInt(ARenderResult.VariationLengths, Length(LMoves[I]));
-        AddInt(ARenderResult.VariationIndexes, -1);
+
         AddInt(ARenderResult.VariationPlies, I + 1);
         AddInt(ARenderResult.VariationBasePlies, ABaseNode.PlyNumber);
         AddString(ARenderResult.VariationMovesTexts, Trim(APv));
@@ -317,7 +316,7 @@ begin
       AddInt(ARenderResult.VariationStarts, ABaseOffset);
       AddInt(ARenderResult.VariationLengths,
         Pos(LMoves[0], Result) - 1);
-      AddInt(ARenderResult.VariationIndexes, -1);
+
       AddInt(ARenderResult.VariationPlies, 0);
       AddInt(ARenderResult.VariationBasePlies, ABaseNode.PlyNumber);
       AddString(ARenderResult.VariationMovesTexts, Trim(APv));
@@ -373,7 +372,6 @@ begin
   SetLength(ARenderResult.VariationNodeIds, 0);
   SetLength(ARenderResult.VariationBeforeMoves, 0);
   SetLength(ARenderResult.VariationLengths, 0);
-  SetLength(ARenderResult.VariationIndexes, 0);
   SetLength(ARenderResult.VariationPlies, 0);
   SetLength(ARenderResult.VariationBasePlies, 0);
   SetLength(ARenderResult.VariationMovesTexts, 0);
@@ -392,10 +390,8 @@ var
   I: Integer;
   LBasePlyNumber: Integer;
   LChild: TGameTreePlyNode;
-  LDisplayAfterPly: Integer;
   LLineOffset: Integer;
   LText: string;
-  LVariationIndex: Integer;
   LVariationPlyNumber: Integer;
 begin
   Result := '';
@@ -407,8 +403,6 @@ begin
     LChild := ANode.Children[I];
     if (LChild = nil) or (LChild = AContinuation) then
       Continue;
-    AGameTree.TryLocateVariationNode(LChild, LBasePlyNumber,
-      LDisplayAfterPly, LVariationIndex, LVariationPlyNumber);
     if (ABasePlyFilter >= 0) and (ANode.PlyNumber <> ABasePlyFilter) then
       Continue;
     if NodeIsAnnotatorAlternative(ANode, LChild) and
@@ -423,17 +417,13 @@ begin
       ARenderResult, LLineOffset);
     if LText = '' then
       Continue;
-    if not AGameTree.TryLocateVariationNode(LChild, LBasePlyNumber,
-      LDisplayAfterPly, LVariationIndex, LVariationPlyNumber) then
-    begin
-      LBasePlyNumber := ANode.PlyNumber;
-      LVariationPlyNumber := 1;
-    end;
+    LBasePlyNumber := ANode.PlyNumber;
+    LVariationPlyNumber := 1;
     begin
       AddNodeHit(ARenderResult, LChild.NodeId, True);
       AddInt(ARenderResult.VariationStarts, LLineOffset - 1);
       AddInt(ARenderResult.VariationLengths, Pos(LChild.MoveText, LText));
-      AddInt(ARenderResult.VariationIndexes, LVariationIndex);
+
       AddInt(ARenderResult.VariationPlies, LVariationPlyNumber - 1);
       AddInt(ARenderResult.VariationBasePlies, LBasePlyNumber);
       AddString(ARenderResult.VariationMovesTexts, '');
@@ -451,10 +441,8 @@ function RenderVariationLine(AGameTree: TGameTree; ANode, APreviousPosition: TGa
 var
   LBasePlyNumber: Integer;
   LContinuation: TGameTreePlyNode;
-  LDisplayAfterPly: Integer;
   LMoveStart: Integer;
   LNested: string;
-  LVariationIndex: Integer;
   LVariationPlyNumber: Integer;
 begin
   Result := '';
@@ -476,12 +464,8 @@ begin
       (Trim(ANode.AnnotatorScore) = '') then
       Result += ' {A: ' + Trim(APreviousPosition.AnnotatorScore) + '}';
 
-  if not AGameTree.TryLocateVariationNode(ANode, LBasePlyNumber, LDisplayAfterPly,
-    LVariationIndex, LVariationPlyNumber) then
-  begin
-    LBasePlyNumber := APreviousPosition.PlyNumber;
-    LVariationPlyNumber := 1;
-  end;
+  LBasePlyNumber := APreviousPosition.PlyNumber;
+  LVariationPlyNumber := 1;
   begin
     LMoveStart := Pos(ANode.MoveText, Result);
     if LMoveStart > 0 then
@@ -489,7 +473,7 @@ begin
       AddNodeHit(ARenderResult, ANode.NodeId, False);
       AddInt(ARenderResult.VariationStarts, ABaseOffset + LMoveStart - 1);
       AddInt(ARenderResult.VariationLengths, Length(ANode.MoveText));
-      AddInt(ARenderResult.VariationIndexes, LVariationIndex);
+
       AddInt(ARenderResult.VariationPlies, LVariationPlyNumber);
       AddInt(ARenderResult.VariationBasePlies, LBasePlyNumber);
       AddString(ARenderResult.VariationMovesTexts, '');

@@ -1,6 +1,6 @@
 unit uGameTree;
 
-{$mode objfpc}{$H+}
+{$mode objfpc}{$H+}{$modeswitch advancedrecords}
 
 interface
 
@@ -28,6 +28,7 @@ type
     FSecondsUsed: Double;
     FMoveNumber: Integer;
     FMoveText: string;
+    FOriginText: string;
     FNodeId: Int64;
     FParent: TGameTreePlyNode;
     FPlyNumber: Integer;
@@ -61,6 +62,7 @@ type
     property SecondsUsed: Double read FSecondsUsed;
     property MoveNumber: Integer read FMoveNumber;
     property MoveText: string read FMoveText;
+    property OriginText: string read FOriginText;
     property NodeId: Int64 read FNodeId;
     property Parent: TGameTreePlyNode read FParent;
     property PlyNumber: Integer read FPlyNumber;
@@ -69,24 +71,20 @@ type
     property WhiteUsedSeconds: Double read FWhiteUsedSeconds;
   end;
 
-  TGameTreeVariationLine = class
-  private
-    FAnnotationText: string;
-    FBasePly: Integer;
-    FDisplayAfterPly: Integer;
-    FMovesText: string;
-    FOriginText: string;
-    FNodeIds: array of Int64;
-  public
-    constructor Create(ADisplayAfterPly: Integer = 0; ABasePly: Integer = 0;
-      const AMovesText: string = ''; const AAnnotationText: string = '';
-      const AOriginText: string = '');
-    property AnnotationText: string read FAnnotationText;
-    property BasePly: Integer read FBasePly;
-    property DisplayAfterPly: Integer read FDisplayAfterPly;
-    property MovesText: string read FMovesText;
-    property OriginText: string read FOriginText;
+  // A read-only inspection path, derived on demand from actual children.
+  // It owns no game data and is never accepted as an import or rebuild input.
+  TGameTreeBranchPath = record
+    Nodes: array of TGameTreePlyNode;
+    function GetBasePly: Integer;
+    function GetMovesText: string;
+    function GetAnnotationText: string;
+    function GetOriginText: string;
+    property BasePly: Integer read GetBasePly;
+    property MovesText: string read GetMovesText;
+    property AnnotationText: string read GetAnnotationText;
+    property OriginText: string read GetOriginText;
   end;
+  TGameTreeBranchPaths = array of TGameTreeBranchPath;
 
   TGameTree = class
   private
@@ -105,7 +103,6 @@ type
     FResultText: string;
     FStartingFEN: string;
     FStatusText: string;
-    FVariationLines: TObjectList;
     FMainline: TFPList;
     FNextNodeId: Int64;
     FRoot: TGameTreePlyNode;
@@ -132,25 +129,25 @@ type
       const ADepth: string = ''; const ATimeText: string = '');
     function GetMainlineNode(APlyNumber: Integer): TGameTreePlyNode;
     function GetMainlineCount: Integer;
-    function GetVariationLine(AIndex: Integer): TGameTreeVariationLine;
-    function GetVariationLineCount: Integer;
     procedure AssignNodeId(ANode: TGameTreePlyNode);
     procedure RemoveMainlineFrom(APlyNumber: Integer);
     procedure RemoveNodeFromParent(ANode: TGameTreePlyNode);
     procedure RemoveVariationNodes(ANode: TGameTreePlyNode);
-    procedure PruneUnreferencedVariations(ANode: TGameTreePlyNode);
-    function FindStoredVariation(ADisplayAfterPly, ABasePly: Integer;
-      const AMovesText: string): Integer;
     procedure SetNodeClockState(ANode: TGameTreePlyNode;
       AWhiteRemainingSeconds, ABlackRemainingSeconds, AWhiteUsedSeconds,
       ABlackUsedSeconds: Double);
-    function UpdateVariationLine(AVariationLine: TGameTreeVariationLine;
-      ADisplayAfterPly, ABasePly: Integer; const AMovesText,
-      AAnnotationText: string): Boolean;
   public
-    function TryLocateVariationNode(ANode: TGameTreePlyNode;
-      out ABase, ADisplay, AIndex, APly: Integer): Boolean;
     function FindChildByMove(AParent: TGameTreePlyNode; const AMove: string): TGameTreePlyNode;
+    function IsMainlineNode(ANode: TGameTreePlyNode): Boolean;
+    function RecordBranchMove(AParent: TGameTreePlyNode; const AMove: string): TGameTreePlyNode;
+    function RecordNodeAnnotation(ANode: TGameTreePlyNode; const AText: string): Boolean;
+    procedure SetNodeOrigin(ANode: TGameTreePlyNode; const AOrigin: string);
+    procedure ClearBranches;
+    procedure RemoveBranch(ANode: TGameTreePlyNode);
+    function BranchPaths: TGameTreeBranchPaths;
+    function GetBranchPath(AIndex: Integer): TGameTreeBranchPath;
+    function GetBranchCount: Integer;
+    function FindBranchNode(AIndex, APly: Integer): TGameTreePlyNode;
     function RecordCompletedMoveData(APly: Integer; const AData: TGameMoveData): Boolean;
     constructor Create;
     destructor Destroy; override;
@@ -181,15 +178,6 @@ type
       const ADepth: string = ''; const ATimeText: string = '');
     procedure RecordAnnotatorPV(APlyNumber: Integer; const AScore, APV: string;
       const ADepth: string = ''; const ATimeText: string = '');
-    function RecordVariationMove(AParent: TGameTreePlyNode; ABasePlyNumber,
-      ADisplayAfterPly, AVariationIndex, AVariationPlyNumber: Integer;
-      const AMoveText: string): TGameTreePlyNode;
-    procedure RecordVariationEnginePV(ABasePlyNumber, ADisplayAfterPly,
-      AVariationIndex, AVariationPlyNumber: Integer; const AScore,
-      APV: string; const ADepth: string = ''; const ATimeText: string = '');
-    procedure RecordVariationAnnotatorPV(ABasePlyNumber, ADisplayAfterPly,
-      AVariationIndex, AVariationPlyNumber: Integer; const AScore,
-      APV: string; const ADepth: string = ''; const ATimeText: string = '');
     function RecordAnnotatorPVForNodeId(ANodeId: Int64; const AScore,
       APV: string; const ADepth: string = '';
       const ATimeText: string = ''): Boolean; overload;
@@ -206,37 +194,12 @@ type
       APV, ADepth, ATimeText: string; out AChanged: Boolean): Boolean; overload;
     function RecordAutoPlayPVForNodeId(ANodeId: Int64; const APV: string;
       out AChanged: Boolean): Boolean;
-    procedure RecordVariationAnnotation(ABasePlyNumber, ADisplayAfterPly,
-      AVariationIndex, AVariationPlyNumber: Integer;
-      const AAnnotationText: string);
-    procedure DiscardMissingVariationPaths;
-    procedure ClearStoredVariations;
-    procedure RemoveStoredVariationLineAtIndex(AIndex: Integer);
     procedure CopyMainlineMovesTo(AMoves: TStrings);
     function CopyNodeMovesTo(ANode: TGameTreePlyNode; AMoves: TStrings): Boolean;
     function TryBuildBoardAtNode(ANode: TGameTreePlyNode;
       ABoard: TDraughtsBoard): Boolean;
     procedure TrimMainlineToCount(ACount: Integer);
-    procedure TrimVariationLine(ABasePlyNumber, ADisplayAfterPly,
-      AVariationIndex, AVariationMoveCount: Integer);
     function FindNodeById(ANodeId: Int64): TGameTreePlyNode;
-    function FindVariationNode(AVariationIndex,
-      AVariationPlyNumber: Integer): TGameTreePlyNode;
-    function FindStoredVariationByDisplayAfterPly(
-      ADisplayAfterPly: Integer): Integer;
-    function StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
-      const AMovesText, AAnnotationText: string): Integer; overload;
-    function StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
-      const AMovesText, AAnnotationText: string;
-      out AChanged: Boolean): Integer; overload;
-    function StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
-      const AMovesText, AAnnotationText: string; AForceNew: Boolean;
-      out AChanged: Boolean): Integer; overload;
-    function StoreVariationLineAtIndex(AVariationIndex, ADisplayAfterPly,
-      ABasePly: Integer; const AMovesText, AAnnotationText: string;
-      out AChanged: Boolean): Integer;
-    procedure SetVariationLineOrigin(AVariationIndex: Integer;
-      const AOriginText: string; out AChanged: Boolean);
     property BlackName: string read FBlackName;
     property BlackRemainingSeconds: Double read FBlackRemainingSeconds;
     property BlackUsedSeconds: Double read FBlackUsedSeconds;
@@ -257,9 +220,8 @@ type
     property Signature: string read FSignature;
     property StartingFEN: string read FStartingFEN;
     property StatusText: string read FStatusText;
-    property VariationLineCount: Integer read GetVariationLineCount;
-    property VariationLine[AIndex: Integer]: TGameTreeVariationLine
-      read GetVariationLine;
+    property BranchCount: Integer read GetBranchCount;
+    property BranchPath[AIndex: Integer]: TGameTreeBranchPath read GetBranchPath;
     property WhiteName: string read FWhiteName;
     property WhiteRemainingSeconds: Double read FWhiteRemainingSeconds;
     property WhiteUsedSeconds: Double read FWhiteUsedSeconds;
@@ -318,18 +280,6 @@ begin
   FBlackUsedSeconds := 0;
 end;
 
-constructor TGameTreeVariationLine.Create(ADisplayAfterPly: Integer;
-  ABasePly: Integer; const AMovesText: string;
-  const AAnnotationText: string; const AOriginText: string);
-begin
-  inherited Create;
-  FDisplayAfterPly := ADisplayAfterPly;
-  FBasePly := ABasePly;
-  FMovesText := Trim(AMovesText);
-  FAnnotationText := Trim(AAnnotationText);
-  FOriginText := Trim(AOriginText);
-end;
-
 destructor TGameTreePlyNode.Destroy;
 begin
   FChildren.Free;
@@ -359,7 +309,6 @@ begin
   FGameTreeId := AllocateGameTreeId;
   FNextNodeId := 0;
   FMainline := TFPList.Create;
-  FVariationLines := TObjectList.Create(True);
   FRoot := TGameTreePlyNode.Create;
   Clear;
 end;
@@ -367,14 +316,12 @@ end;
 destructor TGameTree.Destroy;
 begin
   FRoot.Free;
-  FVariationLines.Free;
   FMainline.Free;
   inherited Destroy;
 end;
 
 procedure TGameTree.Clear;
 begin
-  FVariationLines.Clear;
   FSignature := '';
   ClearStructure;
 end;
@@ -472,8 +419,7 @@ begin
   if EffectiveFen = '' then EffectiveFen := DefaultStartingFEN;
   if (FSignature <> ASignature) or (FStartingFEN <> EffectiveFen) then
   begin
-    FVariationLines.Clear;
-    FSignature := ASignature;
+      FSignature := ASignature;
     ClearStructure;
   end;
   ClearTreeMetadata;
@@ -694,33 +640,6 @@ begin
   AddAnnotatorPV(APlyNumber, AScore, APV, ADepth, ATimeText);
 end;
 
-function TGameTree.RecordVariationMove(AParent: TGameTreePlyNode;
-  ABasePlyNumber, ADisplayAfterPly, AVariationIndex,
-  AVariationPlyNumber: Integer; const AMoveText: string): TGameTreePlyNode;
-var
-  Line: TGameTreeVariationLine;
-begin
-  Result := nil;
-  Line := GetVariationLine(AVariationIndex);
-  if (AParent = nil) or (Line = nil) or (AVariationPlyNumber <= 0) then
-    Exit;
-  // A position owns each continuation once. Legacy lines only index paths.
-  Result := FindChildByMove(AParent, AMoveText);
-  if Result = nil then
-    Result := AddMove(AParent, AParent.PlyNumber + 1, AMoveText);
-  if Length(Line.FNodeIds) < AVariationPlyNumber then
-    SetLength(Line.FNodeIds, AVariationPlyNumber);
-  Line.FNodeIds[AVariationPlyNumber - 1] := Result.NodeId;
-end;
-
-procedure TGameTree.RecordVariationEnginePV(ABasePlyNumber,
-  ADisplayAfterPly, AVariationIndex, AVariationPlyNumber: Integer;
-  const AScore, APV: string; const ADepth: string; const ATimeText: string);
-begin
-  UpdateNodePV(FindVariationNode(AVariationIndex, AVariationPlyNumber),
-    True, AScore, APV, ADepth, ATimeText);
-end;
-
 function TGameTree.RecordEnginePVForNodeId(ANodeId: Int64;
   const AScore, APV: string; const ADepth: string; const ATimeText: string
   ): Boolean;
@@ -765,14 +684,6 @@ begin
     ((LTimeText <> '') and (Trim(LNode.FEnginePVTimeText) <> LTimeText));
   UpdateNodePV(LNode, True, LScore, LPV, LDepth, LTimeText);
   Result := True;
-end;
-
-procedure TGameTree.RecordVariationAnnotatorPV(ABasePlyNumber,
-  ADisplayAfterPly, AVariationIndex, AVariationPlyNumber: Integer;
-  const AScore, APV: string; const ADepth: string; const ATimeText: string);
-begin
-  UpdateNodePV(FindVariationNode(AVariationIndex, AVariationPlyNumber),
-    False, AScore, APV, ADepth, ATimeText);
 end;
 
 function TGameTree.RecordAnnotatorPVForNodeId(ANodeId: Int64;
@@ -822,56 +733,6 @@ begin
   Result := True;
 end;
 
-procedure TGameTree.RecordVariationAnnotation(ABasePlyNumber,
-  ADisplayAfterPly, AVariationIndex, AVariationPlyNumber: Integer;
-  const AAnnotationText: string);
-var
-  LNode: TGameTreePlyNode;
-  Base, Display, Index, Ply: Integer;
-  Canonical: Boolean;
-begin
-  LNode := FindVariationNode(AVariationIndex, AVariationPlyNumber);
-  Canonical := TryLocateVariationNode(LNode, Base, Display, Index, Ply) and
-    (Index = AVariationIndex) and (Ply = AVariationPlyNumber);
-  if (LNode <> nil) and not Canonical and
-    (LNode.CommentText <> '') and (AAnnotationText = '') then Exit;
-  if (LNode <> nil) and not Canonical and
-    (LNode.CommentText <> '') and (Pos(LNode.CommentText, AAnnotationText) = 0) then
-    ApplyAnnotationText(LNode, LNode.CommentText + '; ' + AAnnotationText)
-  else
-    ApplyAnnotationText(LNode, AAnnotationText);
-end;
-
-procedure TGameTree.RemoveStoredVariationLineAtIndex(AIndex: Integer);
-begin
-  if (AIndex < 0) or (AIndex >= FVariationLines.Count) then Exit;
-  FVariationLines.Delete(AIndex);
-  PruneUnreferencedVariations(FRoot);
-end;
-
-procedure TGameTree.DiscardMissingVariationPaths;
-var
-  I, J: Integer;
-  Line: TGameTreeVariationLine;
-begin
-  for I := FVariationLines.Count - 1 downto 0 do
-  begin
-    Line := GetVariationLine(I);
-    for J := 0 to High(Line.FNodeIds) do
-      if FindNodeById(Line.FNodeIds[J]) = nil then
-      begin
-        FVariationLines.Delete(I);
-        Break;
-      end;
-  end;
-end;
-
-procedure TGameTree.ClearStoredVariations;
-begin
-  RemoveVariationNodes(FRoot);
-  FVariationLines.Clear;
-end;
-
 procedure TGameTree.TrimMainlineToCount(ACount: Integer);
 begin
   if ACount < 0 then
@@ -879,232 +740,6 @@ begin
   if ACount < FMainline.Count then
     RemoveMainlineFrom(ACount + 1);
 end;
-
-procedure TGameTree.PruneUnreferencedVariations(ANode: TGameTreePlyNode);
-var
-  I, J, K: Integer;
-  Child: TGameTreePlyNode;
-  Line: TGameTreeVariationLine;
-  Referenced: Boolean;
-begin
-  if ANode = nil then
-    Exit;
-  for I := ANode.ChildCount - 1 downto 0 do
-  begin
-    Child := ANode.Children[I];
-    PruneUnreferencedVariations(Child);
-    if GetMainlineNode(Child.PlyNumber) = Child then
-      Continue;
-    Referenced := False;
-    for J := 0 to VariationLineCount - 1 do
-    begin
-      Line := VariationLine[J];
-      for K := 0 to High(Line.FNodeIds) do
-        if Line.FNodeIds[K] = Child.NodeId then
-        begin
-          Referenced := True;
-          Break;
-        end;
-      if Referenced then
-        Break;
-    end;
-    if (not Referenced) and (Child.ChildCount = 0) then
-      RemoveNodeFromParent(Child);
-  end;
-end;
-
-procedure TGameTree.TrimVariationLine(ABasePlyNumber, ADisplayAfterPly,
-  AVariationIndex, AVariationMoveCount: Integer);
-var
-  Line: TGameTreeVariationLine;
-begin
-  Line := GetVariationLine(AVariationIndex);
-  if Line = nil then
-    Exit;
-  if AVariationMoveCount < 0 then
-    AVariationMoveCount := 0;
-  if Length(Line.FNodeIds) > AVariationMoveCount then
-    SetLength(Line.FNodeIds, AVariationMoveCount);
-  PruneUnreferencedVariations(FRoot);
-end;
-
-function TGameTree.FindStoredVariationByDisplayAfterPly(
-  ADisplayAfterPly: Integer): Integer;
-var
-  I: Integer;
-  VariationEntry: TGameTreeVariationLine;
-begin
-  Result := -1;
-  for I := 0 to FVariationLines.Count - 1 do
-  begin
-    VariationEntry := TGameTreeVariationLine(FVariationLines[I]);
-    if (VariationEntry <> nil) and
-      (VariationEntry.FDisplayAfterPly = ADisplayAfterPly) then
-      Exit(I);
-  end;
-end;
-
-function CanonicalMoveLine(const AMovesText: string): string;
-var
-  Moves: TStringList;
-  I: Integer;
-begin
-  Result := '';
-  Moves := TStringList.Create;
-  try
-    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(AMovesText)), Moves);
-    for I := 0 to Moves.Count - 1 do
-    begin
-      if Result <> '' then
-        Result += ' ';
-      Result += NormalizeMoveNotation(Moves[I]);
-    end;
-  finally
-    Moves.Free;
-  end;
-end;
-
-function TGameTree.FindStoredVariation(ADisplayAfterPly, ABasePly: Integer;
-  const AMovesText: string): Integer;
-var
-  I: Integer;
-  NewMoves: string;
-  VariationEntry: TGameTreeVariationLine;
-begin
-  Result := -1;
-  NewMoves := CanonicalMoveLine(AMovesText);
-  for I := 0 to FVariationLines.Count - 1 do
-  begin
-    VariationEntry := TGameTreeVariationLine(FVariationLines[I]);
-    if (VariationEntry = nil) or
-      (VariationEntry.FDisplayAfterPly <> ADisplayAfterPly) or
-      (VariationEntry.FBasePly <> ABasePly) then
-      Continue;
-
-    if CanonicalMoveLine(VariationEntry.FMovesText) = NewMoves then
-      Exit(I);
-  end;
-end;
-
-function TGameTree.StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
-  const AMovesText, AAnnotationText: string): Integer;
-var
-  Changed: Boolean;
-begin
-  Result := StoreVariationLine(ADisplayAfterPly, ABasePly, AMovesText,
-    AAnnotationText, Changed);
-end;
-
-function TGameTree.StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
-  const AMovesText, AAnnotationText: string;
-  out AChanged: Boolean): Integer;
-begin
-  Result := StoreVariationLine(ADisplayAfterPly, ABasePly, AMovesText,
-    AAnnotationText, False, AChanged);
-end;
-
-function TGameTree.StoreVariationLine(ADisplayAfterPly, ABasePly: Integer;
-  const AMovesText, AAnnotationText: string; AForceNew: Boolean;
-  out AChanged: Boolean): Integer;
-var
-  NewMovesText: string;
-  VariationEntry: TGameTreeVariationLine;
-begin
-  Result := -1;
-  AChanged := False;
-  if (ADisplayAfterPly < 0) or (ABasePly < 0) then
-    Exit;
-
-  NewMovesText := Trim(AMovesText);
-  if AForceNew then
-    Result := -1
-  else
-    Result := FindStoredVariation(ADisplayAfterPly, ABasePly, AMovesText);
-  if Result < 0 then
-  begin
-    VariationEntry := TGameTreeVariationLine.Create(ADisplayAfterPly, ABasePly,
-      NewMovesText, AAnnotationText);
-    Result := FVariationLines.Add(VariationEntry);
-    AChanged := True;
-  end
-  else
-    VariationEntry := TGameTreeVariationLine(FVariationLines[Result]);
-
-  if UpdateVariationLine(VariationEntry, ADisplayAfterPly, ABasePly,
-    NewMovesText, AAnnotationText) then
-    AChanged := True;
-end;
-
-function TGameTree.StoreVariationLineAtIndex(AVariationIndex,
-  ADisplayAfterPly, ABasePly: Integer; const AMovesText,
-  AAnnotationText: string; out AChanged: Boolean): Integer;
-var
-  VariationEntry: TGameTreeVariationLine;
-begin
-  Result := -1;
-  AChanged := False;
-  if (AVariationIndex < 0) or (AVariationIndex >= FVariationLines.Count) or
-    (ADisplayAfterPly < 0) or (ABasePly < 0) then
-    Exit;
-
-  VariationEntry := TGameTreeVariationLine(FVariationLines[AVariationIndex]);
-  if VariationEntry = nil then
-    Exit;
-
-  AChanged := UpdateVariationLine(VariationEntry, ADisplayAfterPly, ABasePly,
-    AMovesText, AAnnotationText);
-  Result := AVariationIndex;
-end;
-
-function TGameTree.UpdateVariationLine(AVariationLine: TGameTreeVariationLine;
-  ADisplayAfterPly, ABasePly: Integer; const AMovesText,
-  AAnnotationText: string): Boolean;
-var
-  NewAnnotationText: string;
-  NewMovesText: string;
-begin
-  Result := False;
-  if AVariationLine = nil then
-    Exit;
-
-  NewMovesText := Trim(AMovesText);
-  NewAnnotationText := Trim(AVariationLine.FAnnotationText);
-  if (Trim(AAnnotationText) <> '') or (NewAnnotationText = '') then
-    NewAnnotationText := Trim(AAnnotationText);
-
-  Result := (AVariationLine.FDisplayAfterPly <> ADisplayAfterPly) or
-    (AVariationLine.FBasePly <> ABasePly) or
-    (Trim(AVariationLine.FMovesText) <> NewMovesText) or
-    (Trim(AVariationLine.FAnnotationText) <> NewAnnotationText);
-
-  AVariationLine.FDisplayAfterPly := ADisplayAfterPly;
-  AVariationLine.FBasePly := ABasePly;
-  AVariationLine.FMovesText := NewMovesText;
-  AVariationLine.FAnnotationText := NewAnnotationText;
-end;
-
-procedure TGameTree.SetVariationLineOrigin(AVariationIndex: Integer;
-  const AOriginText: string; out AChanged: Boolean);
-var
-  VariationEntry: TGameTreeVariationLine;
-begin
-  AChanged := False;
-  if (AVariationIndex < 0) or (AVariationIndex >= FVariationLines.Count) then
-    Exit;
-
-  VariationEntry := TGameTreeVariationLine(FVariationLines[AVariationIndex]);
-  if VariationEntry = nil then
-    Exit;
-
-  AChanged := Trim(VariationEntry.FOriginText) <> Trim(AOriginText);
-  VariationEntry.FOriginText := Trim(AOriginText);
-end;
-
-
-
-
-
-
 
 function TGameTree.RecordAutoPlayPVForNodeId(ANodeId: Int64;
   const APV: string; out AChanged: Boolean): Boolean;
@@ -1242,33 +877,6 @@ begin
   Result := SearchNode(FRoot);
 end;
 
-function TGameTree.FindVariationNode(AVariationIndex,
-  AVariationPlyNumber: Integer): TGameTreePlyNode;
-var
-  LVariationLine: TGameTreeVariationLine;
-begin
-  Result := nil;
-  LVariationLine := GetVariationLine(AVariationIndex);
-  if (LVariationLine = nil) or (AVariationPlyNumber <= 0) then
-    Exit;
-
-  if AVariationPlyNumber <= Length(LVariationLine.FNodeIds) then
-    Result := FindNodeById(LVariationLine.FNodeIds[AVariationPlyNumber - 1]);
-end;
-
-function TGameTree.GetVariationLine(AIndex: Integer): TGameTreeVariationLine;
-begin
-  Result := nil;
-  if (AIndex < 0) or (AIndex >= FVariationLines.Count) then
-    Exit;
-  Result := TGameTreeVariationLine(FVariationLines[AIndex]);
-end;
-
-function TGameTree.GetVariationLineCount: Integer;
-begin
-  Result := FVariationLines.Count;
-end;
-
 function TGameTree.SideForPly(APlyNumber: Integer): TDraughtsSide;
 var
   LStartingSide: TDraughtsSide;
@@ -1302,29 +910,133 @@ begin
   Result.FMoveText := Trim(AMoveText);
 end;
 
-function TGameTree.TryLocateVariationNode(ANode: TGameTreePlyNode;
-  out ABase, ADisplay, AIndex, APly: Integer): Boolean;
-var
-  I, J: Integer;
-  Line: TGameTreeVariationLine;
+function TGameTreeBranchPath.GetBasePly: Integer;
+begin
+  Result := 0;
+  if (Length(Nodes) > 0) and (Nodes[0].Parent <> nil) then Result := Nodes[0].Parent.PlyNumber;
+end;
+
+function TGameTreeBranchPath.GetMovesText: string;
+var I: Integer;
+begin
+  Result := '';
+  for I := 0 to High(Nodes) do
+  begin
+    if Result <> '' then Result += ' ';
+    Result += Nodes[I].MoveText;
+  end;
+end;
+
+function TGameTreeBranchPath.GetAnnotationText: string;
+var Lines: TStringList; I: Integer;
+begin
+  Lines := TStringList.Create;
+  try
+    for I := 0 to High(Nodes) do
+      Lines.Add(AnnotationWithScore(AnnotationWithScore(Nodes[I].CommentText,
+        'engine', Nodes[I].EngineScore), 'annotator', Nodes[I].AnnotatorScore));
+    Result := EncodeVariationAnnotations(Lines);
+  finally Lines.Free; end;
+end;
+
+function TGameTreeBranchPath.GetOriginText: string;
+begin
+  Result := '';
+  if Length(Nodes) > 0 then Result := Nodes[0].OriginText;
+end;
+
+function TGameTree.IsMainlineNode(ANode: TGameTreePlyNode): Boolean;
+begin
+  Result := (ANode <> nil) and ((ANode = Root) or
+    (GetMainlineNode(ANode.PlyNumber) = ANode));
+end;
+
+function TGameTree.RecordBranchMove(AParent: TGameTreePlyNode;
+  const AMove: string): TGameTreePlyNode;
+begin
+  Result := FindChildByMove(AParent, AMove);
+  if (Result = nil) and (AParent <> nil) then
+    Result := AddMove(AParent, AParent.PlyNumber + 1, AMove);
+end;
+
+procedure TGameTree.SetNodeOrigin(ANode: TGameTreePlyNode; const AOrigin: string);
+begin
+  if (ANode <> nil) and (ANode.FOriginText = '') then ANode.FOriginText := AOrigin;
+end;
+
+function TGameTree.RecordNodeAnnotation(ANode: TGameTreePlyNode; const AText: string): Boolean;
+var BeforeText, Text, Comment: string;
 begin
   Result := False;
-  ABase := -1; ADisplay := -1; AIndex := -1; APly := -1;
-  if (ANode = nil) or (ANode = FRoot) or
-    (GetMainlineNode(ANode.PlyNumber) = ANode) then Exit;
-  // Compatibility locations are derived from node identity, never parsed from
-  // an alias that can change when another path is removed or reindexed.
-  for I := 0 to FVariationLines.Count - 1 do
+  if (ANode = nil) or (Trim(AText) = '') then Exit;
+  BeforeText := ANode.CommentText + #10 + ANode.EngineScore + #10 + ANode.AnnotatorScore;
+  Comment := AnnotationWithoutName(AnnotationWithoutName(
+    AnnotationWithoutName(AText, 'engine'), 'annotator'), 'score');
+  Text := AText;
+  if (ANode.CommentText <> '') and (Pos(ANode.CommentText, Comment) = 0) then
   begin
-    Line := GetVariationLine(I);
-    for J := 0 to High(Line.FNodeIds) do
-      if Line.FNodeIds[J] = ANode.NodeId then
-      begin
-        ABase := Line.BasePly; ADisplay := Line.DisplayAfterPly;
-        AIndex := I; APly := J + 1;
-        Exit(True);
-      end;
+    if Comment = '' then Comment := ANode.CommentText
+    else Comment := ANode.CommentText + '; ' + Comment;
+    Text := AnnotationWithScore(AnnotationWithScore(Comment,
+      'engine', ExtractAnnotationValue(AText, 'engine')),
+      'annotator', ExtractAnnotationValue(AText, 'annotator'));
   end;
+  ApplyAnnotationText(ANode, Text);
+  Result := BeforeText <> ANode.CommentText + #10 + ANode.EngineScore + #10 + ANode.AnnotatorScore;
+end;
+
+procedure TGameTree.ClearBranches;
+begin
+  RemoveVariationNodes(Root);
+end;
+
+procedure TGameTree.RemoveBranch(ANode: TGameTreePlyNode);
+begin
+  if not IsMainlineNode(ANode) then RemoveNodeFromParent(ANode);
+end;
+
+function TGameTree.BranchPaths: TGameTreeBranchPaths;
+var I, J: Integer; Parent, Official: TGameTreePlyNode;
+  procedure Visit(Node: TGameTreePlyNode; const Path: TGameTreeBranchPath);
+  var Next: TGameTreeBranchPath; K, N: Integer;
+  begin
+    Next.Nodes := Copy(Path.Nodes);
+    N := Length(Next.Nodes); SetLength(Next.Nodes, N + 1); Next.Nodes[N] := Node;
+    if Node.ChildCount = 0 then
+    begin
+      N := Length(Result); SetLength(Result, N + 1); Result[N] := Next;
+    end
+    else for K := 0 to Node.ChildCount - 1 do Visit(Node.Children[K], Next);
+  end;
+var Empty: TGameTreeBranchPath;
+begin
+  Result := nil; Empty.Nodes := nil;
+  for I := 0 to MainlineCount do
+  begin
+    if I = 0 then Parent := Root else Parent := MainlineNode[I];
+    Official := MainlineNode[I + 1];
+    for J := 0 to Parent.ChildCount - 1 do
+      if Parent.Children[J] <> Official then Visit(Parent.Children[J], Empty);
+  end;
+end;
+
+function TGameTree.GetBranchPath(AIndex: Integer): TGameTreeBranchPath;
+var Paths: TGameTreeBranchPaths;
+begin
+  Result.Nodes := nil; Paths := BranchPaths;
+  if (AIndex >= 0) and (AIndex < Length(Paths)) then Result := Paths[AIndex];
+end;
+
+function TGameTree.GetBranchCount: Integer;
+begin
+  Result := Length(BranchPaths);
+end;
+
+function TGameTree.FindBranchNode(AIndex, APly: Integer): TGameTreePlyNode;
+var Path: TGameTreeBranchPath;
+begin
+  Result := nil; Path := GetBranchPath(AIndex);
+  if (APly > 0) and (APly <= Length(Path.Nodes)) then Result := Path.Nodes[APly - 1];
 end;
 
 function TGameTree.FindChildByMove(AParent: TGameTreePlyNode;

@@ -5,7 +5,7 @@ program game_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, StrUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameOrchestrator, uPdn, uDraughtsBoard;
+  uGameTreePdn, uGameOrchestrator, uPdn, uDraughtsBoard, uTreeTestUtils;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -56,18 +56,18 @@ begin
   Actor := TGameTreeActor.Create;
   try
     Rebuild(Actor, 'import', '', '32-28 18-23 37-32');
-    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+    Execute(Actor, ImportBranch(Actor, 1,
       '20-24 37-32 14-20', 'A: 0.10', gmsUnknown));
-    Check(Actor.GameTree.FindVariationNode(0, 1) <> nil,
+    Check(Actor.GameTree.FindBranchNode(0, 1) <> nil,
       'storing an imported variation must create its first node immediately');
-    Check(Actor.GameTree.FindVariationNode(0, 3) <> nil,
+    Check(Actor.GameTree.FindBranchNode(0, 3) <> nil,
       'all imported variation moves must be materialized');
     Text := GameTreeToPdnText(Actor.GameTree);
     Check(Pos('(1... 20-24', Text) > 0, 'export must retain the variation');
     Check(Pos('14-20 {A: 0.10}', Text) > 0,
       'export must retain its tail and annotation');
     Revision := Actor.Revision;
-    Command := Actor.CreateStoreVariationLineCommand(2, 1,
+    Command := ImportBranch(Actor, 1,
       '20-24 37-32 14-20', 'A: 0.10', gmsUnknown);
     Execute(Actor, Command);
     Check(Actor.Revision = Revision, 'storing an unchanged line must be a no-op');
@@ -138,7 +138,7 @@ begin
       Game.Free;
     end;
     Rebuild(Actor, 'placement', '', '32-28 18-23 37-32');
-    Execute(Actor, Actor.CreateStoreVariationLineCommand(1, 1,
+    Execute(Actor, ImportBranch(Actor, 1,
       '20-24', '', gmsHuman));
     Execute(Actor, Actor.CreateStoreMoveVariationCommand(
       Actor.GameTree.Root.NodeId, '33-28', gmsHuman));
@@ -187,7 +187,7 @@ begin
         False, DefaultTimeControl, gosWaiting, '', AGame.InitialCommentText),
       GameTreeMainlineInput(Moves, Annotations, False, 0, 0, 0, 0),
       GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', '')));
-    Execute(AActor, AActor.CreateClearStoredVariationsCommand);
+    Execute(AActor, AActor.CreateClearBranchesCommand);
     Variations.Text := AGame.MoveVariationsText;
     VariationAnnotations.Text := AGame.MoveVariationAnnotationsText;
     for I := 0 to Variations.Count - 1 do
@@ -197,7 +197,7 @@ begin
         RawAnnotationText := VariationAnnotations[I];
       Check(DecodePdnVariationLine(Variations[I], RawAnnotationText, I,
         Display, Base, MoveText, AnnotationText), 'imported line should decode');
-      Execute(AActor, AActor.CreateStoreVariationLineCommand(Display, Base,
+      Execute(AActor, ImportBranch(AActor, Base,
         MoveText, AnnotationText, gmsUnknown));
     end;
   finally
@@ -247,11 +247,11 @@ begin
         end;
         LoadParsedGame(Actor, Game);
         Check(Actor.GameTree.MainlineCount = 5, 'Black-start mainline must remain complete');
-        for I := 0 to Actor.GameTree.VariationLineCount - 1 do
+        for I := 0 to Actor.GameTree.BranchCount - 1 do
         begin
-          TextToMoveList(Actor.GameTree.VariationLine[I].MovesText, Lines);
+          TextToMoveList(Actor.GameTree.BranchPath[I].MovesText, Lines);
           Check(Actor.GameTree.TryBuildBoardAtNode(
-            Actor.GameTree.FindVariationNode(I, Lines.Count), Board),
+            Actor.GameTree.FindBranchNode(I, Lines.Count), Board),
             'every imported Black-start variation must replay legally');
         end;
         Text := GameTreeToPdnText(Actor.GameTree);
@@ -292,11 +292,11 @@ begin
         'mixed score/comment must preserve its free text');
       Check(Actor.GameTree.MainlineNode[2].CommentText = 'Black reply',
         'reply comment must survive import');
-      Check(Actor.GameTree.FindVariationNode(0, 1).CommentText =
+      Check(Actor.GameTree.FindBranchNode(0, 1).CommentText =
         'First alternative comment', 'variation first comment must survive');
-      Check(Actor.GameTree.FindVariationNode(0, 2).CommentText = 'Middle comment',
+      Check(Actor.GameTree.FindBranchNode(0, 2).CommentText = 'Middle comment',
         'variation middle comment must survive alongside its score');
-      Check(Actor.GameTree.FindVariationNode(0, 3).CommentText = 'Last comment',
+      Check(Actor.GameTree.FindBranchNode(0, 3).CommentText = 'Last comment',
         'variation last comment must survive');
       Text := GameTreeToPdnText(Actor.GameTree);
       Check(Pos('@pdn-annotations:', Text) = 0,
@@ -310,7 +310,7 @@ begin
       LoadParsedGame(Actor, Reloaded);
       Check(Actor.GameTree.Root.CommentText = 'Introduction to this game',
         'legacy export must retain the introduction');
-      Check(Actor.GameTree.FindVariationNode(0, 1).CommentText =
+      Check(Actor.GameTree.FindBranchNode(0, 1).CommentText =
         'First alternative comment', 'legacy export must retain per-move comments');
     finally
       Reloaded.Free;
@@ -332,41 +332,41 @@ begin
   try
     Rebuild(Actor, 'exploration', '', '32-28 18-23 37-32');
     Original := '20-24 37-32 14-20 41-37';
-    Execute(Actor, Actor.CreateStoreVariationLineCommand(1, 1,
+    Execute(Actor, ImportBranch(Actor, 1,
       Original, 'Original tail', gmsHuman));
-    First := Actor.GameTree.FindVariationNode(0, 1);
+    First := Actor.GameTree.FindBranchNode(0, 1);
     Command := Actor.CreateStoreMoveVariationCommand(First.NodeId, '37-32', gmsHuman);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted and (not Command.TreeChanged),
         'replaying the existing continuation should navigate without mutation');
-      Check((Command.VariationIndex = 0) and (Command.PlyNumber = 2),
+      Check((Command.CreatedNodeId = Actor.GameTree.FindBranchNode(0, 2).NodeId),
         'navigation should select the existing next variation node');
     finally
       Command.Free;
     end;
-    Check(Actor.GameTree.VariationLine[0].MovesText = Original,
+    Check(Actor.GameTree.BranchPath[0].MovesText = Original,
       'replaying a move must not truncate the original continuation');
     Execute(Actor, Actor.CreateStoreMoveVariationCommand(First.NodeId,
       '31-27', gmsHuman));
-    Check(Actor.GameTree.VariationLineCount = 2,
+    Check(Actor.GameTree.BranchCount = 2,
       'an alternative inside a variation must create a separate continuation');
-    Check(Actor.GameTree.VariationLine[0].MovesText = Original,
+    Check(Actor.GameTree.BranchPath[0].MovesText = Original,
       'branching must leave the original variation intact');
-    Check(Actor.GameTree.FindVariationNode(0, 4).CommentText = 'Original tail',
+    Check(Actor.GameTree.FindBranchNode(0, 4).CommentText = 'Original tail',
       'branching must preserve the original tail annotation');
-    Check(Actor.GameTree.VariationLine[1].MovesText = '20-24 31-27',
+    Check(Actor.GameTree.BranchPath[1].MovesText = '20-24 31-27',
       'the new branch should retain its prefix');
     Execute(Actor, Actor.CreateStoreMoveVariationCommand(
-      Actor.GameTree.FindVariationNode(1, 2).NodeId, '14-20', gmsHuman));
-    Check(Actor.GameTree.VariationLine[1].MovesText = '20-24 31-27 14-20',
+      Actor.GameTree.FindBranchNode(1, 2).NodeId, '14-20', gmsHuman));
+    Check(Actor.GameTree.BranchPath[1].MovesText = '20-24 31-27 14-20',
       'a new move at the end should extend its own branch');
     Command := Actor.CreateStoreMoveVariationCommand(
       Actor.GameTree.MainlineNode[1].NodeId, '20-24', gmsHuman);
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted and (not Command.TreeChanged) and
-        (Command.VariationIndex = 0), 'replaying an alternative must find its line');
+        (Command.CreatedNodeId = First.NodeId), 'replaying an alternative must find its line');
     finally
       Command.Free;
     end;
@@ -375,19 +375,19 @@ begin
     try
       Actor.ExecuteCommand(Command);
       Check(Command.Accepted and (not Command.TreeChanged) and
-        (Command.VariationIndex = -1) and (Command.PlyNumber = 2),
+        (Command.CreatedNodeId = Actor.GameTree.MainlineNode[2].NodeId),
         'replaying the mainline move must navigate without making a duplicate');
     finally
       Command.Free;
     end;
-    Check((Actor.GameTree.VariationLineCount = 2) and
-      (Actor.GameTree.VariationLine[0].MovesText = Original),
+    Check((Actor.GameTree.BranchCount = 2) and
+      (Actor.GameTree.BranchPath[0].MovesText = Original),
       'navigation must preserve both complete branches');
     Execute(Actor, Actor.CreateStoreMoveVariationCommand(
-      Actor.GameTree.FindVariationNode(0, 4).NodeId, '10-14', gmsHuman));
-    Check(Actor.GameTree.FindVariationNode(0, 4).CommentText = 'Original tail',
+      Actor.GameTree.FindBranchNode(0, 4).NodeId, '10-14', gmsHuman));
+    Check(Actor.GameTree.FindBranchNode(0, 4).CommentText = 'Original tail',
       'extending a line must keep the old final comment on its move');
-    Check(Actor.GameTree.FindVariationNode(0, 5).CommentText = '',
+    Check(Actor.GameTree.FindBranchNode(0, 5).CommentText = '',
       'the newly appended move must not inherit the old final comment');
   finally
     Actor.Free;
@@ -411,29 +411,29 @@ begin
     for Pass := 1 to 3 do
     begin
       LoadParsedGame(Actor, Game);
-      Check(Actor.GameTree.VariationLineCount = 3,
+      Check(Actor.GameTree.BranchCount = 3,
         'all three nested continuation paths must survive import');
-      Check(Actor.GameTree.VariationLine[0].MovesText = '20-24 37-32 14-20',
+      Check(Actor.GameTree.BranchPath[0].MovesText = '20-24 37-32 14-20',
         'outer continuation must remain intact');
-      Check(Actor.GameTree.VariationLine[1].MovesText = '20-24 38-32 14-20',
+      Check(Actor.GameTree.BranchPath[1].MovesText = '20-24 38-32 14-20',
         'nested continuation must retain its outer prefix');
-      Check(Actor.GameTree.VariationLine[2].MovesText = '20-24 38-32 18-22',
+      Check(Actor.GameTree.BranchPath[2].MovesText = '20-24 38-32 18-22',
         'deeper continuation must retain both prefixes');
-      Check(Actor.GameTree.FindVariationNode(1, 2).CommentText = 'Nested choice',
+      Check(Actor.GameTree.FindBranchNode(1, 2).CommentText = 'Nested choice',
         'nested commentary must stay on the nested move');
-      Check(Actor.GameTree.FindVariationNode(2, 3).CommentText = 'Deeper choice',
+      Check(Actor.GameTree.FindBranchNode(2, 3).CommentText = 'Deeper choice',
         'deeper commentary must stay on its own move');
-      Check(Actor.GameTree.FindVariationNode(0, 1) =
-        Actor.GameTree.FindVariationNode(1, 1),
+      Check(Actor.GameTree.FindBranchNode(0, 1) =
+        Actor.GameTree.FindBranchNode(1, 1),
         'outer prefix must be one shared position');
-      Check(Actor.GameTree.FindVariationNode(1, 2) =
-        Actor.GameTree.FindVariationNode(2, 2),
+      Check(Actor.GameTree.FindBranchNode(1, 2) =
+        Actor.GameTree.FindBranchNode(2, 2),
         'deeper alternatives must share the actual parent node');
-      Check(Actor.GameTree.FindVariationNode(1, 2).Parent =
-        Actor.GameTree.FindVariationNode(0, 1), 'nested choice parent');
-      Check(Actor.GameTree.FindVariationNode(2, 3).Parent =
-        Actor.GameTree.FindVariationNode(1, 2), 'deeper choice parent');
-      Check(Actor.GameTree.FindVariationNode(0, 1).ChildCount = 2,
+      Check(Actor.GameTree.FindBranchNode(1, 2).Parent =
+        Actor.GameTree.FindBranchNode(0, 1), 'nested choice parent');
+      Check(Actor.GameTree.FindBranchNode(2, 3).Parent =
+        Actor.GameTree.FindBranchNode(1, 2), 'deeper choice parent');
+      Check(Actor.GameTree.FindBranchNode(0, 1).ChildCount = 2,
         'outer position must own both choices');
       Text := GameTreeToPdnText(Actor.GameTree);
       Check(Pos('37-32 {Original continuation} (2. 38-32', Text) > 0,
@@ -482,20 +482,20 @@ begin
   Actor := TGameTreeActor.Create;
   try
     Rebuild(Actor, 'game A', '', '32-28 18-23');
-    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+    Execute(Actor, ImportBranch(Actor, 1,
       '20-24 37-32', 'A: 0.20', gmsUnknown));
     Rebuild(Actor, 'game A', '', '32-28 18-23');
-    Check(Actor.GameTree.VariationLineCount = 1,
+    Check(Actor.GameTree.BranchCount = 1,
       'refreshing the same game must preserve its variation');
-    Check(Actor.GameTree.FindVariationNode(0, 2).AnnotatorScore = '0.20',
+    Check(Actor.GameTree.FindBranchNode(0, 2).AnnotatorScore = '0.20',
       'refreshing the same game must preserve variation annotations');
     Rebuild(Actor, 'game B', '', '32-28 18-23');
-    Check(Actor.GameTree.VariationLineCount = 0,
+    Check(Actor.GameTree.BranchCount = 0,
       'a different game must not inherit variations even with the same moves');
     Execute(Actor, Actor.CreateStoreMoveVariationCommand(
       Actor.GameTree.Root.NodeId, '33-28', gmsHuman));
     Rebuild(Actor, 'game C', 'W:W31,32:B19,20', '');
-    Check((Actor.GameTree.VariationLineCount = 0) and
+    Check((Actor.GameTree.BranchCount = 0) and
       (Actor.GameTree.Root.ChildCount = 0),
       'loading a new FEN must not inherit a previous root variation');
   finally

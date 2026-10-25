@@ -3,7 +3,7 @@ program game_tree_cursor_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreeCursor;
+  uGameTreeCursor, uTreeTestUtils;
 procedure Check(Value: Boolean; const MessageText: string);
 begin
   if not Value then raise Exception.Create(MessageText);
@@ -40,12 +40,12 @@ begin
     Check(Cursor.Resolve(Tree) = Tree.MainlineNode[2], 'selected node stays frozen as the game grows');
     Cursor.Follow;
     Check(Cursor.Resolve(Tree) = Tree.MainlineNode[3], 'follow resumes at the new tip');
-    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+    Execute(Actor, ImportBranch(Actor, 1,
       '20-24 38-32 14-20', '', gmsHuman));
-    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1,
+    Execute(Actor, ImportBranch(Actor, 1,
       '20-24 38-32 18-22', '', gmsHuman));
-    Selected := Tree.FindVariationNode(1, 3).NodeId;
-    Parent := Tree.FindVariationNode(1, 2).NodeId;
+    Selected := Tree.FindBranchNode(1, 3).NodeId;
+    Parent := Tree.FindBranchNode(1, 2).NodeId;
     Cursor.Select(Tree, Tree.FindNodeById(Selected));
     Cursor.StepLeft(Tree);
     Check(Cursor.NodeId = Parent, 'Left follows actual nested parent');
@@ -55,16 +55,13 @@ begin
     Check(Cursor.NodeId = Parent, 'branch opening selects its actual parent');
     Cursor.StepRight(Tree);
     Check(Cursor.NodeId = Selected, 'branch opening retains the requested child');
-    // Shortening the first compatibility path changes the shared node's address.
+    // Removing one leaf changes derived path order without changing its shared parent.
     Cursor.Select(Tree, Tree.FindNodeById(Parent));
-    Tree.StoreVariationLineAtIndex(0, 2, 1, '20-24', '', Changed);
-    TextToMoveList('20-24', Moves);
-    RecordGameTreeVariationLine(Tree,
-      GameTreeVariationLineInput(Tree.VariationLine[0], 0, Moves, nil));
+    Tree.RemoveBranch(Tree.FindBranchNode(0, 3));
     Check((Cursor.Resolve(Tree).NodeId = Parent) and
-      (Tree.FindVariationNode(1, 2).NodeId = Parent),
-      'compatibility-path changes must not retarget the cursor');
-    Execute(Actor, Actor.CreateClearStoredVariationsCommand);
+      (Tree.FindBranchNode(0, 2).NodeId = Parent),
+      'sibling removal must not retarget the cursor');
+    Execute(Actor, Actor.CreateClearBranchesCommand);
     Check(Cursor.Resolve(Tree) = Tree.MainlineNode[1],
       'removed branches fall back to their nearest surviving ancestor');
     Cursor.Select(Tree, Tree.MainlineNode[3]);
