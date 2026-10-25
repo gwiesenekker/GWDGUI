@@ -65,6 +65,32 @@ begin
   CheckEqual(MoveText, '25x34x30', 'DXP capture move text is canonicalized');
 end;
 
+procedure CheckStrictDxpPackets;
+var Buffer: TDxpPacketBuffer; Packet, Move: string; I: Integer; Raised: Boolean;
+  Board: TDraughtsBoard;
+begin
+  Check(not DxpMoveMessageToText('M000025340130junk', Move), 'DXP rejects trailing garbage');
+  Check(not DxpMoveMessageToText('M000025340100', Move), 'DXP rejects captured square zero');
+  Check(not DxpMoveMessageToText('M00002534023030', Move), 'DXP rejects duplicate captures');
+  Check(not DxpMoveMessageToText('M000025340151', Move), 'DXP rejects square above fifty');
+  Check(not DxpMoveMessageToText('M0000253401+3', Move), 'DXP requires numeric fixed fields');
+  Buffer.Clear;
+  Check(not Buffer.FeedByte('M', Packet), 'partial packet retained');
+  Check(not Buffer.FeedByte('0', Packet), 'next read retains previous partial data');
+  Check(Buffer.FeedByte(#0, Packet) and (Packet = 'M0'), 'delimiter returns complete buffered packet');
+  for I := 1 to 127 do Check(not Buffer.FeedByte('x', Packet), 'maximum packet buffered');
+  Check(Buffer.FeedByte(#0, Packet) and (Length(Packet) = 127), '127-byte packet accepted');
+  for I := 1 to 127 do Buffer.FeedByte('x', Packet);
+  Raised := False;
+  try Buffer.FeedByte('x', Packet); except on E: EConvertError do Raised := True; end;
+  Check(Raised, 'oversized DXP packet rejected');
+  Board := TDraughtsBoard.Create;
+  try
+    Packet := DxpBuildGameReqFischerPacket(Board, dsWhite, 1234567, 1234567, 'test');
+    Check(Pos('999999999999', Packet) > 0, 'Fischer fields clamp instead of losing digits');
+  finally Board.Free; end;
+end;
+
 procedure CheckReplayAcceptsZeroPaddedMove;
 var
   Board: TDraughtsBoard;
@@ -410,6 +436,7 @@ end;
 
 begin
   CheckMoveNormalization;
+  CheckStrictDxpPackets;
   CheckDxpMoveConversion;
   CheckInitialHumanMoveIsLegal;
   CheckReplayAcceptsZeroPaddedMove;

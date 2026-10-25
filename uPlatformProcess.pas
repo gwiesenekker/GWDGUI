@@ -5,7 +5,7 @@ unit uPlatformProcess;
 interface
 
 uses
-  Classes, SysUtils, Process
+  Classes, SysUtils, Process, SyncObjs
   {$IFDEF MSWINDOWS}
   , Windows
   {$ENDIF}
@@ -67,19 +67,28 @@ type
     property SynchronizeData: Boolean read FSynchronizeData write FSynchronizeData;
   end;
 
+function CommandLineQuote(const AText: string): string;
+
 implementation
 
+const LocalFdCloseOnExec = 1;
+var LaunchLock: TCriticalSection;
+
 function CommandLineQuote(const AText: string): string;
-var
-  I: Integer;
+var I, Slashes: Integer;
 begin
   Result := '"';
+  Slashes := 0;
   for I := 1 to Length(AText) do
-    if AText[I] = '"' then
-      Result += '\"'
+    if AText[I] = '\' then Inc(Slashes)
     else
-      Result += AText[I];
-  Result += '"';
+    begin
+      if AText[I] = '"' then
+        Result += StringOfChar('\', 2 * Slashes + 1) + '"'
+      else Result += StringOfChar('\', Slashes) + AText[I];
+      Slashes := 0;
+    end;
+  Result += StringOfChar('\', 2 * Slashes) + '"';
 end;
 
 {$IFDEF MSWINDOWS}
@@ -183,6 +192,8 @@ var
   I: Integer;
 {$ENDIF}
 begin
+  LaunchLock.Acquire;
+  try
   Close;
   {$IFDEF MSWINDOWS}
   Parent2ChildRead := 0;
@@ -190,6 +201,7 @@ begin
   Child2ParentRead := 0;
   Child2ParentWrite := 0;
 
+  try
   FillChar(Security, SizeOf(Security), 0);
   Security.nLength := SizeOf(Security);
   Security.bInheritHandle := True;
@@ -210,11 +222,10 @@ begin
   StartupInfo.hStdOutput := Child2ParentWrite;
   StartupInfo.dwFlags := STARTF_USESTDHANDLES;
 
-  CommandLine := '"' + AFileName + '"';
+  CommandLine := CommandLineQuote(AFileName);
   for I := 0 to ALaunchArgs.Count - 1 do
     CommandLine += ' ' + CommandLineQuote(ALaunchArgs[I]);
 
-  try
     if not CreateProcess(nil, PChar(CommandLine), nil, nil, True,
       CREATE_NO_WINDOW, nil, PChar(ACurrentDirectory), StartupInfo,
       FProcessInfo) then
@@ -226,7 +237,11 @@ begin
     FInputWriteHandle := Parent2ChildWrite;
     FOutputReadHandle := Child2ParentRead;
     FRunning := True;
+    Parent2ChildWrite := 0;
+    Child2ParentRead := 0;
   finally
+    if Parent2ChildWrite <> 0 then CloseHandle(Parent2ChildWrite);
+    if Child2ParentRead <> 0 then CloseHandle(Child2ParentRead);
     if Parent2ChildRead <> 0 then
       CloseHandle(Parent2ChildRead);
     if Child2ParentWrite <> 0 then
@@ -241,7 +256,15 @@ begin
   FProcess.Options := [poUsePipes, poStderrToOutPut];
   FProcess.ShowWindow := swoHIDE;
   FProcess.Execute;
+  {$IFDEF UNIX}
+  // Serialize launches until all parent descriptors are close-on-exec. Other
+  // engines must never inherit pipes belonging to an already running child.
+  if (fpFcntl(FProcess.Input.Handle, F_SETFD, fpFcntl(FProcess.Input.Handle, F_GETFD) or LocalFdCloseOnExec) < 0) or
+    (fpFcntl(FProcess.Output.Handle, F_SETFD, fpFcntl(FProcess.Output.Handle, F_GETFD) or LocalFdCloseOnExec) < 0) then
+    RaiseLastOSError;
   {$ENDIF}
+  {$ENDIF}
+  finally LaunchLock.Release; end;
 end;
 
 procedure TPlatformProcess.WriteLine(const AText: string);
@@ -411,4 +434,8 @@ begin
 end;
 {$ENDIF}
 
+initialization
+  LaunchLock := TCriticalSection.Create;
+finalization
+  LaunchLock.Free;
 end.

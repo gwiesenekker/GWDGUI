@@ -196,7 +196,7 @@ var
 begin
   NeedsQuotes := AValue = '';
   for I := 1 to Length(AValue) do
-    if AValue[I] in [' ', '=', '"'] then
+    if AValue[I] in [' ', #9, #10, #13, '=', '"', '\'] then
       NeedsQuotes := True;
 
   if not NeedsQuotes then
@@ -204,8 +204,8 @@ begin
 
   Result := '"';
   for I := 1 to Length(AValue) do
-    if AValue[I] = '"' then
-      Result += '\"'
+    if AValue[I] in ['"', '\'] then
+      Result += '\' + AValue[I]
     else
       Result += AValue[I];
   Result += '"';
@@ -213,34 +213,39 @@ end;
 
 function ExtractHubArgument(const ALine, AName: string): string;
 var
-  LowerLine: string;
-  LowerName: string;
-  P: Integer;
-  StartPos: Integer;
-  StopPos: Integer;
+  I, Start: Integer;
+  Name, Value: string;
 begin
   Result := '';
-  LowerLine := LowerCase(ALine);
-  LowerName := LowerCase(AName);
-  P := Pos(' ' + LowerName + '=', ' ' + LowerLine);
-  if P = 0 then
-    Exit;
-
-  StartPos := P + Length(AName) + 1;
-  if (StartPos <= Length(ALine)) and (ALine[StartPos] = '"') then
+  I := 1;
+  while I <= Length(ALine) do
   begin
-    Inc(StartPos);
-    StopPos := StartPos;
-    while (StopPos <= Length(ALine)) and (ALine[StopPos] <> '"') do
-      Inc(StopPos);
-    Result := Copy(ALine, StartPos, StopPos - StartPos);
-  end
-  else
-  begin
-    StopPos := StartPos;
-    while (StopPos <= Length(ALine)) and (ALine[StopPos] > ' ') do
-      Inc(StopPos);
-    Result := Copy(ALine, StartPos, StopPos - StartPos);
+    while (I <= Length(ALine)) and (ALine[I] <= ' ') do Inc(I);
+    Start := I;
+    while (I <= Length(ALine)) and (ALine[I] > ' ') and (ALine[I] <> '=') do Inc(I);
+    Name := Copy(ALine, Start, I - Start);
+    if (I > Length(ALine)) or (ALine[I] <> '=') then Continue;
+    Inc(I);
+    Value := '';
+    if (I <= Length(ALine)) and (ALine[I] = '"') then
+    begin
+      Inc(I);
+      while I <= Length(ALine) do
+      begin
+        if ALine[I] = '"' then begin Inc(I); Break; end;
+        if (ALine[I] = '\') and (I < Length(ALine)) and
+          (ALine[I + 1] in ['\', '"']) then Inc(I);
+        Value += ALine[I];
+        Inc(I);
+      end;
+    end
+    else
+    begin
+      Start := I;
+      while (I <= Length(ALine)) and (ALine[I] > ' ') do Inc(I);
+      Value := Copy(ALine, Start, I - Start);
+    end;
+    if SameText(Name, AName) then Exit(Value);
   end;
 end;
 

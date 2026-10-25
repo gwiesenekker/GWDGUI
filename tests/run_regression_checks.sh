@@ -18,6 +18,7 @@ CHECKS=(
   game_tree_cursor_check.pas
   game_preservation_check.pas
   game_tree_topology_check.pas
+  platform_process_check.pas
   socket_disconnect_check.pas
   engine_clock_check.pas
   atomic_file_check.pas

@@ -58,6 +58,7 @@ type
     FLastMovesText: string;
     FProcess: TPlatformProcess;
     FSentMoveCount: Integer;
+    FPacketBuffer: TDxpPacketBuffer;
     FSocket: TSocketStream;
     FSocketLock: TCriticalSection;
     FStopping: Boolean;
@@ -884,6 +885,7 @@ begin
       if (FAcceptThread <> nil) and FAcceptThread.SocketAvailable then
       begin
         FSocket := FAcceptThread.DetachSocket;
+        FPacketBuffer.Clear;
         StopListening;
         Log('DXP socket accepted');
         Exit(True);
@@ -915,6 +917,7 @@ begin
       InetSocket := TInetSocket.Create(FEngine.DxpHost, FEngine.DxpPort, 1000);
       SetSocketCloseOnExec(InetSocket);
       FSocket := InetSocket;
+      FPacketBuffer.Clear;
       if FProcess.NeedsPolling then
         FProcess.ReadAvailable;
       Log('DXP socket connected; attempt=' + IntToStr(Attempt));
@@ -1109,12 +1112,11 @@ begin
 
     if BytesRead > 0 then
     begin
-      if Ch = #0 then
+      if FPacketBuffer.FeedByte(Ch, APacket) then
       begin
         Log('receive; packet=' + APacket);
         Exit(True);
       end;
-      APacket += Ch;
     end
     else
       Sleep(10);
@@ -1279,6 +1281,7 @@ begin
   FGameIncrementSeconds := AIncrementSeconds;
   FGameStarted := False;
   FSentMoveCount := 0;
+  FPacketBuffer.Clear;
   FTotalUsedSeconds := 0;
 
   if FSocket = nil then

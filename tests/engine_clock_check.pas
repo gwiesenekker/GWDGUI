@@ -3,7 +3,7 @@ program engine_clock_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uEngineBase, uEngineParamsJson, uHubEngine, uEngineRegistry,
-  uDraughtsBoard, uGameMoveHistory, uGameOrchestrator;
+  uPlatformProcess, uDraughtsBoard, uGameMoveHistory, uGameOrchestrator;
 
 type
   TClockProbe = class(TDraughtsEngine)
@@ -24,6 +24,21 @@ procedure Check(Condition: Boolean; const MessageText: string);
 begin
   if not Condition then
     raise Exception.Create(MessageText);
+end;
+
+procedure CheckHubArguments;
+var Text: string;
+begin
+  Check(ExtractHubArgument('id name="value name=wrong" version=1', 'name') =
+    'value name=wrong', 'Hub arguments must respect quoted values');
+  Check(ExtractHubArgument('id name="value version=wrong" version=1', 'version') =
+    '1', 'Hub argument names cannot match inside quotes');
+  Check(CommandLineQuote('C:\path\') = '"C:\path\\"', 'Windows arguments double trailing backslashes');
+  Check(CommandLineQuote('a"b') = '"a\"b"', 'Windows arguments escape embedded quotes');
+  Text := 'C:\space path\"quoted"\';
+  Check(ExtractHubArgument('set-param value=' + HubParamQuote(Text) + ' name=path', 'value') =
+    Text, 'Hub quote/parser round trip includes escaped quotes and trailing backslash');
+  Check(ExtractHubArgument('id name="other" missing', 'absent') = '', 'Hub absent argument terminates');
 end;
 
 procedure CheckTypedClockCompatibility;
@@ -372,6 +387,7 @@ begin
     CheckClockedThink('--long-hub', dsWhite, 2, 0, False)
   else
   begin
+    CheckHubArguments;
     CheckBoundedEngineLog;
     CheckClockedThink('--flood-hub', dsWhite, 2, 0, False);
     CheckStartupTimeout;

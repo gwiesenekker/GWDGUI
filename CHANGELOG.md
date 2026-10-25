@@ -3,6 +3,22 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Harden engine protocol boundaries and pipe ownership (D11/D12)
+
+- Retain partial DXP packets between timed reads, enforce the 127-byte limit,
+  reject trailing/non-numeric MOVE data and invalid/repeated captured squares,
+  and clamp oversized Fischer fields. Keep valid zero-capture quiet moves.
+- Parse Hub arguments outside quoted values and round-trip escaped quotes,
+  backslashes and whitespace consistently. Correct Windows command-line quoting
+  for embedded quotes and trailing backslashes, including the executable path.
+- Serialize process launches, mark Unix parent pipe descriptors close-on-exec,
+  and close failed Windows launch pipe handles. Concurrent Windows launches can
+  no longer inherit another launch's temporary child handles.
+- Regress packet fragments/limits, malformed captures, Fischer bounds, Hub quotes,
+  Windows argument strings and actual Linux child pipe inheritance.
+- Validation: board, engine clock, process and real TCP DXP suites pass. Native
+  Windows execution remains unavailable on this Linux host.
+
 ### 2026-10-25 — Show current analysis and frozen PV state (A4–A6)
 
 - Mark the PV browser as browsing, explain Escape to resume, and indicate a newer

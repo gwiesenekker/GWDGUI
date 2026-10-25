@@ -1,12 +1,22 @@
 unit uDxpProtocol;
 
 {$mode objfpc}{$H+}
+{$modeswitch advancedrecords}
 
 interface
 
 uses
-  SysUtils, Classes,
+  SysUtils, Classes, Math,
   uDraughtsBoard;
+
+type
+  TDxpPacketBuffer = record
+  private
+    FPartial: string;
+  public
+    function FeedByte(Value: Char; out Packet: string): Boolean;
+    procedure Clear;
+  end;
 
 function DxpBuildGameReqPacket(ABoard: TDraughtsBoard; AEngineSide: TDraughtsSide;
   AGameMinutes: Double; AGameMoves: Integer; const ANameText: string): string;
@@ -19,6 +29,19 @@ function DxpBuildMovePacket(const AMove: string; ATotalTimeUsedSeconds: Integer)
 function DxpMoveMessageToText(const AMessage: string; out AMoveText: string): Boolean;
 
 implementation
+
+function TDxpPacketBuffer.FeedByte(Value: Char; out Packet: string): Boolean;
+begin
+  Packet := '';
+  Result := Value = #0;
+  if Result then begin Packet := FPartial; FPartial := ''; Exit; end;
+  if Length(FPartial) >= 127 then
+  begin FPartial := ''; raise EConvertError.Create('DXP packet exceeds 127 bytes'); end;
+  FPartial += Value;
+end;
+
+procedure TDxpPacketBuffer.Clear;
+begin FPartial := ''; end;
 
 function Dxp2(AValue: Integer): string;
 begin
@@ -52,8 +75,8 @@ var
   DotPos: Integer;
   FS: TFormatSettings;
 begin
-  if AValue < 0 then
-    AValue := 0;
+  if IsNan(AValue) or IsInfinite(AValue) or (AValue < 0) then AValue := 0;
+  if AValue > 999999 then AValue := 999999;
 
   FS := DefaultFormatSettings;
   FS.DecimalSeparator := '.';
@@ -220,20 +243,24 @@ var
   FromSquare: Integer;
   I: Integer;
   Offset: Integer;
-  ToSquare: Integer;
+  ToSquare, Captured: Integer;
+  Seen: set of Byte;
 begin
   Result := False;
   AMoveText := '';
   if (Length(AMessage) < 11) or (AMessage[1] <> 'M') then
     Exit;
 
+  if Length(AMessage) > 127 then Exit;
+  for I := 2 to Length(AMessage) do
+    if not (AMessage[I] in ['0'..'9']) then Exit;
   FromSquare := StrToIntDef(Copy(AMessage, 6, 2), 0);
   ToSquare := StrToIntDef(Copy(AMessage, 8, 2), 0);
   CaptureCount := StrToIntDef(Copy(AMessage, 10, 2), -1);
   if (FromSquare < 1) or (FromSquare > 50) or
     (ToSquare < 1) or (ToSquare > 50) or (CaptureCount < 0) then
     Exit;
-  if Length(AMessage) < 11 + 2 * CaptureCount then
+  if Length(AMessage) <> 11 + 2 * CaptureCount then
     Exit;
 
   if CaptureCount = 0 then
@@ -242,9 +269,14 @@ begin
   begin
     AMoveText := IntToStr(FromSquare) + 'x' + IntToStr(ToSquare);
     Offset := 12;
+    Seen := [];
     for I := 1 to CaptureCount do
     begin
-      AMoveText += 'x' + IntToStr(StrToIntDef(Copy(AMessage, Offset, 2), 0));
+      Captured := StrToIntDef(Copy(AMessage, Offset, 2), 0);
+      if (Captured < 1) or (Captured > 50) or (Captured in Seen) then
+      begin AMoveText := ''; Exit; end;
+      Include(Seen, Captured);
+      AMoveText += 'x' + IntToStr(Captured);
       Inc(Offset, 2);
     end;
   end;
