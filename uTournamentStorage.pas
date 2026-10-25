@@ -152,6 +152,8 @@ var
 begin
   CheckInteger(Data, 'attempt', 1);
   CheckField(Data, 'pdn', [jtString]);
+  CheckField(Data, 'white_engine_key', [jtString]);
+  CheckField(Data, 'black_engine_key', [jtString]);
   CheckField(Data, 'played_result', [jtString]);
   CheckField(Data, 'manual_result', [jtString]);
   Value := Data.Get('played_result', '');
@@ -226,6 +228,12 @@ begin
     for I := 0 to Engines.Count - 1 do
       if Engines[I].JSONType <> jtString then
         raise EConvertError.Create('Invalid selected tournament engine');
+  CheckField(Data, 'selected_engine_keys', [jtArray]);
+  Engines := TJSONArray(Data.Find('selected_engine_keys'));
+  if Engines <> nil then
+    for I := 0 to Engines.Count - 1 do
+      if Engines[I].JSONType <> jtString then
+        raise EConvertError.Create('Invalid selected tournament engine identity');
   CheckField(Data, 'games', [jtArray]);
   Games := TJSONArray(Data.Find('games'));
   if Games = nil then
@@ -235,6 +243,8 @@ begin
     if Games[I].JSONType <> jtObject then
       raise EConvertError.Create('Invalid tournament game');
     Game := TJSONObject(Games[I]);
+    CheckField(Game, 'white_engine_key', [jtString]);
+    CheckField(Game, 'black_engine_key', [jtString]);
     CheckField(Game, 'record', [jtObject]);
     if Game.Find('record') <> nil then
       ValidateRecord(TJSONObject(Game.Find('record')), True)

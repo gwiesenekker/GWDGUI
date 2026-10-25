@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Resume tournament rows by engine identity (T8)
+
+- Persist each row's engine identity with its record and persist selected engine
+  keys separately from display labels. Resolve those keys on load and refresh
+  labels after registry reordering; never fall back to a display slot for a saved key.
+- Keep legacy rows compatible by capturing their identity when first resolved.
+  Missing engines receive a row diagnostic rather than leaving scheduling spinning.
+- Validate the added identity fields before mutating a loaded tournament.
+- Regress registry reordering and engine removal through actual save/load/setup;
+  tournament record and GTK tournament suites pass.
+
 ### 2026-10-25 — Let star clear a tournament manual override (T15)
 
 - Treat manual `*` as clearing the override, restoring the played result when

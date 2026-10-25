@@ -6,7 +6,7 @@ program tournament_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, Grids, ExtCtrls, CheckLst, Controls, FPJSON, JSONParser, uGuiDialogs,
-  uTournamentStorage, uTournamentDialog, uTournamentGridModel, uMainForm, uGameSetupForm,
+  uEngineRegistry, uTournamentStorage, uTournamentDialog, uTournamentGridModel, uMainForm, uGameSetupForm,
   uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uPdn;
 
 procedure Check(Condition: Boolean; const MessageText: string);
@@ -879,6 +879,59 @@ begin
   end;
 end;
 
+procedure CheckStableEngineRows(const Fixture: string);
+var Dialog, Reloaded, Missing: TTournamentDialog; Engines: TExternalEngineList;
+  Engine: TExternalEngineDefinition; Grid: TStringGrid; Setup: TGameSetup;
+  Config, SavedConfig: string; HadConfig: Boolean;
+
+  procedure WriteEngines(Reversed, OmitA: Boolean);
+  var I: Integer; Name: string;
+  begin
+    Engines.Clear;
+    for I := 0 to 1 do
+    begin
+      if Reversed xor (I = 0) then Name := 'A' else Name := 'B';
+      if OmitA and (Name = 'A') then Continue;
+      Engine := TExternalEngineDefinition.Create;
+      Engine.Kind := eekHub; Engine.HubId := Name;
+      Engine.ExePath := '/tmp/gwd-test-engine-' + Name;
+      Engines.Add(Engine);
+    end;
+    SaveExternalEngines(Config, Engines);
+  end;
+
+begin
+  Config := EnginesJsonFileName;
+  HadConfig := FileExists(Config);
+  if HadConfig then SavedConfig := FileContents(Config);
+  Engines := TExternalEngineList.Create;
+  Dialog := nil; Reloaded := nil; Missing := nil;
+  try
+    WriteEngines(False, False);
+    Dialog := TTournamentDialog.Create(nil);
+    Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    AddTournamentPairingRow(Grid, EnginePickerDisplayName(Engines[0], 1),
+      EnginePickerDisplayName(Engines[1], 2), 1);
+    Dialog.SaveTournamentToFile(Fixture);
+    WriteEngines(True, False);
+    Reloaded := TTournamentDialog.Create(nil);
+    Reloaded.LoadTournamentFromFile(Fixture);
+    Check(Reloaded.GameSetupForRow(1, Setup), 'reordered engines must still resolve');
+    Check((Setup.WhiteEngine.HubId = 'A') and (Setup.BlackEngine.HubId = 'B'),
+      'saved tournament rows must retain engine identities across picker reorder');
+    WriteEngines(True, True);
+    Missing := TTournamentDialog.Create(nil);
+    Missing.LoadTournamentFromFile(Fixture);
+    Check(not Missing.GameSetupForRow(1, Setup), 'missing engine must not bind by a matching slot');
+    Grid := TStringGrid(Missing.FindComponent('TournamentPairings'));
+    Check(Pos('Missing engine', Grid.Cells[TournamentColReason, 1]) > 0,
+      'missing engine must have an actionable row diagnostic');
+  finally
+    Missing.Free; Reloaded.Free; Dialog.Free; Engines.Free;
+    if HadConfig then WriteContents(Config, SavedConfig) else DeleteFile(Config);
+  end;
+end;
+
 procedure CheckMovedOwnedProjection(const Fixture: string);
 var
   Source, Moved: TTournamentDialog;
@@ -1093,6 +1146,7 @@ begin
       CheckResetWaitsForSuccessfulSave(IncludeTrailingPathDelimiter(TestDirectory) + 'failed-reset.json');
       CheckResetPreservesRecoveryFiles;
       CheckPortableTournamentPaths(IncludeTrailingPathDelimiter(TestDirectory) + 'portable.json');
+      CheckStableEngineRows(IncludeTrailingPathDelimiter(TestDirectory) + 'stable-engines.json');
       CheckMovedOwnedProjection(IncludeTrailingPathDelimiter(TestDirectory) + 'owned-collision.json');
       CheckNewProjectionPreservesExistingPdn(IncludeTrailingPathDelimiter(TestDirectory) + 'collision.json');
       CheckProjectionAvoidsExistingDirectory(IncludeTrailingPathDelimiter(TestDirectory) + 'directory.json');

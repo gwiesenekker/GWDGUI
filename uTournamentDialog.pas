@@ -79,10 +79,10 @@ type
     function DisplayNameForEngine(AEngine: TExternalEngineDefinition): string;
     function EngineByDisplayName(const AName: string): TExternalEngineDefinition;
     function EngineKeyForName(const AName: string): string;
+    function EngineForRow(ARow: Integer; White: Boolean): TExternalEngineDefinition;
     function ActiveRunningGameCount: Integer;
     function FindNextUnplayedRow: Integer;
     function FindTournamentGameByRow(ARow: Integer): TTournamentRunningGame;
-    function GameSetupForRow(ARow: Integer; out ASetup: TGameSetup): Boolean;
     function HasNonByeResults: Boolean;
     function MaxConcurrentGames: Integer;
     procedure HighlightRow(ARow: Integer);
@@ -110,6 +110,7 @@ type
     procedure LoadTournamentFromFile(const AFileName: string);
     procedure SaveTournamentToFile(const AFileName: string);
     procedure SetSelectedResult(const AResultText: string);
+    function GameSetupForRow(ARow: Integer; out ASetup: TGameSetup): Boolean;
     procedure RescheduleSelectedGame(Sender: TObject);
     function PdnFileName: string;
     property SaveFileName: string read FFileName;
@@ -822,6 +823,25 @@ begin
       Exit(FEngines[I]);
 end;
 
+function TTournamentDialog.EngineForRow(ARow: Integer; White: Boolean): TExternalEngineDefinition;
+var Key: string; I, Col: Integer; RecordData: TTournamentGameRecord;
+begin
+  Result := nil;
+  RecordData := GameRecord(ARow);
+  if White then begin Key := RecordData.WhiteEngineKey; Col := TournamentColWhite; end
+  else begin Key := RecordData.BlackEngineKey; Col := TournamentColBlack; end;
+  if Key = '' then
+  begin
+    Result := EngineByDisplayName(FGrid.Cells[Col, ARow]);
+    if Result <> nil then
+      if White then RecordData.WhiteEngineKey := EngineIdentityKey(Result)
+      else RecordData.BlackEngineKey := EngineIdentityKey(Result);
+    Exit;
+  end;
+  for I := 0 to FEngines.Count - 1 do
+    if EngineIdentityKey(FEngines[I]) = Key then Exit(FEngines[I]);
+end;
+
 function TTournamentDialog.EngineKeyForName(const AName: string): string;
 var
   Engine: TExternalEngineDefinition;
@@ -1098,12 +1118,12 @@ begin
   if Trim(FGrid.Cells[TournamentColReason, ARow]) <> '' then
     Exit;
 
-  WhiteEngine := EngineByDisplayName(FGrid.Cells[TournamentColWhite, ARow]);
-  BlackEngine := EngineByDisplayName(FGrid.Cells[TournamentColBlack, ARow]);
+  WhiteEngine := EngineForRow(ARow, True);
+  BlackEngine := EngineForRow(ARow, False);
   WhiteKey := EngineIdentityKey(WhiteEngine);
   BlackKey := EngineIdentityKey(BlackEngine);
   if (WhiteKey = '') or (BlackKey = '') then
-    Exit;
+  begin FGrid.Cells[TournamentColReason, ARow] := 'Missing engine'; Exit; end;
   if ABusyEngineKeys <> nil then
   begin
     CandidateKeys := TStringList.Create;
@@ -1294,7 +1314,7 @@ end;
 procedure TTournamentDialog.SaveTournamentSnapshot(const AFileName: string);
 var
   Data: TJSONObject;
-  EngineArray: TJSONArray;
+  EngineArray, EngineKeys: TJSONArray;
   Game: TJSONObject;
   Games: TJSONArray;
   I: Integer;
@@ -1328,9 +1348,14 @@ begin
 
     EngineArray := TJSONArray.Create;
     Data.Add('selected_engines', EngineArray);
+    EngineKeys := TJSONArray.Create;
+    Data.Add('selected_engine_keys', EngineKeys);
     for I := 0 to FEngineCheckList.Items.Count - 1 do
       if FEngineCheckList.Checked[I] then
+      begin
         EngineArray.Add(FEngineCheckList.Items[I]);
+        EngineKeys.Add(EngineIdentityKey(TExternalEngineDefinition(FEngineCheckList.Items.Objects[I])));
+      end;
 
     Games := TJSONArray.Create;
     Data.Add('games', Games);
@@ -1341,6 +1366,8 @@ begin
         if SameText(FGrid.Cells[TournamentColReason, I], 'Bye') and
           not GameRecord(I).HasRecord then
           GameRecord(I).RecordPlayedGame('', FGrid.Cells[TournamentColResult, I]);
+        EngineForRow(I, True);
+        EngineForRow(I, False);
         Game := TJSONObject.Create;
         Game.Add('game', StrToIntDef(FGrid.Cells[TournamentColGame, I], I));
         Game.Add('round', StrToIntDef(FGrid.Cells[TournamentColRound, I], 1));
@@ -1364,7 +1391,9 @@ procedure TTournamentDialog.LoadTournamentFromFile(const AFileName: string);
 var
   Data: TJSONObject;
   EngineName: string;
-  Engines: TJSONData;
+  Engines, SelectedKeys: TJSONData;
+  Engine: TExternalEngineDefinition;
+  KeyIndex: Integer;
   Game: TJSONObject;
   Games: TJSONData;
   I: Integer;
@@ -1402,13 +1431,20 @@ begin
     for I := 0 to FEngineCheckList.Items.Count - 1 do
       FEngineCheckList.Checked[I] := False;
     Engines := TJSONObject(Data).Find('selected_engines');
-    if (Engines <> nil) and (Engines.JSONType = jtArray) then
+    SelectedKeys := Data.Find('selected_engine_keys');
+    if (SelectedKeys <> nil) and (SelectedKeys.JSONType = jtArray) then
+    begin
+      for KeyIndex := 0 to SelectedKeys.Count - 1 do
+        for I := 0 to FEngineCheckList.Items.Count - 1 do
+          if EngineIdentityKey(TExternalEngineDefinition(FEngineCheckList.Items.Objects[I])) =
+            TJSONArray(SelectedKeys).Strings[KeyIndex] then FEngineCheckList.Checked[I] := True;
+    end
+    else if (Engines <> nil) and (Engines.JSONType = jtArray) then
       for I := 0 to TJSONArray(Engines).Count - 1 do
       begin
         EngineName := TJSONArray(Engines).Strings[I];
         Row := FEngineCheckList.Items.IndexOf(EngineName);
-        if Row >= 0 then
-          FEngineCheckList.Checked[Row] := True;
+        if Row >= 0 then FEngineCheckList.Checked[Row] := True;
       end;
 
     ClearTournamentGameRefs;
@@ -1423,6 +1459,10 @@ begin
             Game.Get('black', ''), Game.Get('round', 1));
           FGrid.Cells[TournamentColGame, Row] := IntToStr(Game.Get('game', Row));
           GameRecord(Row).LoadFromJson(Game);
+          Engine := EngineForRow(Row, True);
+          if Engine <> nil then FGrid.Cells[TournamentColWhite, Row] := DisplayNameForEngine(Engine);
+          Engine := EngineForRow(Row, False);
+          if Engine <> nil then FGrid.Cells[TournamentColBlack, Row] := DisplayNameForEngine(Engine);
           FGrid.Cells[TournamentColResult, Row] := GameRecord(Row).EffectiveResult;
           if GameRecord(Row).ManualResult <> '' then
             FGrid.Cells[TournamentColReason, Row] := 'Manual result'
@@ -1571,10 +1611,10 @@ begin
   ASetup.TimeControl := DefaultTimeControl;
   if not TournamentGridHasPairingAtRow(FGrid, ARow) then
     Exit;
-  ASetup.WhiteEngine := EngineByDisplayName(FGrid.Cells[TournamentColWhite, ARow]);
-  ASetup.BlackEngine := EngineByDisplayName(FGrid.Cells[TournamentColBlack, ARow]);
+  ASetup.WhiteEngine := EngineForRow(ARow, True);
+  ASetup.BlackEngine := EngineForRow(ARow, False);
   if (ASetup.WhiteEngine = nil) or (ASetup.BlackEngine = nil) then
-    Exit;
+  begin FGrid.Cells[TournamentColReason, ARow] := 'Missing engine'; Exit; end;
   ASetup.StartingFEN := Trim(FStartingFENEdit.Text);
   if ASetup.StartingFEN = '' then
     ASetup.StartingFEN := 'W:W31-50:B1-20';

@@ -6,6 +6,7 @@ type
   TTournamentGameRecord = class
   private
     FAttempt: Integer;
+    FWhiteEngineKey, FBlackEngineKey: string;
     FPdn: string;
     FPlayedResult: string;
     FManualResult: string;
@@ -23,6 +24,8 @@ type
     function EffectiveResult: string;
     function RenderPdn(const ATournamentId, AEvent, ARound, AGameNo,
       AWhite, ABlack, AFen: string): string;
+    property WhiteEngineKey: string read FWhiteEngineKey write FWhiteEngineKey;
+    property BlackEngineKey: string read FBlackEngineKey write FBlackEngineKey;
     property Attempt: Integer read FAttempt;
     property ManualResult: string read FManualResult;
     property PlayedResult: string read FPlayedResult;
@@ -47,6 +50,8 @@ function TTournamentGameRecord.CurrentJson: TJSONObject;
 begin
   Result := TJSONObject.Create;
   Result.Add('attempt', FAttempt);
+  Result.Add('white_engine_key', FWhiteEngineKey);
+  Result.Add('black_engine_key', FBlackEngineKey);
   Result.Add('pdn', FPdn);
   Result.Add('played_result', FPlayedResult);
   Result.Add('manual_result', FManualResult);
@@ -63,6 +68,8 @@ var
   Data: TJSONObject;
   History: TJSONData;
 begin
+  FWhiteEngineKey := AGame.Get('white_engine_key', '');
+  FBlackEngineKey := AGame.Get('black_engine_key', '');
   Data := TJSONObject(AGame.Find('record'));
   if Data = nil then
   begin
@@ -76,6 +83,8 @@ begin
     end;
     Exit;
   end;
+  FWhiteEngineKey := Data.Get('white_engine_key', FWhiteEngineKey);
+  FBlackEngineKey := Data.Get('black_engine_key', FBlackEngineKey);
   FAttempt := Data.Get('attempt', 1);
   FPdn := Data.Get('pdn', '');
   FPlayedResult := Data.Get('played_result', '');
