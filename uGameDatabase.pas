@@ -44,6 +44,7 @@ type
     procedure CreateImportIndexes;
     procedure DropImportIndexes;
     procedure EnsureContinuationTable;
+    procedure EnsureContinuationState;
     procedure EnsureGameHashColumns;
     procedure ExecuteSql(const ASql: string);
     procedure SetBulkImportPragmas;
@@ -652,7 +653,7 @@ begin
 
   Q := Query;
   try
-    Q.SQL.Text := 'select 1 from continuations limit 1';
+    Q.SQL.Text := 'select 1 from database_state where id=1 and summary_dirty=0';
     Q.Open;
     Result := not Q.EOF;
     Q.Close;
@@ -711,6 +712,27 @@ begin
     'draws integer not null,' +
     'black_wins integer not null,' +
     'primary key(position_key_lo, position_key_hi, side_to_move, next_move))');
+end;
+
+procedure TGameDatabase.EnsureContinuationState;
+const
+  Changes: array[0..2] of string = ('insert', 'update', 'delete');
+var
+  Change: string;
+begin
+  ExecuteSql('create table if not exists database_state (' +
+    'id integer primary key check(id=1),' +
+    'summary_dirty integer not null check(summary_dirty in (0,1)))');
+  // Existing databases have no trustworthy freshness information. Their first
+  // open with this schema must rebuild even if the old summary is nonempty.
+  ExecuteSql('insert or ignore into database_state(id, summary_dirty) values(1,1)');
+  // Invalidate alongside every position change, including writes after a
+  // reentrant rebuild or from another connection. Rollbacks undo this too.
+  for Change in Changes do
+    ExecuteSql('create trigger if not exists continuations_dirty_' + Change +
+      ' after ' + Change + ' on positions ' +
+      'when (select summary_dirty from database_state where id=1)=0 ' +
+      'begin update database_state set summary_dirty=1 where id=1; end');
 end;
 
 procedure TGameDatabase.EnsureGameHashColumns;
@@ -804,8 +826,11 @@ begin
       raise EInvalidOperation.Create(
         'This database uses the old position schema. Create a new database and reimport the PDN file.');
     EnsureContinuationTable;
+    EnsureContinuationState;
     CreateImportIndexes;
     FTransaction.Commit;
+    if not ContinuationSummaryAvailable then RebuildContinuationSummary;
+    CommitActiveTransaction;
     FFileName := AFileName;
   finally
     Q.Free;
@@ -836,6 +861,9 @@ begin
       CommitActiveTransaction;
       SetBulkImportPragmas;
       StartTransactionIfNeeded;
+      // Commit invalidation before any import rows can become durable (including
+      // progress callbacks which may query and commit the active transaction).
+      ExecuteSql('update database_state set summary_dirty=1 where id=1');
       DropImportIndexes;
       CommitActiveTransaction;
       StartTransactionIfNeeded;
@@ -887,6 +915,8 @@ begin
       'from positions ' +
       'where coalesce(next_move, '''') <> '''' ' +
       'group by position_key_lo, position_key_hi, side_to_move, next_move');
+    // Publish the replacement summary and its clean flag in one transaction.
+    ExecuteSql('update database_state set summary_dirty=0 where id=1');
     CommitActiveTransaction;
   except
     if FTransaction.Active then

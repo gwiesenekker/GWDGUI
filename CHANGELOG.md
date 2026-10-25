@@ -3,6 +3,20 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Track and recover database summary freshness (P9)
+
+- Persist a summary freshness flag before imports and invalidate it atomically
+  with position inserts, updates and deletes. Searches aggregate position rows
+  while the summary is stale, including after a rebuild during an active import.
+- Publish rebuilt statistics and the clean flag together. On opening an
+  interrupted or older database, rebuild its summary before returning it for use.
+  A failed rebuild leaves the prior summary marked stale and searches correct.
+- Add regressions for live White/Black statistics, cancellation, reentrant
+  rebuilds, failed summary writes, old-database migration and abrupt process exit
+  immediately after a committed 10,000-game batch, bypassing all import cleanup.
+- Validation: stale-summary regressions fail before their fixes; new import
+  recovery and existing PDN regression checks pass.
+
 ### 2026-10-25 — Separate PDN games at mainline result tokens (P7)
 
 - End each game at its mainline result, retaining adjacent untagged games even
