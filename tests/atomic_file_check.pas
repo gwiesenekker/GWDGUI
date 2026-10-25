@@ -14,7 +14,7 @@ var
 begin
   FileName := GetTempFileName(GetTempDir, 'gwd');
   DirectoryName := FileName + '.directory';
-  NewFile := FileName + '.new';
+  NewFile := FileName + '.Gérard-棋.new';
   Lines := TStringList.Create;
   try
     WriteTextFileAtomically(FileName, 'Original' + #13#10);

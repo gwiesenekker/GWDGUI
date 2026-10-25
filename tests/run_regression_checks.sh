@@ -47,6 +47,11 @@ for check in "${CHECKS[@]}"; do
   run_check "$check"
 done
 
+echo "==> atomic_file_check (filesystem without hard links)"
+fpc -B -dGWDGUI_TEST_NO_HARDLINK -Fu"$ROOT_DIR" -FU"$OUT_DIR" -FE"$OUT_DIR" \
+  "$ROOT_DIR/tests/atomic_file_check.pas" > "$OUT_DIR/atomic_file_no_link.compile.log" 2>&1
+"$OUT_DIR/atomic_file_check"
+
 bash "$ROOT_DIR/tests/source_audit_check.sh"
 
 if command -v lazbuild >/dev/null 2>&1; then

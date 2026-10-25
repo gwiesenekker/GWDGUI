@@ -3,6 +3,20 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Publish safely on Unicode paths and filesystems without hard links (C4, C6)
+
+- Use explicit wide-character Windows create/rename/delete calls for UTF-8 paths.
+  Retry only transient sharing/lock failures with a bounded delay, preserving the
+  existing destination when replacement fails.
+- Fall back from unsupported Unix hard links to exclusive name reservation and
+  rename. Existing files/directories remain protected; a crash before rename can
+  leave an empty recoverable projection rather than overwrite unrelated data.
+- Regress non-ASCII paths, collisions and cleanup through both normal and forced
+  no-hard-link paths. Include the fallback in the regression runner.
+- Validation: both atomic-file modes pass on Linux. Windows API changes were
+  checked against the installed FPC declarations; native Windows execution remains
+  unavailable in this workspace.
+
 ### 2026-10-25 — Read PDN spans without per-character string growth (F6)
 
 - Copy ordinary token, comment, header and whitespace spans from stream buffers;
