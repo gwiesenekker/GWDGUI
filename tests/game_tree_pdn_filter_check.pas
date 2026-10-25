@@ -610,7 +610,7 @@ begin
     Tree.RecordMainlineMove(2, '16-21');
     AddFixtureBranch(Tree, 1, '18-23 37-32', 'variation');
     Data := Default(TGameTreeNodeData);
-    Data.CommentText := 'literal {braces} and \ path';
+    Data.CommentText := 'literal {braces} and \ path' + #10 + 'second line';
     Data.EnginePV := '18-23 37-32'; Data.EngineScore := '0.12';
     Data.EnginePVDepth := '19'; Data.EnginePVTimeText := '1.25';
     Data.AnnotatorPV := '20-24 34-29'; Data.AnnotatorScore := '-0.20';
@@ -632,6 +632,8 @@ begin
       Root := Game.BuildMoveTree;
       try
         Check(Root.HasNodeData, 'root metadata survives');
+        Check(Root.NodeData.CommentText = Data.CommentText, 'multiline root note survives complete PDN cycle');
+        Check(Game.ImportWarningsText = '', 'multiline projection is not falsely marked edited');
         Check(Root.Children[0].HasNodeData, 'mainline metadata survives');
         Check(Root.Children[0].ChildCount = 2, 'only real variations survive');
         Check(Root.Children[0].Children[1].HasNodeData, 'branch metadata survives');

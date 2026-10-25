@@ -1,3 +1,59 @@
+# Response to Claude's review of 9c958ec
+
+Reviewed and addressed on 2026-10-25. Source: `claude/review-9c958ec.md`.
+Changes are local commits; nothing has been pushed or released.
+
+I agree with all thirteen new findings. R8 and D16 were the most urgent: a valid
+ambiguous capture could break export, and an equivalent DXP capture order could
+end a normal game. The medium findings also describe real failures or regressions,
+not just style preferences. The new tests exercise the precise missing cases.
+The game tree remains the source of truth throughout these changes.
+
+| Review IDs | Resolution |
+|---|---|
+| R8 | Keep freshly generated legal PDN capture paths after playing a move. Regress ambiguous capture after ply 1 through both writers and database import. |
+| D16/D10 | Compare DXP captures as source, destination and captured-square multiset. Regress a real TCP exchange with reordered captures. |
+| M6 | Publish locked engine PV/score/depth/time and log updates on an immutable runner-owned position snapshot during thinking. The engine thread never reads the mutating orchestrator. |
+| T19/T8 | Include arguments, initialization/INI and endpoint settings in engine identity. Persist arguments and INI fields. Resolve an old key only when unique. |
+| T20/T5 | Persist capture failures per row, pause scheduling, retain retry/manual overrides, and allow unrelated edits, saving, game removal and explicit rescheduling. |
+| F8 | Serialize complete database PDN without replaying every stored node. Reuse already validated canonical mainline moves; compress full PDN when smaller. Schema 5 reads old storage and protects it from older applications. |
+| P22/P13 | Compare complete legacy candidates, upgrade duplicate identities lazily, and keep newly supplied comments/variations distinct. Regress v3/v4 rows and capture aliases. |
+| P21/P15 | Write compact readable metadata without duplicating ordinary comments. Read old blobs; retain empty-PV depth/time fields, multiline layout and independent analysis after visible edits. Normalize file-join whitespace for edit detection. |
+| T21/T4 | Replace exponential Swiss backtracking with maximum-cardinality matching using augmenting paths and odd-cycle contraction. Exhaustively check all six-player graphs against an independent oracle. |
+| T3 | Keep round-robin colour runs to at most two in the tested 2–12-player fields, including mirrored double rounds, while preserving balance and pair coverage. |
+| F9 | Write tournament JSON once per save, including durable row state when PDN publication fails; cache verified ownership to avoid reparsing unchanged files. |
+| T22 | Adopt an older unfingerprinted PDN when it exactly matches the current projection and identity. Preserve unverifiable content with an accurate notice. |
+| D18/D12 | Follow protocol.txt's literal Hub values. Backslashes remain literal; reject quotes/newlines that the grammar cannot represent. |
+| U6/P18 | Display standard capture notation with correct click/highlight ranges; avoid redundant Black move numbers inside variations. |
+| C4 | Include Windows access-denied errors in bounded publication retries. The error classification is regressed; native Windows execution remains unavailable. |
+| D8 | Map localhost to loopback, reject invalid/unsupported listen hostnames, validate accepted peers and support an optional explicit peer address. Rejected clients do not stop the listener. |
+| P10 | Run import on a worker-owned database connection. Poll locked progress from the modal dialog, with immediate Stop/close cancellation and no nested message processing in import callbacks. |
+| Review notes | Launch auxiliary processes under the engine launch lock and protect their Unix pipes. Treat a zero startup timeout as the default. |
+
+Each fix has regression coverage and a CHANGELOG entry. The agreed policy choices
+in the older response below remain in place; the latest review explicitly accepts
+them. No new finding has been silently deferred.
+
+Two suggestions are deliberately qualified:
+
+- **F9:** retain a content hash on every save rather than trusting file size and
+  modification time alone. Rapid same-size edits can share a timestamp; the new
+  regression proves they are preserved. Removing duplicate JSON writes and repeated
+  parsing still reduces the local 1,000-game / 10 KB autosave benchmark from
+  354 ms to 236 ms. This is a local measurement, not a release performance guarantee.
+- **F4:** retain the bounded per-refresh validated-board cache. Replaying from the
+  root remains correct; a persistent prefix cache would need additional revision
+  and invalidation rules. This residual observation is an optimization, not another
+  correctness repair.
+
+Verification: the complete headless suite, worker/lifecycle and mutation-audit
+checks, GTK main/tournament suites, real TCP DXP suite and application build pass
+on Lazarus 4.8 / FPC 3.2.2 / Linux. Native Windows and Lazarus 3.0 runs are still
+unavailable. The review's full 136 MB database benchmark has not been rerun, so
+no claim is made that its original import time or file size has been restored.
+
+---
+
 # Response to Claude's review of 3678ba3
 
 Reviewed and addressed on 2026-10-25. Source: `claude/review-3678ba3.md`,

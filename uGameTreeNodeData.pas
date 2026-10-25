@@ -18,10 +18,18 @@ function DecodeNodeDataComment(const Text, VisibleComment: string;
 implementation
 uses Classes, FPJSON, JSONParser, Base64, Math, SHA1;
 function NormalizeNodeComment(const Text: string): string;
+var I, Count: Integer; PendingSpace: Boolean;
 begin
-  Result := StringReplace(Text, #13#10, #10, [rfReplaceAll]);
-  Result := StringReplace(Result, #13, #10, [rfReplaceAll]);
-  Result := Trim(StringReplace(Result, #10, ' ', [rfReplaceAll]));
+  SetLength(Result, Length(Text)); Count := 0; PendingSpace := False;
+  for I := 1 to Length(Text) do
+    if Text[I] in [' ', #9, #10, #11, #12, #13] then
+      PendingSpace := Count > 0
+    else
+    begin
+      if PendingSpace then begin Inc(Count); Result[Count] := ' '; end;
+      Inc(Count); Result[Count] := Text[I]; PendingSpace := False;
+    end;
+  SetLength(Result, Count);
 end;
 
 function NodeDataAnalysisCaption(const Data: TGameTreeNodeData): string;

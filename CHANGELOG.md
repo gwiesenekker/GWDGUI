@@ -3,6 +3,14 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Recognize multiline metadata through the file reader (P21/P15)
+
+- Normalize whitespace introduced by file-line joining only for metadata edit
+  detection, preserving original comment layout and literal metadata values.
+- Extend repeated complete-file round trips with multiline notes and verify that
+  unchanged comments produce no stale-metadata warning.
+- Validation: metadata, parser, preservation and database regressions pass.
+
 ### 2026-10-25 — Keep canonical capture identities in fast storage (F8/P22)
 
 - Reuse the importer’s already validated mainline moves in the storage writer,

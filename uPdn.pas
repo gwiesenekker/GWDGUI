@@ -289,7 +289,11 @@ begin
 end;
 
 function NormalizePdnComment(const Text: string): string;
-begin Result := NormalizeNodeComment(Text); end;
+begin
+  Result := StringReplace(Text, #13#10, #10, [rfReplaceAll]);
+  Result := StringReplace(Result, #13, #10, [rfReplaceAll]);
+  Result := Trim(StringReplace(Result, #10, ' ', [rfReplaceAll]));
+end;
 
 function EscapePdnComment(const Text: string): string;
 begin
