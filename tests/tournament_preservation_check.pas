@@ -214,8 +214,8 @@ begin
     Data := GetJSON(Lines.Text);
     try
       Check(TJSONObject(Data).Get('tournament_id', '') <> '', 'autosave must retain identity');
-      Check(TJSONObject(Data).Get('pdn_file_name', '') = OriginalPdn,
-        'autosave must retain the absolute PDN path');
+      Check(TJSONObject(Data).Get('pdn_file_name', '') = ExtractFileName(OriginalPdn),
+        'autosave must retain a relative PDN path');
     finally
       Data.Free;
     end;
@@ -728,6 +728,66 @@ begin
   end;
 end;
 
+procedure CheckPortableTournamentPaths(const Target: string);
+var
+  Dialog, Reloaded: TTournamentDialog;
+  Grid: TStringGrid;
+  Data: TJSONObject;
+  MovedDir, MovedJson, MovedPdn, Pdn, FallbackPdn: string;
+begin
+  Dialog := TTournamentDialog.Create(nil);
+  Reloaded := TTournamentDialog.Create(nil);
+  MovedDir := Target + '.moved';
+  MovedJson := IncludeTrailingPathDelimiter(MovedDir) + ExtractFileName(Target);
+  MovedPdn := '';
+  FallbackPdn := '';
+  try
+    Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    AddTournamentPairingRow(Grid, 'White', 'Black', 1);
+    Dialog.SaveTournamentToFile(Target);
+    Dialog.SetSelectedResult('1-1');
+    Pdn := Dialog.PdnFileName;
+    Data := TJSONObject(GetJSON(FileContents(Target)));
+    try
+      Check(Data.Get('pdn_file_name', '') = ExtractFileName(Pdn),
+        'same-directory PDN must be serialized relative to JSON');
+    finally
+      Data.Free;
+    end;
+    Check(CreateDir(MovedDir), 'create moved tournament directory');
+    MovedPdn := IncludeTrailingPathDelimiter(MovedDir) + ExtractFileName(Pdn);
+    Check(RenameFile(Target, MovedJson) and RenameFile(Pdn, MovedPdn),
+      'move tournament JSON and PDN together');
+    Reloaded.LoadTournamentFromFile(MovedJson);
+    Check((Reloaded.StorageError = '') and (Reloaded.PdnFileName = MovedPdn),
+      'moved tournament must resume beside its JSON');
+    Reloaded.SetSelectedResult('0-2');
+    CheckPdnResult(MovedPdn, '0-2', '1');
+    // Simulate an older absolute path from a machine/directory that no longer exists.
+    Data := TJSONObject(GetJSON(FileContents(MovedJson)));
+    try
+      Data.Strings['pdn_file_name'] := Target + '.absent/old.pdn';
+      WriteContents(MovedJson, Data.AsJSON);
+    finally
+      Data.Free;
+    end;
+    Reloaded.LoadTournamentFromFile(MovedJson);
+    FallbackPdn := Reloaded.PdnFileName;
+    Check((Reloaded.StorageError = '') and (FallbackPdn <> MovedPdn) and
+      (ExtractFilePath(FallbackPdn) = IncludeTrailingPathDelimiter(MovedDir)),
+      'missing old folder must choose an unused PDN beside the loaded JSON');
+    CheckPdnResult(MovedPdn, '0-2', '1');
+    CheckPdnResult(FallbackPdn, '0-2', '1');
+  finally
+    Reloaded.Free;
+    Dialog.Free;
+    DeleteFile(MovedJson);
+    DeleteFile(MovedPdn);
+    DeleteFile(FallbackPdn);
+    RemoveDir(MovedDir);
+  end;
+end;
+
 procedure CheckNewProjectionPreservesExistingPdn(const Fixture: string);
 var
   Dialog, Reloaded, Resumed: TTournamentDialog;
@@ -752,7 +812,7 @@ begin
     Data := TJSONObject(GetJSON(FileContents(Fixture)));
     try
       Check(not Data.Get('pdn_owned', True), 'an uncreated projection must not be claimed as owned');
-      Check(Data.Get('pdn_file_name', '') = UnclaimedPdn, 'JSON must record the unused target');
+      Check(Data.Get('pdn_file_name', '') = ExtractFileName(UnclaimedPdn), 'JSON must record the unused target');
     finally
       Data.Free;
     end;
@@ -774,7 +834,7 @@ begin
     Data := TJSONObject(GetJSON(FileContents(Fixture)));
     try
       Check(Data.Get('pdn_owned', False), 'ownership must persist only after successful first publication');
-      Check(Data.Get('pdn_file_name', '') = CurrentPdn, 'JSON and published PDN path must agree');
+      Check(Data.Get('pdn_file_name', '') = ExtractFileName(CurrentPdn), 'JSON and published PDN path must agree');
     finally
       Data.Free;
     end;
@@ -901,6 +961,7 @@ begin
       CheckResetPreservesSavedFiles(IncludeTrailingPathDelimiter(TestDirectory) + 'clear.json', 2);
       CheckResetWaitsForSuccessfulSave(IncludeTrailingPathDelimiter(TestDirectory) + 'failed-reset.json');
       CheckResetPreservesRecoveryFiles;
+      CheckPortableTournamentPaths(IncludeTrailingPathDelimiter(TestDirectory) + 'portable.json');
       CheckNewProjectionPreservesExistingPdn(IncludeTrailingPathDelimiter(TestDirectory) + 'collision.json');
       CheckProjectionAvoidsExistingDirectory(IncludeTrailingPathDelimiter(TestDirectory) + 'directory.json');
       CheckLegacyMigrationCollision(IncludeTrailingPathDelimiter(TestDirectory) + 'legacy-collision.json');

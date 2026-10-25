@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Make tournament PDN paths portable (T13)
+
+- Store PDN paths relative to the JSON. Moving a tournament folder keeps its PDN
+  linked; older absolute paths still work when their directory exists.
+- Rebuild beside the loaded JSON when the recorded directory is missing, using
+  an unused filename to preserve existing archives.
+- Regress folder moves, resumed result edits, missing legacy directories and
+  collision-safe fallback, alongside existing ownership protections.
+- Validation: relative-path regression fails before the fix; GTK tournament suite passes.
+
 ### 2026-10-25 — Move recovery files on the first named tournament save (T12)
 
 - Publish the JSON and a separate, collision-safe PDN beside the chosen save

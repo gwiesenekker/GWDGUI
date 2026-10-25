@@ -430,7 +430,10 @@ tournament. Saving over an existing JSON file asks for overwrite confirmation.
 Older JSON files without the PDN ownership marker preserve any existing PDN as
 an archive and generate a separate projection from the saved records.
 Manual overrides are identified in the PDN headers along with the played result.
-Loading the JSON repairs a stale or missing PDN. Earlier attempts remain in JSON.
+Loading the JSON repairs a stale or missing PDN. Paths are saved relative to the
+JSON, so move the JSON and PDN together. If an older path points to a missing
+directory, GWDGUI generates a new PDN beside the JSON and preserves any existing
+archive there. Earlier attempts remain in JSON.
 
 Older tournament files did not contain the played games. When loading one with
 an existing PDN archive, GWDGUI preserves that archive and creates a separate PDN

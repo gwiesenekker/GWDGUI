@@ -1287,7 +1287,8 @@ begin
     Data.Add('storage_version', 2);
     Data.Add('legacy_pdn_file_name', FLegacyPdnFileName);
     Data.Add('tournament_id', FTournamentId);
-    Data.Add('pdn_file_name', NextPdnFileName);
+    Data.Add('pdn_file_name', ExtractRelativePath(ExpandFileName(AFileName),
+      NextPdnFileName));
     Data.Add('pdn_owned', FPdnFileOwned);
     Data.Add('tournament_name', FTournamentNameEdit.Text);
     Data.Add('starting_fen', FStartingFENEdit.Text);
@@ -1418,6 +1419,13 @@ begin
     FLegacyPdnFileName := Data.Get('legacy_pdn_file_name', '');
     FPdnFileOwned := (Data.Get('storage_version', 0) >= 2) and
       Data.Get('pdn_owned', False);
+    if (FPdnFileName = '') or not DirectoryExists(ExtractFilePath(FPdnFileName)) then
+    begin
+      // Rebuild from authoritative JSON at the new location. A pre-existing
+      // sibling PDN has not been claimed by this snapshot and must be preserved.
+      FPdnFileName := ChangeFileExt(ExpandFileName(AFileName), '.pdn');
+      FPdnFileOwned := False;
+    end;
     if (Data.Get('storage_version', 0) >= 2) and
       (Data.Find('pdn_owned') = nil) and FileExists(FPdnFileName) and
       (FLegacyPdnFileName = '') then
