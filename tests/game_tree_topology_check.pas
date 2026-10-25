@@ -102,6 +102,42 @@ begin
   end;
 end;
 
+procedure CheckFirstChildMainContinuation;
+var
+  Actor: TGameTreeActor;
+  Tree: TGameTree;
+  FirstId, SecondId: Int64;
+begin
+  Actor := TGameTreeActor.Create;
+  try
+    Rebuild(Actor, 'promotion', '', '');
+    Tree := Actor.GameTree;
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(0, 0,
+      '31-26 16-21', 'Keep this comment', gmsHuman));
+    FirstId := Tree.FindVariationNode(0, 1).NodeId;
+    SecondId := Tree.FindVariationNode(0, 2).NodeId;
+    Execute(Actor, Actor.CreateRecordAnnotatorPVCommand(FirstId, '0.50', '16-21'));
+    Execute(Actor, Actor.CreateAppendMainlineMoveCommand('31-26', gmsEngineMatch));
+    Check((Tree.Root.ChildCount = 1) and (Tree.MainlineNode[1].NodeId = FirstId),
+      'promoting an existing child must reuse its identity instead of duplicating it');
+    Check(Tree.MainlineNode[1].AnnotatorPV = '16-21', 'promotion must retain node-owned analysis');
+    Execute(Actor, Actor.CreateAppendMainlineMoveCommand('16-21', gmsEngineMatch));
+    Check((Tree.MainlineNode[2].NodeId = SecondId) and
+      (Tree.MainlineNode[1].Children[0] = Tree.MainlineNode[2]),
+      'the next promoted move must reuse the first-child continuation');
+    Check(Tree.MainlineNode[2].CommentText = 'Keep this comment', 'promotion must retain node-owned comments');
+    Rebuild(Actor, 'ordering', '', '');
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(0, 0, '31-26', '', gmsHuman));
+    FirstId := Tree.FindVariationNode(0, 1).NodeId;
+    Execute(Actor, Actor.CreateAppendMainlineMoveCommand('32-28', gmsEngineMatch));
+    Check((Tree.Root.ChildCount = 2) and (Tree.Root.Children[0] = Tree.MainlineNode[1]) and
+      (Tree.Root.Children[1].NodeId = FirstId),
+      'a later mainline insertion must precede an earlier alternative without deleting it');
+  finally
+    Actor.Free;
+  end;
+end;
+
 procedure CheckSharedBranches;
 var
   Actor: TGameTreeActor;
@@ -295,6 +331,7 @@ end;
 
 begin
   CheckMainlineAndReplay;
+  CheckFirstChildMainContinuation;
   CheckSharedBranches;
   CheckMetadataBelongsToNodes;
   CheckScoresDoNotCreepForward;

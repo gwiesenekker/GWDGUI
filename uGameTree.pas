@@ -153,6 +153,7 @@ type
       AAnnotationText: string): Boolean;
     function FindVariationNodeByKey(const AVariationKey: string): TGameTreePlyNode;
   public
+    function FindChildByMove(AParent: TGameTreePlyNode; const AMove: string): TGameTreePlyNode;
     function RecordCompletedMoveData(APly: Integer; const AData: TGameMoveData): Boolean;
     constructor Create;
     destructor Destroy; override;
@@ -702,7 +703,6 @@ function TGameTree.RecordVariationMove(AParent: TGameTreePlyNode;
 var
   Key: string;
   Line: TGameTreeVariationLine;
-  I: Integer;
   Created: Boolean;
 begin
   Result := nil;
@@ -712,13 +712,7 @@ begin
   Key := BuildVariationKey(ABasePlyNumber, ADisplayAfterPly,
     AVariationIndex, AVariationPlyNumber);
   // A position owns each continuation once. Legacy lines only index paths.
-  for I := 0 to AParent.ChildCount - 1 do
-    if SameText(NormalizeMoveNotation(AParent.Children[I].MoveText),
-      NormalizeMoveNotation(AMoveText)) then
-    begin
-      Result := AParent.Children[I];
-      Break;
-    end;
+  Result := FindChildByMove(AParent, AMoveText);
   Created := Result = nil;
   if Created then
   begin
@@ -1344,20 +1338,35 @@ begin
   Result.FMoveText := Trim(AMoveText);
 end;
 
+function TGameTree.FindChildByMove(AParent: TGameTreePlyNode;
+  const AMove: string): TGameTreePlyNode;
+var
+  I: Integer;
+begin
+  Result := nil;
+  if AParent = nil then Exit;
+  for I := 0 to AParent.ChildCount - 1 do
+    if NormalizeMoveNotation(AParent.Children[I].MoveText) = NormalizeMoveNotation(AMove) then
+      Exit(AParent.Children[I]);
+end;
+
 function TGameTree.AddMainlineMove(APlyNumber: Integer;
   const AMoveText: string): TGameTreePlyNode;
+var
+  ParentNode: TGameTreePlyNode;
 begin
-  if APlyNumber <= 0 then
-    Exit(nil);
-
-  if APlyNumber = 1 then
-    Result := AddMove(FRoot, APlyNumber, AMoveText)
-  else if GetMainlineNode(APlyNumber - 1) <> nil then
-    Result := AddMove(GetMainlineNode(APlyNumber - 1), APlyNumber, AMoveText)
-  else
-    Exit(nil);
-  while FMainline.Count < APlyNumber do
-    FMainline.Add(nil);
+  Result := nil;
+  if APlyNumber <= 0 then Exit;
+  if APlyNumber = 1 then ParentNode := FRoot
+  else ParentNode := GetMainlineNode(APlyNumber - 1);
+  if ParentNode = nil then Exit;
+  Result := FindChildByMove(ParentNode, AMoveText);
+  if Result = nil then Result := AddMove(ParentNode, APlyNumber, AMoveText);
+  // The first child is always the official continuation at a mainline position.
+  // Reuse a previously explored node, retaining its identity and metadata.
+  ParentNode.FChildren.Move(ParentNode.FChildren.IndexOf(Result), 0);
+  Result.FVariationKey := '';
+  while FMainline.Count < APlyNumber do FMainline.Add(nil);
   FMainline[APlyNumber - 1] := Result;
 end;
 

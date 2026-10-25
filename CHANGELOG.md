@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Reuse explored nodes as first-child main continuations (G7)
+
+- Find an existing child before adding a mainline move. Promote that same node
+  to the first-child position, retaining its ID, comments, analysis and descendants.
+- Keep earlier alternatives after a later mainline insertion; avoid duplicate
+  move children when an explored continuation becomes the official line.
+- Regress promotion of two successive moves, metadata retention and insertion
+  after alternatives already exist.
+- Validation: promotion regression fails before the fix; topology, actor,
+  preservation, cursor and GTK main-form checks pass.
+
 ### 2026-10-25 — Apply complete runner history to game-tree nodes (M1, consumer)
 
 - Attach each completed search to its parent position, and each move's elapsed
