@@ -12,6 +12,8 @@ type
   TTournamentRunningGame = class
   public
     Active: Boolean;
+    PendingCapture: Boolean;
+    CaptureError: string;
     GameId: Integer;
     Row: Integer;
   end;
@@ -66,6 +68,7 @@ type
     procedure ClearPairingsClick(Sender: TObject);
     procedure ClearStaleRunningReasons;
     procedure AutoSaveTournament;
+    function HasPendingCaptures: Boolean;
     procedure SaveTournamentSnapshot(const AFileName: string);
     procedure EnsureStoragePaths;
     function StartNewTournamentStorage: Boolean;
@@ -106,6 +109,8 @@ type
     function TournamentSignature: string;
     procedure UpdateButtons;
     procedure UpdateCrossTable;
+  protected
+    function CaptureGamePdn(AGame: TObject): string; virtual;
   public
     procedure LoadTournamentFromFile(const AFileName: string);
     procedure SaveTournamentToFile(const AFileName: string);
@@ -717,8 +722,14 @@ end;
 
 procedure TTournamentDialog.AutoSaveTournament;
 begin
-  if FLoadingTournament then
+  if FLoadingTournament then Exit;
+  if HasPendingCaptures then
+  begin
+    FRunning := False;
+    if FTimer <> nil then FTimer.Enabled := ActiveRunningGameCount > 0;
+    if not FClosing then UpdateButtons;
     Exit;
+  end;
   FStorageError := '';
   try
     EnsureStoragePaths;
@@ -746,13 +757,42 @@ begin
   Result := TTournamentGameRecord(FGameRecords[ARow - 1]);
 end;
 
+function TTournamentDialog.HasPendingCaptures: Boolean;
+var I: Integer; Running: TTournamentRunningGame;
+begin
+  for I := 0 to FRunningGames.Count - 1 do
+  begin
+    Running := TTournamentRunningGame(FRunningGames[I]);
+    if Running.PendingCapture then
+    begin FStorageError := Running.CaptureError; Exit(True); end;
+  end;
+  Result := False;
+end;
+
+function TTournamentDialog.CaptureGamePdn(AGame: TObject): string;
+begin
+  Result := GameTreeToPdnText(TRunningGame(AGame).GameTree);
+end;
+
 procedure TTournamentDialog.CaptureTournamentGame(
   ARunningGame: TTournamentRunningGame; AGame: TObject);
 begin
-  if (ARunningGame = nil) or not (AGame is TRunningGame) then
-    Exit;
-  GameRecord(ARunningGame.Row).RecordPlayedGame(
-    GameTreeToPdnText(TRunningGame(AGame).GameTree), TRunningGame(AGame).ResultText);
+  if (ARunningGame = nil) or not (AGame is TRunningGame) then Exit;
+  try
+    GameRecord(ARunningGame.Row).RecordPlayedGame(CaptureGamePdn(AGame),
+      TRunningGame(AGame).ResultText);
+    ARunningGame.PendingCapture := False;
+    ARunningGame.CaptureError := '';
+  except
+    on E: Exception do
+    begin
+      ARunningGame.Active := False;
+      ARunningGame.PendingCapture := True;
+      ARunningGame.CaptureError := 'Could not capture finished game: ' + E.Message;
+      FStorageError := ARunningGame.CaptureError;
+      FRunning := False;
+    end;
+  end;
 end;
 
 procedure TTournamentDialog.WritePdnProjection;
@@ -1190,6 +1230,7 @@ end;
 
 procedure TTournamentDialog.SetSelectedResult(const AResultText: string);
 begin
+  if HasPendingCaptures then Exit;
   if (FGrid = nil) or (FGrid.Row <= 0) or
     (FGrid.Row >= FGrid.RowCount) or IsRowRunning(FGrid.Row) or
     (not TournamentGridHasPairingAtRow(FGrid, FGrid.Row)) then
@@ -1219,6 +1260,7 @@ procedure TTournamentDialog.RescheduleSelectedGame(Sender: TObject);
 var
   Row: Integer;
 begin
+  if FStorageError <> '' then Exit;
   Row := FGrid.Row;
   if (Row <= 0) or (Row >= FGrid.RowCount) then
     Exit;
@@ -1271,7 +1313,18 @@ procedure TTournamentDialog.SaveTournamentToFile(const AFileName: string);
 var
   OldJson, OldPdn, RecoveryDirectory: string;
   OldOwned, Relocate: Boolean;
+  I: Integer;
+  Running: TTournamentRunningGame;
+  Game: TRunningGame;
 begin
+  for I := 0 to FRunningGames.Count - 1 do
+  begin
+    Running := TTournamentRunningGame(FRunningGames[I]);
+    if not Running.PendingCapture then Continue;
+    Game := TournamentRunningGameFor(Owner, Running);
+    if Game <> nil then CaptureTournamentGame(Running, Game);
+  end;
+  if HasPendingCaptures then raise EInOutError.Create(FStorageError);
   OldJson := FFileName;
   OldPdn := FPdnFileName;
   OldOwned := FPdnFileOwned;
@@ -1722,7 +1775,7 @@ begin
   for I := FRunningGames.Count - 1 downto 0 do
   begin
     RunningGame := TTournamentRunningGame(FRunningGames[I]);
-    if not RunningGame.Active then
+    if not RunningGame.Active and not RunningGame.PendingCapture then
       Continue;
     if not (AGame is TRunningGame) then
       Continue;

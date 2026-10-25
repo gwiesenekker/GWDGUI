@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Pause safely on finished-game capture errors (T5)
+
+- Catch capture/serialization failures, mark finished rows inactive, and retain a
+  pending capture with its error instead of retrying it every timer tick.
+- Do not publish an incomplete tournament while captures are pending. Allow an
+  explicit save/completion retry to recover retained live games; protect pending
+  captures from manual result edits and retain duplicate-completion safeguards.
+- Regress injected capture failure, successful retry and a later manual override.
+  Preserve the round-number fallback for callers constructing pairing records.
+- Validation: GTK tournament suite passes.
+
 ### 2026-10-25 — Resume tournament rows by engine identity (T8)
 
 - Persist each row's engine identity with its record and persist selected engine

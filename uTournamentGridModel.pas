@@ -104,12 +104,14 @@ procedure ApplyTournamentPairingRoundToGrid(AGrid: TStringGrid;
   const APairingRound: TTournamentPairingRound);
 var
   I: Integer;
-  Row: Integer;
+  Row, Round: Integer;
 begin
   for I := 0 to High(APairingRound.Pairings) do
   begin
+    Round := APairingRound.Pairings[I].RoundNumber;
+    if Round <= 0 then Round := APairingRound.RoundNumber;
     Row := AddTournamentPairingRow(AGrid, APairingRound.Pairings[I].White,
-      APairingRound.Pairings[I].Black, APairingRound.Pairings[I].RoundNumber);
+      APairingRound.Pairings[I].Black, Round);
     if SameText(APairingRound.Pairings[I].Black, 'BYE') then
     begin
       AGrid.Cells[TournamentColResult, Row] := '2-0';

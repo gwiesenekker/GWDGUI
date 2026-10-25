@@ -9,6 +9,18 @@ uses
   uEngineRegistry, uTournamentStorage, uTournamentDialog, uTournamentGridModel, uMainForm, uGameSetupForm,
   uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uPdn;
 
+type
+  TFailingCaptureTournament = class(TTournamentDialog)
+  public
+    FailCapture: Boolean;
+    function CaptureGamePdn(AGame: TObject): string; override;
+  end;
+function TFailingCaptureTournament.CaptureGamePdn(AGame: TObject): string;
+begin
+  if FailCapture then raise EInOutError.Create('injected capture failure');
+  Result := inherited CaptureGamePdn(AGame);
+end;
+
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
   if not Condition then
@@ -90,6 +102,30 @@ begin
     Game.Free;
     Dialog.Free;
   end;
+end;
+
+procedure CheckCaptureFailureStopsCleanly(const Fixture: string);
+var Dialog: TFailingCaptureTournament; Game: TRunningGame;
+begin
+  Dialog := TFailingCaptureTournament.Create(nil);
+  Game := NewGame(104);
+  try
+    WriteFixture(Fixture, 'Capture failure');
+    Dialog.LoadTournamentFromFile(Fixture);
+    Dialog.RegisterRunningGame(1, Game);
+    CompleteGame(Game, '2-0');
+    Dialog.FailCapture := True;
+    Dialog.GameStopped(Game);
+    Check(not Dialog.IsRunning and (Pos('injected capture failure', Dialog.StorageError) > 0),
+      'capture failure must pause without leaving a finished row active');
+    Dialog.FailCapture := False;
+    Dialog.GameStopped(Game);
+    Check(Dialog.StorageError = '', 'a pending capture must be retryable after its failure is corrected');
+    Dialog.SetSelectedResult('1-1');
+    Dialog.GameStopped(Game);
+    Check(TStringGrid(Dialog.FindComponent('TournamentPairings')).Cells[TournamentColResult, 1] = '1-1',
+      'successful capture retries must not enable stale completion overwrites');
+  finally Game.Free; Dialog.Free; end;
 end;
 
 procedure CheckPairingChangesWaitForShutdown(const Fixture, OtherFile: string);
@@ -1130,6 +1166,7 @@ begin
       end;
       WriteFixture(Fixture, 'Original');
       WriteFixture(OtherFile, 'Other');
+      CheckCaptureFailureStopsCleanly(IncludeTrailingPathDelimiter(TestDirectory) + 'capture-failure.json');
       CheckCompletionIsAppliedOnce(Fixture);
       CheckFailedLoadIsTransactional(Fixture);
       CheckPairingChangesWaitForShutdown(Fixture, OtherFile);
