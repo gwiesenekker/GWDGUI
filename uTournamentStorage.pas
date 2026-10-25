@@ -58,28 +58,38 @@ begin
   end;
 end;
 
+type
+  TTournamentPdnIdentityCheck = class
+    Id: string;
+    Matches: Boolean;
+    procedure CheckGame(Game: TPdnGame; BytesRead, TotalBytes: Int64; var Stop: Boolean);
+  end;
+
+procedure TTournamentPdnIdentityCheck.CheckGame(Game: TPdnGame;
+  BytesRead, TotalBytes: Int64; var Stop: Boolean);
+begin
+  if Game.TournamentId <> Id then
+  begin
+    Matches := False;
+    Stop := True;
+  end;
+end;
+
 function TournamentPdnMatchesId(const AFileName, AId: string): Boolean;
-var
-  Games: TList;
-  I: Integer;
+var Check: TTournamentPdnIdentityCheck;
 begin
   Result := False;
   if (AId = '') or not FileExists(AFileName) then Exit;
-  Games := TList.Create;
+  Check := TTournamentPdnIdentityCheck.Create;
   try
+    Check.Id := AId;
+    Check.Matches := True;
     try
-      LoadPdnGamesFromFile(AFileName, Games);
-      for I := 0 to Games.Count - 1 do
-        if TPdnGame(Games[I]).TournamentId <> AId then Exit;
-      Result := True;
-    except
-      // An unreadable or malformed file cannot establish ownership.
-      Result := False;
-    end;
-  finally
-    for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
-    Games.Free;
-  end;
+      // Ownership needs headers, not move trees or large comment copies.
+      ReadPdnGamesFromFile(AFileName, @Check.CheckGame, True);
+      Result := Check.Matches;
+    except Result := False; end;
+  finally Check.Free; end;
 end;
 
 function UnusedTournamentPdnPath(const ACandidate: string): string;

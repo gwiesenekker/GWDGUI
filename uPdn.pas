@@ -59,7 +59,7 @@ type
 
 procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList);
 procedure ReadPdnGamesFromFile(const AFileName: string;
-  AOnGame: TPdnGameReadEvent);
+  AOnGame: TPdnGameReadEvent; AHeadersOnly: Boolean = False);
 procedure AppendPdnGameToFile(const AFileName: string; AGame: TPdnGame);
 procedure AppendPdnTextToFile(const AFileName, APdnText: string);
 function PdnGameToText(AGame: TPdnGame): string;
@@ -752,12 +752,12 @@ procedure ExtractPdnMoveData(const AText: string; AMoves, AAnnotations,
   AWarnings: TStrings = nil; ATreeRoot: TPdnMoveNode = nil;
   AMovetextResult: PString = nil);
 var
-  I: Integer;
+  I, J: Integer;
   LBraceDepth: Integer;
-  LComment: string;
+  LComment: TStringBuilder;
   LInLineComment: Boolean;
   LLastMoveIndex: Integer;
-  LToken: string;
+  LToken: TStringBuilder;
   LVariationText: string;
   LVariationClosed: Boolean;
   Positions: array of TPdnMoveNode;
@@ -771,8 +771,8 @@ var
   var
     LCleanToken: string;
   begin
-    LCleanToken := CleanMoveToken(LToken);
-    LToken := '';
+    LCleanToken := CleanMoveToken(LToken.ToString);
+    LToken.Clear;
     if LCleanToken = '' then
       Exit;
     if LCleanToken[1] = '$' then
@@ -803,9 +803,9 @@ var
   var
     LCommentText: string;
   begin
-    LCommentText := Trim(StringReplace(StringReplace(LComment, #13, ' ',
+    LCommentText := Trim(StringReplace(StringReplace(LComment.ToString, #13, ' ',
       [rfReplaceAll]), #10, ' ', [rfReplaceAll]));
-    LComment := '';
+    LComment.Clear;
     if LCommentText = '' then
       Exit;
     if (LLastMoveIndex < 0) or (LLastMoveIndex >= AAnnotations.Count) then
@@ -821,61 +821,40 @@ var
   end;
 
   function ReadParenthesizedText(out AClosed: Boolean): string;
-  var
-    Depth: Integer;
-    InBrace: Integer;
-    InLineComment: Boolean;
+  var Depth, InBrace, Start: Integer; InLineComment: Boolean;
   begin
-    Result := '';
     AClosed := False;
     Depth := 1;
     InBrace := 0;
     InLineComment := False;
     Inc(I);
+    Start := I;
     while I <= Length(AText) do
     begin
       if InLineComment then
       begin
-        Result += AText[I];
         if AText[I] in [#10, #13] then InLineComment := False;
       end
       else if InBrace > 0 then
       begin
-        if AText[I] = '{' then
-          Inc(InBrace)
-        else if AText[I] = '}' then
-          Dec(InBrace);
-        Result += AText[I];
+        if AText[I] = '{' then Inc(InBrace)
+        else if AText[I] = '}' then Dec(InBrace);
       end
-      else if AText[I] = '{' then
-      begin
-        Inc(InBrace);
-        Result += AText[I];
-      end
-      else if AText[I] = ';' then
-      begin
-        InLineComment := True;
-        Result += AText[I];
-      end
-      else if AText[I] = '(' then
-      begin
-        Inc(Depth);
-        Result += AText[I];
-      end
+      else if AText[I] = '{' then Inc(InBrace)
+      else if AText[I] = ';' then InLineComment := True
+      else if AText[I] = '(' then Inc(Depth)
       else if AText[I] = ')' then
       begin
         Dec(Depth);
         if Depth = 0 then
         begin
           AClosed := True;
-          Exit;
+          Exit(Copy(AText, Start, I - Start));
         end;
-        Result += AText[I];
-      end
-      else
-        Result += AText[I];
+      end;
       Inc(I);
     end;
+    Result := Copy(AText, Start, MaxInt);
   end;
 
   procedure ProcessVariation(const AVariationText: string);
@@ -1011,13 +990,16 @@ begin
     Exit;
 
   if AMovetextResult <> nil then AMovetextResult^ := '';
+  LComment := TStringBuilder.Create;
+  LToken := TStringBuilder.Create;
+  try
   SetLength(Positions, 1);
   Positions[0] := ATreeRoot;
   LBraceDepth := 0;
-  LComment := '';
+  LComment.Clear;
   LInLineComment := False;
   LLastMoveIndex := -1;
-  LToken := '';
+  LToken.Clear;
   I := 1;
   while I <= Length(AText) do
   begin
@@ -1034,10 +1016,18 @@ begin
 
     if LBraceDepth > 0 then
     begin
+      J := I;
+      while (J <= Length(AText)) and not (AText[J] in ['{', '}']) do Inc(J);
+      if J > I then
+      begin
+        LComment.Append(Copy(AText, I, J - I));
+        I := J;
+        Continue;
+      end;
       if AText[I] = '{' then
       begin
         Inc(LBraceDepth);
-        LComment += AText[I];
+        LComment.Append(AText[I]);
       end
       else if AText[I] = '}' then
       begin
@@ -1045,10 +1035,10 @@ begin
         if LBraceDepth = 0 then
           ProcessComment
         else
-          LComment += AText[I];
+          LComment.Append(AText[I]);
       end
       else
-        LComment += AText[I];
+        LComment.Append(AText[I]);
       Inc(I);
       Continue;
     end;
@@ -1058,7 +1048,7 @@ begin
         begin
           ProcessToken;
           Inc(LBraceDepth);
-          LComment := '';
+          LComment.Clear;
         end;
       '(':
         begin
@@ -1082,11 +1072,18 @@ begin
       ' ', #9, #10, #13:
         ProcessToken;
     else
-      LToken += AText[I];
+      begin
+        J := I;
+        while (J <= Length(AText)) and not (AText[J] in [' ', #9, #10, #13, '{', '(', ')', ';']) do Inc(J);
+        LToken.Append(Copy(AText, I, J - I));
+        I := J;
+        Continue;
+      end;
     end;
     Inc(I);
   end;
   ProcessToken;
+  finally LToken.Free; LComment.Free; end;
 end;
 
 procedure ExtractMovesAndAnnotationsFromPdnText(const AText: string;
@@ -1227,51 +1224,25 @@ begin
   end;
 end;
 
-type
-  TPdnGameListCollector = class
-    Games: TList;
-    procedure Collect(AGame: TPdnGame; ABytesRead, ATotalBytes: Int64;
-      var AStop: Boolean);
-  end;
-
-procedure TPdnGameListCollector.Collect(AGame: TPdnGame; ABytesRead,
-  ATotalBytes: Int64; var AStop: Boolean);
-var
-  Copy: TPdnGame;
-begin
-  Copy := TPdnGame.Create;
-  try
-    Copy.AssignFrom(AGame);
-    Games.Add(Copy);
-  except
-    Copy.Free;
-    raise;
-  end;
-end;
+procedure ReadPdnGamesInternal(const AFileName: string;
+  AOnGame: TPdnGameReadEvent; AOwnedGames: TList; AHeadersOnly: Boolean); forward;
 
 procedure LoadPdnGamesFromFile(const AFileName: string; AGames: TList);
-var
-  Collector: TPdnGameListCollector;
 begin
   if AGames = nil then Exit;
   ClearGameList(AGames);
-  Collector := TPdnGameListCollector.Create;
-  try
-    Collector.Games := AGames;
-    ReadPdnGamesFromFile(AFileName, @Collector.Collect);
-  finally
-    Collector.Free;
-  end;
+  ReadPdnGamesInternal(AFileName, nil, AGames, False);
 end;
 
-procedure ReadPdnGamesFromFile(const AFileName: string;
-  AOnGame: TPdnGameReadEvent);
+procedure ReadPdnGamesInternal(const AFileName: string;
+  AOnGame: TPdnGameReadEvent; AOwnedGames: TList; AHeadersOnly: Boolean);
 var
   Buffer: array[0..65535] of Byte;
-  BytesRead, I, BraceDepth, VariationDepth: Integer;
+  BytesRead, I, J, BraceDepth, VariationDepth: Integer;
+  Chunk: RawByteString;
   Current: TPdnGame;
   MoveLines, HeaderNames: TStringList;
-  MoveLine, TagText, Token: string;
+  MoveLine, TagText, Token: TStringBuilder;
   Stop, InTag, InQuote, Escaped, InLineComment: Boolean;
   HasMovetext, LineHasContent, PreviousCR, ResultSeen: Boolean;
   Stream: TFileStream;
@@ -1285,10 +1256,16 @@ var
   procedure FinishGame;
   begin
     if Current = nil then Exit;
-    MoveLines.Add(MoveLine);
-    MoveLine := '';
-    AddCurrentGame(Current, MoveLines, nil);
-    try
+    if not AHeadersOnly then MoveLines.Add(MoveLine.ToString);
+    MoveLine.Clear;
+    if not AHeadersOnly then AddCurrentGame(Current, MoveLines, nil)
+    else MoveLines.Clear;
+    if AOwnedGames <> nil then
+    begin
+      AOwnedGames.Add(Current);
+      Current := nil;
+    end
+    else try
       AOnGame(Current, Stream.Position, TotalBytes, Stop);
     finally
       FreeAndNil(Current);
@@ -1304,16 +1281,16 @@ var
   var
     Value: string;
   begin
-    if Token = '' then Exit;
-    Value := Token;
-    Token := '';
+    if Token.Length = 0 then Exit;
+    Value := Token.ToString;
+    Token.Clear;
     // Delay delivery after a result so trailing comments/NAGs stay with their
     // game. Only a new top-level token or header starts the next game.
     if ResultSeen and (VariationDepth = 0) and IsPdnResultToken(CleanMoveToken(Value)) then Exit;
     if ResultSeen and (VariationDepth = 0) and (Value[1] <> '$') then FinishGame;
     if Stop then Exit;
     EnsureGame;
-    MoveLine += Value;
+    if not AHeadersOnly then MoveLine.Append(Value);
     HasMovetext := True;
     if (VariationDepth = 0) and IsPdnResultToken(CleanMoveToken(Value)) then
       ResultSeen := True;
@@ -1322,20 +1299,21 @@ var
   procedure FinishTag;
   var
     NameEnd: Integer;
-    Name: string;
+    Name, Text: string;
   begin
+    Text := TagText.ToString;
     NameEnd := 2;
-    while (NameEnd <= Length(TagText)) and
-      not (TagText[NameEnd] in [' ', #9, #10, #13, ']']) do Inc(NameEnd);
-    Name := Copy(TagText, 2, NameEnd - 2);
+    while (NameEnd <= Length(Text)) and
+      not (Text[NameEnd] in [' ', #9, #10, #13, ']']) do Inc(NameEnd);
+    Name := Copy(Text, 2, NameEnd - 2);
     // Whitespace cannot establish a game boundary: headers may contain blank
     // lines even after Result. A repeated tag identifies a new header block.
     if HeaderNames.IndexOf(Name) >= 0 then FinishGame;
     if Stop then Exit;
     EnsureGame;
-    ParsePdnTag(TagText, Current);
+    ParsePdnTag(Text, Current);
     HeaderNames.Add(Name);
-    TagText := '';
+    TagText.Clear;
     InTag := False;
   end;
 
@@ -1343,7 +1321,7 @@ var
   begin
     if InTag then
     begin
-      TagText += C;
+      TagText.Append(C);
       if Escaped then Escaped := False
       else if InQuote and (C = '\') then Escaped := True
       else if C = '"' then InQuote := not InQuote
@@ -1352,25 +1330,25 @@ var
     end;
     if InLineComment then
     begin
-      MoveLine += C;
+      if not AHeadersOnly then MoveLine.Append(C);
       if C = #10 then
       begin
         InLineComment := False;
-        MoveLines.Add(MoveLine);
-        MoveLine := '';
+        if not AHeadersOnly then MoveLines.Add(MoveLine.ToString);
+        MoveLine.Clear;
         LineHasContent := False;
       end;
       Exit;
     end;
     if BraceDepth > 0 then
     begin
-      MoveLine += C;
+      if not AHeadersOnly then MoveLine.Append(C);
       if C = '{' then Inc(BraceDepth)
       else if C = '}' then Dec(BraceDepth);
       if C = #10 then
       begin
-        MoveLines.Add(MoveLine);
-        MoveLine := '';
+        if not AHeadersOnly then MoveLines.Add(MoveLine.ToString);
+        MoveLine.Clear;
         LineHasContent := False;
       end
       else if not (C in [' ', #9]) then LineHasContent := True;
@@ -1387,20 +1365,21 @@ var
       InTag := True;
       InQuote := False;
       Escaped := False;
-      TagText := '[';
+      TagText.Clear;
+      TagText.Append('[');
       LineHasContent := True;
       Exit;
     end;
     if C = #10 then
     begin
-      MoveLines.Add(MoveLine);
-      MoveLine := '';
+      if not AHeadersOnly then MoveLines.Add(MoveLine.ToString);
+      MoveLine.Clear;
       LineHasContent := False;
       Exit;
     end;
     if C in [' ', #9] then
     begin
-      MoveLine += C;
+      if not AHeadersOnly then MoveLine.Append(C);
       Exit;
     end;
     EnsureGame;
@@ -1408,37 +1387,37 @@ var
     case C of
       '{':
         begin
-          MoveLine += C;
+          if not AHeadersOnly then MoveLine.Append(C);
           BraceDepth := 1;
         end;
       ';':
         begin
-          MoveLine += C;
+          if not AHeadersOnly then MoveLine.Append(C);
           InLineComment := True;
         end;
       '(':
         begin
-          MoveLine += C;
+          if not AHeadersOnly then MoveLine.Append(C);
           Inc(VariationDepth);
           HasMovetext := True;
         end;
       ')':
         begin
-          MoveLine += C;
+          if not AHeadersOnly then MoveLine.Append(C);
           if VariationDepth > 0 then Dec(VariationDepth);
           HasMovetext := True;
         end;
     else
-      Token += C;
+      Token.Append(C);
     end;
   end;
 
 begin
-  if not Assigned(AOnGame) then Exit;
+  if not Assigned(AOnGame) and (AOwnedGames = nil) then Exit;
   Current := nil;
-  MoveLine := '';
-  TagText := '';
-  Token := '';
+  MoveLine := TStringBuilder.Create;
+  TagText := TStringBuilder.Create;
+  Token := TStringBuilder.Create;
   ResultSeen := False;
   Stop := False;
   InTag := False;
@@ -1462,22 +1441,78 @@ begin
       (Buffer[1] <> $BB) or (Buffer[2] <> $BF) then Stream.Position := 0;
     repeat
       BytesRead := Stream.Read(Buffer, SizeOf(Buffer));
-      for I := 0 to BytesRead - 1 do
+      I := 0;
+      while I < BytesRead do
       begin
-        if Buffer[I] = 13 then ReadChar(#10)
-        else if not ((Buffer[I] = 10) and PreviousCR) then ReadChar(Chr(Buffer[I]));
-        PreviousCR := Buffer[I] = 13;
+        J := I;
+        if InTag then
+        begin
+          if not Escaped then
+            while (J < BytesRead) and not (Chr(Buffer[J]) in ['"', '\', ']', #10, #13]) do Inc(J);
+        end
+        else if BraceDepth > 0 then
+          while (J < BytesRead) and not (Chr(Buffer[J]) in ['{', '}', #10, #13]) do Inc(J)
+        else if InLineComment then
+          while (J < BytesRead) and not (Buffer[J] in [10, 13]) do Inc(J)
+        else if Chr(Buffer[I]) in [' ', #9] then
+          while (J < BytesRead) and (Chr(Buffer[J]) in [' ', #9]) do Inc(J)
+        else
+          while (J < BytesRead) and not (Chr(Buffer[J]) in
+            [' ', #9, #10, #13, '[', '{', ';', '(', ')']) do Inc(J);
+        if J > I then
+        begin
+          if InTag or not AHeadersOnly or
+            ((BraceDepth = 0) and not InLineComment and not (Chr(Buffer[I]) in [' ', #9])) then
+            SetString(Chunk, PChar(@Buffer[I]), J - I);
+          if InTag then TagText.Append(Chunk)
+          else if (BraceDepth > 0) or InLineComment then
+          begin
+            if not AHeadersOnly then MoveLine.Append(Chunk);
+            LineHasContent := True;
+          end
+          else if Chr(Buffer[I]) in [' ', #9] then
+          begin
+            FinishToken;
+            if not AHeadersOnly then MoveLine.Append(Chunk);
+          end
+          else
+          begin
+            EnsureGame;
+            Token.Append(Chunk);
+            LineHasContent := True;
+          end;
+          PreviousCR := False;
+          I := J;
+        end
+        else
+        begin
+          if Buffer[I] = 13 then ReadChar(#10)
+          else if not ((Buffer[I] = 10) and PreviousCR) then ReadChar(Chr(Buffer[I]));
+          PreviousCR := Buffer[I] = 13;
+          Inc(I);
+        end;
         if Stop then Break;
       end;
     until (BytesRead = 0) or Stop;
+    if not Stop and AHeadersOnly and (InTag or (BraceDepth > 0) or (VariationDepth > 0)) then
+      raise EConvertError.Create('Unterminated PDN header, comment or variation');
     if not Stop then FinishToken;
     if not Stop then FinishGame;
   finally
     Current.Free;
+    Token.Free;
+    TagText.Free;
+    MoveLine.Free;
     HeaderNames.Free;
     MoveLines.Free;
     Stream.Free;
   end;
+end;
+
+procedure ReadPdnGamesFromFile(const AFileName: string;
+  AOnGame: TPdnGameReadEvent; AHeadersOnly: Boolean);
+begin
+  ReadPdnGamesInternal(AFileName, AOnGame, nil, AHeadersOnly);
 end;
 
 function FormatVariationForPdn(const AMovesText, AStartingFEN: string;

@@ -3,6 +3,20 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Read PDN spans without per-character string growth (F6)
+
+- Copy ordinary token, comment, header and whitespace spans from stream buffers;
+  slice recursive variation text once. Reuse bounded-growth parser buffers.
+- Buffered loads take ownership of parsed games directly instead of deep-cloning
+  their trees. Streaming callbacks retain their existing borrowed ownership.
+- Add headers-only streaming for tournament identity checks, avoiding move trees
+  and large comment copies on every save. Reject malformed identity documents.
+- Regress large comments spanning buffers, mixed identities and spoofed/malformed
+  ownership tags. Existing boundary, tree, filter and GUI tests pass.
+- Validation: the same 10 MB/1,000-game fixture improved from 762/735 ms buffered/
+  streaming to 75/54 ms. GTK tournament performance/preservation passes (195 ms
+  for a 1,000-game, 10 KB-per-game autosave); hidden main-form suite passes.
+
 ### 2026-10-25 — Make Lazarus regression builds portable and noninteractive (C5, C3)
 
 - Store the noninteractive define in all three test projects and reject builds

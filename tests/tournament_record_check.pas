@@ -6,6 +6,29 @@ begin
   if not Condition then
     raise Exception.Create(MessageText);
 end;
+procedure CheckProjectionIdentity;
+var FileName: string; Text: TStringList;
+begin
+  FileName := GetTempFileName(GetTempDir, 'gwd-id');
+  Text := TStringList.Create;
+  try
+    Text.Text := '[Event "One"] [TournamentId "ours"] 1. 32-28 {' +
+      StringOfChar('c', 70000) + '} *' + LineEnding +
+      '[Event "Two"] [TournamentId "ours"] 1. 33-28 *';
+    Text.SaveToFile(FileName);
+    Check(TournamentPdnMatchesId(FileName, 'ours'), 'headers-only ownership across buffers');
+    Text.Text := Text.Text + LineEnding + '[Event "Other"] [TournamentId "theirs"] *';
+    Text.SaveToFile(FileName);
+    Check(not TournamentPdnMatchesId(FileName, 'ours'), 'mixed identities must not establish ownership');
+    Text.Text := '{[TournamentId "ours"]} 1. 32-28 *';
+    Text.SaveToFile(FileName);
+    Check(not TournamentPdnMatchesId(FileName, 'ours'), 'comment must not establish ownership');
+    Text.Text := '[TournamentId "ours"';
+    Text.SaveToFile(FileName);
+    Check(not TournamentPdnMatchesId(FileName, 'ours'), 'malformed tag must not establish ownership');
+  finally Text.Free; DeleteFile(FileName); end;
+end;
+
 procedure CheckStreamedDocument;
 var
   Data, ReadBack: TJSONData;
@@ -33,6 +56,7 @@ var
   PdnText, FileName: string;
   I: Integer;
 begin
+  CheckProjectionIdentity;
   CheckStreamedDocument;
   RecordData := TTournamentGameRecord.Create;
   Reloaded := TTournamentGameRecord.Create;
