@@ -770,6 +770,12 @@ begin
     Exit;
   FPdnWriteLock.Acquire;
   try
+    if FPdnFileOwned and not TournamentPdnMatchesId(FPdnFileName, FTournamentId) then
+    begin
+      FPdnFileOwned := False;
+      FPdnFileName := UnusedTournamentPdnPath(FPdnFileName);
+      SaveTournamentSnapshot(FFileName);
+    end;
     WriteTextFileAtomically(FPdnFileName, Trim(PdnText) + LineEnding, FPdnFileOwned);
     if not FPdnFileOwned then
     begin

@@ -34,6 +34,7 @@ type
     function TreeDataSignature: string;
   public
     EventName: string;
+    TournamentId: string;
     WhiteName: string;
     BlackName: string;
     ResultText: string;
@@ -175,6 +176,7 @@ begin
   if ASource.FParsedRoot <> nil then FParsedRoot := ASource.FParsedRoot.Clone;
   FParsedSignature := ASource.FParsedSignature;
   EventName := ASource.EventName;
+  TournamentId := ASource.TournamentId;
   WhiteName := ASource.WhiteName;
   BlackName := ASource.BlackName;
   ResultText := ASource.ResultText;
@@ -1081,7 +1083,9 @@ begin
   LValue := PdnUnquote(Copy(ALine, LFirstQuote + 1,
     LLastQuote - LFirstQuote - 1));
 
-  if SameText(LName, 'Event') then
+  if SameText(LName, 'TournamentId') then
+    AGame.TournamentId := LValue
+  else if SameText(LName, 'Event') then
     AGame.EventName := LValue
   else if SameText(LName, 'White') then
     AGame.WhiteName := LValue
@@ -1659,6 +1663,8 @@ begin
   Lines := TStringList.Create;
   try
     Lines.Add('[Event "' + PdnQuote(AGame.EventName) + '"]');
+    if AGame.TournamentId <> '' then
+      Lines.Add('[TournamentId "' + PdnQuote(AGame.TournamentId) + '"]');
     Lines.Add('[White "' + PdnQuote(AGame.WhiteName) + '"]');
     Lines.Add('[Black "' + PdnQuote(AGame.BlackName) + '"]');
     Lines.Add('[Result "' + PdnQuote(PdnExportResult(AGame.ResultText)) + '"]');

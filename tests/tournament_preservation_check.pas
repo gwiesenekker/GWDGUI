@@ -302,6 +302,8 @@ begin
   end;
 end;
 
+function FileContents(const FileName: string): string; forward;
+
 procedure CheckRecordsAndPdnStayConsistent(const Fixture: string);
 var
   Dialog, Reloaded: TTournamentDialog;
@@ -362,25 +364,29 @@ begin
     finally
       Data.Free;
     end;
-    // JSON is authoritative: loading must repair a stale or damaged PDN projection.
+    // A damaged/unrelated projection is preserved; rebuild at a fresh path.
     Lines.Text := 'stale export';
     Lines.SaveToFile(PdnPath);
     Reloaded := TTournamentDialog.Create(nil);
     Reloaded.LoadTournamentFromFile(Fixture);
+    Check(FileContents(PdnPath) = 'stale export' + LineEnding, 'preserve unverified PDN content');
+    PdnPath := Reloaded.PdnFileName;
     CheckPdnResult(PdnPath, '0-2', '2');
     Reloaded.Free;
     Reloaded := nil;
     Dialog.RescheduleSelectedGame(nil);
     Dialog.RegisterRunningGame(1, Third);
+    PdnPath := Dialog.PdnFileName;
     DeleteFile(PdnPath);
     Check(CreateDir(PdnPath), 'prepare blocked PDN projection');
     CompleteGame(Third, '2-0');
     Dialog.GameStopped(Third);
-    Check((not Dialog.IsRunning) and (Dialog.StorageError <> ''),
-      'failed PDN write must pause without keeping a finished row active');
+    Check((not Dialog.IsRunning) and (Dialog.StorageError = '') and DirectoryExists(PdnPath),
+      'an occupied directory must remain intact while the projection chooses a new path');
     RemoveDir(PdnPath);
     Reloaded := TTournamentDialog.Create(nil);
     Reloaded.LoadTournamentFromFile(Fixture);
+    PdnPath := Reloaded.PdnFileName;
     CheckPdnResult(PdnPath, '2-0', '3');
     Check(Reloaded.StorageError = '', 'saved JSON must recover a failed PDN write');
   finally
@@ -846,6 +852,41 @@ begin
   end;
 end;
 
+procedure CheckMovedOwnedProjection(const Fixture: string);
+var
+  Source, Moved: TTournamentDialog;
+  Grid: TStringGrid;
+  Data: TJSONObject;
+  Collision: string;
+begin
+  WriteFixture(Fixture, 'Owned projection');
+  Source := TTournamentDialog.Create(nil);
+  Moved := TTournamentDialog.Create(nil);
+  try
+    Source.LoadTournamentFromFile(Fixture);
+    Grid := TStringGrid(Source.FindComponent('TournamentPairings'));
+    Grid.Row := 1;
+    Source.SetSelectedResult('2-0');
+    Collision := Fixture + '.unrelated.pdn';
+    WriteContents(Collision, '[Event "Unrelated"]' + #13#10 + '1. 33-28 *' + #13#10);
+    Data := TJSONObject(GetJSON(FileContents(Fixture)));
+    try
+      Data.Strings['pdn_file_name'] := ExtractFileName(Collision);
+      WriteContents(Fixture, Data.AsJSON);
+    finally Data.Free; end;
+    Moved.LoadTournamentFromFile(Fixture);
+    Moved.SetSelectedResult('1-1');
+    Check(Moved.StorageError = '', 'owned projection collision must recover');
+    Check(FileContents(Collision) = '[Event "Unrelated"]' + #13#10 + '1. 33-28 *' + #13#10,
+      'copied JSON must never overwrite an unrelated claimed-owned PDN');
+    Check(Moved.PdnFileName <> Collision, 'ownership mismatch must choose a fresh path');
+    CheckPdnResult(Moved.PdnFileName, '1-1', '1');
+  finally
+    Moved.Free;
+    Source.Free;
+  end;
+end;
+
 procedure CheckNewProjectionPreservesExistingPdn(const Fixture: string);
 var
   Dialog, Reloaded, Resumed: TTournamentDialog;
@@ -1024,6 +1065,7 @@ begin
       CheckResetWaitsForSuccessfulSave(IncludeTrailingPathDelimiter(TestDirectory) + 'failed-reset.json');
       CheckResetPreservesRecoveryFiles;
       CheckPortableTournamentPaths(IncludeTrailingPathDelimiter(TestDirectory) + 'portable.json');
+      CheckMovedOwnedProjection(IncludeTrailingPathDelimiter(TestDirectory) + 'owned-collision.json');
       CheckNewProjectionPreservesExistingPdn(IncludeTrailingPathDelimiter(TestDirectory) + 'collision.json');
       CheckProjectionAvoidsExistingDirectory(IncludeTrailingPathDelimiter(TestDirectory) + 'directory.json');
       CheckLegacyMigrationCollision(IncludeTrailingPathDelimiter(TestDirectory) + 'legacy-collision.json');

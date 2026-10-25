@@ -6,8 +6,9 @@ function ReadTournamentDocument(const AFileName: string): TJSONObject;
 function TournamentDocumentText(AData: TJSONData): string;
 function TournamentPdnTag(const AName, AValue: string): string;
 function UnusedTournamentPdnPath(const ACandidate: string): string;
+function TournamentPdnMatchesId(const AFileName, AId: string): Boolean;
 implementation
-uses Classes, SysUtils, JSONParser, uTournamentTypes, uTournamentResults;
+uses Classes, SysUtils, JSONParser, uTournamentTypes, uTournamentResults, uPdn;
 
 function TournamentDocumentText(AData: TJSONData): string;
 var
@@ -54,6 +55,30 @@ begin
     if Output.Size > 0 then Move(Output.Memory^, Result[1], Output.Size);
   finally
     Output.Free;
+  end;
+end;
+
+function TournamentPdnMatchesId(const AFileName, AId: string): Boolean;
+var
+  Games: TList;
+  I: Integer;
+begin
+  Result := False;
+  if (AId = '') or not FileExists(AFileName) then Exit;
+  Games := TList.Create;
+  try
+    try
+      LoadPdnGamesFromFile(AFileName, Games);
+      for I := 0 to Games.Count - 1 do
+        if TPdnGame(Games[I]).TournamentId <> AId then Exit;
+      Result := True;
+    except
+      // An unreadable or malformed file cannot establish ownership.
+      Result := False;
+    end;
+  finally
+    for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
+    Games.Free;
   end;
 end;
 

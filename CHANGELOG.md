@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Verify tournament PDN ownership before replacement (T17)
+
+- Check the tournament IDs in an existing projection before replacing it, even
+  when a copied JSON claims ownership. Preserve unrelated, damaged or occupied
+  targets and publish the authoritative records to a fresh path instead.
+- Preserve TournamentId through PDN reads and copies. Regress a copied JSON
+  pointing at an unrelated PDN and update recovery tests to preserve unknown data.
+- Validation: overwrite regression fails before the fix; GTK tournament suite passes.
+
 ### 2026-10-25 — Retain database indexes through interrupted imports (P9)
 
 - Keep the position-search and game-position indexes active throughout imports,
