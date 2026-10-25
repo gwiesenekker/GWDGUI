@@ -52,7 +52,6 @@ type
     FTotalMovesBySide: array[TDraughtsSide] of Integer;
     FUsedSeconds: array[TDraughtsSide] of Double;
     procedure ApplyTimeUsed(ASide: TDraughtsSide; ASecondsUsed: Double);
-    function BuildLevelMessage(ASide: TDraughtsSide): string;
     function BuildPositionMessage: string;
     procedure CheckDrawsAfterMove;
     procedure ChangeState(ANewState: TGameOrchestratorState; const AReason: string);
@@ -385,19 +384,6 @@ begin
   Result := Format('%.3f', [ASeconds], FormatSettings);
 end;
 
-function TGameOrchestrator.BuildLevelMessage(ASide: TDraughtsSide): string;
-begin
-  Result := 'level';
-  if GetMovesRemaining(ASide) > 0 then
-    Result += ' moves=' + IntToStr(GetMovesRemaining(ASide));
-  Result += ' time=' + FormatHubSeconds(FRemainingSeconds[ASide]);
-  if (FTimeControl.IncrementSeconds > 0) and
-    ((FTimeControl.IncrementMode = cimFromStart) or
-     ((FTimeControl.MovesPerPeriod > 0) and
-      (FTotalMovesBySide[ASide] + 1 >= FTimeControl.MovesPerPeriod))) then
-    Result += ' inc=' + FormatHubSeconds(FTimeControl.IncrementSeconds);
-end;
-
 function TGameOrchestrator.GetMovesRemaining(ASide: TDraughtsSide): Integer;
 begin
   if FTimeControl.MovesPerPeriod > 0 then
@@ -495,7 +481,7 @@ var
   LEngine: TDraughtsEngine;
   LSide: TDraughtsSide;
   LStartTick: QWord;
-  LAvailableSeconds: Double;
+  LAvailableSeconds, LActiveIncrement: Double;
   LTimeoutMs: Integer;
   LSearchStarted: Boolean;
 
@@ -542,9 +528,13 @@ begin
       '; moves_remaining=' + IntToStr(GetMovesRemaining(LSide)) +
       '; remaining_seconds=' + FormatHubSeconds(FRemainingSeconds[LSide]) +
       '; total_used_seconds=' + FormatHubSeconds(FUsedSeconds[LSide]));
-    LEngine.SetClockInfo(GetMovesRemaining(LSide), FRemainingSeconds[LSide],
-      FUsedSeconds[LSide]);
-    LEngine.ReceiveMessage(BuildLevelMessage(LSide));
+    LActiveIncrement := 0;
+    if (FTimeControl.IncrementMode = cimFromStart) or
+      ((FTimeControl.MovesPerPeriod > 0) and
+       (FTotalMovesBySide[LSide] + 1 >= FTimeControl.MovesPerPeriod)) then
+      LActiveIncrement := FTimeControl.IncrementSeconds;
+    LEngine.SetClockInfoWithIncrement(GetMovesRemaining(LSide), FRemainingSeconds[LSide],
+      FUsedSeconds[LSide], LActiveIncrement);
 
     LAvailableSeconds := FRemainingSeconds[LSide];
     if (FTimeControl.IncrementMode = cimFromStart) or

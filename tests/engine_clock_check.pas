@@ -5,10 +5,33 @@ uses
   Classes, SysUtils, uEngineBase, uHubEngine, uEngineRegistry,
   uDraughtsBoard, uGameMoveHistory, uGameOrchestrator;
 
+type
+  TClockProbe = class(TDraughtsEngine)
+    Used: Double;
+    Calls: Integer;
+    function DoStartThinking: string; override;
+    procedure SetClockInfo(Moves: Integer; Remaining, TotalUsed: Double); override;
+  end;
+function TClockProbe.DoStartThinking: string;
+begin Result := ''; end;
+procedure TClockProbe.SetClockInfo(Moves: Integer; Remaining, TotalUsed: Double);
+begin Used := TotalUsed; Inc(Calls); end;
+
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
   if not Condition then
     raise Exception.Create(MessageText);
+end;
+
+procedure CheckTypedClockCompatibility;
+var Engine: TClockProbe;
+begin
+  Engine := TClockProbe.Create;
+  try
+    Engine.SetClockInfoWithIncrement(0, 90, 17, 2);
+    Check((Engine.Used = 17) and (Engine.Calls = 1),
+      'extended clock configuration must preserve used time for non-Hub adapters');
+  finally Engine.Free; end;
 end;
 
 procedure FakeHub(const Mode: string);
@@ -315,6 +338,7 @@ begin
     CheckClockedThink('--long-hub', dsWhite, 2, 0, False)
   else
   begin
+    CheckTypedClockCompatibility;
     CheckHubLevel;
     CheckClockedThink('--silent-hub', dsWhite, 0.002, 0, True);
     CheckClockedThink('--silent-hub', dsBlack, 0.002, 0, True);

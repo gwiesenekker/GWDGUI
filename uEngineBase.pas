@@ -84,6 +84,8 @@ type
     procedure RequestStop; virtual;
     procedure SetClockInfo(AMovesRemaining: Integer; ARemainingSeconds,
       ATotalUsedSeconds: Double); virtual;
+    procedure SetClockInfoWithIncrement(AMovesRemaining: Integer;
+      ARemainingSeconds, ATotalUsedSeconds, AIncrementSeconds: Double); virtual;
     procedure SetGamePosition(const AStartingFEN: string; AMoves: TStrings); virtual;
     function StartThinking: string; virtual;
     procedure Stop; virtual;
@@ -454,6 +456,12 @@ begin
   Log('clock received; moves_remaining=' + IntToStr(AMovesRemaining) +
     '; remaining_seconds=' + FloatToStr(ARemainingSeconds) +
     '; total_used_seconds=' + FloatToStr(ATotalUsedSeconds));
+end;
+
+procedure TDraughtsEngine.SetClockInfoWithIncrement(AMovesRemaining: Integer;
+  ARemainingSeconds, ATotalUsedSeconds, AIncrementSeconds: Double);
+begin
+  SetClockInfo(AMovesRemaining, ARemainingSeconds, ATotalUsedSeconds);
 end;
 
 procedure TDraughtsEngine.LogCurrentState(const AReason: string);

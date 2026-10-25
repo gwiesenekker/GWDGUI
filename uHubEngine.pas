@@ -72,6 +72,8 @@ type
     procedure RequestStop; override;
     procedure SetClockInfo(AMovesRemaining: Integer; ARemainingSeconds,
       ATotalUsedSeconds: Double); override;
+    procedure SetClockInfoWithIncrement(AMovesRemaining: Integer;
+      ARemainingSeconds, ATotalUsedSeconds, AIncrementSeconds: Double); override;
     procedure SetGamePosition(const AStartingFEN: string; AMoves: TStrings); override;
     procedure StartAnalyzing;
     procedure StartMcts;
@@ -1070,6 +1072,14 @@ begin
   Command.RemainingSeconds := ARemainingSeconds;
   Command.TotalUsedSeconds := ATotalUsedSeconds;
   QueueProcedureCommand(Command);
+end;
+
+procedure THubEngine.SetClockInfoWithIncrement(AMovesRemaining: Integer;
+  ARemainingSeconds, ATotalUsedSeconds, AIncrementSeconds: Double);
+begin
+  SetClockInfo(AMovesRemaining, ARemainingSeconds, ATotalUsedSeconds);
+  if AIncrementSeconds > 0 then
+    ReceiveMessage(FLevelCommand + ' inc=' + HubSeconds(AIncrementSeconds));
 end;
 
 procedure THubEngine.SetGamePosition(const AStartingFEN: string; AMoves: TStrings);

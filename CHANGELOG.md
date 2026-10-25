@@ -3,6 +3,14 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Keep extended clock configuration protocol-neutral (D7)
+
+- Route increment-aware clock data through a typed engine method. Hub adds its
+  protocol field; other adapters receive their unchanged accumulated used time.
+- Regress compatibility with an adapter implementing the original clock method.
+- Validation: clock suite passes; removes the generic text-message path that
+  could otherwise reset DXP's used-time field.
+
 ### 2026-10-25 — Send accurate engine clock controls (D6, D7)
 
 - Truncate DXP whole-minute controls instead of rounding fractional minutes up,
