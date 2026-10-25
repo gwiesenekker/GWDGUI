@@ -33,6 +33,8 @@ type
     FFileName: string;
     FPdnFileName: string;
     FPdnFileOwned: Boolean;
+    FPdnPublishedHash: string;
+    FStorageNotice: string;
     FTournamentId: string;
     FStorageError: string;
     FGrid: TStringGrid;
@@ -135,7 +137,7 @@ type
 implementation
 
 uses
-  Dialogs, FPJSON, Graphics, JSONParser, Math, LazFileUtils, uGameOrchestrator,
+  Dialogs, SHA1, FPJSON, Graphics, JSONParser, Math, LazFileUtils, uGameOrchestrator,
   uGuiDialogs, uMainForm, uTournamentGridModel, uTournamentModel,
   uTournamentPairing, uTournamentResults, uTournamentTypes, uTournamentStorage,
   uAtomicFile, uGameTreePdn, uPdn;
@@ -692,6 +694,8 @@ begin
   FFileName := NewFileName;
   FPdnFileName := '';
   FPdnFileOwned := False;
+  FPdnPublishedHash := '';
+  FStorageNotice := '';
   FLegacyPdnFileName := '';
   Result := True;
 end;
@@ -819,20 +823,24 @@ begin
     Exit;
   FPdnWriteLock.Acquire;
   try
-    if FPdnFileOwned and not TournamentPdnMatchesId(FPdnFileName, FTournamentId) then
+    if FPdnFileOwned and
+      (not TournamentPdnMatchesId(FPdnFileName, FTournamentId) or
+       (FPdnPublishedHash = '') or
+       (SHA1Print(SHA1File(FPdnFileName)) <> FPdnPublishedHash)) then
     begin
+      FStorageNotice := 'Preserved changed PDN: ' + ExtractFileName(FPdnFileName);
+      FLegacyPdnFileName := FPdnFileName;
       FPdnFileOwned := False;
+      FPdnPublishedHash := '';
       FPdnFileName := UnusedTournamentPdnPath(FPdnFileName);
       SaveTournamentSnapshot(FFileName);
     end;
     WriteTextFileAtomically(FPdnFileName, Trim(PdnText) + LineEnding, FPdnFileOwned);
-    if not FPdnFileOwned then
-    begin
-      FPdnFileOwned := True;
-      // Persist ownership only after exclusive creation succeeded. If this
-      // snapshot fails, recovery preserves the unclaimed file and uses a new one.
-      SaveTournamentSnapshot(FFileName);
-    end;
+    FPdnPublishedHash := SHA1Print(SHA1String(Trim(PdnText) + LineEnding));
+    FPdnFileOwned := True;
+    // Publish the fingerprint only after the PDN succeeds. A failed JSON update
+    // causes conservative preservation of the unrecognized file on recovery.
+    SaveTournamentSnapshot(FFileName);
   finally
     FPdnWriteLock.Release;
   end;
@@ -1386,6 +1394,7 @@ begin
     Data.Add('pdn_file_name', ExtractRelativePath(ExpandFileName(AFileName),
       NextPdnFileName));
     Data.Add('pdn_owned', FPdnFileOwned);
+    Data.Add('pdn_published_hash', FPdnPublishedHash);
     Data.Add('tournament_name', FTournamentNameEdit.Text);
     Data.Add('starting_fen', FStartingFENEdit.Text);
     Data.Add('moves_per_period', StrToIntDef(Trim(FMovesEdit.Text), 75));
@@ -1452,6 +1461,7 @@ var
   I: Integer;
   Row: Integer;
   PairingType: string;
+  Id: TGUID;
 begin
   if IsRunning then
     Exit;
@@ -1522,7 +1532,14 @@ begin
           else
             FGrid.Cells[TournamentColReason, Row] := Game.Get('reason', '');
         end;
-    FTournamentId := Data.Get('tournament_id', FTournamentId);
+    FTournamentId := Data.Get('tournament_id', '');
+    if FTournamentId = '' then
+    begin
+      if CreateGUID(Id) <> 0 then raise EInOutError.Create('Could not create a tournament identity');
+      FTournamentId := GUIDToString(Id);
+    end;
+    FPdnPublishedHash := Data.Get('pdn_published_hash', '');
+    FStorageNotice := '';
     FPdnFileName := Data.Get('pdn_file_name', ChangeFileExt(ExpandFileName(AFileName), '.pdn'));
     if (FPdnFileName <> '') and not FilenameIsAbsolute(FPdnFileName) then
       FPdnFileName := ExpandFileName(ExtractFilePath(ExpandFileName(AFileName)) + FPdnFileName);
@@ -1985,6 +2002,7 @@ begin
         ((PairingActions[I] = 'LoadTournament') or (FStorageError = ''));
   end;
   Caption := 'Tournament';
+  if FStorageNotice <> '' then Caption := Caption + ' - ' + FStorageNotice;
   if FStorageError <> '' then
     Caption := Caption + ' - save failed: ' + FStorageError;
   if FRunning then

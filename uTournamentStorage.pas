@@ -202,6 +202,7 @@ begin
   CheckField(Data, 'tournament_id', [jtString]);
   CheckField(Data, 'pdn_file_name', [jtString]);
   CheckField(Data, 'pdn_owned', [jtBoolean]);
+  CheckField(Data, 'pdn_published_hash', [jtString]);
   CheckInteger(Data, 'moves_per_period', 0);
   CheckInteger(Data, 'concurrent_games', 1);
   CheckField(Data, 'minutes_per_period', [jtNumber]);

@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Preserve external tournament PDN edits (T16)
+
+- Persist the fingerprint of the last published PDN and verify it before replacing
+  an owned projection. Preserve changed or unverifiable files byte for byte,
+  select a fresh projection path, and show a preservation notice in the title.
+- Give each legacy file without an identity a fresh ID when loaded, including
+  when several legacy tournaments are loaded through the same dialog.
+- Keep explicitly tagged standings-only records for legacy/manual results so
+  their results remain exportable without inventing a move history.
+- Validation: GTK tournament suite passes, including same-ID external edits,
+  resume after edits, independent legacy identities and existing collision cases.
+
 ### 2026-10-25 — Apply FMJD endgame draw limits (R7)
 
 - Track the sixteen-move and five-move material limits from FMJD Annex 1,

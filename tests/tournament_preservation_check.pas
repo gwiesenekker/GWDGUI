@@ -1121,6 +1121,46 @@ begin
   end;
 end;
 
+procedure CheckExternalPdnEdits(const Fixture: string);
+var Dialog, Resumed: TTournamentDialog; Grid: TStringGrid;
+  PdnPath, Edited: string;
+begin
+  Dialog := TTournamentDialog.Create(nil); Resumed := TTournamentDialog.Create(nil);
+  try
+    Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    AddTournamentPairingRow(Grid, 'White', 'Black', 1);
+    Dialog.SaveTournamentToFile(Fixture);
+    Dialog.SetSelectedResult('1-1');
+    PdnPath := Dialog.PdnFileName;
+    Edited := FileContents(PdnPath) + '{external user annotation}' + LineEnding;
+    WriteContents(PdnPath, Edited);
+    Resumed.LoadTournamentFromFile(Fixture);
+    Resumed.SetSelectedResult('2-0');
+    Check((Resumed.StorageError = '') and (Resumed.PdnFileName <> PdnPath),
+      'edited same-identity PDN must get a fresh projection path');
+    Check(FileContents(PdnPath) = Edited, 'external PDN edits survive byte for byte');
+    Check(Pos('Preserved changed PDN', Resumed.Caption) > 0, 'external edit preservation is visible');
+    CheckPdnResult(Resumed.PdnFileName, '2-0', '1');
+  finally Resumed.Free; Dialog.Free; end;
+end;
+
+procedure CheckIndependentLegacyIdentities(const Fixture: string);
+var Dialog: TTournamentDialog; FirstId: string;
+begin
+  WriteFixture(Fixture, 'First legacy');
+  WriteFixture(Fixture + '.second', 'Second legacy');
+  Dialog := TTournamentDialog.Create(nil);
+  try
+    Dialog.LoadTournamentFromFile(Fixture);
+    Dialog.SaveTournamentToFile(Fixture + '.first-saved');
+    FirstId := TournamentId(Fixture + '.first-saved');
+    Dialog.LoadTournamentFromFile(Fixture + '.second');
+    Dialog.SaveTournamentToFile(Fixture + '.second-saved');
+    Check(TournamentId(Fixture + '.second-saved') <> FirstId,
+      'separate legacy files loaded in one dialog need distinct identities');
+  finally Dialog.Free; end;
+end;
+
 procedure CheckLegacyMigrationCollision(const Fixture: string);
 var
   Dialog: TTournamentDialog;
@@ -1187,6 +1227,8 @@ begin
       CheckMovedOwnedProjection(IncludeTrailingPathDelimiter(TestDirectory) + 'owned-collision.json');
       CheckNewProjectionPreservesExistingPdn(IncludeTrailingPathDelimiter(TestDirectory) + 'collision.json');
       CheckProjectionAvoidsExistingDirectory(IncludeTrailingPathDelimiter(TestDirectory) + 'directory.json');
+      CheckExternalPdnEdits(IncludeTrailingPathDelimiter(TestDirectory) + 'external-edits.json');
+      CheckIndependentLegacyIdentities(IncludeTrailingPathDelimiter(TestDirectory) + 'legacy-identities.json');
       CheckLegacyMigrationCollision(IncludeTrailingPathDelimiter(TestDirectory) + 'legacy-collision.json');
       CheckUnmarkedV2PdnIsPreserved(IncludeTrailingPathDelimiter(TestDirectory) + 'unmarked-v2.json');
       WriteLn('OK');
