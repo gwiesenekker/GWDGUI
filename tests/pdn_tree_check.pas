@@ -140,7 +140,22 @@ begin
       'changing compatibility fields must invalidate the cached parsed tree');
   finally Root.Free; Game.Free; end;
 end;
+procedure CheckIllegalBranchWarnings;
+var Game: TPdnGame; Root: TPdnMoveNode;
 begin
+  Game := TPdnGame.Create;
+  try
+    Game.MovesText := '32-28 18-23';
+    Game.MoveVariationsText := EncodePdnVariationLine(2, 1, '18-24');
+    Game.ValidateMoveTree;
+    Check(Pos('18-24', Game.ImportWarningsText) > 0, 'rejected branch must carry a warning');
+    Root := Game.BuildMoveTree;
+    try Check(Root.ChildCount > 0, 'validation must retain original parsed content');
+    finally Root.Free; end;
+  finally Game.Free; end;
+end;
+begin
+  CheckIllegalBranchWarnings;
   CheckNestedTree;
   CheckMalformedAndBlackStart;
   CheckEarlyBranchAndDatabaseCompatibility;

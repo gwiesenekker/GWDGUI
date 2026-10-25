@@ -414,6 +414,18 @@ begin
       'a warned game must still load its mainline and valid branches into the actual form');
     Check(Pos('Good sibling', GameTreeToPdnText(AForm.ActiveGameTree)) > 0,
       'opening a warned game must retain its valid annotations');
+    Source.Text := '[Event "Illegal branch"]' + LineEnding +
+      '1. 32-28 18-23 (1... 18-24) *';
+    Source.SaveToFile(FileName);
+    Dialog.OpenPdnFile(FileName);
+    Grid.OnSelectCell(Grid, 0, 1, CanSelect);
+    Check(Warning.Visible and (Pos('18-24', Warning.Caption) > 0),
+      'PDN list must explain an illegal branch before opening it');
+    LoadPdnGamesFromFile(FileName, Games);
+    AForm.LoadPdnGameToDisplay(TPdnGame(Games[0]));
+    Check((AForm.ActiveGameTree.MainlineCount = 2) and
+      (Pos('18-24', AForm.ActiveGameTree.StatusText) > 0),
+      'actor rejection must remain visible in the board status');
   finally
     Dialog.Free;
     for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;

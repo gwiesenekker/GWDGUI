@@ -121,12 +121,21 @@ end;
 procedure TPdnOpenDialog.ShowGameWarnings(ARow: Integer);
 var
   Game: TPdnGame;
+  Warnings: TStringList;
 begin
   Game := GameAtRow(ARow);
   FWarningLabel.Caption := '';
   if Game <> nil then
+  begin
+    Game.ValidateMoveTree;
     FWarningLabel.Caption := Trim(StringReplace(Game.ImportWarningsText,
       LineEnding, ' ', [rfReplaceAll]));
+    Warnings := TStringList.Create;
+    try
+      Warnings.Text := Game.ImportWarningsText;
+      if Warnings.Count > 0 then FGrid.Cells[4, ARow] := IntToStr(Warnings.Count);
+    finally Warnings.Free; end;
+  end;
   FWarningLabel.Hint := FWarningLabel.Caption;
   FWarningLabel.Visible := FWarningLabel.Caption <> '';
 end;

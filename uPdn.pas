@@ -31,6 +31,7 @@ type
     FParsedRoot: TPdnMoveNode;
     FParsedSignature: string;
     FHasResultTag: Boolean;
+    FValidatedSignature: string;
     function TreeDataSignature: string;
   public
     EventName: string;
@@ -48,6 +49,8 @@ type
     constructor Create;
     destructor Destroy; override;
     function BuildMoveTree: TPdnMoveNode;
+    procedure ValidateMoveTree;
+    procedure AddImportWarning(const Text: string);
     procedure AssignFrom(ASource: TPdnGame);
   end;
 
@@ -188,6 +191,57 @@ begin
   MoveVariationAnnotationsText := ASource.MoveVariationAnnotationsText;
   MoveVariationsText := ASource.MoveVariationsText;
   MovesText := ASource.MovesText;
+end;
+
+procedure TPdnGame.AddImportWarning(const Text: string);
+var Warnings: TStringList;
+begin
+  Warnings := TStringList.Create;
+  try
+    Warnings.Text := ImportWarningsText;
+    if Warnings.IndexOf(Text) < 0 then Warnings.Add(Text);
+    ImportWarningsText := Warnings.Text;
+  finally Warnings.Free; end;
+end;
+
+procedure TPdnGame.ValidateMoveTree;
+var
+  Root: TPdnMoveNode;
+  Board: TDraughtsBoard;
+
+  procedure Visit(Node: TPdnMoveNode; Before: TDraughtsBoard; Ply: Integer);
+  var I: Integer; Next: TDraughtsBoard; Move: string;
+  begin
+    for I := 0 to Node.ChildCount - 1 do
+    begin
+      if not Before.TryGetLegalMove(Node.Children[I].MoveText, Move) then
+      begin
+        AddImportWarning('Cannot load move ' + Node.Children[I].MoveText +
+          ' at ply ' + IntToStr(Ply + 1) + ': illegal from its parent position; its subtree is skipped.');
+        Continue;
+      end;
+      Next := TDraughtsBoard.Create;
+      try
+        Next.AssignFrom(Before);
+        Next.PlayMove(Move, False, False);
+        Visit(Node.Children[I], Next, Ply + 1);
+      finally Next.Free; end;
+    end;
+  end;
+
+begin
+  if FValidatedSignature = TreeDataSignature then Exit;
+  Root := BuildMoveTree;
+  Board := TDraughtsBoard.Create;
+  try
+    try
+      Board.LoadFromFEN(StartingFEN);
+      Visit(Root, Board, 0);
+    except
+      on E: EConvertError do AddImportWarning('Cannot load starting position: ' + E.Message);
+    end;
+    FValidatedSignature := TreeDataSignature;
+  finally Board.Free; Root.Free; end;
 end;
 
 function PdnUnquote(const AText: string): string;

@@ -4291,6 +4291,9 @@ procedure TMainForm.ImportPdnTree(AGameTree: TGameTree; AGame: TPdnGame);
 var
   Actor: TGameTreeActor;
   ParsedRoot: TPdnMoveNode;
+  Header: TGameTreeHeaderInput;
+  StatusCommand: TGameTreeCommand;
+  StatusError: string;
 
   procedure ImportChildren(Source: TPdnMoveNode; ParentId: Int64);
   var I: Integer; Command: TGameTreeCommand; ErrorText: string;
@@ -4301,7 +4304,9 @@ var
         Source.Children[I].MoveText, Source.Children[I].AnnotationText);
       try
         if ExecuteGameTreeCommand(Actor, Command, ErrorText) then
-          ImportChildren(Source.Children[I], Command.CreatedNodeId);
+          ImportChildren(Source.Children[I], Command.CreatedNodeId)
+        else
+          AGame.AddImportWarning('Cannot load move ' + Source.Children[I].MoveText + ': ' + ErrorText);
       finally Command.Free; end;
     end;
   end;
@@ -4314,6 +4319,14 @@ begin
   try
     ClearTreeBranches(AGameTree);
     ImportChildren(ParsedRoot, AGameTree.Root.NodeId);
+    if Trim(AGame.ImportWarningsText) <> '' then
+    begin
+      Header := CurrentGameTreeHeaderInput(nil, AGameTree);
+      Header.StatusText := Trim(StringReplace(AGame.ImportWarningsText, LineEnding, ' ', [rfReplaceAll]));
+      StatusCommand := Actor.CreateSetHeaderCommand(Header);
+      try ExecuteGameTreeCommand(Actor, StatusCommand, StatusError);
+      finally StatusCommand.Free; end;
+    end;
     RefreshDisplayFromGameTree(AGameTree, True);
   finally ParsedRoot.Free; end;
 end;

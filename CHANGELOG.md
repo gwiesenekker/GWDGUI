@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Explain rejected PDN branches (P20)
+
+- Validate a selected PDN's recursive tree lazily and show illegal-move/subtree
+  diagnostics in the PDN list. Preserve parsed input for inspection; do not pay
+  for legal replay of every game merely to populate the file list.
+- Record actor import rejections instead of ignoring their error text, and retain
+  warnings in the loaded board status. Valid mainlines and sibling branches load.
+- Regress parser diagnostics and the actual list/board warning flow.
+- Validation: recursive-tree and hidden GTK main-form suites pass.
+
 ### 2026-10-25 — Keep runner snapshots on their owning thread (M5)
 
 - Asynchronous engine log callbacks only append under the log lock; they cannot
