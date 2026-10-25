@@ -3,7 +3,7 @@ program game_tree_pdn_filter_check;
 {$mode objfpc}{$H+}
 
 uses
-  Classes, SysUtils, uDraughtsBoard, uGameOrchestrator, uGameTree, uGameTreeBuilder,
+  Classes, SysUtils, Base64, uDraughtsBoard, uGameOrchestrator, uGameTree, uGameTreeBuilder,
   uGameTreePdn, uGameTreeSearchRef, uPvSnapshot, uTreeTestUtils, uPdn,
   uGameTreeNodeData;
 
@@ -644,12 +644,17 @@ begin
       for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
       Games.Clear;
     end;
+    Text := GameTreeToPdnTextEx(Tree, DefaultGameTreePdnRenderOptions);
+    Check(Pos('pv="18-23 37-32"', Text) > 0, 'PV metadata is readable');
+    Check(Pos('[%gwd-node ', Text) = 0, 'new exports avoid duplicated base64 JSON');
     Text := StringReplace(Text, 'literal \{braces\}', 'edited', []);
     Lines.Text := Text; Lines.SaveToFile(FileName);
     LoadPdnGamesFromFile(FileName, Games);
     Game := TPdnGame(Games[0]); Root := Game.BuildMoveTree;
     try
-      Check(not Root.HasNodeData, 'edited root comment wins over stale metadata');
+      Check(Root.HasNodeData, 'edited comment retains independent analysis');
+      Check(Root.NodeData.EnginePV = Data.EnginePV, 'edited comment keeps PV');
+      Check(Root.NodeData.EngineScore = Data.EngineScore, 'unchanged visible score survives comment edit');
       Check(Pos('edited', Root.AnnotationText) > 0, 'edited root text retained');
       Check(Pos('edited', Game.ImportWarningsText) > 0, 'stale metadata reported');
     finally Root.Free; end;
@@ -660,7 +665,34 @@ begin
   end;
 end;
 
+procedure CheckCompactMetadata;
+var Data, Loaded: TGameTreeNodeData; Encoded: string; Edited: Boolean;
 begin
+  Encoded := '[%gwd-node ' + EncodeStringBase64('{"schema":"GWDGUI-node-1","projection":"old note","CommentText":"old note","EnginePV":"32-28"}') + ']';
+  Check(DecodeNodeDataComment(Encoded, 'old note', Loaded, Edited), 'legacy base64 remains readable');
+  Check((Loaded.EnginePV = '32-28') and not Edited, 'legacy metadata is preserved');
+  Data := Default(TGameTreeNodeData);
+  Data.CommentText := 'an ordinary note'; Data.OriginText := 'Human';
+  Check(EncodeNodeData(Data, Data.CommentText) = '', 'ordinary notes need no extension');
+  Data.EnginePVDepth := '23'; Data.EnginePVTimeText := '1.5';
+  Encoded := EncodeNodeData(Data, Data.CommentText);
+  Check(Length(Encoded) < 100, 'empty-PV metadata is compact');
+  Check(DecodeNodeDataComment(Encoded, Data.CommentText, Loaded, Edited), 'decode empty-PV fields');
+  Check((Loaded.EnginePVDepth = '23') and (Loaded.EnginePVTimeText = '1.5'), 'empty PV keeps depth/time');
+  Data.CommentText := 'first line' + #10 + 'second line';
+  Encoded := EncodeNodeData(Data, NormalizeNodeComment(Data.CommentText));
+  Check(DecodeNodeDataComment(Encoded, 'first line second line', Loaded, Edited), 'decode multiline note');
+  Check(not Edited, 'line normalization does not falsely mark comment edited');
+  Check(Loaded.CommentText = Data.CommentText, 'multiline note layout survives');
+  Data.EnginePV := '32-28'; Data.EngineScore := '0.10';
+  Encoded := EncodeNodeData(Data, NormalizeNodeComment(Data.CommentText) + '; E: 0.10');
+  Check(DecodeNodeDataComment(Encoded, 'first line second line; E: 0.50', Loaded, Edited), 'decode edited score');
+  Check(Edited and (Loaded.EngineScore = '') and (Loaded.EnginePV = '32-28'),
+    'visible score edit discards stale score but retains independent PV');
+end;
+
+begin
+  CheckCompactMetadata;
   CheckVariationNumbering;
   CheckAmbiguousCaptureAfterMove;
   CheckNodeDataRoundTrip;

@@ -288,11 +288,7 @@ begin
 end;
 
 function NormalizePdnComment(const Text: string): string;
-begin
-  Result := StringReplace(Text, #13#10, #10, [rfReplaceAll]);
-  Result := StringReplace(Result, #13, #10, [rfReplaceAll]);
-  Result := Trim(StringReplace(Result, #10, ' ', [rfReplaceAll]));
-end;
+begin Result := NormalizeNodeComment(Text); end;
 
 function EscapePdnComment(const Text: string): string;
 begin
@@ -762,21 +758,21 @@ var
 
   procedure ProcessComment;
   var
-    LCommentText, Projection, Actual: string;
+    LCommentText, Actual: string;
+    Edited: Boolean;
     Data: TGameTreeNodeData;
     Target: TPdnMoveNode;
   begin
     LCommentText := NormalizePdnComment(LComment.ToString);
     LComment.Clear;
     if LCommentText = '' then Exit;
-    if DecodeNodeData(LCommentText, Data, Projection) then
+    if LLastMoveIndex >= 0 then Actual := AAnnotations[LLastMoveIndex]
+    else if AInitialComments <> nil then Actual := AInitialComments.Text
+    else Actual := '';
+    if DecodeNodeDataComment(LCommentText, Actual, Data, Edited) then
     begin
       Target := nil;
-      if LLastMoveIndex >= 0 then Actual := AAnnotations[LLastMoveIndex]
-      else if AInitialComments <> nil then Actual := AInitialComments.Text
-      else Actual := '';
-      if NormalizePdnComment(Actual) <> NormalizePdnComment(Projection) then
-      begin Warn('Ignored node data whose visible comment was edited.'); Exit; end;
+      if Edited then Warn('Visible node comment edited; retained independent analysis metadata.');
       if ATreeRoot <> nil then Target := Positions[LLastMoveIndex + 1];
       if Target <> nil then
       begin Target.HasNodeData := True; Target.NodeData := Data; Target.AnnotationText := Data.CommentText; end;
@@ -785,7 +781,7 @@ var
       begin AInitialComments.Clear; if Data.CommentText <> '' then AInitialComments.Add(Data.CommentText); end;
       Exit;
     end;
-    if Copy(LCommentText, 1, 11) = '[%gwd-node ' then
+    if (Copy(LCommentText, 1, 11) = '[%gwd-node ') or (Copy(LCommentText, 1, 6) = '[%gwd ') then
       Warn('Malformed node-data comment retained as text.');
     if (LLastMoveIndex < 0) or (LLastMoveIndex >= AAnnotations.Count) then
     begin
@@ -1732,11 +1728,15 @@ var
   I: Integer;
 
   procedure WriteAnnotation(Node: TPdnMoveNode);
+  var Encoded: string;
   begin
     if Node.AnnotationText <> '' then
       Output.Append(' {' + EscapePdnComment(Node.AnnotationText) + '}');
     if Node.HasNodeData then
-      Output.Append(' {' + EncodeNodeData(Node.NodeData, Node.AnnotationText) + '}');
+    begin
+      Encoded := EncodeNodeData(Node.NodeData, Node.AnnotationText);
+      if Encoded <> '' then Output.Append(' {' + EscapePdnComment(Encoded) + '}');
+    end;
   end;
 
   procedure WriteSequence(Parent, Node: TPdnMoveNode; Before: TDraughtsBoard;

@@ -128,8 +128,10 @@ begin
 end;
 
 function ClockSecondsCaption(ASeconds: Double): string;
+var FS: TFormatSettings;
 begin
-  Result := FormatFloat('0.000', ASeconds);
+  FS := DefaultFormatSettings; FS.DecimalSeparator := '.';
+  Result := FormatFloat('0.000', ASeconds, FS);
 end;
 
 function NodeClockAnnotation(ANode: TGameTreePlyNode): string;
@@ -163,7 +165,7 @@ end;
 function NodeAnnotation(ANode: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions; AForFile: Boolean = False): string;
 var
-  LClockText, Projection: string;
+  LClockText, Projection, Encoded: string;
   Data: TGameTreeNodeData;
 begin
   Result := '';
@@ -208,9 +210,9 @@ begin
     if not AOptions.ShowAnnotatorFullPV then
       if AOptions.ShowAnnotatorPVMove then Data.AnnotatorPV := FirstPvMove(Data.AnnotatorPV)
       else Data.AnnotatorPV := '';
-    if Data.EnginePV = '' then
+    if not AOptions.ShowEngineFullPV and not AOptions.ShowEnginePVMove then
     begin Data.EnginePVDepth := ''; Data.EnginePVTimeText := ''; end;
-    if Data.AnnotatorPV = '' then
+    if not AOptions.ShowAnnotatorFullPV and not AOptions.ShowAnnotatorPVMove then
     begin Data.AnnotatorPVDepth := ''; Data.AnnotatorPVTimeText := ''; end;
     if not AOptions.ShowClocks then
     begin
@@ -218,10 +220,8 @@ begin
       Data.WhiteRemainingSeconds := 0; Data.BlackRemainingSeconds := 0;
       Data.WhiteUsedSeconds := 0; Data.BlackUsedSeconds := 0;
     end;
-    if (Data.CommentText <> '') or (Data.OriginText <> '') or (Data.EnginePV <> '') or
-      (Data.EngineScore <> '') or (Data.AnnotatorPV <> '') or (Data.AnnotatorScore <> '') or
-      (Data.AutoPlayPV <> '') or Data.HasClockInfo or Data.HasMoveTime then
-      Result += ' {' + EncodeNodeData(Data, Projection) + '}';
+    Encoded := EncodeNodeData(Data, Projection);
+    if Encoded <> '' then Result += ' {' + EscapePdnComment(Encoded) + '}';
   end;
 end;
 

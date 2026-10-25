@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Keep node metadata compact and readable (P21/P15)
+
+- Replace duplicated base64 JSON with a compact readable extension; ordinary
+  human comments need no metadata. Continue reading the previous format.
+- Preserve multiline comment layout and depth/time fields without a PV. Normalize
+  visible whitespace before detecting edits, and retain independent analysis
+  when comments change while discarding contradictory edited score/clock values.
+- Validation: repeated tree and legacy writer round trips, edited comments/scores,
+  multiline notes, empty PVs, old metadata and preservation regressions pass.
+
 ### 2026-10-25 — Show standard captures in the move list (U6/P18)
 
 - Render mainline and real variation captures with the board's standard PDN

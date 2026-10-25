@@ -11,36 +11,203 @@ type
 function EncodeNodeData(const Data: TGameTreeNodeData; const Projection: string): string;
 function DecodeNodeData(const Text: string; out Data: TGameTreeNodeData;
   out Projection: string): Boolean;
+function NormalizeNodeComment(const Text: string): string;
+function NodeDataAnalysisCaption(const Data: TGameTreeNodeData): string;
+function DecodeNodeDataComment(const Text, VisibleComment: string;
+  out Data: TGameTreeNodeData; out Edited: Boolean): Boolean;
 implementation
-uses FPJSON, JSONParser, Base64, Math;
-function EncodeNodeData(const Data: TGameTreeNodeData; const Projection: string): string;
-var Value: TJSONObject;
+uses Classes, FPJSON, JSONParser, Base64, Math, SHA1;
+function NormalizeNodeComment(const Text: string): string;
 begin
-  Value := TJSONObject.Create;
-  try
-    Value.Add('schema', 'GWDGUI-node-1');
-    if Projection <> '' then Value.Add('projection', Projection);
-    if Data.CommentText <> '' then Value.Add('CommentText', Data.CommentText);
-    if Data.OriginText <> '' then Value.Add('OriginText', Data.OriginText);
-    if Data.EnginePV <> '' then Value.Add('EnginePV', Data.EnginePV);
-    if Data.EngineScore <> '' then Value.Add('EngineScore', Data.EngineScore);
-    if Data.EnginePVDepth <> '' then Value.Add('EnginePVDepth', Data.EnginePVDepth);
-    if Data.EnginePVTimeText <> '' then Value.Add('EnginePVTimeText', Data.EnginePVTimeText);
-    if Data.AnnotatorPV <> '' then Value.Add('AnnotatorPV', Data.AnnotatorPV);
-    if Data.AnnotatorScore <> '' then Value.Add('AnnotatorScore', Data.AnnotatorScore);
-    if Data.AnnotatorPVDepth <> '' then Value.Add('AnnotatorPVDepth', Data.AnnotatorPVDepth);
-    if Data.AnnotatorPVTimeText <> '' then Value.Add('AnnotatorPVTimeText', Data.AnnotatorPVTimeText);
-    if Data.AutoPlayPV <> '' then Value.Add('AutoPlayPV', Data.AutoPlayPV);
-    if Data.HasClockInfo then Value.Add('HasClockInfo', True);
-    if Data.HasMoveTime then Value.Add('HasMoveTime', True);
-    if Data.SecondsUsed <> 0 then Value.Add('SecondsUsed', Data.SecondsUsed);
-    if Data.WhiteRemainingSeconds <> 0 then Value.Add('WhiteRemainingSeconds', Data.WhiteRemainingSeconds);
-    if Data.BlackRemainingSeconds <> 0 then Value.Add('BlackRemainingSeconds', Data.BlackRemainingSeconds);
-    if Data.WhiteUsedSeconds <> 0 then Value.Add('WhiteUsedSeconds', Data.WhiteUsedSeconds);
-    if Data.BlackUsedSeconds <> 0 then Value.Add('BlackUsedSeconds', Data.BlackUsedSeconds);
-    Result := '[%gwd-node ' + EncodeStringBase64(Value.FormatJSON(AsCompressedJSON)) + ']';
-  finally Value.Free; end;
+  Result := StringReplace(Text, #13#10, #10, [rfReplaceAll]);
+  Result := StringReplace(Result, #13, #10, [rfReplaceAll]);
+  Result := Trim(StringReplace(Result, #10, ' ', [rfReplaceAll]));
 end;
+
+function NodeDataAnalysisCaption(const Data: TGameTreeNodeData): string;
+var FS: TFormatSettings;
+  procedure Add(const Text: string);
+  begin if Result <> '' then Result += '; '; Result += Text; end;
+  function Seconds(Value: Double): string;
+  begin Result := FormatFloat('0.000', Value, FS); end;
+begin
+  FS := DefaultFormatSettings; FS.DecimalSeparator := '.';
+  Result := '';
+  if Trim(Data.EngineScore) <> '' then Add('E: ' + Trim(Data.EngineScore));
+  if Trim(Data.AnnotatorScore) <> '' then Add('A: ' + Trim(Data.AnnotatorScore));
+  if Data.HasClockInfo then
+  begin
+    Add('clk: W=' + Seconds(Data.WhiteRemainingSeconds) + ', B=' + Seconds(Data.BlackRemainingSeconds) +
+      '; used: W=' + Seconds(Data.WhiteUsedSeconds) + ', B=' + Seconds(Data.BlackUsedSeconds));
+    if Data.HasMoveTime then Add('emt: ' + Seconds(Data.SecondsUsed));
+  end;
+end;
+
+function NodeCommentChecksum(const Text: string): string;
+begin Result := Copy(SHA1Print(SHA1String(NormalizeNodeComment(Text))), 1, 12); end;
+
+function EncodeNodeData(const Data: TGameTreeNodeData; const Projection: string): string;
+var FS: TFormatSettings; Value: TJSONString; Note: string;
+  procedure Add(const Key, Text: string);
+  var Encoded: string;
+  begin
+    if Text = '' then Exit;
+    Value := TJSONString.Create(Text);
+    try Encoded := Value.AsJSON; finally Value.Free; end;
+    // Keep braces/brackets out of the surrounding PDN comment grammar.
+    Encoded := StringReplace(Encoded, '{', '\u007b', [rfReplaceAll]);
+    Encoded := StringReplace(Encoded, '}', '\u007d', [rfReplaceAll]);
+    Encoded := StringReplace(Encoded, '[', '\u005b', [rfReplaceAll]);
+    Encoded := StringReplace(Encoded, ']', '\u005d', [rfReplaceAll]);
+    Result += ' ' + Key + '=' + Encoded;
+  end;
+  function Number(Value: Double): string;
+  begin Result := FloatToStr(Value, FS); end;
+begin
+  Result := '';
+  Note := NormalizeNodeComment(Data.CommentText);
+  // Ordinary comments and default human provenance need no extension at all.
+  if (Data.EnginePV = '') and (Data.EngineScore = '') and (Data.EnginePVDepth = '') and
+    (Data.EnginePVTimeText = '') and (Data.AnnotatorPV = '') and (Data.AnnotatorScore = '') and
+    (Data.AnnotatorPVDepth = '') and (Data.AnnotatorPVTimeText = '') and (Data.AutoPlayPV = '') and
+    not Data.HasClockInfo and not Data.HasMoveTime and (Data.SecondsUsed = 0) and
+    (Data.WhiteRemainingSeconds = 0) and (Data.BlackRemainingSeconds = 0) and
+    (Data.WhiteUsedSeconds = 0) and (Data.BlackUsedSeconds = 0) and
+    ((Data.OriginText = '') or SameText(Data.OriginText, 'Human')) and
+    (Data.CommentText = Note) then Exit;
+  FS := DefaultFormatSettings; FS.DecimalSeparator := '.';
+  Result := '[%gwd h=' + NodeCommentChecksum(Projection);
+  if Note <> '' then Result += ' n=' + IntToStr(Length(Note));
+  if (Data.CommentText <> Note) or (Copy(NormalizeNodeComment(Projection), 1, Length(Note)) <> Note) then
+    Add('note', Data.CommentText); // Exceptional layout only; ordinary comments are never duplicated.
+  Add('origin', Data.OriginText); Add('pv', Data.EnginePV); Add('eval', Data.EngineScore);
+  Add('depth', Data.EnginePVDepth); Add('time', Data.EnginePVTimeText);
+  Add('apv', Data.AnnotatorPV); Add('aeval', Data.AnnotatorScore);
+  Add('adepth', Data.AnnotatorPVDepth); Add('atime', Data.AnnotatorPVTimeText);
+  Add('autopv', Data.AutoPlayPV);
+  if Data.HasClockInfo or (Data.WhiteRemainingSeconds <> 0) or (Data.BlackRemainingSeconds <> 0) or
+    (Data.WhiteUsedSeconds <> 0) or (Data.BlackUsedSeconds <> 0) then
+  begin
+    Add('clk', Number(Data.WhiteRemainingSeconds) + ',' + Number(Data.BlackRemainingSeconds) + ',' +
+      Number(Data.WhiteUsedSeconds) + ',' + Number(Data.BlackUsedSeconds));
+    if not Data.HasClockInfo then Add('clock-info', '0');
+  end;
+  if Data.HasMoveTime then Add('emt', Number(Data.SecondsUsed))
+  else if Data.SecondsUsed <> 0 then Add('seconds', Number(Data.SecondsUsed));
+  Result += ']';
+end;
+
+function DecodeNodeDataComment(const Text, VisibleComment: string;
+  out Data: TGameTreeNodeData; out Edited: Boolean): Boolean;
+var Obj: TJSONObject; Parsed: TJSONData; Parts: TStringList;
+  I, Start, NoteLength, PrefixLength: Integer; Key, Token, Projection, Actual, Suffix: string;
+  FS: TFormatSettings;
+  function Number(const Value: string): Double;
+  begin
+    if not TryStrToFloat(Value, Result, FS) or IsNan(Result) or IsInfinite(Result) then
+      raise EConvertError.Create('Invalid node clock');
+  end;
+begin
+  Data := Default(TGameTreeNodeData); Edited := False; Result := False;
+  Actual := NormalizeNodeComment(VisibleComment);
+  if Copy(Text, 1, 11) = '[%gwd-node ' then
+  begin
+    Result := DecodeNodeData(Text, Data, Projection);
+    if not Result then Exit;
+    Edited := Actual <> NormalizeNodeComment(Projection);
+  end
+  else
+  begin
+    if (Copy(Text, 1, 6) <> '[%gwd ') or (Text[Length(Text)] <> ']') then Exit;
+    Obj := TJSONObject.Create; Parts := TStringList.Create; Parsed := nil;
+    FS := DefaultFormatSettings; FS.DecimalSeparator := '.';
+    try
+      try
+        I := 7;
+        while I < Length(Text) do
+        begin
+          while (I < Length(Text)) and (Text[I] <= ' ') do Inc(I);
+          if I = Length(Text) then Break;
+          Start := I;
+          while (I < Length(Text)) and not (Text[I] in ['=', ' ', #9]) do Inc(I);
+          Key := Copy(Text, Start, I - Start);
+          if (Key = '') or (Text[I] <> '=') or (Obj.Find(Key) <> nil) then Exit;
+          Inc(I); Start := I;
+          if Text[I] = '"' then
+          begin
+            Inc(I);
+            while I < Length(Text) do
+            begin
+              if Text[I] = '\' then Inc(I)
+              else if Text[I] = '"' then Break;
+              Inc(I);
+            end;
+            if (I >= Length(Text)) or (Text[I] <> '"') then Exit;
+            Inc(I); Token := Copy(Text, Start, I - Start);
+            Parsed := GetJSON(Token);
+            if Parsed.JSONType <> jtString then Exit;
+            Obj.Add(Key, Parsed.AsString); FreeAndNil(Parsed);
+          end
+          else
+          begin
+            while (I < Length(Text)) and (Text[I] > ' ') do Inc(I);
+            Obj.Add(Key, Copy(Text, Start, I - Start));
+          end;
+        end;
+        if Obj.Get('h', '') = '' then Exit;
+        NoteLength := StrToInt(Obj.Get('n', '0'));
+        if NoteLength < 0 then Exit;
+        Edited := Obj.Get('h', '') <> NodeCommentChecksum(Actual);
+        Data.CommentText := Copy(Actual, 1, NoteLength);
+        if Obj.Find('note') <> nil then Data.CommentText := Obj.Get('note', '');
+        Data.OriginText := Obj.Get('origin', '');
+        Data.EnginePV := Obj.Get('pv', ''); Data.EngineScore := Obj.Get('eval', '');
+        Data.EnginePVDepth := Obj.Get('depth', ''); Data.EnginePVTimeText := Obj.Get('time', '');
+        Data.AnnotatorPV := Obj.Get('apv', ''); Data.AnnotatorScore := Obj.Get('aeval', '');
+        Data.AnnotatorPVDepth := Obj.Get('adepth', ''); Data.AnnotatorPVTimeText := Obj.Get('atime', '');
+        Data.AutoPlayPV := Obj.Get('autopv', '');
+        if Obj.Find('clk') <> nil then
+        begin
+          Parts.StrictDelimiter := True; Parts.Delimiter := ','; Parts.DelimitedText := Obj.Get('clk', '');
+          if Parts.Count <> 4 then Exit;
+          Data.WhiteRemainingSeconds := Number(Parts[0]); Data.BlackRemainingSeconds := Number(Parts[1]);
+          Data.WhiteUsedSeconds := Number(Parts[2]); Data.BlackUsedSeconds := Number(Parts[3]);
+          Data.HasClockInfo := Obj.Get('clock-info', '1') <> '0';
+        end;
+        if Obj.Find('emt') <> nil then
+        begin Data.HasMoveTime := True; Data.SecondsUsed := Number(Obj.Get('emt', '')); end
+        else if Obj.Find('seconds') <> nil then Data.SecondsUsed := Number(Obj.Get('seconds', ''));
+        Result := True;
+      except Result := False; end;
+    finally Parsed.Free; Parts.Free; Obj.Free; end;
+    if not Result then Exit;
+  end;
+  if Edited then
+  begin
+    Suffix := NodeDataAnalysisCaption(Data);
+    PrefixLength := Length(Actual) - Length(Suffix);
+    if (Suffix <> '') and (PrefixLength >= 0) and (Copy(Actual, PrefixLength + 1, MaxInt) = Suffix) and
+      ((PrefixLength = 0) or (Copy(Actual, PrefixLength - 1, 2) = '; ')) then
+    begin
+      if PrefixLength > 0 then Dec(PrefixLength, 2);
+      Data.CommentText := Copy(Actual, 1, PrefixLength);
+    end
+    else
+    begin
+      // The visible score/clock projection changed. Keep independent PV/depth/time
+      // data, but never restore values that could contradict the user's edit.
+      Data.CommentText := Actual;
+      if Suffix <> '' then
+      begin
+        Data.EngineScore := ''; Data.AnnotatorScore := '';
+        Data.HasClockInfo := False; Data.HasMoveTime := False; Data.SecondsUsed := 0;
+        Data.WhiteRemainingSeconds := 0; Data.BlackRemainingSeconds := 0;
+        Data.WhiteUsedSeconds := 0; Data.BlackUsedSeconds := 0;
+      end;
+    end;
+  end;
+end;
+
 function DecodeNodeData(const Text: string; out Data: TGameTreeNodeData;
   out Projection: string): Boolean;
 var Value: TJSONData; Obj: TJSONObject; Payload: string;

@@ -51,6 +51,7 @@ var StartPos, EndPos: Integer;
 begin
   repeat
     StartPos := Pos(' {[%gwd-node ', Text);
+    if StartPos = 0 then StartPos := Pos(' {[%gwd ', Text);
     if StartPos = 0 then Break;
     EndPos := PosEx('}', Text, StartPos);
     Check(EndPos > 0, 'node-data comment must close');
