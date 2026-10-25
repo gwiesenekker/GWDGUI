@@ -1224,9 +1224,45 @@ begin
 end;
 
 procedure TTournamentDialog.SaveTournamentToFile(const AFileName: string);
+var
+  OldJson, OldPdn, RecoveryDirectory: string;
+  OldOwned, Relocate: Boolean;
 begin
-  SaveTournamentSnapshot(AFileName);
-  WritePdnProjection;
+  OldJson := FFileName;
+  OldPdn := FPdnFileName;
+  OldOwned := FPdnFileOwned;
+  RecoveryDirectory := IncludeTrailingPathDelimiter(ExpandFileName(
+    IncludeTrailingPathDelimiter(GetAppConfigDir(False)) + 'tournaments'));
+  Relocate := (OldJson <> '') and
+    (ExtractFilePath(ExpandFileName(OldJson)) = RecoveryDirectory) and
+    (ExtractFilePath(ExpandFileName(AFileName)) <> RecoveryDirectory);
+  try
+    if Relocate and ((OldPdn = '') or
+      (ExtractFilePath(ExpandFileName(OldPdn)) = RecoveryDirectory)) then
+    begin
+      FPdnFileName := UnusedTournamentPdnPath(ChangeFileExt(
+        ExpandFileName(AFileName), '.pdn'));
+      FPdnFileOwned := False;
+    end;
+    SaveTournamentSnapshot(AFileName);
+    WritePdnProjection;
+  except
+    // A failed Save As must leave the recoverable source and its identity intact.
+    FFileName := OldJson;
+    FPdnFileName := OldPdn;
+    FPdnFileOwned := OldOwned;
+    raise;
+  end;
+  if Relocate then
+  begin
+    // Only remove the source once both new files have been published successfully.
+    if OldOwned and (OldPdn <> FPdnFileName) and
+      (ExtractFilePath(ExpandFileName(OldPdn)) = RecoveryDirectory) and
+      FileExists(OldPdn) and not DeleteFile(OldPdn) then
+      raise EInOutError.Create('Tournament saved, but could not remove recovery PDN');
+    if FileExists(OldJson) and not DeleteFile(OldJson) then
+      raise EInOutError.Create('Tournament saved, but could not remove recovery JSON');
+  end;
   FStorageError := '';
   UpdateButtons;
 end;

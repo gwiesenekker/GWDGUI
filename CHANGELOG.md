@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Move recovery files on the first named tournament save (T12)
+
+- Publish the JSON and a separate, collision-safe PDN beside the chosen save
+  location before removing the old recovery files. Preserve recovery files and
+  in-memory paths if saving fails. Later Save As keeps an established PDN path.
+- Regress failed and successful first saves, unrelated PDN collisions, recovery
+  cleanup, reloading results and subsequent Save As behavior.
+- Validation: regression fails without relocation; expanded GTK tournament suite passes.
+
 ### 2026-10-25 — Isolate malformed PDN variations instead of aborting files (P16)
 
 - Skip variations whose numbered or annotated start is outside their parent line;

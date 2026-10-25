@@ -420,6 +420,9 @@ GWDGUI regenerates the tournament PDN from these saved records, with one game
 per current pairing attempt, including games ending before their first move.
 Byes do not create PDN games. The PDN path is chosen beside the first JSON file
 and remains fixed when you rename the tournament or save the JSON elsewhere.
+On the first save outside the recovery directory, the PDN moves beside the chosen
+JSON; the old recovery files are removed after both new files are saved. A failed
+save keeps the recovery files available.
 An existing file or directory is never adopted as a new PDN target: GWDGUI uses
 a unique filename instead. Its first write also refuses to replace a file that
 appeared after the name was chosen. Later saves update the PDN created for that

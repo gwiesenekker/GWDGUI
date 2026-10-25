@@ -675,6 +675,59 @@ begin
   end;
 end;
 
+procedure CheckFirstSaveRelocatesRecovery(const Target: string);
+var
+  Dialog, Reloaded: TTournamentDialog;
+  Grid: TStringGrid;
+  OldJson, OldPdn, NewPdn, Saved: string;
+  Failed: Boolean;
+begin
+  Dialog := TTournamentDialog.Create(nil);
+  Reloaded := TTournamentDialog.Create(nil);
+  OldJson := '';
+  OldPdn := '';
+  NewPdn := '';
+  try
+    Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
+    AddTournamentPairingRow(Grid, 'White', 'Black', 1);
+    Dialog.SetSelectedResult('1-1');
+    OldJson := Dialog.SaveFileName;
+    OldPdn := Dialog.PdnFileName;
+    Saved := FileContents(OldJson);
+    Failed := False;
+    try
+      Dialog.SaveTournamentToFile(Target + '/missing/file.json');
+    except
+      on E: Exception do Failed := True;
+    end;
+    Check(Failed, 'saving to a missing directory must fail');
+    Check((Dialog.SaveFileName = OldJson) and (Dialog.PdnFileName = OldPdn) and
+      (FileContents(OldJson) = Saved) and FileExists(OldPdn),
+      'failed first Save As must preserve recovery paths and files');
+    WriteContents(ChangeFileExt(Target, '.pdn'), 'Unrelated archive');
+    Dialog.SaveTournamentToFile(Target);
+    NewPdn := Dialog.PdnFileName;
+    Check((ExtractFilePath(NewPdn) = ExtractFilePath(Target)) and
+      (NewPdn <> ChangeFileExt(Target, '.pdn')), 'first Save As must relocate beside JSON safely');
+    Check(FileContents(ChangeFileExt(Target, '.pdn')) = 'Unrelated archive',
+      'relocation must preserve unrelated PDN');
+    Check(not FileExists(OldJson) and not FileExists(OldPdn),
+      'successful first Save As must remove obsolete recovery files');
+    Reloaded.LoadTournamentFromFile(Target);
+    Check((Reloaded.StorageError = '') and (Reloaded.PdnFileName = NewPdn) and
+      (TStringGrid(Reloaded.FindComponent('TournamentPairings')).Cells[TournamentColResult, 1] = '1-1'),
+      'named save must recover result and relocated projection');
+    Dialog.SaveTournamentToFile(Target + '.copy.json');
+    Check(Dialog.PdnFileName = NewPdn, 'later Save As must retain an established non-recovery PDN');
+  finally
+    Dialog.Free;
+    Reloaded.Free;
+    DeleteFile(OldJson);
+    DeleteFile(OldPdn);
+    DeleteFile(NewPdn);
+  end;
+end;
+
 procedure CheckNewProjectionPreservesExistingPdn(const Fixture: string);
 var
   Dialog, Reloaded, Resumed: TTournamentDialog;
@@ -839,6 +892,7 @@ begin
       CheckPairingChangesWaitForShutdown(Fixture, OtherFile);
       CheckAutosaveAndFailureRecovery(Fixture);
       CheckUnsavedTournamentGetsRecoveryFile;
+      CheckFirstSaveRelocatesRecovery(IncludeTrailingPathDelimiter(TestDirectory) + 'named.json');
       CheckRecordsAndPdnStayConsistent(IncludeTrailingPathDelimiter(TestDirectory) + 'records.json');
       CheckLegacyPdnIsPreserved(IncludeTrailingPathDelimiter(TestDirectory) + 'legacy.json');
       CheckByeSurvivesReload(IncludeTrailingPathDelimiter(TestDirectory) + 'bye.json');
