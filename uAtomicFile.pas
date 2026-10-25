@@ -1,6 +1,7 @@
 unit uAtomicFile;
 {$mode objfpc}{$H+}
 interface
+function IsTransientPublicationError(AError: LongWord): Boolean;
 procedure WriteTextFileAtomically(const AFileName, AText: string;
   AReplaceExisting: Boolean = True);
 procedure AppendTextFileDurably(const AFileName, AText: string);
@@ -9,6 +10,13 @@ uses
   Classes, SysUtils
   {$IFDEF UNIX}, BaseUnix, Unix{$ENDIF}
   {$IFDEF MSWINDOWS}, Windows{$ENDIF};
+
+function IsTransientPublicationError(AError: LongWord): Boolean;
+begin
+  // Windows ERROR_ACCESS_DENIED, ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION.
+  // Access denied may be transient with antivirus/indexer handles. Retries stay bounded.
+  Result := AError in [5, 32, 33];
+end;
 
 procedure AppendTextFileDurably(const AFileName, AText: string);
 var Handle: THandle; Stream: THandleStream; Last: Char; Text: string;
@@ -95,7 +103,7 @@ begin
     begin
       if MoveFileExW(PWideChar(WideTemp), PWideChar(WideTarget), MoveFlags) then Break;
       MoveError := GetLastError;
-      if (Attempt = 5) or not (MoveError in [ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION]) then
+      if (Attempt = 5) or not IsTransientPublicationError(MoveError) then
         RaiseLastOSError(MoveError);
       Sleep(20 shl Attempt);
     end;

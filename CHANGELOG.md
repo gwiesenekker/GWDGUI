@@ -3,6 +3,13 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Retry transient Windows access-denied publication errors (C4)
+
+- Include access denied in the existing bounded atomic-rename retry policy for
+  transient antivirus/indexer handles. Keep permanent path/existence errors immediate.
+- Validation: retry-policy classification and atomic-file regression checks pass;
+  native Windows execution remains unavailable on this Linux host.
+
 ### 2026-10-25 — Publish live engine analysis from stable position snapshots (M6)
 
 - Keep full position/history snapshots on the owning runner thread. During a

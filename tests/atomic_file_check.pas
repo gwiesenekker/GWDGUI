@@ -12,6 +12,10 @@ var
   Search: TSearchRec;
   Raised: Boolean;
 begin
+  Check(IsTransientPublicationError(5) and IsTransientPublicationError(32) and
+    IsTransientPublicationError(33), 'transient Windows sharing and access errors are retried');
+  Check(not IsTransientPublicationError(80) and not IsTransientPublicationError(3),
+    'existing-file and missing-path errors must not be treated as sharing errors');
   FileName := GetTempFileName(GetTempDir, 'gwd');
   DirectoryName := FileName + '.directory';
   NewFile := FileName + '.Gérard-棋.new';
