@@ -538,6 +538,20 @@ begin
   end;
 end;
 
+procedure CheckVariationNumbering;
+var Tree: TGameTree; Text: string;
+begin
+  Tree := TGameTree.Create;
+  try
+    Tree.BeginRebuild('numbers', 'Numbers', 'White', 'Black', '*', DefaultStartingFEN);
+    Tree.RecordMainlineMove(1, '32-28');
+    AddFixtureBranch(Tree, 0, '33-28 18-23', '');
+    Text := GameTreeToPdnText(Tree);
+    Check((Pos('1. 33-28', Text) > 0) and (Pos('1... 18-23', Text) = 0),
+      'a Black reply within a variation must not repeat the White move number');
+  finally Tree.Free; end;
+end;
+
 procedure CheckAmbiguousCaptureAfterMove;
 const Fen = 'B:WK21,26:B1,31,39,14,17,19';
 var Tree: TGameTree; Game: TPdnGame; Games: TList; Board: TDraughtsBoard;
@@ -647,6 +661,7 @@ begin
 end;
 
 begin
+  CheckVariationNumbering;
   CheckAmbiguousCaptureAfterMove;
   CheckNodeDataRoundTrip;
   CheckTransientPvSnapshot;

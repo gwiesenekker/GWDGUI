@@ -128,7 +128,7 @@ begin
 end;
 
 procedure CheckLandingCaptureImport(AForm: TMainForm);
-var Game: TPdnGame; Text: string;
+var Game: TPdnGame; Text: string; Memo: TMemo; Board: TDraughtsBoardControl;
 begin
   Game := TPdnGame.Create;
   try
@@ -138,6 +138,14 @@ begin
     Check((AForm.ActiveGameTree.MainlineCount = 1) and
       (AForm.ActiveGameTree.MainlineNode[1].MoveText = '32x12x27x17'),
       'landing path must import as a validated canonical tree move');
+    Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Check((Pos('32x12', Memo.Text) > 0) and (Pos('x27x17', Memo.Text) = 0),
+      'move list uses standard capture notation');
+    Memo.SelStart := Pos('32x12', Memo.Text) - 1; Memo.OnClick(Memo);
+    Board := TDraughtsBoardControl(AForm.FindComponent('MainBoard'));
+    Check((Board.Board[12] = pkWhiteMan) and (Board.Board[17] = pkEmpty) and
+      (Board.Board[27] = pkEmpty) and (Memo.SelText = '32x12'),
+      'standard capture caption retains the correct clickable move range');
     Text := GameTreeToPdnText(AForm.ActiveGameTree);
     Check((Pos('32x12x27x17', Text) = 0) and (Pos('32x12', Text) > 0) and
       (Pos('[SetUp "1"]', Text) > 0), 'PDN export must use standard capture and setup notation');

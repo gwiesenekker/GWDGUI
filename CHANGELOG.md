@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Show standard captures in the move list (U6/P18)
+
+- Render mainline and real variation captures with the board's standard PDN
+  notation and calculate navigation/highlight ranges from the displayed caption.
+- Number a variation's first move and subsequent White moves without repeating
+  the number before every Black reply.
+- Validation: tree rendering/preservation and GTK regressions pass, including
+  clicking and highlighting a shortened capture caption on the actual board.
+
 ### 2026-10-25 — Match Swiss opponents without exponential search (T21/T4, T3)
 
 - Replace bounded backtracking with augmenting-path matching and odd-cycle
