@@ -3,6 +3,21 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Separate PDN games at mainline result tokens (P7)
+
+- End each game at its mainline result, retaining adjacent untagged games even
+  on one line. Ignore result-like text in comments and nested variations; keep
+  trailing comments and NAGs with the completed game without creating empty games.
+- Preserve result-only games, cancellation and tokens spanning stream buffers.
+  Allow blank lines in unfinished headers; a blank line can separate a tags-only
+  game once its Result tag declares a completed result.
+- Regress database import of untagged games, nested results, trailing comments,
+  result-only games, empty input, exact CR/LF/CRLF bytes, EOF without a newline,
+  spaced headers and quoted tags/comments/results crossing the 64 KiB buffer.
+- Validation: the untagged-game regression fails before the fix; full headless
+  suite, both GTK suites and application build pass. PDN regression heap checking
+  reports no leaks. Rebuilt the local application.
+
 ### 2026-10-25 — Read PDN headers outside comments and quoted values (P7)
 
 - Use one incremental reader for buffered and streaming imports. Read each tag

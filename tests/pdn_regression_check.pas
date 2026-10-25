@@ -381,6 +381,94 @@ begin
   end;
 end;
 
+procedure CheckPdnResultBoundaries;
+var
+  FileName, DbName, Text: string;
+  Games: TList;
+  Collector: TReadCollector;
+  Database: TGameDatabase;
+  Imported, Duplicates, Errors, I: Integer;
+
+  procedure LoadFixture(const AText: string; Count: Integer);
+  var
+    J: Integer;
+    Stream: TFileStream;
+  begin
+    // Preserve exact bytes: line-ending normalization would hide CR-only and
+    // EOF-without-newline bugs, and shift the buffer-boundary fixture.
+    Stream := TFileStream.Create(FileName, fmCreate);
+    try
+      if AText <> '' then Stream.WriteBuffer(AText[1], Length(AText));
+    finally
+      Stream.Free;
+    end;
+    LoadPdnGamesFromFile(FileName, Games);
+    ClearGames(Collector.Games);
+    ReadPdnGamesFromFile(FileName, @Collector.ReadGame);
+    Check(Games.Count = Count, 'result boundary fixture game count');
+    Check(Collector.Games.Count = Count, 'streamed result boundary game count');
+    for J := 0 to Count - 1 do
+      CheckEqual(PdnGameToText(TPdnGame(Collector.Games[J])),
+        PdnGameToText(TPdnGame(Games[J])), 'result boundary buffered/streamed parity');
+  end;
+
+begin
+  FileName := GetTempFileName(GetTempDir, 'gwd-boundary');
+  DbName := FileName + '.db';
+  Games := TList.Create;
+  Collector := TReadCollector.Create;
+  Database := TGameDatabase.Create;
+  try
+    LoadFixture('1. 32-28 18-23 2-0 1. 33-28 18-22 0-2' + LineEnding +
+      '1. 34-29 20-24 1/2-1/2' + LineEnding + '1. 35-30 19-23 *', 4);
+    CheckEqual(TPdnGame(Games[0]).MovesText, '32-28 18-23', 'first untagged game');
+    CheckEqual(TPdnGame(Games[1]).MovesText, '33-28 18-22', 'same-line untagged game');
+    CheckEqual(TPdnGame(Games[2]).ResultText, '1-1', 'later untagged result');
+    Database.CreateDatabase(DbName);
+    Database.ImportPdnFile(FileName, Imported, Duplicates, Errors);
+    Check((Imported = 4) and (Duplicates = 0) and (Errors = 0),
+      'database must import separate complete untagged games');
+    LoadFixture('1. 32-28 (1. 33-28 (1. 34-29 0-0) 0-2) {2-0} 18-23 1-1' +
+      '{trailing comment [Event "still here"]} $1 ; * 0-2 [Event "ignored"]' +
+      LineEnding + '1. 33-28 18-22 0-0', 2);
+    CheckEqual(TPdnGame(Games[0]).MovesText, '32-28 18-23', 'nested results must not end mainline');
+    CheckEqual(TPdnGame(Games[0]).ResultText, '1-1', 'mainline result wins over nested tokens');
+    Check(Pos('trailing comment', TPdnGame(Games[0]).MoveAnnotationsText) > 0,
+      'post-result comments remain attached to the completed game');
+    CheckEqual(TPdnGame(Games[1]).ResultText, '0-0', 'double-loss boundary');
+    LoadFixture('2-0 0-2 1-1 *', 4);
+    for I := 0 to Games.Count - 1 do
+      CheckEqual(TPdnGame(Games[I]).MovesText, '', 'result-only games');
+    LoadFixture('1. 32-28 * {trailing} ; [not a tag]' + LineEnding +
+      '{more trailing comments}', 1);
+    // Cross the stream reader's 64 KiB buffer in a quoted tag, comment and result.
+    Text := '[Event "' + StringOfChar('q', 65530) + '\" ] title"] ' +
+      '1. 32-28 {' + StringOfChar('c', 65536) + ' [ignored] 0-2} 18-23 ';
+    Text += StringOfChar(' ', (65535 - (Length(Text) mod 65536) + 65536) mod 65536);
+    Text += '2-0 1. 33-28 18-22 *';
+    LoadFixture(Text, 2);
+    CheckEqual(TPdnGame(Games[0]).ResultText, '2-0', 'result split across buffers');
+    CheckEqual(TPdnGame(Games[0]).EventName, StringOfChar('q', 65530) + '" ] title',
+      'quoted tag split across buffers');
+    ClearGames(Collector.Games);
+    Collector.StopAfter := 1;
+    ReadPdnGamesFromFile(FileName, @Collector.ReadGame);
+    Check(Collector.Games.Count = 1, 'cancellation at a result boundary');
+    Collector.StopAfter := 0;
+    LoadFixture('1. 32-28 18-23 2-0' + #13 + '1. 33-28 18-22 0-2' + #13#10 +
+      '[Event "Last"]' + #10 + '1. 34-29 *', 3);
+    LoadFixture('', 0);
+    LoadFixture(' ' + #9 + LineEnding, 0);
+  finally
+    Database.Free;
+    Collector.Free;
+    ClearGames(Games);
+    Games.Free;
+    DeleteFile(FileName);
+    DeleteFile(DbName);
+  end;
+end;
+
 procedure CheckPdnHeaderBoundaries;
 var
   FileName: string;
@@ -425,6 +513,11 @@ begin
     Check(Pos('[Event "not a tag"]', TPdnGame(Games[0]).MoveAnnotationsText) > 0,
       'retain multiline comment with tag-like text');
     CheckEqual(TPdnGame(Games[1]).MovesText, '33-28', 'inline movetext after tag');
+    LoadFixture('[Event "Spaced header"]' + LineEnding + LineEnding +
+      '[White "A"]' + LineEnding + LineEnding + '[Black "B"]' + LineEnding +
+      '[Result "*"]' + LineEnding + LineEnding + '1. 32-28 *', 1);
+    CheckEqual(TPdnGame(Games[0]).WhiteName, 'A', 'blank lines in unfinished header');
+    CheckEqual(TPdnGame(Games[0]).BlackName, 'B', 'spaced header retains Black');
     LoadFixture('[Event "Forfeit"]' + LineEnding + '[Result "0-2"]' + LineEnding +
       '[Event "Played"]' + LineEnding + '[Result "1-1"]' + LineEnding +
       '1. 32-28 18-23 1-1', 2);
@@ -785,6 +878,7 @@ begin
 end;
 
 begin
+  CheckPdnResultBoundaries;
   CheckPdnHeaderBoundaries;
   CheckDatabaseWriteErrorsRemainFatal;
   CheckInvalidGamesDoNotAbortImport;

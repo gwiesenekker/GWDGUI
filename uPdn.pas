@@ -1213,9 +1213,9 @@ var
   BytesRead, I, BraceDepth, VariationDepth: Integer;
   Current: TPdnGame;
   MoveLines, HeaderNames: TStringList;
-  MoveLine, TagText: string;
+  MoveLine, TagText, Token: string;
   Stop, InTag, InQuote, Escaped, InLineComment: Boolean;
-  HasMovetext, LineHasContent, HeaderGap, PreviousCR: Boolean;
+  HasMovetext, LineHasContent, HeaderGap, PreviousCR, ResultSeen: Boolean;
   Stream: TFileStream;
   TotalBytes: Int64;
 
@@ -1236,10 +1236,29 @@ var
       FreeAndNil(Current);
     end;
     HeaderNames.Clear;
+    ResultSeen := False;
     HasMovetext := False;
     HeaderGap := False;
     BraceDepth := 0;
     VariationDepth := 0;
+  end;
+
+  procedure FinishToken;
+  var
+    Value: string;
+  begin
+    if Token = '' then Exit;
+    Value := Token;
+    Token := '';
+    // Delay delivery after a result so trailing comments/NAGs stay with their
+    // game. Only a new top-level token or header starts the next game.
+    if ResultSeen and (VariationDepth = 0) and (Value[1] <> '$') then FinishGame;
+    if Stop then Exit;
+    EnsureGame;
+    MoveLine += Value;
+    HasMovetext := True;
+    if (VariationDepth = 0) and IsPdnResultToken(CleanMoveToken(Value)) then
+      ResultSeen := True;
   end;
 
   procedure FinishTag;
@@ -1251,10 +1270,11 @@ var
     while (NameEnd <= Length(TagText)) and
       not (TagText[NameEnd] in [' ', #9, #10, #13, ']']) do Inc(NameEnd);
     Name := Copy(TagText, 2, NameEnd - 2);
-    // A repeated tag or a blank line between header blocks starts a tags-only
-    // game (for example a forfeit), even when it has no movetext result.
+    // Repeated tags start a new header block. A completed tags-only game can
+    // also end at a blank line; allow blank lines in an unfinished header.
     if (HeaderNames.IndexOf(Name) >= 0) or
-      (HeaderGap and (HeaderNames.Count > 0)) then FinishGame;
+      (HeaderGap and (Current <> nil) and Current.FHasResultTag and
+       (Current.ResultText <> '*')) then FinishGame;
     if Stop then Exit;
     EnsureGame;
     ParsePdnTag(TagText, Current);
@@ -1301,6 +1321,8 @@ var
       else if not (C in [' ', #9]) then LineHasContent := True;
       Exit;
     end;
+    if C in [' ', #9, #10, '[', '{', ';', '(', ')'] then FinishToken;
+    if Stop then Exit;
     // Recover at a header on a new line even if a preceding RAV was unclosed.
     // Brackets inside brace/line comments and quoted values never reach here.
     if (C = '[') and ((VariationDepth = 0) or not LineHasContent) then
@@ -1328,23 +1350,32 @@ var
       Exit;
     end;
     EnsureGame;
-    MoveLine += C;
     LineHasContent := True;
     case C of
-      '{': BraceDepth := 1;
-      ';': InLineComment := True;
+      '{':
+        begin
+          MoveLine += C;
+          BraceDepth := 1;
+        end;
+      ';':
+        begin
+          MoveLine += C;
+          InLineComment := True;
+        end;
       '(':
         begin
+          MoveLine += C;
           Inc(VariationDepth);
           HasMovetext := True;
         end;
       ')':
         begin
+          MoveLine += C;
           if VariationDepth > 0 then Dec(VariationDepth);
           HasMovetext := True;
         end;
     else
-      HasMovetext := True;
+      Token += C;
     end;
   end;
 
@@ -1353,6 +1384,8 @@ begin
   Current := nil;
   MoveLine := '';
   TagText := '';
+  Token := '';
+  ResultSeen := False;
   Stop := False;
   InTag := False;
   InQuote := False;
@@ -1384,6 +1417,7 @@ begin
         if Stop then Break;
       end;
     until (BytesRead = 0) or Stop;
+    if not Stop then FinishToken;
     if not Stop then FinishGame;
   finally
     Current.Free;
