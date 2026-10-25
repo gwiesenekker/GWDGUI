@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Retain PDN movetext results (P5)
+
+- Use the mainline termination result when no Result tag was supplied. Normalize
+  equivalent result spellings and retain an explicit tag on conflict, with an
+  import warning. Results inside variations and comments do not affect the game.
+- Regress buffered and streaming imports, explicit unknown results, conflicts,
+  equivalent spellings and save/load round trips.
+- Validation: the missing-result regression fails before the fix; PDN regression,
+  recursive-tree and tree-filter checks pass.
+
 ### 2026-10-25 — Make batch import commands use typed move records (G7)
 
 - Replace flattened move text plus encoded annotation arrays in actor imports

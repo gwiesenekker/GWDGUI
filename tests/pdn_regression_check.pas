@@ -381,6 +381,60 @@ begin
   end;
 end;
 
+procedure CheckMovetextResults;
+const
+  Texts: array[0..6] of string = (
+    '1. 32-28 18-23 2-0',
+    '1. 32-28 (1. 33-28 0-2) 18-23 1/2-1/2',
+    '[Result "1-0"]' + LineEnding + '1. 32-28 18-23 2-0',
+    '[Result "0-2"]' + LineEnding + '1. 32-28 18-23 2-0',
+    '[Result "*"]' + LineEnding + '1. 32-28 18-23 1-0',
+    '1. 32-28 {0-2} 18-23 *',
+    '1. 32-28 18-23 0-1');
+  Expected: array[0..6] of string = ('2-0', '1-1', '2-0', '0-2', '*', '*', '0-2');
+var
+  FileName: string;
+  Lines: TStringList;
+  Games: TList;
+  Collector: TReadCollector;
+  I: Integer;
+  Game: TPdnGame;
+begin
+  FileName := GetTempFileName(GetTempDir, 'gwd-result');
+  Lines := TStringList.Create;
+  Games := TList.Create;
+  Collector := TReadCollector.Create;
+  try
+    for I := Low(Texts) to High(Texts) do
+    begin
+      Lines.Text := Texts[I];
+      Lines.SaveToFile(FileName);
+      LoadPdnGamesFromFile(FileName, Games);
+      Check(Games.Count = 1, 'result fixture must load one game');
+      Game := TPdnGame(Games[0]);
+      CheckEqual(Game.ResultText, Expected[I], 'movetext result case ' + IntToStr(I));
+      CheckEqual(Game.MovesText, '32-28 18-23', 'results must not enter move list');
+      Check((Game.ImportWarningsText <> '') = ((I = 3) or (I = 4)),
+        'only conflicting tag and mainline results should warn');
+      ClearGames(Collector.Games);
+      ReadPdnGamesFromFile(FileName, @Collector.ReadGame);
+      CheckEqual(TPdnGame(Collector.Games[0]).ResultText, Expected[I], 'streamed result');
+      CheckEqual(TPdnGame(Collector.Games[0]).ImportWarningsText,
+        Game.ImportWarningsText, 'streamed conflict warning');
+      Lines.Text := PdnGameToText(Game);
+      Lines.SaveToFile(FileName);
+      LoadPdnGamesFromFile(FileName, Games);
+      CheckEqual(TPdnGame(Games[0]).ResultText, Expected[I], 'result round trip');
+    end;
+  finally
+    Collector.Free;
+    ClearGames(Games);
+    Games.Free;
+    Lines.Free;
+    DeleteFile(FileName);
+  end;
+end;
+
 procedure CheckMalformedVariationDoesNotAbortFile;
 var
   FileName, DbName, LogName: string;
@@ -477,6 +531,7 @@ begin
 end;
 
 begin
+  CheckMovetextResults;
   CheckMalformedVariationDoesNotAbortFile;
   CheckPdnLoadAndAppend;
   CheckPdnGluedMoveNumbers;

@@ -30,6 +30,7 @@ type
   private
     FParsedRoot: TPdnMoveNode;
     FParsedSignature: string;
+    FHasResultTag: Boolean;
     function TreeDataSignature: string;
   public
     EventName: string;
@@ -177,6 +178,7 @@ begin
   WhiteName := ASource.WhiteName;
   BlackName := ASource.BlackName;
   ResultText := ASource.ResultText;
+  FHasResultTag := ASource.FHasResultTag;
   StartingFEN := ASource.StartingFEN;
   InitialCommentText := ASource.InitialCommentText;
   ImportWarningsText := ASource.ImportWarningsText;
@@ -699,7 +701,8 @@ end;
 procedure ExtractPdnMoveData(const AText: string; AMoves, AAnnotations,
   AVariations, AVariationAnnotations: TStrings; const AStartingFEN: string = '';
   AInitialComments: TStrings = nil; APlyOffset: Integer = 0;
-  AWarnings: TStrings = nil; ATreeRoot: TPdnMoveNode = nil);
+  AWarnings: TStrings = nil; ATreeRoot: TPdnMoveNode = nil;
+  AMovetextResult: PString = nil);
 var
   I: Integer;
   LBraceDepth: Integer;
@@ -730,7 +733,11 @@ var
       (Pos('x', LowerCase(LCleanToken)) = 0) then
       Exit;
     if IsPdnResultToken(LCleanToken) then
+    begin
+      if AMovetextResult <> nil then
+        AMovetextResult^ := NormalizePdnResult(LCleanToken);
       Exit;
+    end;
     if LooksLikePdnMove(LCleanToken) then
     begin
       AMoves.Add(NormalizeMoveNotation(LCleanToken));
@@ -955,6 +962,7 @@ begin
   if (AMoves = nil) or (AAnnotations = nil) then
     Exit;
 
+  if AMovetextResult <> nil then AMovetextResult^ := '';
   SetLength(Positions, 1);
   Positions[0] := ATreeRoot;
   LBraceDepth := 0;
@@ -1086,7 +1094,10 @@ begin
   else if SameText(LName, 'Black') then
     AGame.BlackName := LValue
   else if SameText(LName, 'Result') then
-    AGame.ResultText := NormalizePdnResult(LValue)
+  begin
+    AGame.ResultText := NormalizePdnResult(LValue);
+    AGame.FHasResultTag := True;
+  end
   else if SameText(LName, 'FEN') then
     AGame.StartingFEN := Trim(LValue);
 end;
@@ -1111,6 +1122,7 @@ var
   LVariationAnnotations: TStringList;
   LVariations: TStringList;
   LWarnings: TStringList;
+  LMovetextResult: string;
 begin
   if ACurrent = nil then
     Exit;
@@ -1124,7 +1136,16 @@ begin
     FreeAndNil(ACurrent.FParsedRoot);
     ACurrent.FParsedRoot := TPdnMoveNode.Create;
     ExtractPdnMoveData(AMoveLines.Text, LMoves, LAnnotations, LVariations,
-      LVariationAnnotations, ACurrent.StartingFEN, LInitialComments, 0, LWarnings, ACurrent.FParsedRoot);
+      LVariationAnnotations, ACurrent.StartingFEN, LInitialComments, 0, LWarnings, ACurrent.FParsedRoot, @LMovetextResult);
+    if LMovetextResult <> '' then
+    begin
+      if not ACurrent.FHasResultTag then
+        ACurrent.ResultText := LMovetextResult
+      else if ACurrent.ResultText <> LMovetextResult then
+        LWarnings.Add('Result tag "' + ACurrent.ResultText +
+          '" conflicts with movetext result "' + LMovetextResult +
+          '"; kept the Result tag.');
+    end;
     ACurrent.InitialCommentText := Trim(StringReplace(LInitialComments.Text,
       LineEnding, ' ', [rfReplaceAll]));
     ACurrent.ImportWarningsText := LWarnings.Text;
