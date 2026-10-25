@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Show current analysis and frozen PV state (A4–A6)
+
+- Mark the PV browser as browsing, explain Escape to resume, and indicate a newer
+  pending PV. Clear that feedback when the newest PV is applied.
+- Evaluate the selected position from its own annotator/engine score. Keep older
+  evaluations in the history chart rather than presenting them as current.
+- Stop interpreting arbitrary free-text comments as engine evaluations.
+- Validation: GTK regressions cover browsing/pending/resume feedback, score
+  precedence, historical selection, root selection and numeric-looking comments.
+
 ### 2026-10-25 — Match database names across Unicode case (P14)
 
 - Use Unicode case folding consistently for database name/event filters and

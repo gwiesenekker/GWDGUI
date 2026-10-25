@@ -55,8 +55,6 @@ type
       const AName: string; out AScore: Double): Boolean;
     function TryScoreInLines(ALines: TStrings; APly: Integer;
       out AScore: Double): Boolean;
-    function TryVisibleAnnotatorScoreInLines(ALines: TStrings;
-      out AScore: Double): Boolean;
     function TryVisibleScoreInLines(ALines: TStrings;
       out AScore: Double): Boolean;
   protected
@@ -64,6 +62,7 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure Paint; override;
   public
+    function TryCurrentEvaluation(out AScore: Double): Boolean;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     property AnnotationsText: string read FAnnotationsText
@@ -451,8 +450,6 @@ begin
 
     HasVisibleScore := TryVisibleScoreInLines(Lines, BarScore);
     if not HasVisibleScore then
-      HasVisibleScore := TryVisibleAnnotatorScoreInLines(Lines, BarScore);
-    if not HasVisibleScore then
       BarScore := 0.0;
     if DrawEvaluationBar then
     begin
@@ -739,12 +736,6 @@ begin
   AScoreText := ExtractAnnotationValue(ALines[APly - 1], AName);
   if (AScoreText = '') and SameText(AName, 'engine') then
     AScoreText := ExtractAnnotationValue(ALines[APly - 1], 'score');
-  if (AScoreText = '') and SameText(AName, 'engine') and
-    TryExtractScoreFromAnnotation('score=' + Trim(ALines[APly - 1]), Score) then
-  begin
-    AScoreText := Trim(ALines[APly - 1]);
-    Exit(True);
-  end;
   if AScoreText = '' then
     Exit;
   Result := TryExtractScoreFromAnnotation('score=' + AScoreText, Score);
@@ -769,40 +760,29 @@ begin
   Result := TryAnnotationScoreInLines(ALines, APly, 'engine', AScore);
 end;
 
-function TScoreHistoryControl.TryVisibleAnnotatorScoreInLines(ALines: TStrings;
-  out AScore: Double): Boolean;
-var
-  I: Integer;
-  Ply: Integer;
+function TScoreHistoryControl.TryCurrentEvaluation(out AScore: Double): Boolean;
+var Lines: TStringList;
 begin
-  Result := False;
-  AScore := 0.0;
-  if ALines = nil then
-    Exit;
-  Ply := FCurrentPly;
-  if (Ply < 0) or (Ply > ALines.Count) then
-    Ply := ALines.Count;
-  for I := Ply downto 1 do
-    if TryAnnotationScoreInLines(ALines, I, 'annotator', AScore) then
-      Exit(True);
+  Lines := TStringList.Create;
+  try
+    Lines.Text := FAnnotationsText;
+    Result := TryVisibleScoreInLines(Lines, AScore);
+  finally Lines.Free; end;
 end;
 
 function TScoreHistoryControl.TryVisibleScoreInLines(ALines: TStrings;
   out AScore: Double): Boolean;
 var
-  I: Integer;
   Ply: Integer;
 begin
   Result := False;
   AScore := 0.0;
-  if ALines = nil then
-    Exit;
+  if ALines = nil then Exit;
   Ply := FCurrentPly;
-  if (Ply < 0) or (Ply > ALines.Count) then
-    Ply := ALines.Count;
-  for I := Ply downto 1 do
-    if TryScoreInLines(ALines, I, AScore) then
-      Exit(True);
+  if Ply < 0 then Ply := ALines.Count;
+  // The bar describes the selected position. Earlier scores belong to the chart.
+  Result := TryAnnotationScoreInLines(ALines, Ply, 'annotator', AScore);
+  if not Result then Result := TryScoreInLines(ALines, Ply, AScore);
 end;
 
 end.

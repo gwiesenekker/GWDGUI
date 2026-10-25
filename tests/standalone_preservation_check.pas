@@ -8,7 +8,7 @@ program standalone_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, Grids, LCLType, Controls, ComCtrls, Menus,
-  uDatabaseForm, uGameDatabase, uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPdnOpenDialog, uPvBrowser, uGuiDialogs,
+  uDatabaseForm, uGameDatabase, uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPdnOpenDialog, uPvBrowser, uScoreHistoryControl, uGuiDialogs,
   uGameTreeNodeData, uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameOrchestrator, uTreeTestUtils;
 
 type
@@ -47,6 +47,26 @@ begin
   DatabaseForm.OpenDatabase(ForbiddenPath);
   DatabaseForm.Close;
   Check(DatabaseForm.Visible, 'closing during import must request cancellation, not close its owner');
+end;
+
+procedure CheckEvaluationDisplay;
+var Control: TScoreHistoryControl; Score: Double;
+begin
+  Control := TScoreHistoryControl.Create(nil);
+  try
+    Control.AnnotationsText := 'engine=0.1' + LineEnding + 'annotator=0.8' +
+      LineEnding + '+2 for white';
+    Control.CurrentPly := 2;
+    Check(Control.TryCurrentEvaluation(Score) and (Abs(Score - 0.8) < 0.001),
+      'current annotator score takes precedence over an old engine score');
+    Control.CurrentPly := 3;
+    Check(not Control.TryCurrentEvaluation(Score), 'free text is not an evaluation');
+    Control.CurrentPly := 1;
+    Check(Control.TryCurrentEvaluation(Score) and (Abs(Score - 0.1) < 0.001),
+      'selected historical position uses its own engine score');
+    Control.CurrentPly := 0;
+    Check(not Control.TryCurrentEvaluation(Score), 'root must not borrow a later score');
+  finally Control.Free; end;
 end;
 
 procedure CheckNodeDataImport(AForm: TMainForm);
@@ -846,8 +866,13 @@ begin
     Check((Displayed.CurrentFEN = Expected.CurrentFEN) and
       (Memo.SelText = '1.32-28'),
       'clicking past an invalid PV move must select the last legal position');
+    Check(Pos('browsing; Esc to resume', Info.Caption) > 0, 'PV label indicates browsing');
+    Browser.SetData(Base, 0, DefaultStartingFEN, '33-28', '0.2', '20', '1');
+    Check(Pos('newer PV pending', Info.Caption) > 0, 'PV label indicates pending update');
     Key := VK_ESCAPE;
     Memo.OnKeyDown(Memo, Key, []);
+    Check((Pos('browsing', Info.Caption) = 0) and (Pos('score 0.2', Info.Caption) > 0),
+      'Escape resumes newest PV and clears browsing label');
     Browser.SetData(Base, 0, DefaultStartingFEN,
       '32-28 19-23 46-41 23x32', '', '', '');
     Expected.PlayMove('19-23');
@@ -1039,6 +1064,7 @@ begin
     try
       Check(not GameTreeHasContent(Form.ActiveGameTree),
         'untouched initial board should not prompt to save');
+      CheckEvaluationDisplay;
       CheckNodeDataImport(Form);
       CheckLandingCaptureImport(Form);
       CheckModalDatabaseImport(Form);

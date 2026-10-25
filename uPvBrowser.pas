@@ -168,6 +168,11 @@ begin
     Result += ' no info';
   if FInvalidMove <> '' then
     Result += ' — invalid PV';
+  if FBrowsePly >= 0 then
+  begin
+    Result += ' — browsing; Esc to resume';
+    if FHasPendingData then Result += '; newer PV pending';
+  end;
 end;
 
 procedure TPvBrowser.BuildMoveText(out AText: string; var AStarts,
@@ -316,6 +321,7 @@ begin
   else if APly > LMoveCount then
     APly := LMoveCount;
   FBrowsePly := APly;
+  if FInfoLabel <> nil then FInfoLabel.Caption := FormatInfo;
   RenderBoard;
   HighlightSelection(True);
 end;
@@ -386,6 +392,7 @@ begin
   FPendingDepth := Trim(ADepth);
   FPendingTimeText := Trim(ATimeText);
   FHasPendingData := True;
+  if FInfoLabel <> nil then FInfoLabel.Caption := FormatInfo;
 end;
 
 procedure TPvBrowser.ApplyPendingData;
@@ -400,6 +407,7 @@ end;
 procedure TPvBrowser.UnlockUpdates;
 begin
   FBrowsePly := -1;
+  if FInfoLabel <> nil then FInfoLabel.Caption := FormatInfo;
   if FHasPendingData then
     ApplyPendingData
   else
