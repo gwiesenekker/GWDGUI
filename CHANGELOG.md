@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Preserve live subtrees during mainline rebuilds (G7)
+
+- Stop copying and replaying stored variation lines during rebuilds. Update the
+  mainline chain in place, keeping surviving node IDs, descendants and metadata.
+- Resolve an optional analysis target to its node ID before a rebuild, and validate
+  header changes against actual child paths. A different root starts a fresh tree.
+- Regress a queued rebuild followed by a new branch move and analysis update:
+  executing the rebuild must preserve both newer edits instead of replaying stale data.
+- Validation: the new regression fails with the old adapter; topology, actor,
+  move-validation and preservation checks pass.
+
 ### 2026-10-25 — Remove encoded variation keys from the model and actor (G7)
 
 - Delete stored `base:display:index:ply` keys and their parser. Determine mainline

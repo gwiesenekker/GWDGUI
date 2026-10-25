@@ -1158,7 +1158,11 @@ begin
     Actor.GameTree.BeginRebuild('rebuild', 'Event', 'White', 'Black', '*',
       'W:W31-50:B1-20');
     Actor.GameTree.RecordMainlineMove(1, '32-28');
-    VariationIndex := Actor.GameTree.StoreVariationLine(2, 1, '18-23', '');
+    Command := Actor.CreateStoreVariationLineCommand(2, 1, '18-23', '', gmsHuman);
+    Actor.ExecuteCommand(Command);
+    Check(Command.Accepted, 'setup branch must be materialized before rebuilding');
+    VariationIndex := Command.VariationIndex;
+    Command.Free;
     Check(VariationIndex = 0, 'setup variation should be stored');
 
     Moves.Add('32-28');

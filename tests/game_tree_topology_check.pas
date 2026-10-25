@@ -66,6 +66,39 @@ begin
   Check(Count > 0, 'stored branches must provide node-based caret ranges');
 end;
 
+procedure CheckQueuedRebuildPreservesCurrentBranches;
+var
+  Actor: TGameTreeActor;
+  Moves: TStringList;
+  Command: TGameTreeCommand;
+  Node: TGameTreePlyNode;
+  Id: Int64;
+begin
+  Actor := TGameTreeActor.Create;
+  Moves := TStringList.Create;
+  try
+    Rebuild(Actor, 'queued', '', '32-28 18-23');
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(2, 1, '20-24', '', gmsHuman));
+    Node := Actor.GameTree.FindVariationNode(0, 1);
+    Id := Node.NodeId;
+    TextToMoveList('32-28 18-23 37-32', Moves);
+    Command := Actor.CreateRebuildFromInputsCommand(
+      GameTreeHeaderInput('queued', '', '', '', '*', DefaultStartingFEN, False,
+        DefaultTimeControl), GameTreeMainlineInput(Moves, nil, False, 0, 0, 0, 0),
+      GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', ''));
+    Execute(Actor, Actor.CreateStoreMoveVariationCommand(Id, '38-32', gmsHuman));
+    Execute(Actor, Actor.CreateRecordAnnotatorPVCommand(Id, '0.70', '38-32'));
+    Execute(Actor, Command);
+    Node := Actor.GameTree.FindNodeById(Id);
+    Check((Node <> nil) and (Node.ChildCount = 1) and
+      (Node.Children[0].MoveText = '38-32') and (Node.AnnotatorScore = '0.70'),
+      'queued mainline rebuild must retain later branch edits and node metadata');
+  finally
+    Moves.Free;
+    Actor.Free;
+  end;
+end;
+
 procedure CheckMainlineAndReplay;
 var
   Actor: TGameTreeActor;
@@ -407,6 +440,7 @@ begin
 end;
 
 begin
+  CheckQueuedRebuildPreservesCurrentBranches;
   CheckMainlineAndReplay;
   CheckFirstChildMainContinuation;
   CheckMoveInsertionUsesRealAncestry;

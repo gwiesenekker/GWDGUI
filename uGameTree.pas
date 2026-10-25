@@ -209,6 +209,7 @@ type
     procedure RecordVariationAnnotation(ABasePlyNumber, ADisplayAfterPly,
       AVariationIndex, AVariationPlyNumber: Integer;
       const AAnnotationText: string);
+    procedure DiscardMissingVariationPaths;
     procedure ClearStoredVariations;
     procedure RemoveStoredVariationLineAtIndex(AIndex: Integer);
     procedure CopyMainlineMovesTo(AMoves: TStrings);
@@ -464,8 +465,12 @@ end;
 
 procedure TGameTree.BeginRebuild(const ASignature, AEventName, AWhiteName,
   ABlackName, AResultText, AStartingFEN: string);
+var
+  EffectiveFen: string;
 begin
-  if FSignature <> ASignature then
+  EffectiveFen := Trim(AStartingFEN);
+  if EffectiveFen = '' then EffectiveFen := DefaultStartingFEN;
+  if (FSignature <> ASignature) or (FStartingFEN <> EffectiveFen) then
   begin
     FVariationLines.Clear;
     FSignature := ASignature;
@@ -842,6 +847,23 @@ begin
   if (AIndex < 0) or (AIndex >= FVariationLines.Count) then Exit;
   FVariationLines.Delete(AIndex);
   PruneUnreferencedVariations(FRoot);
+end;
+
+procedure TGameTree.DiscardMissingVariationPaths;
+var
+  I, J: Integer;
+  Line: TGameTreeVariationLine;
+begin
+  for I := FVariationLines.Count - 1 downto 0 do
+  begin
+    Line := GetVariationLine(I);
+    for J := 0 to High(Line.FNodeIds) do
+      if FindNodeById(Line.FNodeIds[J]) = nil then
+      begin
+        FVariationLines.Delete(I);
+        Break;
+      end;
+  end;
 end;
 
 procedure TGameTree.ClearStoredVariations;
