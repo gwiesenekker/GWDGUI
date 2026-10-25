@@ -957,8 +957,10 @@ begin
     if AUpdateLegalMoves then
       GenerateLegalMoves
     else
+    begin
       FLegalMoves.Clear;
-    FLegalPdnPaths.Clear;
+      FLegalPdnPaths.Clear;
+    end;
   finally
     LSquares.Free;
   end;

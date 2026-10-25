@@ -3,6 +3,14 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Keep capture paths after playing a move (R8)
+
+- Keep newly generated PDN capture paths alongside legal moves; clear both lists
+  only when move generation is explicitly deferred.
+- Regress an ambiguous king capture on ply two through both PDN writers and a
+  database import surrounded by valid games. Verify the chosen capture survives.
+- Validation: board, tree-PDN and PDN/database regression checks pass.
+
 ### 2026-10-25 — Keep runtime files local and document review decisions (C3)
 
 - Stop tracking local preferences and tournament output while preserving both

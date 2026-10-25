@@ -936,6 +936,33 @@ begin
   end;
 end;
 
+procedure CheckAmbiguousCaptureImport;
+var Database: TGameDatabase; Lines: TStringList; Game: TPdnGame;
+  Board: TDraughtsBoard; Moves: TStringList;
+  Name, DbName, Legal: string; Imported, Duplicates, Errors: Integer;
+begin
+  Name := GetTempFileName(GetTempDir, 'gwd'); DbName := Name + '.db';
+  Database := TGameDatabase.Create; Lines := TStringList.Create;
+  try
+    Lines.Text := '[Event "before"]' + LineEnding + '1.32-28 *' + LineEnding +
+      '[Event "ambiguous"]' + LineEnding + '[FEN "B:WK21,26:B1,31,39,14,17,19"]' +
+      LineEnding + '1...1-6 2.21x43x17x19x39 *' + LineEnding +
+      '[Event "after"]' + LineEnding + '1.33-28 *';
+    Lines.SaveToFile(Name); Database.CreateDatabase(DbName);
+    Database.ImportPdnFile(Name, Imported, Duplicates, Errors);
+    Check((Imported = 3) and (Errors = 0), 'ambiguous second-ply capture must not abort neighboring imports');
+    Game := Database.LoadGameById(2);
+    Board := TDraughtsBoard.Create; Moves := TStringList.Create;
+    try
+      ExtractStrings([' '], [], PChar(Game.MovesText), Moves);
+      Check(Moves.Count = 2, 'stored ambiguous game retains both moves');
+      Board.LoadFromFEN(Game.StartingFEN); Board.PlayMove(Moves[0]);
+      Check(Board.TryGetLegalMove(Moves[1], Legal) and (Legal = '21x43x17x19x39'),
+        'stored standard capture path resolves to the chosen canonical move');
+    finally Moves.Free; Board.Free; Game.Free; end;
+  finally Database.Free; Lines.Free; DeleteFile(Name); DeleteFile(DbName); end;
+end;
+
 procedure CheckDeferredGameParsing;
 var Games, Eager: TList; Lines: TStringList; FileName: string;
   Game, CopyGame: TPdnGame; Root: TPdnMoveNode; I: Integer;
@@ -975,6 +1002,7 @@ begin
 end;
 
 begin
+  CheckAmbiguousCaptureImport;
   CheckDeferredGameParsing;
   CheckPdnResultBoundaries;
   CheckPdnHeaderBoundaries;

@@ -538,6 +538,42 @@ begin
   end;
 end;
 
+procedure CheckAmbiguousCaptureAfterMove;
+const Fen = 'B:WK21,26:B1,31,39,14,17,19';
+var Tree: TGameTree; Game: TPdnGame; Games: TList; Board: TDraughtsBoard;
+  Text, Legal: string; Moves: TStringList; I, Writer: Integer;
+begin
+  Tree := TGameTree.Create; Game := TPdnGame.Create; Games := TList.Create;
+  Board := TDraughtsBoard.Create; Moves := TStringList.Create;
+  try
+    Tree.BeginRebuild('ambiguous', 'Capture', 'White', 'Black', '*', Fen);
+    Tree.RecordMainlineMove(1, '1-6');
+    Tree.RecordMainlineMove(2, '21x43x17x19x39');
+    Game.StartingFEN := Fen; Game.MovesText := '1-6 21x43x17x19x39';
+    for Writer := 0 to 1 do
+    begin
+      if Writer = 0 then Text := GameTreeToPdnText(Tree)
+      else Text := PdnGameToText(Game);
+      LoadPdnGamesFromText(Text, Games);
+      Check(Games.Count = 1, 'ambiguous capture export remains a single game');
+      TextToMoveList(TPdnGame(Games[0]).MovesText, Moves);
+      Check(Moves.Count = 2, 'both moves survive ambiguous capture export');
+      Board.LoadFromFEN(Fen);
+      for I := 0 to Moves.Count - 1 do
+      begin
+        Check(Board.TryGetLegalMove(Moves[I], Legal), 'exported path resolves after an earlier move');
+        if I = 1 then Check(Legal = '21x43x17x19x39', 'ambiguous path retains the chosen capture');
+        Board.PlayMove(Legal);
+      end;
+      for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
+      Games.Clear;
+    end;
+  finally
+    for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
+    Moves.Free; Board.Free; Games.Free; Game.Free; Tree.Free;
+  end;
+end;
+
 procedure CheckNodeDataRoundTrip;
 var
   Tree: TGameTree;
@@ -611,6 +647,7 @@ begin
 end;
 
 begin
+  CheckAmbiguousCaptureAfterMove;
   CheckNodeDataRoundTrip;
   CheckTransientPvSnapshot;
   CheckGameTreeIds;
