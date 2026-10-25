@@ -654,11 +654,19 @@ function TTournamentDialog.StartNewTournamentStorage: Boolean;
 var
   Id: TGUID;
   NewId, NewFileName, BaseName: string;
+  I: Integer;
+  HasRecords: Boolean;
 begin
   Result := False;
   // Results may exist only in memory after a failed save. Keep them until the
   // current tournament has been saved successfully instead of discarding them.
   if IsRunning or (FStorageError <> '') then Exit;
+  HasRecords := False;
+  for I := 0 to FGameRecords.Count - 1 do
+    if TTournamentGameRecord(FGameRecords[I]).HasRecord or
+      (TTournamentGameRecord(FGameRecords[I]).Attempt > 1) then
+    begin HasRecords := True; Break; end;
+  if not HasRecords then Exit(True);
   repeat
     if CreateGUID(Id) <> 0 then
       raise EInOutError.Create('Could not create a tournament identity');

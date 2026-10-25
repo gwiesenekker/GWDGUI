@@ -485,6 +485,27 @@ begin
   end;
 end;
 
+procedure CheckEmptyResetKeepsStorage(const Fixture: string);
+var Dialog: TTournamentDialog; Clear: TButton; OldPath, OldId: string;
+begin
+  Dialog := TTournamentDialog.Create(nil);
+  try
+    Dialog.SaveTournamentToFile(Fixture);
+    OldPath := Dialog.SaveFileName;
+    OldId := TournamentId(OldPath);
+    Clear := TButton(Dialog.FindComponent('ClearPairing'));
+    Clear.OnClick(Clear);
+    Clear.OnClick(Clear);
+    Check((Dialog.SaveFileName = OldPath) and (TournamentId(OldPath) = OldId),
+      'resetting an empty tournament must not create storage generations');
+    AddTournamentPairingRow(TStringGrid(Dialog.FindComponent('TournamentPairings')), 'White', 'Black', 1);
+    Dialog.SetSelectedResult('1-1');
+    Dialog.RescheduleSelectedGame(nil);
+    Clear.OnClick(Clear);
+    Check(Dialog.SaveFileName <> OldPath, 'historical attempts must still get a protected generation');
+  finally Dialog.Free; end;
+end;
+
 procedure CheckResetPreservesSavedFiles(const Fixture: string; Action: Integer);
 var
   Dialog, Reloaded: TTournamentDialog;
@@ -1062,6 +1083,7 @@ begin
       CheckRecordsAndPdnStayConsistent(IncludeTrailingPathDelimiter(TestDirectory) + 'records.json');
       CheckLegacyPdnIsPreserved(IncludeTrailingPathDelimiter(TestDirectory) + 'legacy.json');
       CheckByeSurvivesReload(IncludeTrailingPathDelimiter(TestDirectory) + 'bye.json');
+      CheckEmptyResetKeepsStorage(IncludeTrailingPathDelimiter(TestDirectory) + 'empty-reset.json');
       CheckResetPreservesSavedFiles(IncludeTrailingPathDelimiter(TestDirectory) + 'apply.json', 0);
       CheckResetPreservesSavedFiles(IncludeTrailingPathDelimiter(TestDirectory) + 'create.json', 1);
       CheckResetPreservesSavedFiles(IncludeTrailingPathDelimiter(TestDirectory) + 'clear.json', 2);

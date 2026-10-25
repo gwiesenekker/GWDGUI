@@ -3,6 +3,14 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Reuse storage for empty tournament resets (T18)
+
+- Keep the storage identity/path when clearing or recreating a tournament with
+  no results or historical attempts. Preserve the separate-generation safeguard
+  whenever recorded or rescheduled history exists.
+- Regress repeated empty resets and a reset after rescheduling a recorded game.
+- Validation: empty-reset regression fails before the fix; GTK tournament suite passes.
+
 ### 2026-10-25 — Preserve annotator cancellation through launch (D15)
 
 - Give each analyzer runner a persistent cancellation token, assign it when its
