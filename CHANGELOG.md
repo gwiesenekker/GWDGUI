@@ -3,6 +3,20 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Remove encoded variation keys from the model and actor (G7)
+
+- Delete stored `base:display:index:ply` keys and their parser. Determine mainline
+  membership structurally and prune alternatives using node identity.
+- Build new branch paths from real parents; find an existing child by move before
+  updating the legacy line adapter. Reindexing that adapter cannot redirect a move.
+- Derive shared-comment merge locations from node IDs; preserve existing comments
+  when another path contributes an empty annotation.
+- Regress imported paths containing a mainline prefix, sibling insertion, alias
+  removal/reindexing and following an existing child without tree mutation.
+- Validation: topology, actor, preservation, cursor and GTK main-form checks pass.
+- The legacy line adapter remains at import/rebuild boundaries; its complete
+  retirement is separate from removal of encoded keys and structural selection.
+
 ### 2026-10-25 — Render and select branches by structure and node identity (G7)
 
 - Render a branch's first-child continuation and sibling alternatives directly

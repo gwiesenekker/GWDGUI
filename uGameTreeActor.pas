@@ -1000,9 +1000,10 @@ var
   LVariationPly: Integer;
   LStoredLine: TGameTreeVariationLine;
   LStoredMoves: TStringList;
-  VariationLine: TGameTreeVariationLine;
   ExtendExisting: Boolean;
-  ExistingIndex: Integer;
+  BranchNodes: TList;
+  ParentNode: TGameTreePlyNode;
+  CompatBase, CompatDisplay, CompatPly: Integer;
   NextNode: TGameTreePlyNode;
   Annotations: TStringList;
 
@@ -1018,38 +1019,6 @@ var
     ACommand.MoveText := ATarget.MoveText;
   end;
 
-  function FindExistingPrefix: Integer;
-  var
-    J, K: Integer;
-    Wanted, Existing: TStringList;
-    Matches: Boolean;
-    Line: TGameTreeVariationLine;
-  begin
-    Result := -1;
-    Wanted := TStringList.Create;
-    Existing := TStringList.Create;
-    try
-      TextToMoveList(LMovesText, Wanted);
-      for J := 0 to FGameTree.VariationLineCount - 1 do
-      begin
-        Line := FGameTree.VariationLine[J];
-        if Line.BasePly <> LBasePly then
-          Continue;
-        TextToMoveList(Line.MovesText, Existing);
-        if Existing.Count < Wanted.Count then
-          Continue;
-        Matches := True;
-        for K := 0 to Wanted.Count - 1 do
-          Matches := Matches and (NormalizeMoveNotation(Wanted[K]) =
-            NormalizeMoveNotation(Existing[K]));
-        if Matches then
-          Exit(J);
-      end;
-    finally
-      Existing.Free;
-      Wanted.Free;
-    end;
-  end;
 begin
   Result := False;
   AChanged := False;
@@ -1063,92 +1032,63 @@ begin
     Exit;
   end;
 
-  LBasePly := ANode.PlyNumber;
-  LDisplayAfterPly := LBasePly;
-  LVariationIndex := -1;
-  LVariationPly := 0;
-  LAnnotationText := '';
-  ExtendExisting := False;
-  LOriginText := MoveSourceOriginText(ACommand.MoveSource);
-  if Trim(ANode.VariationKey) <> '' then
-  begin
-    if not FGameTree.ParseVariationKey(ANode.VariationKey, LBasePly,
-      LDisplayAfterPly, LVariationIndex, LVariationPly) then
+  BranchNodes := TList.Create;
+  Annotations := TStringList.Create;
+  try
+    ParentNode := ANode;
+    while (ParentNode <> FGameTree.Root) and
+      (FGameTree.MainlineNode[ParentNode.PlyNumber] <> ParentNode) do
     begin
-      Reject(ACommand, 'invalid variation key');
-      Exit;
+      BranchNodes.Insert(0, ParentNode);
+      ParentNode := ParentNode.Parent;
     end;
-    if (LVariationIndex < 0) or
-      (LVariationIndex >= FGameTree.VariationLineCount) then
+    LBasePly := ParentNode.PlyNumber;
+    LDisplayAfterPly := LBasePly;
+    LVariationPly := BranchNodes.Count;
+    LVariationIndex := -1;
+    ExtendExisting := False;
+    LOriginText := MoveSourceOriginText(ACommand.MoveSource);
+    if FGameTree.TryLocateVariationNode(ANode, CompatBase, CompatDisplay,
+      LVariationIndex, CompatPly) and (CompatBase = LBasePly) then
     begin
-      Reject(ACommand, 'variation index out of range');
-      Exit;
+      LDisplayAfterPly := CompatDisplay;
+      ExtendExisting := (ANode.ChildCount = 0) and
+        (FGameTree.FindVariationNode(LVariationIndex, CompatPly + 1) = nil);
     end;
-    VariationLine := FGameTree.VariationLine[LVariationIndex];
-    if VariationLine = nil then
-    begin
-      Reject(ACommand, 'variation line not found');
-      Exit;
-    end;
-    NextNode := FGameTree.FindVariationNode(LVariationIndex, LVariationPly + 1);
-    if (NextNode <> nil) and
-      (NormalizeMoveNotation(NextNode.MoveText) = LMoveText) then
-    begin
-      FollowExisting(LVariationIndex, LVariationPly + 1, NextNode);
-      Exit(True);
-    end;
-    ExtendExisting := NextNode = nil;
-    LMovesText := '';
-    for I := 1 to LVariationPly do
-    begin
-      LVariationNode := FGameTree.FindVariationNode(LVariationIndex, I);
-      if LVariationNode = nil then
-        Break;
-      if LMovesText <> '' then
-        LMovesText += ' ';
-      LMovesText += LVariationNode.MoveText;
-    end;
-    if LMovesText <> '' then
-      LMovesText += ' ';
-    LMovesText += LMoveText;
-    Annotations := TStringList.Create;
-    try
-      for I := 1 to LVariationPly do
-      begin
-        LVariationNode := FGameTree.FindVariationNode(LVariationIndex, I);
-        LAnnotationText := AnnotationWithScore(LVariationNode.CommentText,
-          'engine', LVariationNode.EngineScore);
-        LAnnotationText := AnnotationWithScore(LAnnotationText,
-          'annotator', LVariationNode.AnnotatorScore);
-        Annotations.Add(LAnnotationText);
-      end;
-      Annotations.Add('');
-      LAnnotationText := EncodeVariationAnnotations(Annotations);
-    finally
-      Annotations.Free;
-    end;
-  end
-  else
-  begin
-    LMovesText := LMoveText;
-    NextNode := FGameTree.MainlineNode[ANode.PlyNumber + 1];
-    if (NextNode <> nil) and
-      (NormalizeMoveNotation(NextNode.MoveText) = LMoveText) then
-    begin
-      FollowExisting(-1, NextNode.PlyNumber, NextNode);
-      Exit(True);
-    end;
-  end;
-
-  ExistingIndex := FindExistingPrefix;
-  if ExistingIndex >= 0 then
-  begin
-    NextNode := FGameTree.FindVariationNode(ExistingIndex, LVariationPly + 1);
+    // Move identity and ancestry decide the result; line aliases only describe
+    // the path for older import/export adapters after the child is selected.
+    NextNode := FGameTree.FindChildByMove(ANode, LMoveText);
     if NextNode <> nil then
     begin
-      FollowExisting(ExistingIndex, LVariationPly + 1, NextNode);
+      if FGameTree.MainlineNode[NextNode.PlyNumber] = NextNode then
+        FollowExisting(-1, NextNode.PlyNumber, NextNode)
+      else
+      begin
+        if not FGameTree.TryLocateVariationNode(NextNode, CompatBase,
+          CompatDisplay, LVariationIndex, CompatPly) then
+          CompatPly := LVariationPly + 1;
+        FollowExisting(LVariationIndex, CompatPly, NextNode);
+      end;
       Exit(True);
     end;
+    LMovesText := '';
+    for I := 0 to BranchNodes.Count - 1 do
+    begin
+      LVariationNode := TGameTreePlyNode(BranchNodes[I]);
+      if LMovesText <> '' then LMovesText += ' ';
+      LMovesText += LVariationNode.MoveText;
+      LAnnotationText := AnnotationWithScore(LVariationNode.CommentText,
+        'engine', LVariationNode.EngineScore);
+      Annotations.Add(AnnotationWithScore(LAnnotationText,
+        'annotator', LVariationNode.AnnotatorScore));
+    end;
+    if LMovesText <> '' then LMovesText += ' ';
+    LMovesText += LMoveText;
+    Annotations.Add('');
+    LAnnotationText := EncodeVariationAnnotations(Annotations);
+  finally
+    Annotations.Free;
+    BranchNodes.Free;
   end;
 
   if ExtendExisting then

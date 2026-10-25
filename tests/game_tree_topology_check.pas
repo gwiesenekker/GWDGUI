@@ -166,6 +166,53 @@ begin
   end;
 end;
 
+procedure CheckMoveInsertionUsesRealAncestry;
+var
+  Actor: TGameTreeActor;
+  Tree: TGameTree;
+  Parent, Child: TGameTreePlyNode;
+  Command: TGameTreeCommand;
+  ChildId: Int64;
+  Moves: TStringList;
+begin
+  Actor := TGameTreeActor.Create;
+  Moves := TStringList.Create;
+  try
+    Rebuild(Actor, 'ancestry', '', '32-28 18-23');
+    Tree := Actor.GameTree;
+    // The import adapter includes an official move in its path. Actual branch
+    // ancestry starts after that shared mainline node, regardless of alias base.
+    Execute(Actor, Actor.CreateStoreVariationLineCommand(1, 0,
+      '32-28 20-24', 'Keep branch comment', gmsHuman));
+    Parent := Tree.FindVariationNode(0, 2);
+    Command := Actor.CreateStoreMoveVariationCommand(Parent.NodeId, '37-32', gmsHuman);
+    Actor.ExecuteCommand(Command);
+    Check(Command.Accepted, Command.ErrorText);
+    ChildId := Command.CreatedNodeId;
+    Command.Free;
+    Child := Tree.FindNodeById(ChildId);
+    Check((Child <> nil) and (Child.Parent = Parent), 'new move must use its real parent');
+    Check(Tree.CopyNodeMovesTo(Child, Moves) and
+      (Moves.CommaText = '32-28,20-24,37-32'), 'new branch must follow real ancestry');
+    Execute(Actor, Actor.CreateStoreMoveVariationCommand(Parent.NodeId, '38-32', gmsHuman));
+    Check(Parent.ChildCount = 2, 'a second move must create one sibling');
+    Tree.RemoveStoredVariationLineAtIndex(0);
+    Command := Actor.CreateStoreMoveVariationCommand(Parent.NodeId, '37-32', gmsHuman);
+    try
+      Actor.ExecuteCommand(Command);
+      Check(Command.Accepted and not Command.TreeChanged and (Command.CreatedNodeId = ChildId),
+        'replaying a child after alias reindexing must find that node without mutation');
+    finally
+      Command.Free;
+    end;
+    Check(Parent.CommentText = 'Keep branch comment', 'branch editing must preserve parent comments');
+    CheckRenderedNodeHits(Tree);
+  finally
+    Moves.Free;
+    Actor.Free;
+  end;
+end;
+
 procedure CheckSharedBranches;
 var
   Actor: TGameTreeActor;
@@ -362,6 +409,7 @@ end;
 begin
   CheckMainlineAndReplay;
   CheckFirstChildMainContinuation;
+  CheckMoveInsertionUsesRealAncestry;
   CheckSharedBranches;
   CheckMetadataBelongsToNodes;
   CheckScoresDoNotCreepForward;

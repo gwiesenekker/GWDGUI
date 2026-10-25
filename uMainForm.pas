@@ -5952,7 +5952,7 @@ var
       Exit;
     AText += IntToStr(ANode.PlyNumber) + '|' +
       IntToStr(Ord(ANode.SideToMove)) + '|' + ANode.MoveText + '|' +
-      ANode.VariationKey + '|';
+      IntToStr(ANode.NodeId) + '|';
     if not AOptions.HideAnnotations then
     begin
       if AOptions.ShowEngineScore then

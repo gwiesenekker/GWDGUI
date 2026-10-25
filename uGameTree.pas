@@ -32,7 +32,6 @@ type
     FParent: TGameTreePlyNode;
     FPlyNumber: Integer;
     FSideToMove: TDraughtsSide;
-    FVariationKey: string;
     FWhiteRemainingSeconds: Double;
     FWhiteUsedSeconds: Double;
     {$WARN 3018 OFF}
@@ -66,7 +65,6 @@ type
     property Parent: TGameTreePlyNode read FParent;
     property PlyNumber: Integer read FPlyNumber;
     property SideToMove: TDraughtsSide read FSideToMove;
-    property VariationKey: string read FVariationKey;
     property WhiteRemainingSeconds: Double read FWhiteRemainingSeconds;
     property WhiteUsedSeconds: Double read FWhiteUsedSeconds;
   end;
@@ -132,8 +130,6 @@ type
       const ADepth: string = ''; const ATimeText: string = '');
     procedure AddAnnotatorPV(APlyNumber: Integer; const AScore, APV: string;
       const ADepth: string = ''; const ATimeText: string = '');
-    function BuildVariationKey(ABasePlyNumber, ADisplayAfterPly,
-      AVariationIndex, AVariationPlyNumber: Integer): string;
     function GetMainlineNode(APlyNumber: Integer): TGameTreePlyNode;
     function GetMainlineCount: Integer;
     function GetVariationLine(AIndex: Integer): TGameTreeVariationLine;
@@ -151,7 +147,6 @@ type
     function UpdateVariationLine(AVariationLine: TGameTreeVariationLine;
       ADisplayAfterPly, ABasePly: Integer; const AMovesText,
       AAnnotationText: string): Boolean;
-    function FindVariationNodeByKey(const AVariationKey: string): TGameTreePlyNode;
   public
     function TryLocateVariationNode(ANode: TGameTreePlyNode;
       out ABase, ADisplay, AIndex, APly: Integer): Boolean;
@@ -211,9 +206,6 @@ type
       APV, ADepth, ATimeText: string; out AChanged: Boolean): Boolean; overload;
     function RecordAutoPlayPVForNodeId(ANodeId: Int64; const APV: string;
       out AChanged: Boolean): Boolean;
-    function ParseVariationKey(const AVariationKey: string;
-      out ABasePlyNumber, ADisplayAfterPly, AVariationIndex,
-      AVariationPlyNumber: Integer): Boolean;
     procedure RecordVariationAnnotation(ABasePlyNumber, ADisplayAfterPly,
       AVariationIndex, AVariationPlyNumber: Integer;
       const AAnnotationText: string);
@@ -318,7 +310,6 @@ begin
   FPlyNumber := 0;
   FMoveNumber := 0;
   FSideToMove := dsWhite;
-  FVariationKey := '';
   FHasClockInfo := False;
   FWhiteRemainingSeconds := 0;
   FBlackRemainingSeconds := 0;
@@ -444,7 +435,7 @@ begin
   while I >= 0 do
   begin
     Child := ANode.Children[I];
-    if Trim(Child.VariationKey) <> '' then
+    if GetMainlineNode(Child.PlyNumber) <> Child then
       ANode.FChildren.Remove(Child)
     else
       RemoveVariationNodes(Child);
@@ -675,7 +666,6 @@ begin
   Result.FMoveNumber := MoveNumberForPly(APlyNumber);
   Result.FSideToMove := SideForPly(APlyNumber);
   Result.FMoveText := Trim(AMoveText);
-  Result.FVariationKey := '';
 end;
 
 procedure TGameTree.RecordMainlineAnnotation(APlyNumber: Integer;
@@ -703,24 +693,16 @@ function TGameTree.RecordVariationMove(AParent: TGameTreePlyNode;
   ABasePlyNumber, ADisplayAfterPly, AVariationIndex,
   AVariationPlyNumber: Integer; const AMoveText: string): TGameTreePlyNode;
 var
-  Key: string;
   Line: TGameTreeVariationLine;
-  Created: Boolean;
 begin
   Result := nil;
   Line := GetVariationLine(AVariationIndex);
   if (AParent = nil) or (Line = nil) or (AVariationPlyNumber <= 0) then
     Exit;
-  Key := BuildVariationKey(ABasePlyNumber, ADisplayAfterPly,
-    AVariationIndex, AVariationPlyNumber);
   // A position owns each continuation once. Legacy lines only index paths.
   Result := FindChildByMove(AParent, AMoveText);
-  Created := Result = nil;
-  if Created then
-  begin
+  if Result = nil then
     Result := AddMove(AParent, AParent.PlyNumber + 1, AMoveText);
-    Result.FVariationKey := Key;
-  end;
   if Length(Line.FNodeIds) < AVariationPlyNumber then
     SetLength(Line.FNodeIds, AVariationPlyNumber);
   Line.FNodeIds[AVariationPlyNumber - 1] := Result.NodeId;
@@ -840,12 +822,15 @@ procedure TGameTree.RecordVariationAnnotation(ABasePlyNumber,
   const AAnnotationText: string);
 var
   LNode: TGameTreePlyNode;
-  LVariationKey: string;
+  Base, Display, Index, Ply: Integer;
+  Canonical: Boolean;
 begin
-  LVariationKey := BuildVariationKey(ABasePlyNumber, ADisplayAfterPly,
-    AVariationIndex, AVariationPlyNumber);
-  LNode := FindVariationNodeByKey(LVariationKey);
-  if (LNode <> nil) and (LNode.VariationKey <> LVariationKey) and
+  LNode := FindVariationNode(AVariationIndex, AVariationPlyNumber);
+  Canonical := TryLocateVariationNode(LNode, Base, Display, Index, Ply) and
+    (Index = AVariationIndex) and (Ply = AVariationPlyNumber);
+  if (LNode <> nil) and not Canonical and
+    (LNode.CommentText <> '') and (AAnnotationText = '') then Exit;
+  if (LNode <> nil) and not Canonical and
     (LNode.CommentText <> '') and (Pos(LNode.CommentText, AAnnotationText) = 0) then
     ApplyAnnotationText(LNode, LNode.CommentText + '; ' + AAnnotationText)
   else
@@ -886,7 +871,7 @@ begin
   begin
     Child := ANode.Children[I];
     PruneUnreferencedVariations(Child);
-    if Child.VariationKey = '' then
+    if GetMainlineNode(Child.PlyNumber) = Child then
       Continue;
     Referenced := False;
     for J := 0 to VariationLineCount - 1 do
@@ -895,9 +880,6 @@ begin
       for K := 0 to High(Line.FNodeIds) do
         if Line.FNodeIds[K] = Child.NodeId then
         begin
-          // Keep one canonical address for memo clicks and node-based commands.
-          Child.FVariationKey := BuildVariationKey(Line.BasePly,
-            Line.DisplayAfterPly, J, K + 1);
           Referenced := True;
           Break;
         end;
@@ -1214,16 +1196,6 @@ begin
   end;
 end;
 
-function TGameTree.FindVariationNodeByKey(
-  const AVariationKey: string): TGameTreePlyNode;
-var
-  Base, Display, Index, Ply: Integer;
-begin
-  Result := nil;
-  if ParseVariationKey(AVariationKey, Base, Display, Index, Ply) then
-    Result := FindVariationNode(Index, Ply);
-end;
-
 function TGameTree.FindNodeById(ANodeId: Int64): TGameTreePlyNode;
   function SearchNode(ANode: TGameTreePlyNode): TGameTreePlyNode;
   var
@@ -1295,38 +1267,6 @@ begin
     Result := ((APlyNumber - 1) div 2) + 1;
 end;
 
-function TGameTree.BuildVariationKey(ABasePlyNumber, ADisplayAfterPly,
-  AVariationIndex, AVariationPlyNumber: Integer): string;
-begin
-  Result := IntToStr(ABasePlyNumber) + ':' + IntToStr(ADisplayAfterPly) +
-    ':' + IntToStr(AVariationIndex) + ':' + IntToStr(AVariationPlyNumber);
-end;
-
-function TGameTree.ParseVariationKey(const AVariationKey: string;
-  out ABasePlyNumber, ADisplayAfterPly, AVariationIndex,
-  AVariationPlyNumber: Integer): Boolean;
-var
-  Parts: TStringList;
-begin
-  Result := False;
-  ABasePlyNumber := -1;
-  ADisplayAfterPly := -1;
-  AVariationIndex := -1;
-  AVariationPlyNumber := -1;
-  Parts := TStringList.Create;
-  try
-    ExtractStrings([':'], [], PChar(Trim(AVariationKey)), Parts);
-    if Parts.Count <> 4 then
-      Exit;
-    Result := TryStrToInt(Parts[0], ABasePlyNumber) and
-      TryStrToInt(Parts[1], ADisplayAfterPly) and
-      TryStrToInt(Parts[2], AVariationIndex) and
-      TryStrToInt(Parts[3], AVariationPlyNumber);
-  finally
-    Parts.Free;
-  end;
-end;
-
 function TGameTree.AddMove(AParent: TGameTreePlyNode; APlyNumber: Integer;
   const AMoveText: string): TGameTreePlyNode;
 begin
@@ -1392,7 +1332,6 @@ begin
   // The first child is always the official continuation at a mainline position.
   // Reuse a previously explored node, retaining its identity and metadata.
   ParentNode.FChildren.Move(ParentNode.FChildren.IndexOf(Result), 0);
-  Result.FVariationKey := '';
   while FMainline.Count < APlyNumber do FMainline.Add(nil);
   FMainline[APlyNumber - 1] := Result;
 end;
