@@ -1219,7 +1219,7 @@ var
   MoveLines, HeaderNames: TStringList;
   MoveLine, TagText, Token: string;
   Stop, InTag, InQuote, Escaped, InLineComment: Boolean;
-  HasMovetext, LineHasContent, HeaderGap, PreviousCR, ResultSeen: Boolean;
+  HasMovetext, LineHasContent, PreviousCR, ResultSeen: Boolean;
   Stream: TFileStream;
   TotalBytes: Int64;
 
@@ -1242,7 +1242,6 @@ var
     HeaderNames.Clear;
     ResultSeen := False;
     HasMovetext := False;
-    HeaderGap := False;
     BraceDepth := 0;
     VariationDepth := 0;
   end;
@@ -1256,6 +1255,7 @@ var
     Token := '';
     // Delay delivery after a result so trailing comments/NAGs stay with their
     // game. Only a new top-level token or header starts the next game.
+    if ResultSeen and (VariationDepth = 0) and IsPdnResultToken(CleanMoveToken(Value)) then Exit;
     if ResultSeen and (VariationDepth = 0) and (Value[1] <> '$') then FinishGame;
     if Stop then Exit;
     EnsureGame;
@@ -1274,16 +1274,13 @@ var
     while (NameEnd <= Length(TagText)) and
       not (TagText[NameEnd] in [' ', #9, #10, #13, ']']) do Inc(NameEnd);
     Name := Copy(TagText, 2, NameEnd - 2);
-    // Repeated tags start a new header block. A completed tags-only game can
-    // also end at a blank line; allow blank lines in an unfinished header.
-    if (HeaderNames.IndexOf(Name) >= 0) or
-      (HeaderGap and (Current <> nil) and Current.FHasResultTag and
-       (Current.ResultText <> '*')) then FinishGame;
+    // Whitespace cannot establish a game boundary: headers may contain blank
+    // lines even after Result. A repeated tag identifies a new header block.
+    if HeaderNames.IndexOf(Name) >= 0 then FinishGame;
     if Stop then Exit;
     EnsureGame;
     ParsePdnTag(TagText, Current);
     HeaderNames.Add(Name);
-    HeaderGap := False;
     TagText := '';
     InTag := False;
   end;
@@ -1342,7 +1339,6 @@ var
     end;
     if C = #10 then
     begin
-      if not LineHasContent and (HeaderNames.Count > 0) then HeaderGap := True;
       MoveLines.Add(MoveLine);
       MoveLine := '';
       LineHasContent := False;
@@ -1397,7 +1393,6 @@ begin
   InLineComment := False;
   HasMovetext := False;
   LineHasContent := False;
-  HeaderGap := False;
   PreviousCR := False;
   BraceDepth := 0;
   VariationDepth := 0;

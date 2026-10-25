@@ -436,7 +436,10 @@ begin
     Check(Pos('trailing comment', TPdnGame(Games[0]).MoveAnnotationsText) > 0,
       'post-result comments remain attached to the completed game');
     CheckEqual(TPdnGame(Games[1]).ResultText, '0-0', 'double-loss boundary');
-    LoadFixture('2-0 0-2 1-1 *', 4);
+    LoadFixture('[Event "Complete header"] [Result "2-0"]' + LineEnding +
+      LineEnding + '[White "A"] [Black "B"] 1. 32-28 2-0 2-0', 1);
+    CheckEqual(TPdnGame(Games[0]).EventName, 'Complete header', 'completed header survives whitespace');
+    LoadFixture('2-0 2-0 1-1 *', 1);
     for I := 0 to Games.Count - 1 do
       CheckEqual(TPdnGame(Games[I]).MovesText, '', 'result-only games');
     LoadFixture('1. 32-28 * {trailing} ; [not a tag]' + LineEnding +
@@ -525,8 +528,8 @@ begin
     CheckEqual(TPdnGame(Games[0]).MovesText, '', 'forfeit has no moves');
     CheckEqual(TPdnGame(Games[0]).ResultText, '0-2', 'forfeit keeps result');
     LoadFixture('[White "Forfeit"]' + LineEnding + '[Result "0-2"]' +
-      LineEnding + LineEnding + '[Event "Played"]' + LineEnding + '1. 33-28 *', 2);
-    CheckEqual(TPdnGame(Games[0]).WhiteName, 'Forfeit', 'blank line separates disjoint headers');
+      LineEnding + LineEnding + '[Event "Played"]' + LineEnding + '1. 33-28 *', 1);
+    CheckEqual(TPdnGame(Games[0]).WhiteName, 'Forfeit', 'blank lines must not split disjoint header fields');
     LoadFixture(#$EF#$BB#$BF + '[Event' + #9 + '"Quoted ] and \"name\" \\ path"]' +
       LineEnding + '[White "A"]' + LineEnding + LineEnding + '1. 32-28 *', 1);
     CheckEqual(TPdnGame(Games[0]).EventName, 'Quoted ] and "name" \ path',

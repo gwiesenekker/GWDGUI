@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Avoid phantom PDN games from header gaps and repeated results (P19)
+
+- Blank lines no longer split a header, including after its Result tag. Repeated
+  tags still identify separate tags-only games. Ignore extra result fragments
+  after a completed game rather than inventing empty games.
+- Regress spaced complete headers and duplicate results. Disjoint header fields
+  without a repeated tag or movetext terminator remain one header block.
+- Validation: boundary regression fails before the fix; PDN regression passes.
+
 ### 2026-10-25 — Verify tournament PDN ownership before replacement (T17)
 
 - Check the tournament IDs in an existing projection before replacing it, even
