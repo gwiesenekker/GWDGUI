@@ -11,6 +11,7 @@ type
   TTournamentPairing = record
     White: string;
     Black: string;
+    RoundNumber: Integer;
   end;
 
   TTournamentPairingArray = array of TTournamentPairing;
@@ -41,7 +42,7 @@ uses
   SysUtils, uTournamentResults;
 
 procedure AppendPairing(var APairings: TTournamentPairingArray;
-  const AWhite, ABlack: string);
+  const AWhite, ABlack: string; ARoundNumber: Integer = 1);
 var
   Index: Integer;
 begin
@@ -49,6 +50,7 @@ begin
   SetLength(APairings, Index + 1);
   APairings[Index].White := AWhite;
   APairings[Index].Black := ABlack;
+  APairings[Index].RoundNumber := ARoundNumber;
 end;
 
 function TournamentAllResultsKnown(AWhiteEngines, ABlackEngines,
@@ -75,18 +77,35 @@ end;
 
 procedure GenerateRoundRobinPairings(AEngines: TStrings;
   ADoubleRoundRobin: Boolean; out APairings: TTournamentPairingArray);
-var
-  I: Integer;
-  J: Integer;
+var Slots: array of Integer; N, Round, I, A, B, Last, FirstLegCount: Integer;
 begin
   SetLength(APairings, 0);
-  for I := 0 to AEngines.Count - 2 do
-    for J := I + 1 to AEngines.Count - 1 do
+  if AEngines.Count < 2 then Exit;
+  N := AEngines.Count;
+  if Odd(N) then Inc(N); // A virtual participant supplies the bye.
+  SetLength(Slots, N);
+  for I := 0 to N - 1 do Slots[I] := I;
+  for Round := 1 to N - 1 do
+  begin
+    for I := 0 to N div 2 - 1 do
     begin
-      AppendPairing(APairings, AEngines[I], AEngines[J]);
-      if ADoubleRoundRobin then
-        AppendPairing(APairings, AEngines[J], AEngines[I]);
+      A := Slots[I]; B := Slots[N - 1 - I];
+      if (A >= AEngines.Count) or (B >= AEngines.Count) then Continue;
+      if (I = 0) and not Odd(Round) then
+        AppendPairing(APairings, AEngines[B], AEngines[A], Round)
+      else AppendPairing(APairings, AEngines[A], AEngines[B], Round);
     end;
+    Last := Slots[N - 1];
+    for I := N - 1 downto 2 do Slots[I] := Slots[I - 1];
+    Slots[1] := Last;
+  end;
+  if ADoubleRoundRobin then
+  begin
+    FirstLegCount := Length(APairings);
+    for I := 0 to FirstLegCount - 1 do
+      AppendPairing(APairings, APairings[I].Black, APairings[I].White,
+        APairings[I].RoundNumber + N - 1);
+  end;
 end;
 
 function PairingAlreadyPlayed(AWhiteEngines, ABlackEngines: TStrings;
@@ -264,6 +283,7 @@ end;
 function BuildTournamentPairingRound(AIsSwiss, ADoubleRoundRobin: Boolean;
   AEngines, AWhiteEngines, ABlackEngines, AResults,
   ARounds: TStrings): TTournamentPairingRound;
+var I: Integer;
 begin
   Result.HasRepeat := False;
   Result.RoundNumber := 1;
@@ -273,6 +293,7 @@ begin
     Result.RoundNumber := TournamentNextRoundNumber(ARounds);
     GenerateSwissPairings(AEngines, AWhiteEngines, ABlackEngines, AResults,
       ARounds, Result.Pairings, Result.HasRepeat);
+    for I := 0 to High(Result.Pairings) do Result.Pairings[I].RoundNumber := Result.RoundNumber;
   end
   else
     GenerateRoundRobinPairings(AEngines, ADoubleRoundRobin, Result.Pairings);

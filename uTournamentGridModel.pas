@@ -109,7 +109,7 @@ begin
   for I := 0 to High(APairingRound.Pairings) do
   begin
     Row := AddTournamentPairingRow(AGrid, APairingRound.Pairings[I].White,
-      APairingRound.Pairings[I].Black, APairingRound.RoundNumber);
+      APairingRound.Pairings[I].Black, APairingRound.Pairings[I].RoundNumber);
     if SameText(APairingRound.Pairings[I].Black, 'BYE') then
     begin
       AGrid.Cells[TournamentColResult, Row] := '2-0';

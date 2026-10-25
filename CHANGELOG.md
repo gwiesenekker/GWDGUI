@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Balance round-robin colours and schedule real rounds (T3)
+
+- Generate circle pairings with alternating fixed-player colours, a virtual bye
+  for odd fields, and distinct round numbers. Double round robins mirror the full
+  first leg with colours reversed in later rounds.
+- Carry each pairing's round into the grid rather than assigning every game to round 1.
+- Regress 2–12 participants, both formats, pair coverage, colour balance and no
+  participant playing twice in a round.
+- Validation: balance regression fails before the fix; pairing and GTK tournament suites pass.
+
 ### 2026-10-25 — Preserve literal PDN comments and Black-start numbering (P18, P12)
 
 - Stop interpreting `base_ply` or annotator-like text in comments as structural
