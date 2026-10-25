@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Apply FMJD endgame draw limits (R7)
+
+- Track the sixteen-move and five-move material limits from FMJD Annex 1,
+  articles 6.3/6.4 (https://www.fmjd.org/docs/Annex_1.pdf). Start counting after
+  the qualifying position is reached; keep an existing sixteen-move deadline
+  through captures and apply an earlier five-move deadline when appropriate.
+- Reset counters on a new game and give a terminal win precedence over draws.
+- Regress both sides, king/man material classes, entry into a qualifying ending,
+  capture without reset, counter reset and actual played king-versus-king draw.
+- Validation: dedicated endgame, board and headless regression suites pass.
+
 ### 2026-10-25 — Reconcile DXP exchanges with the game record (D10)
 
 - Track the exact moves and starting position exchanged with a DXP peer. Send

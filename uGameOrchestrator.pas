@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils,
-  uDraughtsBoard, uEngineBase, uGameMoveHistory, uPdn;
+  uDraughtsDrawRules, uDraughtsBoard, uEngineBase, uGameMoveHistory, uPdn;
 
 type
   TClockIncrementMode = (
@@ -40,6 +40,7 @@ type
     FLog: TStringList;
     FLogTarget: TStrings;
     FConsecutiveReversiblePlyCount: Integer;
+    FEndgameDrawCounter: TEndgameDrawCounter;
     FMovesInPeriod: array[TDraughtsSide] of Integer;
     FMoveHistory: TGameMoveHistory;
     FMovesPlayed: TStringList;
@@ -281,6 +282,7 @@ begin
   FPositionHistory.Clear;
   FPositionHistory.Add(FBoard.PositionKey);
   FConsecutiveReversiblePlyCount := 0;
+  FEndgameDrawCounter.Start(FBoard);
   FLastError := '';
   FGameResult := '*';
   ResetClocks;
@@ -357,10 +359,24 @@ const
   RepetitionDrawCount = 3;
   TwentyFiveMovesInPlies = 50;
 var
-  LRepetitionCount: Integer;
+  LRepetitionCount, MoveLimit: Integer;
 begin
   if FState <> gosRunning then
     Exit;
+
+  // A terminal win takes precedence on the last move allowed by a draw limit.
+  if FBoard.LegalMoveCount = 0 then
+  begin
+    if FBoard.SideToMove = dsWhite then FinishGame('0-2', 'White has no legal move')
+    else FinishGame('2-0', 'Black has no legal move');
+    Exit;
+  end;
+  MoveLimit := FEndgameDrawCounter.DrawMoveLimit;
+  if MoveLimit <> 0 then
+  begin
+    FinishGame('1-1', 'draw by ' + IntToStr(MoveLimit) + '-move endgame rule');
+    Exit;
+  end;
 
   LRepetitionCount := CountCurrentPositionRepetitions;
   if LRepetitionCount >= RepetitionDrawCount then
@@ -621,6 +637,7 @@ begin
     Inc(FConsecutiveReversiblePlyCount)
   else
     FConsecutiveReversiblePlyCount := 0;
+  FEndgameDrawCounter.AfterMove(FBoard);
   FPositionHistory.Add(FBoard.PositionKey);
   LMoveAnnotation := '';
   if (Trim(ASource) = 'engine') and (FEngines[ASide] <> nil) and

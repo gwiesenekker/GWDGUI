@@ -7,6 +7,7 @@ CHECKS=(
   analyzer_runner_shutdown_check.pas
   analyzer_position_check.pas
   hub_search_fence_check.pas
+  endgame_draw_check.pas
   board_regression_check.pas
   pdn_regression_check.pas
   database_import_recovery_check.pas
