@@ -33,3 +33,8 @@ engines.json
 # Numbered local engine configurations and executables
 /engine[0-9]*
 /endgine[0-9]*
+
+# Runtime preferences and tournament output (keep existing local files)
+/prefs.json
+/Tournament.pdn
+/.gwdgui-new-build

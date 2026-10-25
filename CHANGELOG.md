@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Keep runtime files local and document review decisions (C3)
+
+- Stop tracking local preferences and tournament output while preserving both
+  existing files on disk. Keep the generated user manual as documentation.
+- Add a portable Lazarus build command that stages compilation in a temporary
+  directory and replaces the local executable only after a successful build.
+- Document the portable writable-directory configuration model, build/test
+  prerequisites, and the response to Claude's 3678ba3 review in REVIEW_NOTES.md.
+- Validation: isolated application build succeeds; headless, GTK, TCP DXP and
+  tournament checks pass. The 1,000-game autosave check takes 354 ms on this host.
+
 ### 2026-10-25 — Reuse validated boards within a display refresh (F4)
 
 - Cache successful board replays by tree, node and actor revision for the duration

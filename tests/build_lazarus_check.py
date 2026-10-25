@@ -25,7 +25,8 @@ def option(path, value):
 for node in root.findall('./ProjectOptions/Units/*/Filename'):
     node.set('Value', str((project.parent / node.get('Value')).resolve()))
 option('CompilerOptions/Target/Filename', output / project.stem)
-option('CompilerOptions/SearchPaths/OtherUnitFiles', project.parent.parent)
+source_root = project.parent.parent if project.parent.name == 'tests' else project.parent
+option('CompilerOptions/SearchPaths/OtherUnitFiles', source_root)
 option('CompilerOptions/SearchPaths/UnitOutputDirectory', output / 'units')
 isolated = output / project.name
 tree.write(isolated, encoding='utf-8', xml_declaration=True)
