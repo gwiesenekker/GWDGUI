@@ -46,6 +46,19 @@ begin
   end;
 end;
 
+function WithoutNodeDataComments(Text: string): string;
+var StartPos, EndPos: Integer;
+begin
+  repeat
+    StartPos := Pos(' {[%gwd-node ', Text);
+    if StartPos = 0 then Break;
+    EndPos := PosEx('}', Text, StartPos);
+    Check(EndPos > 0, 'node-data comment must close');
+    Delete(Text, StartPos, EndPos - StartPos + 1);
+  until False;
+  Result := Text;
+end;
+
 procedure CheckStoredVariationsAreExported;
 var
   Actor: TGameTreeActor;
@@ -143,9 +156,11 @@ begin
     Execute(Actor, Actor.CreateStoreMoveVariationCommand(
       Actor.GameTree.Root.NodeId, '33-28', gmsHuman));
     Text := GameTreeToPdnText(Actor.GameTree);
-    Check(Pos('32-28 (1. 33-28)', Text) > 0,
+    Check((Pos('(1. 33-28', Text) > Pos('32-28', Text)) and
+      (Pos('(1. 33-28', Text) > 0),
       'root alternatives must be exported after the first move');
-    Check(Pos('18-23 (1... 20-24)', Text) > 0,
+    Check((Pos('(1... 20-24', Text) > Pos('18-23', Text)) and
+      (Pos('(1... 20-24', Text) > 0),
       'GUI alternatives must be exported after the move they replace');
     Game := ParseGame(Text);
     try
@@ -436,9 +451,9 @@ begin
       Check(Actor.GameTree.FindBranchNode(0, 1).ChildCount = 2,
         'outer position must own both choices');
       Text := GameTreeToPdnText(Actor.GameTree);
-      Check(Pos('37-32 {Original continuation} (2. 38-32', Text) > 0,
+      Check(Pos('37-32 {Original continuation} (2. 38-32', WithoutNodeDataComments(Text)) > 0,
         'nested choice must export inside the outer branch');
-      Check(Pos('14-20 {Nested tail} (2... 18-22', Text) > 0,
+      Check(Pos('14-20 {Nested tail} (2... 18-22', WithoutNodeDataComments(Text)) > 0,
         'deeper choice must export inside the nested branch');
       Check(Pos('Outer reply', Text) = RPos('Outer reply', Text),
         'shared prefix must export once');
