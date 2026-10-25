@@ -5,7 +5,7 @@ program game_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, StrUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameOrchestrator, uPdn;
+  uGameTreePdn, uGameOrchestrator, uPdn, uDraughtsBoard;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -205,6 +205,67 @@ begin
     Variations.Free;
     Annotations.Free;
     Moves.Free;
+  end;
+end;
+
+procedure CheckBlackStartWhiteVariations;
+var
+  Actor: TGameTreeActor;
+  Game: TPdnGame;
+  Lines, Annotations: TStringList;
+  Text, Moves, Comment: string;
+  Display, Base, I, Cycle: Integer;
+  Board: TDraughtsBoard;
+begin
+  Text := '[Event "Black-start alternatives"]' + LineEnding +
+    '[FEN "B:W31-50:B1-20"]' + LineEnding + LineEnding +
+    '1... 18-23 (1... 19-23) 2. 32-28 ' +
+    '(2. 33-28 {White reply} (2. 31-27 {Nested reply} 12-18) 17-22) ' +
+    '23x32 3. 37x28 (3. 38x27 {White capture} 12-18) 12-18 *';
+  Actor := TGameTreeActor.Create;
+  Lines := TStringList.Create;
+  Annotations := TStringList.Create;
+  Board := TDraughtsBoard.Create;
+  try
+    for Cycle := 1 to 3 do
+    begin
+      Game := ParseGame(Text);
+      try
+        Lines.Text := Game.MoveVariationsText;
+        Annotations.Text := Game.MoveVariationAnnotationsText;
+        Check(Lines.Count = 4, 'Black-start RAVs, including nested White choices, must survive');
+        for I := 0 to Lines.Count - 1 do
+        begin
+          Check(DecodePdnVariationLine(Lines[I], Annotations[I], I,
+            Display, Base, Moves, Comment), 'Black-start variation must decode');
+          if Pos('19-23', Moves) = 1 then
+            Check(Base = 0, 'Black move 1 variation starts at the root')
+          else if Pos('38x27', Moves) = 1 then
+            Check(Base = 3, 'White move 3 variation starts after three plies')
+          else
+            Check(Base = 1, 'White move 2 variation starts after the initial Black move');
+        end;
+        LoadParsedGame(Actor, Game);
+        Check(Actor.GameTree.MainlineCount = 5, 'Black-start mainline must remain complete');
+        for I := 0 to Actor.GameTree.VariationLineCount - 1 do
+        begin
+          TextToMoveList(Actor.GameTree.VariationLine[I].MovesText, Lines);
+          Check(Actor.GameTree.TryBuildBoardAtNode(
+            Actor.GameTree.FindVariationNode(I, Lines.Count), Board),
+            'every imported Black-start variation must replay legally');
+        end;
+        Text := GameTreeToPdnText(Actor.GameTree);
+        Check((Pos('White reply', Text) > 0) and (Pos('Nested reply', Text) > 0) and
+          (Pos('White capture', Text) > 0), 'Black-start variation comments must round trip');
+      finally
+        Game.Free;
+      end;
+    end;
+  finally
+    Board.Free;
+    Annotations.Free;
+    Lines.Free;
+    Actor.Free;
   end;
 end;
 
@@ -446,6 +507,7 @@ begin
   CheckStoredVariationsAreExported;
   CheckVariationsBelongToTheirGame;
   CheckStandardVariationPlacement;
+  CheckBlackStartWhiteVariations;
   CheckCommentsStayWithTheirMoves;
   CheckCommentRoundTrips;
   CheckExplorationPreservesContinuations;

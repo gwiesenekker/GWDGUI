@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Position White variations correctly when Black starts (remaining P1)
+
+- Correct numbered White-move conversion for Black-to-move FENs: move 2 follows
+  the initial Black ply, and later White alternatives retain the same offset.
+- Regress Black and White alternatives, a nested White choice, a later capture
+  alternative, annotations and three model save/load cycles with legal replay.
+- Exercise actual move-memo clicks on parsed Black-start variations and verify
+  their boards follow the correct parent paths without mutating the game.
+- Validation: model preservation and expanded GTK main-form checks pass.
+
 ### 2026-10-24 — Avoid adopting or overwriting existing tournament PDNs (T11)
 
 - Choose an unused PDN target for a new tournament, including existing directory

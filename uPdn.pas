@@ -534,7 +534,7 @@ begin
     if ASide = dsBlack then
       Result := (AMoveNumber - 1) * 2 + 1
     else
-      Result := AMoveNumber * 2;
+      Result := (AMoveNumber - 1) * 2;
   end;
 end;
 

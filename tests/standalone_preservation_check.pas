@@ -219,6 +219,63 @@ begin
   end;
 end;
 
+procedure CheckBlackStartVariationNavigation(AForm: TMainForm);
+var
+  Games: TList;
+  Source, Moves: TStringList;
+  FileName, BeforeText: string;
+  Memo: TMemo;
+  Board: TDraughtsBoardControl;
+  Expected: TDraughtsBoard;
+  I: Integer;
+
+  procedure SelectVariation(const MoveText, Path: string);
+  var
+    J, Offset: Integer;
+  begin
+    Offset := Pos(MoveText, Memo.Text);
+    Check(Offset > 0, 'Black-start alternative must be visible: ' + MoveText);
+    Memo.SelStart := Offset - 1;
+    Memo.SelLength := 0;
+    Memo.OnClick(Memo);
+    Expected.LoadFromFEN('B:W31-50:B1-20');
+    TextToMoveList(Path, Moves);
+    for J := 0 to Moves.Count - 1 do Expected.PlayMove(Moves[J]);
+    Check(Board.Board.CurrentFEN = Expected.CurrentFEN,
+      'Black-start alternative must browse from its actual parent: ' + MoveText);
+    Check(GameTreeToPdnText(AForm.ActiveGameTree) = BeforeText,
+      'browsing Black-start alternatives must not mutate the game');
+  end;
+begin
+  Games := TList.Create;
+  Source := TStringList.Create;
+  Moves := TStringList.Create;
+  Expected := TDraughtsBoard.Create;
+  FileName := GetTempFileName(GetTempDir, 'gwd');
+  try
+    Source.Text := '[FEN "B:W31-50:B1-20"]' + LineEnding + LineEnding +
+      '1... 18-23 2. 32-28 (2. 33-28 (2. 31-27 12-18) 17-22) ' +
+      '23x32 3. 37x28 (3. 38x27 12-18) 12-18 *';
+    Source.SaveToFile(FileName);
+    LoadPdnGamesFromFile(FileName, Games);
+    Check(Games.Count = 1, 'Black-start GUI fixture must parse');
+    AForm.LoadPdnGameToDisplay(TPdnGame(Games[0]));
+    Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Board := TDraughtsBoardControl(AForm.FindComponent('MainBoard'));
+    BeforeText := GameTreeToPdnText(AForm.ActiveGameTree);
+    SelectVariation('33-28', '18-23 33-28');
+    SelectVariation('31-27', '18-23 31-27');
+    SelectVariation('38x27', '18-23 32-28 23x32 38x27');
+  finally
+    for I := 0 to Games.Count - 1 do TObject(Games[I]).Free;
+    DeleteFile(FileName);
+    Expected.Free;
+    Moves.Free;
+    Source.Free;
+    Games.Free;
+  end;
+end;
+
 procedure ClickBoardSquare(AForm: TMainForm; ASquare: Integer);
 var
   Board: TDraughtsBoardControl;
@@ -708,6 +765,7 @@ begin
       CheckPvReplayIsValidated(Form);
       CheckFrozenPvSurvivesRefresh(Form);
       CheckNestedGuiNavigation(Form);
+      CheckBlackStartVariationNavigation(Form);
       CheckExportDoesNotMutate(Form);
       Game.EventName := 'Standalone test';
       Game.MovesText := '32-28 18-23';
