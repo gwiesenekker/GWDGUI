@@ -225,7 +225,7 @@ begin
   else if SameText(Result, '1/2-1/2') or SameText(Result, '1/2:1/2') then
     Result := '1-1'
   else if not (SameText(Result, '2-0') or SameText(Result, '1-1') or
-    SameText(Result, '0-2') or SameText(Result, '*')) then
+    SameText(Result, '0-2') or SameText(Result, '0-0') or SameText(Result, '*')) then
     Result := '*';
 end;
 
@@ -234,7 +234,7 @@ begin
   Result := SameText(AText, '2-0') or SameText(AText, '1-1') or
     SameText(AText, '0-2') or SameText(AText, '1-0') or
     SameText(AText, '0-1') or SameText(AText, '1/2-1/2') or
-    SameText(AText, '1/2:1/2') or SameText(AText, '*');
+    SameText(AText, '1/2:1/2') or SameText(AText, '0-0') or SameText(AText, '*');
 end;
 
 function PdnExportResult(const AText: string): string;

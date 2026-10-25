@@ -381,6 +381,60 @@ begin
   end;
 end;
 
+procedure CheckDoubleLossResult;
+var
+  FileName, DbName: string;
+  Lines: TStringList;
+  Games: TList;
+  Database: TGameDatabase;
+  Collector: TReadCollector;
+  Imported, Duplicates, Errors, I: Integer;
+begin
+  FileName := GetTempFileName(GetTempDir, 'gwd-zero');
+  DbName := FileName + '.db';
+  Lines := TStringList.Create;
+  Games := TList.Create;
+  Database := TGameDatabase.Create;
+  Collector := TReadCollector.Create;
+  try
+    Lines.Text := '[Event "Double loss"]' + LineEnding +
+      '[Result "0-0"]' + LineEnding + '1. 32-28 18-23 0-0' + LineEnding +
+      '[Event "No result tag"]' + LineEnding + '1. 33-28 18-22 0-0';
+    Lines.SaveToFile(FileName);
+    LoadPdnGamesFromFile(FileName, Games);
+    ReadPdnGamesFromFile(FileName, @Collector.ReadGame);
+    Check((Games.Count = 2) and (Collector.Games.Count = 2), 'load both double-loss games');
+    for I := 0 to 1 do
+    begin
+      CheckEqual(TPdnGame(Games[I]).ResultText, '0-0', 'preserve double loss');
+      CheckEqual(TPdnGame(Collector.Games[I]).MovesText, TPdnGame(Games[I]).MovesText,
+        'double-loss streaming parity');
+      Check(Pos('0-0', TPdnGame(Games[I]).MovesText) = 0, '0-0 must not be a move');
+      Check(TPdnGame(Games[I]).ImportWarningsText = '', 'matching double-loss result must not warn');
+    end;
+    Database.CreateDatabase(DbName);
+    Database.ImportPdnFile(FileName, Imported, Duplicates, Errors);
+    Check((Imported = 2) and (Errors = 0), 'double loss must not abort database import');
+    Database.LoadGames(Games);
+    CheckEqual(TDatabaseGameInfo(Games[0]).ResultText, '0-0', 'database retains double loss');
+    CheckEqual(PdnExportResult('0-0'), '0-0', 'export double loss unchanged');
+    ClearGames(Games);
+    Games.Add(Database.LoadGameById(1));
+    Lines.Text := PdnGameToText(TPdnGame(Games[0]));
+    Lines.SaveToFile(FileName);
+    LoadPdnGamesFromFile(FileName, Games);
+    CheckEqual(TPdnGame(Games[0]).ResultText, '0-0', 'double-loss round trip');
+  finally
+    Collector.Free;
+    Database.Free;
+    ClearGames(Games);
+    Games.Free;
+    Lines.Free;
+    DeleteFile(FileName);
+    DeleteFile(DbName);
+  end;
+end;
+
 procedure CheckMovetextResults;
 const
   Texts: array[0..6] of string = (
@@ -531,6 +585,7 @@ begin
 end;
 
 begin
+  CheckDoubleLossResult;
   CheckMovetextResults;
   CheckMalformedVariationDoesNotAbortFile;
   CheckPdnLoadAndAppend;

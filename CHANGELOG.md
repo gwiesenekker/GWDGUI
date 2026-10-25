@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Recognize double-loss PDN results (P6)
+
+- Treat `0-0` as a result, preserving it in tags, movetext and exports instead
+  of importing it as an illegal move or changing it to an unknown result.
+- Regress tagged and untagged results, streaming parity, database import and
+  save/load round trips.
+- Validation: the double-loss regression fails before the fix; PDN regression,
+  recursive-tree and tree-filter checks pass.
+
 ### 2026-10-25 — Retain PDN movetext results (P5)
 
 - Use the mainline termination result when no Result tag was supplied. Normalize
