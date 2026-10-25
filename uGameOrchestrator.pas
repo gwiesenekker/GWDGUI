@@ -599,6 +599,7 @@ var
   LMoveAnnotation: string;
   LMove: string;
   LReversibleMove: Boolean;
+  RecordedMove: TGameMove;
 begin
   LMove := NormalizeMoveNotation(AMove);
   if FState <> gosRunning then
@@ -629,10 +630,21 @@ begin
     LMoveAnnotation := AnnotationWithScore('', 'engine',
       FEngines[ASide].LastScore);
   if FEngines[ASide] <> nil then
-    FMoveHistory.AddMove(LMove, ASide, ASecondsUsed, LMoveAnnotation,
+    RecordedMove := FMoveHistory.AddMove(LMove, ASide, ASecondsUsed, LMoveAnnotation,
       FEngines[ASide].PrincipalVariation)
   else
-    FMoveHistory.AddMove(LMove, ASide, ASecondsUsed, LMoveAnnotation);
+    RecordedMove := FMoveHistory.AddMove(LMove, ASide, ASecondsUsed, LMoveAnnotation);
+  RecordedMove.HasClockInfo := True;
+  RecordedMove.WhiteRemainingSeconds := FRemainingSeconds[dsWhite];
+  RecordedMove.BlackRemainingSeconds := FRemainingSeconds[dsBlack];
+  RecordedMove.WhiteUsedSeconds := FUsedSeconds[dsWhite];
+  RecordedMove.BlackUsedSeconds := FUsedSeconds[dsBlack];
+  if FEngines[ASide] <> nil then
+  begin
+    RecordedMove.PvScore := FEngines[ASide].LastScore;
+    RecordedMove.PvDepth := FEngines[ASide].LastDepth;
+    RecordedMove.PvTimeText := FEngines[ASide].LastTimeText;
+  end;
   for LEngineSide := Low(TDraughtsSide) to High(TDraughtsSide) do
     if FEngines[LEngineSide] <> nil then
     begin

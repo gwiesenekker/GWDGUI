@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Carry complete move data in runner snapshots (M1, producer)
+
+- Capture each completed move's analysis, score, depth, search time, seconds used
+  and both post-move clocks before clearing engine search fields.
+- Include independent, complete move-data arrays in every runner snapshot and
+  snapshot copy, so coalescing GUI updates cannot discard earlier move metadata.
+- Regress multiple engine moves around a human reply, per-move analysis isolation,
+  both clocks, rejected human input timing and independent snapshot copies.
+- Validation: expanded engine-clock and runner lifecycle checks pass.
+
 ### 2026-10-25 — Build large tournament saves in linear passes (F5)
 
 - Stream JSON arrays/objects, the combined PDN and each game's movetext instead

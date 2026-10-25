@@ -3,7 +3,7 @@ program engine_clock_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uEngineBase, uHubEngine, uEngineRegistry,
-  uDraughtsBoard, uGameOrchestrator;
+  uDraughtsBoard, uGameMoveHistory, uGameOrchestrator;
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
@@ -41,6 +41,8 @@ begin
         Sleep(61000)
       else if Mode = '--delayed-hub' then
         Sleep(180);
+      if Mode = '--history-hub' then
+        WriteLn('info depth=17 time=0.12 score=0.42 pv="' + MoveText + '"');
       if (Mode <> '--silent-hub') and
         ((Mode <> '--recovering-hub') or Recovered) then
         WriteLn('done move=' + MoveText);
@@ -160,6 +162,40 @@ begin
   end;
 end;
 
+procedure CheckCompleteEngineHistory;
+var
+  Game: TGameOrchestrator;
+  Engine: THubEngine;
+  Moves: TGameMoveDataArray;
+begin
+  Game := TGameOrchestrator.Create;
+  try
+    Engine := CreateEngine('--history-hub');
+    Game.Engine[dsWhite] := Engine;
+    Check(Engine.LaunchAndInit, 'history engine must initialize');
+    Game.NewGame(DefaultStartingFEN);
+    Check(Game.PlayNextMove = '32-28', 'first engine history move');
+    Game.PlayMove('18-23', dsBlack, 0.25, 'human');
+    Check(Game.PlayNextMove = '37-32', 'second engine history move');
+    Moves := Game.MoveHistory.ExportData;
+    Check((Length(Moves) = 3) and (Moves[0].PrincipalVariation = '32-28') and
+      (Moves[2].PrincipalVariation = '37-32'), 'each engine PV must survive later searches');
+    Check((Moves[0].PvScore = '0.42') and (Moves[0].PvDepth = '17') and
+      (Moves[0].PvTimeText <> '') and (Moves[2].PvDepth = '17'),
+      'all completed moves must retain score, depth and analysis time');
+    Check(Moves[0].HasClockInfo and Moves[1].HasClockInfo and Moves[2].HasClockInfo,
+      'all engine and human moves must carry clocks');
+    Check((Moves[1].SecondsUsed = 0.25) and (Moves[1].BlackUsedSeconds = 0.25) and
+      (Moves[2].BlackUsedSeconds = 0.25) and
+      (Moves[2].WhiteUsedSeconds >= Moves[0].WhiteUsedSeconds),
+      'move times and both post-move clocks must be preserved independently');
+    Check((Moves[1].PrincipalVariation = '') and (Moves[1].PvScore = ''),
+      'human moves must not inherit a prior engine search');
+  finally
+    Game.Free;
+  end;
+end;
+
 procedure CheckPeriodBoundary;
 var
   Game: TGameOrchestrator;
@@ -264,6 +300,7 @@ begin
     CheckClockedThink('--delayed-hub', dsWhite, 0.002, 0.2, False);
     CheckIncrementAfterMoveLimit;
     CheckPeriodBoundary;
+    CheckCompleteEngineHistory;
     CheckReuseAfterClockTimeout;
   end;
   WriteLn('OK');

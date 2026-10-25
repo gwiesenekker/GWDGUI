@@ -8,6 +8,19 @@ uses
   Classes, SysUtils, uDraughtsBoard;
 
 type
+  TGameMoveData = record
+    MoveText: string;
+    Side: TDraughtsSide;
+    SecondsUsed: Double;
+    Annotation: string;
+    PrincipalVariation: string;
+    PvScore, PvDepth, PvTimeText: string;
+    HasClockInfo: Boolean;
+    WhiteRemainingSeconds, BlackRemainingSeconds: Double;
+    WhiteUsedSeconds, BlackUsedSeconds: Double;
+  end;
+  TGameMoveDataArray = array of TGameMoveData;
+
   TGameMove = class
   public
     MoveText: string;
@@ -15,6 +28,10 @@ type
     SecondsUsed: Double;
     Annotation: string;
     PrincipalVariation: string;
+    PvScore, PvDepth, PvTimeText: string;
+    HasClockInfo: Boolean;
+    WhiteRemainingSeconds, BlackRemainingSeconds: Double;
+    WhiteUsedSeconds, BlackUsedSeconds: Double;
   end;
 
   TGameMoveHistory = class
@@ -29,6 +46,7 @@ type
       ASecondsUsed: Double; const AAnnotation: string = '';
       const APrincipalVariation: string = ''): TGameMove;
     procedure AssignFromTexts(const AMovesText, AAnnotationsText: string);
+    function ExportData: TGameMoveDataArray;
     procedure Clear;
     procedure FillPureMoves(AMoves: TStrings);
     function AnnotationsText: string;
@@ -75,6 +93,30 @@ begin
   Result.Annotation := Trim(AAnnotation);
   Result.PrincipalVariation := Trim(APrincipalVariation);
   FItems.Add(Result);
+end;
+
+function TGameMoveHistory.ExportData: TGameMoveDataArray;
+var
+  I: Integer;
+begin
+  Result := nil;
+  SetLength(Result, Count);
+  for I := 0 to Count - 1 do
+  begin
+    Result[I].MoveText := Items[I].MoveText;
+    Result[I].Side := Items[I].Side;
+    Result[I].SecondsUsed := Items[I].SecondsUsed;
+    Result[I].Annotation := Items[I].Annotation;
+    Result[I].PrincipalVariation := Items[I].PrincipalVariation;
+    Result[I].PvScore := Items[I].PvScore;
+    Result[I].PvDepth := Items[I].PvDepth;
+    Result[I].PvTimeText := Items[I].PvTimeText;
+    Result[I].HasClockInfo := Items[I].HasClockInfo;
+    Result[I].WhiteRemainingSeconds := Items[I].WhiteRemainingSeconds;
+    Result[I].BlackRemainingSeconds := Items[I].BlackRemainingSeconds;
+    Result[I].WhiteUsedSeconds := Items[I].WhiteUsedSeconds;
+    Result[I].BlackUsedSeconds := Items[I].BlackUsedSeconds;
+  end;
 end;
 
 procedure TGameMoveHistory.AssignFromTexts(const AMovesText,

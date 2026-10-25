@@ -8,7 +8,7 @@ uses
   Classes, SyncObjs, SysUtils,
   uCancellationToken,
   uDraughtsBoard, uDxpEngine, uEngineBase, uEngineRegistry,
-  uGameOrchestrator, uGameSetupForm, uHubEngine, uPvSnapshot,
+  uGameOrchestrator, uGameMoveHistory, uGameSetupForm, uHubEngine, uPvSnapshot,
   uThreadMessageQueue;
 
 type
@@ -24,6 +24,7 @@ type
     FLogLines: TStringList;
     FLogRevision: QWord;
     FMoveAnnotationsText: string;
+    FMoveData: TGameMoveDataArray;
     FMovesPlayedText: string;
     FPlyCount: Integer;
     FPvSnapshot: TPvSnapshot;
@@ -32,6 +33,7 @@ type
     FWhiteRemainingSeconds: Double;
     FWhitePlayerName: string;
     FWhiteUsedSeconds: Double;
+    function GetMoveData: TGameMoveDataArray;
     function GetPrincipalVariation: string;
     function GetPvBaseBoard: TDraughtsBoard;
     function GetPvBasePly: Integer;
@@ -52,6 +54,7 @@ type
     property LastError: string read FLastError;
     property LogLines: TStringList read FLogLines;
     property LogRevision: QWord read FLogRevision;
+    property MoveData: TGameMoveDataArray read GetMoveData;
     property MoveAnnotationsText: string read FMoveAnnotationsText;
     property MovesPlayedText: string read FMovesPlayedText;
     property PlyCount: Integer read FPlyCount;
@@ -213,6 +216,11 @@ begin
   Result := FPvSnapshot.Score;
 end;
 
+function TGameRunnerSnapshot.GetMoveData: TGameMoveDataArray;
+begin
+  Result := Copy(FMoveData);
+end;
+
 procedure TGameRunnerSnapshot.AssignFrom(ASource: TGameRunnerSnapshot);
 begin
   if ASource = nil then
@@ -231,6 +239,7 @@ begin
     FLogRevision := ASource.FLogRevision;
   end;
   FMoveAnnotationsText := ASource.FMoveAnnotationsText;
+  FMoveData := Copy(ASource.FMoveData);
   FMovesPlayedText := ASource.FMovesPlayedText;
   FPlyCount := ASource.FPlyCount;
   FPvSnapshot.AssignFrom(ASource.FPvSnapshot);
@@ -610,6 +619,7 @@ begin
   Result.FMovesPlayedText := FOrchestrator.MovesPlayedText;
   Result.FMoveAnnotationsText := FOrchestrator.MoveAnnotationsText;
   Result.FPlyCount := FOrchestrator.MoveHistory.Count;
+  Result.FMoveData := FOrchestrator.MoveHistory.ExportData;
   Result.FState := FOrchestrator.State;
   Result.FStartingFEN := FOrchestrator.StartingFEN;
   Result.FWhiteRemainingSeconds := FOrchestrator.RemainingSeconds[dsWhite];

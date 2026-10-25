@@ -7,7 +7,7 @@ uses
   cthreads,
   {$ENDIF}
   Interfaces, Classes, SysUtils, SyncObjs, uMainForm, uGameRunnerThread,
-  uGameSetupForm, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
+  uGameSetupForm, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
 
 type
   TObserver = class
@@ -174,6 +174,8 @@ var
   Observer: TObserver;
   Runner: TGameRunnerThread;
   Rejected, Continued: Boolean;
+  Moves: TGameMoveDataArray;
+  CopySnapshot: TGameRunnerSnapshot;
 begin
   Setup := Default(TGameSetup);
   Setup.StartingFEN := 'W:W31-50:B1-20';
@@ -209,6 +211,23 @@ begin
         'only the two legal commands should reach the game history');
       Check(Observer.Last.WhiteUsedSeconds >= 0.05,
         'rejecting input must not reset the human clock');
+      Moves := Observer.Last.MoveData;
+      Check((Length(Moves) = 2) and (Moves[0].MoveText = '32-28') and
+        (Moves[1].MoveText = '18-23'), 'snapshot must carry all completed moves');
+      Check((Moves[0].SecondsUsed >= 0.05) and Moves[0].HasClockInfo and
+        (Moves[1].WhiteUsedSeconds = Moves[0].WhiteUsedSeconds) and
+        (Moves[1].BlackUsedSeconds >= Moves[0].BlackUsedSeconds),
+        'snapshot must retain move times and both clocks for each completed move');
+      CopySnapshot := TGameRunnerSnapshot.Create;
+      try
+        CopySnapshot.AssignFrom(Observer.Last);
+        Moves[0].MoveText := 'changed copy';
+        Check((Observer.Last.MoveData[0].MoveText = '32-28') and
+          (CopySnapshot.MoveData[0].MoveText = '32-28'),
+          'snapshots and returned history arrays must own independent records');
+      finally
+        CopySnapshot.Free;
+      end;
     finally
       Observer.Lock.Release;
     end;
