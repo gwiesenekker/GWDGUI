@@ -569,8 +569,7 @@ begin
     Exit;
   end;
 
-  if (CompareText(LMessage, 'go think') = 0) or
-    (CompareText(LMessage, 'go thiink') = 0) then
+  if CompareText(LMessage, 'go think') = 0 then
   begin
     LMove := StartThinking;
     if LMove <> '' then

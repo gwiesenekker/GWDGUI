@@ -338,8 +338,6 @@ begin
     (AEngine <> nil) and (AEngine.Kind <> eekDxp));
   AddOrUpdateParam(AParams, 'gui-ini-file', 'string', '', True);
   AddOrUpdateParam(AParams, 'gui-send-starting-position', 'bool', 'true', True);
-  AddOrUpdateParam(AParams, 'gui-single-captures-include-captured-square',
-    'bool', 'true', True);
   AddOrUpdateParam(AParams, 'gui-engine-supports-mcts', 'bool', 'false', True);
   AddOrUpdateParam(AParams, 'gui-score-perspective', 'string',
     'side-to-move', True);

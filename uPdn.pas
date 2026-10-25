@@ -327,62 +327,6 @@ begin
     Result := '0-1';
 end;
 
-function StripPdnMoveText(const AText: string): string;
-var
-  I: Integer;
-  LBraceDepth: Integer;
-  LInLineComment: Boolean;
-  LParenDepth: Integer;
-begin
-  Result := '';
-  LBraceDepth := 0;
-  LInLineComment := False;
-  LParenDepth := 0;
-  for I := 1 to Length(AText) do
-  begin
-    if LInLineComment then
-    begin
-      if AText[I] in [#10, #13] then
-      begin
-        LInLineComment := False;
-        Result += ' ';
-      end;
-      Continue;
-    end;
-
-    if LBraceDepth > 0 then
-    begin
-      if AText[I] = '{' then
-        Inc(LBraceDepth)
-      else if AText[I] = '}' then
-        Dec(LBraceDepth);
-      Continue;
-    end;
-
-    if LParenDepth > 0 then
-    begin
-      if AText[I] = '(' then
-        Inc(LParenDepth)
-      else if AText[I] = ')' then
-        Dec(LParenDepth);
-      Continue;
-    end;
-
-    case AText[I] of
-      '{':
-        Inc(LBraceDepth);
-      '(':
-        Inc(LParenDepth);
-      ';':
-        LInLineComment := True;
-      #10, #13, #9:
-        Result += ' ';
-    else
-      Result += AText[I];
-    end;
-  end;
-end;
-
 function CleanMoveToken(AToken: string): string;
 var
   DotPos: Integer;
@@ -1109,28 +1053,6 @@ begin
   end;
   ProcessToken;
   finally LToken.Free; LComment.Free; end;
-end;
-
-procedure ExtractMovesAndAnnotationsFromPdnText(const AText: string;
-  AMoves, AAnnotations: TStrings);
-begin
-  ExtractPdnMoveData(AText, AMoves, AAnnotations, nil, nil);
-end;
-
-function ExtractMovesFromPdnText(const AText: string): string;
-var
-  LAnnotations: TStringList;
-  LMoves: TStringList;
-begin
-  LAnnotations := TStringList.Create;
-  LMoves := TStringList.Create;
-  try
-    ExtractMovesAndAnnotationsFromPdnText(AText, LMoves, LAnnotations);
-    Result := Trim(StringReplace(LMoves.Text, LineEnding, ' ', [rfReplaceAll]));
-  finally
-    LMoves.Free;
-    LAnnotations.Free;
-  end;
 end;
 
 procedure ParsePdnTag(const ALine: string; AGame: TPdnGame);

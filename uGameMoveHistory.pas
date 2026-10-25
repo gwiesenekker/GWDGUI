@@ -45,7 +45,6 @@ type
     function AddMove(const AMoveText: string; ASide: TDraughtsSide;
       ASecondsUsed: Double; const AAnnotation: string = '';
       const APrincipalVariation: string = ''): TGameMove;
-    procedure AssignFromTexts(const AMovesText, AAnnotationsText: string);
     function ExportData: TGameMoveDataArray;
     procedure Clear;
     procedure FillPureMoves(AMoves: TStrings);
@@ -147,35 +146,6 @@ begin
     Result[I].BlackRemainingSeconds := Items[I].BlackRemainingSeconds;
     Result[I].WhiteUsedSeconds := Items[I].WhiteUsedSeconds;
     Result[I].BlackUsedSeconds := Items[I].BlackUsedSeconds;
-  end;
-end;
-
-procedure TGameMoveHistory.AssignFromTexts(const AMovesText,
-  AAnnotationsText: string);
-var
-  I: Integer;
-  LAnnotations: TStringList;
-  LMoves: TStringList;
-  LSide: TDraughtsSide;
-begin
-  Clear;
-  LAnnotations := TStringList.Create;
-  LMoves := TStringList.Create;
-  try
-    ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(AMovesText)), LMoves);
-    LAnnotations.Text := AAnnotationsText;
-    LSide := dsWhite;
-    for I := 0 to LMoves.Count - 1 do
-    begin
-      if I < LAnnotations.Count then
-        AddMove(LMoves[I], LSide, 0, LAnnotations[I])
-      else
-        AddMove(LMoves[I], LSide, 0, '');
-      LSide := OppositeSide(LSide);
-    end;
-  finally
-    LMoves.Free;
-    LAnnotations.Free;
   end;
 end;
 

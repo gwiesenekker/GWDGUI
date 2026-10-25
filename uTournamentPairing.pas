@@ -25,8 +25,6 @@ type
 function BuildTournamentPairingRound(AIsSwiss, ADoubleRoundRobin: Boolean;
   AEngines, AWhiteEngines, ABlackEngines, AResults,
   ARounds: TStrings): TTournamentPairingRound;
-function FindNextUnplayedTournamentRow(AIsSwiss: Boolean; AResults,
-  ARounds: TStrings): Integer;
 function TournamentAllResultsKnown(AWhiteEngines, ABlackEngines,
   AResults: TStrings): Boolean;
 function TournamentNextRoundNumber(ARounds: TStrings): Integer;
@@ -340,32 +338,6 @@ begin
   end
   else
     GenerateRoundRobinPairings(AEngines, ADoubleRoundRobin, Result.Pairings);
-end;
-
-function FindNextUnplayedTournamentRow(AIsSwiss: Boolean; AResults,
-  ARounds: TStrings): Integer;
-var
-  I: Integer;
-  LatestRound: Integer;
-begin
-  Result := 0;
-  if not AIsSwiss then
-  begin
-    for I := 0 to AResults.Count - 1 do
-      if not TournamentResultIsKnown(ParseTournamentResult(AResults[I])) then
-        Exit(I + 1);
-    Exit;
-  end;
-
-  LatestRound := 0;
-  for I := 0 to ARounds.Count - 1 do
-    if StrToIntDef(ARounds[I], 0) > LatestRound then
-      LatestRound := StrToIntDef(ARounds[I], 0);
-
-  for I := 0 to AResults.Count - 1 do
-    if (StrToIntDef(ARounds[I], 0) = LatestRound) and
-      (not TournamentResultIsKnown(ParseTournamentResult(AResults[I]))) then
-      Exit(I + 1);
 end;
 
 end.
