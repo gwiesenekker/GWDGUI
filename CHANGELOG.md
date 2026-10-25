@@ -3,6 +3,14 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Append PDN without rewriting the archive (P11)
+
+- Append the new record through an append-mode handle and flush it, reading only
+  the final byte needed for separation. Preserve all existing bytes and line
+  endings; use Unicode Windows paths and exclusive Windows writer sharing.
+- Regress CRLF prefix preservation while retaining existing append/load checks.
+- Validation: PDN regression suite passes.
+
 ### 2026-10-25 — Bound engine output retained in memory (F1)
 
 - Bound engine state logs and individual diagnostic entries. Consume Hub info

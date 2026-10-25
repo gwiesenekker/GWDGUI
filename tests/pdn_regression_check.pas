@@ -141,6 +141,24 @@ begin
   end;
 end;
 
+procedure CheckAppendPreservesBytes;
+const Original = '[Event "Original"]' + #13#10 + '1. 32-28 *' + #13#10;
+var FileName, Text: string; Stream: TFileStream;
+begin
+  FileName := GetTempFileName(GetTempDir, 'gwd-append');
+  try
+    Stream := TFileStream.Create(FileName, fmCreate);
+    try Stream.WriteBuffer(Original[1], Length(Original)); finally Stream.Free; end;
+    AppendPdnTextToFile(FileName, '[Event "New"]' + LineEnding + '1. 33-28 *');
+    Stream := TFileStream.Create(FileName, fmOpenRead);
+    try SetLength(Text, Stream.Size); Stream.ReadBuffer(Text[1], Length(Text));
+    finally Stream.Free; end;
+    CheckEqual(Copy(Text, 1, Length(Original)), Original,
+      'append must preserve the existing archive bytes and line endings');
+    Check(Pos('[Event "New"]', Text) > Length(Original), 'new game must follow existing bytes');
+  finally DeleteFile(FileName); end;
+end;
+
 procedure CheckPdnGluedMoveNumbers;
 var
   FileName: string;
@@ -889,6 +907,7 @@ begin
   CheckMovetextResults;
   CheckMalformedVariationDoesNotAbortFile;
   CheckPdnLoadAndAppend;
+  CheckAppendPreservesBytes;
   CheckPdnGluedMoveNumbers;
   CheckPdnVariationImportExport;
   CheckMoveHistoryKeepsMoveAndAnnotationTogether;

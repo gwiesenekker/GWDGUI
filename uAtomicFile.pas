@@ -3,11 +3,46 @@ unit uAtomicFile;
 interface
 procedure WriteTextFileAtomically(const AFileName, AText: string;
   AReplaceExisting: Boolean = True);
+procedure AppendTextFileDurably(const AFileName, AText: string);
 implementation
 uses
   Classes, SysUtils
   {$IFDEF UNIX}, BaseUnix, Unix{$ENDIF}
   {$IFDEF MSWINDOWS}, Windows{$ENDIF};
+
+procedure AppendTextFileDurably(const AFileName, AText: string);
+var Handle: THandle; Stream: THandleStream; Last: Char; Text: string;
+begin
+  if Trim(AText) = '' then Exit;
+  {$IFDEF MSWINDOWS}
+  Handle := CreateFileW(PWideChar(UTF8Decode(ExpandFileName(AFileName))),
+    GENERIC_READ or FILE_APPEND_DATA, FILE_SHARE_READ, nil, OPEN_ALWAYS,
+    FILE_ATTRIBUTE_NORMAL, 0);
+  if Handle = INVALID_HANDLE_VALUE then RaiseLastOSError;
+  {$ELSE}
+  Handle := fpOpen(PChar(AFileName), O_RDWR or O_CREAT or O_APPEND, &666);
+  if Handle < 0 then RaiseLastOSError;
+  {$ENDIF}
+  Stream := THandleStream.Create(Handle);
+  try
+    Text := '';
+    if Stream.Size > 0 then
+    begin
+      Stream.Seek(-1, soEnd);
+      Stream.ReadBuffer(Last, 1);
+      if Last = #10 then Text := LineEnding
+      else Text := LineEnding + LineEnding;
+    end;
+    Text += TrimRight(AText) + LineEnding;
+    Stream.WriteBuffer(Text[1], Length(Text));
+    {$IFDEF UNIX}if fpFsync(Handle) <> 0 then RaiseLastOSError;{$ENDIF}
+    {$IFDEF MSWINDOWS}if not FlushFileBuffers(Handle) then RaiseLastOSError;{$ENDIF}
+  finally
+    Stream.Free;
+    {$IFDEF UNIX}fpClose(Handle);{$ENDIF}
+    {$IFDEF MSWINDOWS}CloseHandle(Handle);{$ENDIF}
+  end;
+end;
 
 procedure WriteTextFileAtomically(const AFileName, AText: string;
   AReplaceExisting: Boolean);

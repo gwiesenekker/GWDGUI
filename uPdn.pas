@@ -78,7 +78,7 @@ function DecodePdnVariationLine(const ALine, AAnnotation: string;
 
 implementation
 
-uses FPJSON, JSONParser;
+uses FPJSON, JSONParser, uAtomicFile;
 
 const
   DefaultPdnFen = 'W:W31-50:B1-20';
@@ -1682,24 +1682,8 @@ begin
 end;
 
 procedure AppendPdnTextToFile(const AFileName, APdnText: string);
-var
-  Lines: TStringList;
-  Text: string;
 begin
-  Text := TrimRight(APdnText);
-  if Trim(Text) = '' then
-    Exit;
-  Lines := TStringList.Create;
-  try
-    if FileExists(AFileName) then
-      Lines.LoadFromFile(AFileName);
-    if (Lines.Count > 0) and (Trim(Lines[Lines.Count - 1]) <> '') then
-      Lines.Add('');
-    Lines.Text := Lines.Text + Text + LineEnding;
-    Lines.SaveToFile(AFileName);
-  finally
-    Lines.Free;
-  end;
+  AppendTextFileDurably(AFileName, APdnText);
 end;
 
 function TPdnGame.BuildMoveTree: TPdnMoveNode;
