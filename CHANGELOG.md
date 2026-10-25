@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Match Swiss opponents without exponential search (T21/T4, T3)
+
+- Replace bounded backtracking with augmenting-path matching and odd-cycle
+  contraction. Maximize fresh pairings and keep score order as a preference;
+  label unavoidable repeated pairs accurately.
+- Alternate round-robin pair orientations, fix the virtual bye for odd fields,
+  and reverse the mirrored second leg to avoid joining colour streaks.
+- Regress matching against an independent exhaustive oracle on every six-player
+  graph (32,768 cases), 25 rounds with 40 players, and colour runs of at most two
+  alongside existing balance, round and pair-coverage checks for 2–12 players.
+- Validation: pairing regressions pass in under one second on this host.
+
 ### 2026-10-25 — Isolate failed tournament captures to their rows (T20)
 
 - Persist a failed capture's result and diagnostic in its row and PDN placeholder,

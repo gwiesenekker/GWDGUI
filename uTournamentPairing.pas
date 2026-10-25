@@ -83,13 +83,18 @@ begin
   if Odd(N) then Inc(N); // A virtual participant supplies the bye.
   SetLength(Slots, N);
   for I := 0 to N - 1 do Slots[I] := I;
+  if Odd(AEngines.Count) then
+  begin
+    Slots[0] := AEngines.Count; // Fix the bye so actual players alternate colours.
+    for I := 1 to N - 1 do Slots[I] := I - 1;
+  end;
   for Round := 1 to N - 1 do
   begin
     for I := 0 to N div 2 - 1 do
     begin
       A := Slots[I]; B := Slots[N - 1 - I];
       if (A >= AEngines.Count) or (B >= AEngines.Count) then Continue;
-      if (I = 0) and not Odd(Round) then
+      if ((I = 0) and not Odd(Round)) or ((I > 0) and Odd(I)) then
         AppendPairing(APairings, AEngines[B], AEngines[A], Round)
       else AppendPairing(APairings, AEngines[A], AEngines[B], Round);
     end;
@@ -100,22 +105,11 @@ begin
   if ADoubleRoundRobin then
   begin
     FirstLegCount := Length(APairings);
-    for I := 0 to FirstLegCount - 1 do
+    // Reverse the mirrored leg so the turn-around cannot concatenate colour runs.
+    for I := FirstLegCount - 1 downto 0 do
       AppendPairing(APairings, APairings[I].Black, APairings[I].White,
-        APairings[I].RoundNumber + N - 1);
+        2 * (N - 1) + 1 - APairings[I].RoundNumber);
   end;
-end;
-
-function PairingAlreadyPlayed(AWhiteEngines, ABlackEngines: TStrings;
-  const A, B: string): Boolean;
-var
-  I: Integer;
-begin
-  Result := False;
-  for I := 0 to AWhiteEngines.Count - 1 do
-    if (SameText(AWhiteEngines[I], A) and SameText(ABlackEngines[I], B)) or
-      (SameText(AWhiteEngines[I], B) and SameText(ABlackEngines[I], A)) then
-      Exit(True);
 end;
 
 function EngineHadBye(AWhiteEngines, ABlackEngines: TStrings;
@@ -144,7 +138,9 @@ var
   Temp: Integer;
   ByeName: string;
   Choices: array of Integer;
-  SearchBudget: Integer;
+  Played: array of array of Boolean;
+  Parent, Base, Queue: array of Integer;
+  Used, Blossom: array of Boolean;
 
   function ComesBefore(AIndex, BIndex: Integer): Boolean;
   begin
@@ -174,8 +170,7 @@ var
   function PairPenalty(AIndex, BIndex: Integer): Integer;
   begin
     Result := Abs(Scores[AIndex] - Scores[BIndex]);
-    if PairingAlreadyPlayed(AWhiteEngines, ABlackEngines, AEngines[AIndex],
-      AEngines[BIndex]) then
+    if Played[AIndex, BIndex] then
       Inc(Result, 10000);
   end;
 
@@ -200,31 +195,89 @@ var
     end;
   end;
 
-  function FindNonRepeatMatching: Boolean;
-  var First, Candidate, A, B: Integer;
+  function CommonBase(A, B: Integer): Integer;
+  var Seen: array of Boolean;
   begin
-    if SearchBudget <= 0 then Exit(False);
-    Dec(SearchBudget);
-    First := 0;
-    while (First <= High(Order)) and Paired[Order[First]] do Inc(First);
-    if First > High(Order) then Exit(True);
-    A := Order[First];
-    Paired[A] := True;
-    // Score-sorted order tries nearby scores first. Backtrack before accepting
-    // a repeated opponent; a locally best pairing may strand the final pair.
-    for Candidate := First + 1 to High(Order) do
+    SetLength(Seen, AEngines.Count);
+    while True do
     begin
-      B := Order[Candidate];
-      if Paired[B] or PairingAlreadyPlayed(AWhiteEngines, ABlackEngines,
-        AEngines[A], AEngines[B]) then Continue;
-      Paired[B] := True;
-      Choices[A] := B; Choices[B] := A;
-      if FindNonRepeatMatching() then Exit(True);
-      Choices[A] := -1; Choices[B] := -1;
-      Paired[B] := False;
+      A := Base[A]; Seen[A] := True;
+      if Choices[A] < 0 then Break;
+      A := Parent[Choices[A]];
     end;
-    Paired[A] := False;
+    while True do
+    begin
+      B := Base[B];
+      if Seen[B] then Exit(B);
+      B := Parent[Choices[B]];
+    end;
+  end;
+
+  procedure MarkBlossomPath(V, RootBase, Child: Integer);
+  begin
+    while Base[V] <> RootBase do
+    begin
+      Blossom[Base[V]] := True; Blossom[Base[Choices[V]]] := True;
+      Parent[V] := Child; Child := Choices[V]; V := Parent[Choices[V]];
+    end;
+  end;
+
+  function AugmentFrom(Root: Integer): Boolean;
+  var Head, Tail, V, U, K, L, RootBase, Previous, Next: Integer;
+  begin
+    for K := 0 to High(Order) do
+    begin Parent[K] := -1; Base[K] := K; Used[K] := False; end;
+    Head := 0; Tail := 1; Queue[0] := Root; Used[Root] := True;
+    while Head < Tail do
+    begin
+      V := Queue[Head]; Inc(Head);
+      for K := 0 to High(Order) do
+      begin
+        U := Order[K];
+        if Paired[U] or (U = V) or Played[V, U] or
+          (Base[V] = Base[U]) or (Choices[V] = U) then Continue;
+        if (U = Root) or ((Choices[U] >= 0) and (Parent[Choices[U]] >= 0)) then
+        begin
+          RootBase := CommonBase(V, U);
+          for L := 0 to High(Order) do Blossom[L] := False;
+          MarkBlossomPath(V, RootBase, U); MarkBlossomPath(U, RootBase, V);
+          for L := 0 to High(Order) do
+            if Blossom[Base[L]] then
+            begin
+              Base[L] := RootBase;
+              if not Used[L] then begin Used[L] := True; Queue[Tail] := L; Inc(Tail); end;
+            end;
+        end
+        else if Parent[U] < 0 then
+        begin
+          Parent[U] := V;
+          if Choices[U] < 0 then
+          begin
+            while U >= 0 do
+            begin
+              Previous := Parent[U]; Next := -1;
+              if Previous >= 0 then Next := Choices[Previous];
+              Choices[U] := Previous;
+              if Previous >= 0 then Choices[Previous] := U;
+              U := Next;
+            end;
+            Exit(True);
+          end;
+          U := Choices[U];
+          if not Used[U] then begin Used[U] := True; Queue[Tail] := U; Inc(Tail); end;
+        end;
+      end;
+    end;
     Result := False;
+  end;
+
+  procedure FindNonRepeatMatching;
+  var K: Integer;
+  begin
+    // Edmonds augmenting paths with odd-cycle contraction: polynomial matching
+    // replaces exponential backtracking while keeping score order as a preference.
+    for K := 0 to High(Order) do
+      if not Paired[Order[K]] and (Choices[Order[K]] < 0) then AugmentFrom(Order[K]);
   end;
 
   procedure AppendBalancedPairing(AIndex, BIndex: Integer);
@@ -248,6 +301,14 @@ begin
   SetLength(Order, AEngines.Count);
   SetLength(Paired, AEngines.Count);
   SetLength(Scores, AEngines.Count);
+  SetLength(Played, AEngines.Count, AEngines.Count);
+  SetLength(Parent, AEngines.Count); SetLength(Base, AEngines.Count);
+  SetLength(Queue, AEngines.Count); SetLength(Used, AEngines.Count); SetLength(Blossom, AEngines.Count);
+  for I := 0 to AWhiteEngines.Count - 1 do
+  begin
+    J := AEngines.IndexOf(AWhiteEngines[I]); Temp := AEngines.IndexOf(ABlackEngines[I]);
+    if (J >= 0) and (Temp >= 0) then begin Played[J, Temp] := True; Played[Temp, J] := True; end;
+  end;
   for I := 0 to AEngines.Count - 1 do
     Order[I] := I;
 
@@ -290,18 +351,17 @@ begin
 
   SetLength(Choices, AEngines.Count);
   for I := 0 to High(Choices) do Choices[I] := -1;
-  SearchBudget := 200000;
-  if FindNonRepeatMatching() then
+  FindNonRepeatMatching;
   begin
     for I := 0 to High(Order) do
       if Choices[Order[I]] >= 0 then
       begin
         J := Choices[Order[I]];
         AppendBalancedPairing(Order[I], J);
+        Paired[Order[I]] := True; Paired[J] := True;
         Choices[J] := -1; Choices[Order[I]] := -1;
       end;
-  end
-  else
+  end;
   for I := 0 to High(Order) do
   begin
     if Paired[Order[I]] then
@@ -309,8 +369,7 @@ begin
     J := FindBestOpponent(I);
     if J < 0 then
       Break;
-    if PairingAlreadyPlayed(AWhiteEngines, ABlackEngines, AEngines[Order[I]],
-      AEngines[Order[J]]) then
+    if Played[Order[I], Order[J]] then
       AHasRepeat := True;
     AppendBalancedPairing(Order[I], Order[J]);
     Paired[Order[I]] := True;
