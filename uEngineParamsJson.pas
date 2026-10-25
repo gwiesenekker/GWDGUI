@@ -190,25 +190,17 @@ begin
 end;
 
 function HubParamQuote(const AValue: string): string;
-var
-  I: Integer;
-  NeedsQuotes: Boolean;
+var I: Integer; NeedsQuotes: Boolean;
 begin
   NeedsQuotes := AValue = '';
   for I := 1 to Length(AValue) do
-    if AValue[I] in [' ', #9, #10, #13, '=', '"', '\'] then
-      NeedsQuotes := True;
-
-  if not NeedsQuotes then
-    Exit(AValue);
-
-  Result := '"';
-  for I := 1 to Length(AValue) do
-    if AValue[I] in ['"', '\'] then
-      Result += '\' + AValue[I]
-    else
-      Result += AValue[I];
-  Result += '"';
+  begin
+    if AValue[I] in ['"', #10, #13] then
+      raise EConvertError.Create('Hub values cannot contain double quotes or line breaks');
+    if AValue[I] in [' ', #9, '='] then NeedsQuotes := True;
+  end;
+  // protocol.txt defines delimiters, not C-style escapes. Backslashes are literal.
+  if NeedsQuotes then Result := '"' + AValue + '"' else Result := AValue;
 end;
 
 function ExtractHubArgument(const ALine, AName: string): string;
@@ -233,8 +225,6 @@ begin
       while I <= Length(ALine) do
       begin
         if ALine[I] = '"' then begin Inc(I); Break; end;
-        if (ALine[I] = '\') and (I < Length(ALine)) and
-          (ALine[I + 1] in ['\', '"']) then Inc(I);
         Value += ALine[I];
         Inc(I);
       end;
@@ -334,6 +324,7 @@ begin
       'false', True);
     AddOrUpdateParam(AParams, 'gui-dxp-launch-arguments', 'string', '', False);
   end;
+  AddOrUpdateParam(AParams, 'gui-dxp-peer-ip', 'string', '', True);
   AddOrUpdateParam(AParams, 'gui-dxp-role', 'string', RoleText,
     (AEngine <> nil) and (AEngine.Kind <> eekDxp));
   AddOrUpdateParam(AParams, 'gui-ini-file', 'string', '', True);

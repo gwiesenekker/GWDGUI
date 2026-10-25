@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-25 — Validate DXP bindings and preserve literal Hub paths (D8/D18)
+
+- Resolve localhost to loopback before binding and reject other nonnumeric listen
+  addresses instead of silently exposing all interfaces. Keep explicit IPv4 network
+  bindings supported; optionally restrict accepted clients with gui-dxp-peer-ip.
+- Check accepted peer addresses and continue listening after a rejected client.
+  Apply the same address validation to the connection tester.
+- Follow protocol.txt's literal Hub values: do not double backslashes or treat a
+  final backslash as escaping the closing quote. Reject unrepresentable quotes
+  and line breaks explicitly instead of inventing undocumented escapes.
+- Validation: real TCP binding/peer checks and Hub clock/quoting regressions pass.
+
 ### 2026-10-25 — Retry transient Windows access-denied publication errors (C4)
 
 - Include access denied in the existing bounded atomic-rename retry policy for

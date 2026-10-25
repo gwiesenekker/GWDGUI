@@ -110,6 +110,34 @@ begin
   end;
 end;
 
+procedure CheckNamedListenerAndPeerRestriction;
+var Listener: TDxpAcceptThread; Port: Word; Client: TInetSocket; Tick: QWord;
+begin
+  Check(DxpListenAddress('localhost') = '127.0.0.1', 'localhost resolves before binding');
+  Check(not DxpPeerAllowed('127.0.0.1', '', '192.0.2.1'), 'loopback listener rejects nonlocal peer');
+  Port := AvailablePort; Listener := TDxpAcceptThread.Create(Port, 'localhost', '127.0.0.2');
+  Client := nil;
+  try
+    Tick := GetTickCount64;
+    while not Listener.Listening and (GetTickCount64 - Tick < 2000) do Sleep(5);
+    Check(Listener.Listening, 'localhost listener starts');
+    try
+      Client := TInetSocket.Create('127.0.0.2', Port, 100);
+      Check(False, 'localhost must not become a wildcard binding');
+    except on E: ESocketError do ; end;
+    Client := TInetSocket.Create('127.0.0.1', Port, 1000);
+    Sleep(100);
+    Check(not Listener.SocketAvailable, 'configured unexpected peer must not be accepted');
+    Check(Listener.Listening, 'rejected peer must not stop accepting');
+  finally Client.Free; Listener.Free; end;
+  Listener := TDxpAcceptThread.Create(AvailablePort, 'invalid address!');
+  try
+    Listener.WaitFor;
+    Check((not Listener.Listening) and (Pos('IPv4', Listener.ErrorMessage) > 0),
+      'invalid listener address must fail rather than bind all interfaces');
+  finally Listener.Free; end;
+end;
+
 procedure CheckListenerShutdownRaces;
 var I: Integer; Listener: TDxpAcceptThread; Test: TDxpTestConnectionThread;
 begin
@@ -279,6 +307,7 @@ begin
   CheckGameEndClaim('2', dsWhite, '*');
   CheckGameEndClaim('0', dsBlack, '*');
   CheckLoopbackBinding;
+  CheckNamedListenerAndPeerRestriction;
   CheckListenerShutdownRaces;
   CheckGameEndClaim('1', dsWhite, '0-2');
   CheckGameEndClaim('1', dsBlack, '2-0');

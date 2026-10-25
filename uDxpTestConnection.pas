@@ -36,7 +36,7 @@ type
 implementation
 
 uses
-  SysUtils;
+  SysUtils, sockets, uSocketSafety;
 
 constructor TDxpTestConnectionThread.Create(const AHost: string; APort: Word;
   ARole: TDxpEngineRole; AOnLog: TDxpTestLogEvent);
@@ -66,6 +66,8 @@ end;
 procedure TDxpTestConnectionThread.AcceptConnection(Sender: TObject;
   Data: TSocketStream);
 begin
+  if not DxpPeerAllowed(FDxpHost, '', NetAddrToStr(TInetSockAddr(Data.RemoteAddress).sin_addr)) then
+  begin Data.Free; Exit; end;
   FSocket := Data;
   if FServer <> nil then
     FServer.StopAccepting(False);
@@ -108,13 +110,14 @@ begin
   try
     if FRole = derListen then
     begin
+      FDxpHost := DxpListenAddress(FDxpHost);
       Log('[DXP listening on ' + FDxpHost + ':' + IntToStr(FDxpPort) + ']');
       FLock.Acquire;
       try FServer := TInetServer.Create(FDxpHost, FDxpPort);
       finally FLock.Release; end;
       try
         FServer.ReuseAddress := True;
-        FServer.MaxConnections := 1;
+        FServer.MaxConnections := -1;
         FServer.OnConnect := @AcceptConnection;
         FServer.Listen;
         if not Terminated then FServer.StartAccepting;

@@ -24,6 +24,7 @@ type
     FListening: Boolean;
     FPort: Word;
     FHost: string;
+    FAllowedPeer: string;
     FServer: TInetServer;
     FSocket: TSocketStream;
     procedure AcceptConnection(Sender: TObject; Data: TSocketStream);
@@ -34,7 +35,8 @@ type
   protected
     procedure Execute; override;
   public
-    constructor Create(APort: Word; const AHost: string = '127.0.0.1');
+    constructor Create(APort: Word; const AHost: string = '127.0.0.1';
+      const AAllowedPeer: string = '');
     destructor Destroy; override;
     function DetachSocket: TSocketStream;
     procedure StopAccepting;
@@ -381,12 +383,14 @@ begin
   {$ENDIF}
 end;
 
-constructor TDxpAcceptThread.Create(APort: Word; const AHost: string);
+constructor TDxpAcceptThread.Create(APort: Word; const AHost: string;
+  const AAllowedPeer: string);
 begin
   inherited Create(True);
   FreeOnTerminate := False;
   FLock := TCriticalSection.Create;
   FPort := APort;
+  FAllowedPeer := Trim(AAllowedPeer);
   FHost := Trim(AHost);
   if FHost = '' then FHost := '127.0.0.1';
   Start;
@@ -407,7 +411,11 @@ begin
 end;
 
 procedure TDxpAcceptThread.AcceptConnection(Sender: TObject; Data: TSocketStream);
+var Peer: TInetSockAddr;
 begin
+  Peer := TInetSockAddr(Data.RemoteAddress);
+  if not DxpPeerAllowed(FHost, FAllowedPeer, NetAddrToStr(Peer.sin_addr)) then
+  begin Data.Free; Exit; end;
   SetSocketCloseOnExec(Data);
   FLock.Acquire;
   try
@@ -491,13 +499,15 @@ end;
 procedure TDxpAcceptThread.Execute;
 begin
   try
+    FHost := DxpListenAddress(FHost);
+    if FAllowedPeer <> '' then FAllowedPeer := DxpListenAddress(FAllowedPeer);
     FLock.Acquire;
     try FServer := TInetServer.Create(FHost, FPort);
     finally FLock.Release; end;
     SetHandleCloseOnExec(FServer.Socket);
     try
       FServer.ReuseAddress := True;
-      FServer.MaxConnections := 1;
+      FServer.MaxConnections := -1;
       FServer.OnConnect := @AcceptConnection;
       FServer.Listen;
       FLock.Acquire;
@@ -844,7 +854,8 @@ begin
   Result := False;
   StopListening;
   Log('DXP listen; host=' + FEngine.DxpHost + '; port=' + IntToStr(FEngine.DxpPort));
-  FAcceptThread := TDxpAcceptThread.Create(FEngine.DxpPort, FEngine.DxpHost);
+  FAcceptThread := TDxpAcceptThread.Create(FEngine.DxpPort, FEngine.DxpHost,
+    EngineParamValue(FParams, 'gui-dxp-peer-ip', ''));
   StartTick := GetTickCount64;
   repeat
     if FStopping or StopRequested then

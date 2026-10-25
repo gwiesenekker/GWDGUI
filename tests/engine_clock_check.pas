@@ -27,7 +27,7 @@ begin
 end;
 
 procedure CheckHubArguments;
-var Text: string;
+var Text: string; Raised: Boolean;
 begin
   Check(ExtractHubArgument('id name="value name=wrong" version=1', 'name') =
     'value name=wrong', 'Hub arguments must respect quoted values');
@@ -35,9 +35,15 @@ begin
     '1', 'Hub argument names cannot match inside quotes');
   Check(CommandLineQuote('C:\path\') = '"C:\path\\"', 'Windows arguments double trailing backslashes');
   Check(CommandLineQuote('a"b') = '"a\"b"', 'Windows arguments escape embedded quotes');
-  Text := 'C:\space path\"quoted"\';
+  Text := 'C:\space path\';
   Check(ExtractHubArgument('set-param value=' + HubParamQuote(Text) + ' name=path', 'value') =
-    Text, 'Hub quote/parser round trip includes escaped quotes and trailing backslash');
+    Text, 'Hub paths retain literal backslashes including the final one');
+  Check(ExtractHubArgument('set-param value="C:\dir\" name=path', 'name') = 'path',
+    'trailing path backslash does not swallow the closing quote');
+  Check(HubParamQuote('C:\x\y') = 'C:\x\y', 'plain Windows path needs no escaping');
+  Raised := False;
+  try HubParamQuote('a"b'); except on E: EConvertError do Raised := True; end;
+  Check(Raised, 'unrepresentable Hub quote must fail explicitly');
   Check(ExtractHubArgument('id name="other" missing', 'absent') = '', 'Hub absent argument terminates');
 end;
 

@@ -153,20 +153,9 @@ type
   end;
 
 function HubQuote(const AText: string): string;
-var
-  I: Integer;
 begin
-  Result := '"';
-  for I := 1 to Length(AText) do
-  begin
-    if AText[I] = '"' then
-      Result += '\"'
-    else if AText[I] = '\' then
-      Result += '\\'
-    else
-      Result += AText[I];
-  end;
-  Result += '"';
+  HubParamQuote(AText); // Validate the protocol's representable character set.
+  Result := '"' + AText + '"';
 end;
 
 function HubSeconds(ASeconds: Double): string;
