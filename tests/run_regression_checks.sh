@@ -66,3 +66,5 @@ fpc -B -dGWDGUI_TEST_NO_HARDLINK -Fu"$ROOT_DIR" -FU"$OUT_DIR" -FE"$OUT_DIR" \
 "$OUT_DIR/atomic_file_check"
 
 bash "$ROOT_DIR/tests/source_audit_check.sh"
+
+python3 "$ROOT_DIR/tests/build_info_check.py"

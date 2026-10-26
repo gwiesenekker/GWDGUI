@@ -138,3 +138,13 @@ For reproducible opt-in headless performance measurements, run
 `bash tests/run_performance_checks.sh`. See [PERFORMANCE.md](PERFORMANCE.md) for
 the fixture, timings, output fingerprints, compiler settings and comparison
 procedure. These timings are not pass/fail limits in the regression suite.
+
+`help_menu_check` exercises File/Database/Help shortcuts, Quit save/cancel
+behavior, opening/reopening the embedded manual, case-insensitive search,
+next/previous wraparound, Unicode selection offsets, keyboard controls and
+About's embedded commit. It runs in the GTK suite. `build_info_check.py` compiles
+generated build data with FPC and checks clean/modified Git identities, source
+archives, Unicode/apostrophes and exact manual text, plus the direct IDE fallback.
+The headless sweep runs it automatically. Isolated Lazarus builds regenerate
+embedded data and rebuild project units so commit/manual changes cannot reuse
+stale unit files.

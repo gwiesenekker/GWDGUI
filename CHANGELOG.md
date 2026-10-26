@@ -5,6 +5,22 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Add searchable offline Help and commit identification
+
+- Add Help → Manual (F1) with a read-only offline manual, case-insensitive Find,
+  result counts, Next/Previous with wraparound, Ctrl+F, F3/Shift+F3 and Escape.
+- Add Help → About GWDGUI (Shift+F1), showing the full commit captured at build
+  time and whether tracked files had uncommitted changes.
+- Embed MANUAL.md and build identity in isolated application/test builds and
+  rebuild project units to prevent stale metadata. Direct IDE and Git-less source
+  builds report unavailable identity explicitly; direct IDE builds can read a
+  manual beside the executable. Generated files stay outside the source tree.
+- Update the manual for Help, all menu shortcuts, Quit and build identification.
+- Add actual GTK help/menu/search tests and compiled build-data regressions for
+  Unicode, quoting, exact text, clean/modified Git, archives and IDE fallback.
+- Validation: full headless/source-audit and GTK suites, generated-data checks,
+  and application build pass. Nothing pushed.
+
 ### 2026-10-26 — Add menu accelerators and File → Quit
 
 - Add File/Database mnemonics and shortcuts for PDN open/save, preferences,

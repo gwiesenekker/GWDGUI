@@ -10,6 +10,7 @@ uses
 {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
 var GuiTestConfirmationResult: Integer = 0;
     GuiTestChoiceOnShow: TNotifyEvent = nil;
+    GuiTestLastConfirmationText: string = '';
 {$ENDIF}
 
 function ShowGuiChoiceDialog(AOwner: TCustomForm; const ACaption,
@@ -333,6 +334,7 @@ var
   PromptLabel: TLabel;
 begin
   {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+  GuiTestLastConfirmationText := AText;
   if GuiTestConfirmationResult <> 0 then Exit(GuiTestConfirmationResult);
   raise EInvalidOperation.Create('Unexpected dialog (' + ACaption + '): ' + AText);
   {$ENDIF}

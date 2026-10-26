@@ -11,7 +11,7 @@ uses
   uGameOrchestrator, uGameRunnerThread, uRunningGame, uGameSetupForm, uGameSetupTypes,
   uEngineParamsJson, uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue, uGameGuiMessages, uAnalysisCoordinator,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
-  uGuiDialogs, uDatabaseForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
+  uGuiDialogs, uManualForm, uAppInfo, uDatabaseForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
   uGameTreePdn, uNotationPresentation, uDisplayedPosition, uGameTreeSearchRef, uGameTreeView, uPositionSetupForm,
   uPreferences, uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm, uGameMoveHistory;
 
@@ -119,6 +119,7 @@ type
     FPopoutBoard: TDraughtsBoard;
     FPopoutBoardControl: TDraughtsBoardControl;
     FPositionSetupForm: TPositionSetupForm;
+    FManualForm: TManualForm;
     FPreferences: TGuiPreferences;
     FPreferencesForm: TPreferencesForm;
     FPvInfoLabel: TLabel;
@@ -342,6 +343,8 @@ type
     function CurrentDisplayedGameTreeNode(
       AGameTree: TGameTree): TGameTreePlyNode;
     function LiveGameCount: Integer;
+    procedure ManualClick(Sender: TObject);
+    procedure AboutClick(Sender: TObject);
     procedure QuitClick(Sender: TObject);
     procedure MainFormKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
@@ -476,6 +479,7 @@ var
   LDatabaseMenu: TMenuItem;
   LFenPopup: TPopupMenu;
   LFileMenu: TMenuItem;
+  LHelpMenu: TMenuItem;
   LGameMovePopup: TPopupMenu;
   LLeftSplitter: TSplitter;
   LMainMenu: TMainMenu;
@@ -630,6 +634,14 @@ begin
   LMenuItem.ShortCut := ShortCut(Ord('O'), [ssCtrl, ssShift]);
   LMenuItem.OnClick := @OpenDatabaseClick;
   LDatabaseMenu.Add(LMenuItem);
+  LHelpMenu := TMenuItem.Create(Self);
+  LHelpMenu.Caption := '&Help'; LMainMenu.Items.Add(LHelpMenu);
+  LMenuItem := TMenuItem.Create(Self); LMenuItem.Caption := '&Manual...';
+  LMenuItem.ShortCut := ShortCut(VK_F1, []);
+  LMenuItem.OnClick := @ManualClick; LHelpMenu.Add(LMenuItem);
+  LMenuItem := TMenuItem.Create(Self); LMenuItem.Caption := '&About GWDGUI...';
+  LMenuItem.ShortCut := ShortCut(VK_F1, [ssShift]);
+  LMenuItem.OnClick := @AboutClick; LHelpMenu.Add(LMenuItem);
   Menu := LMainMenu;
 
   LToolbar := TPanel.Create(Self);
@@ -1229,6 +1241,7 @@ begin
   FreeAndNil(FSetupForm);
   FreeAndNil(FPositionSetupForm);
   FreeAndNil(FPreferencesForm);
+  FreeAndNil(FManualForm);
   FreeAndNil(FScoreHistoryForm);
   FreeAndNil(FTournamentDialog);
   FreeAndNil(FPdnOpenDialog);
@@ -4531,6 +4544,16 @@ begin
   end
   else Exit;
   Key := 0;
+end;
+
+procedure TMainForm.ManualClick(Sender: TObject);
+begin
+  if FManualForm = nil then FManualForm := TManualForm.Create(Self);
+  ShowFormCenteredOnOwner(FManualForm, Self);
+end;
+procedure TMainForm.AboutClick(Sender: TObject);
+begin
+  ShowGuiOkDialog(Self, 'About GWDGUI', AppAboutText);
 end;
 
 procedure TMainForm.QuitClick(Sender: TObject);

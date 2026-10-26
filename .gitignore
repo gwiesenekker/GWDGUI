@@ -38,3 +38,6 @@ engines.json
 /prefs.json
 /Tournament.pdn
 /.gwdgui-new-build
+
+# Python build/test helper cache
+__pycache__/

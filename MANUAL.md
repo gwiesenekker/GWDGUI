@@ -1,13 +1,14 @@
 # GWDGUI User Manual
 
-This manual describes the current GWDGUI application, a graphical workbench for international draughts. It can play and browse games,
+This manual describes the current GWDGUI application, a graphical workbench for
+international draughts. It can play and browse games,
 run Hub and DXP engines, organize engine tournaments, display engine analysis,
 and store or search games in an SQLite database.
 
 ## Menu shortcuts
 
-Use **Alt+F** for File and **Alt+D** for Database. Keyboard shortcuts are also
-shown beside their menu items:
+Use **Alt+F** for File, **Alt+D** for Database and **Alt+H** for Help. Keyboard
+shortcuts are also shown beside their menu items:
 
 | Action | Shortcut |
 |---|---|
@@ -17,9 +18,27 @@ shown beside their menu items:
 | Create database | Ctrl+Shift+N |
 | Open database | Ctrl+Shift+O |
 | Quit | Ctrl+Q |
+| Manual | F1 |
+| About GWDGUI | Shift+F1 |
 
 **File → Quit** uses the same save prompts and safe shutdown as closing the main
 window. Choose Cancel in a save prompt to keep working.
+
+### Help and build identification
+
+Choose **Help → Manual** (F1) to open this manual inside GWDGUI. The manual is
+read-only and available offline in builds made with `build.sh`.
+
+Type in **Find** to search without regard to letter case. The first match is
+highlighted and the result count is shown. **Next** / **Previous** move between
+matches and wrap at the ends; use **F3** / **Shift+F3** for the same actions.
+**Ctrl+F** focuses and selects the search query. **Enter** finds the next match,
+and **Escape** closes the manual window.
+
+**Help → About GWDGUI** shows the build description and full Git commit captured
+when the executable was built. A build made from modified tracked files is
+marked as including uncommitted changes. This identifies the running executable;
+it does not query whichever checkout happens to be on disk later.
 
 ## 1. Getting started
 
@@ -607,8 +626,13 @@ expected by the build or distribution.
 A typical source build is:
 
 ```bash
-lazbuild --build-mode=Default gwdgui.lpi
+bash build.sh
 ```
+
+`build.sh` embeds the current manual and Git build identity. Direct IDE or
+`lazbuild gwdgui.lpi` builds remain supported, but report that the commit is
+unavailable and load `MANUAL.md` from beside the executable. Builds from source
+archives without Git metadata explicitly report that the commit is unavailable.
 
 The repository's regression checks can be run with:
 
