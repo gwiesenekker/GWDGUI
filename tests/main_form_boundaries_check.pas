@@ -4,11 +4,11 @@ program main_form_boundaries_check;
   {$FATAL Build this test with its .lpi project}
 {$ENDIF}
 uses {$IFDEF UNIX}cthreads,{$ENDIF}
-  Interfaces, Forms, Classes, SysUtils, Controls, StdCtrls, Menus, ExtCtrls,
+  Interfaces, Forms, Classes, SysUtils, Controls, StdCtrls, Menus, ExtCtrls, Grids,
   LCLType, Types, uMainForm, uRunningGame, uBoardControl, uDraughtsBoard, uPdn,
   uGameTree, uGameTreePdn, uGameTreeBuilder, uGameSetupTypes, uGameOrchestrator, uGuiDialogs,
   uPositionSetupForm, uEngineRegistry, uEngineParamsJson, uAnalyzerRunnerThread,
-  uGameGuiMessages, uGameTreeSearchRef;
+  uGameGuiMessages, uGameTreeSearchRef, uEngineEditForm;
 
 type
   TCaptureChoice = class
@@ -266,7 +266,7 @@ begin
   Result := False;
 end;
 
-function ButtonWithCaption(Form: TMainForm; const Caption: string): TButton;
+function ButtonWithCaption(Form: TCustomForm; const Caption: string): TButton;
 var I: Integer;
 begin
   for I := 0 to Form.ComponentCount - 1 do
@@ -380,6 +380,35 @@ begin
   end;
 end;
 
+procedure CheckInvalidEngineParameters;
+var Form: TEngineEditForm; Definition: TExternalEngineDefinition;
+  Lines: TStringList; Params: TEngineParamArray; ExeName, ParamName, Before: string;
+  I, Row: Integer; Grid: TStringGrid;
+begin
+  ExeName := GetTempFileName(GetTempDir, 'gwdedit'); ParamName := EngineParamsFileName(ExeName);
+  Definition := TExternalEngineDefinition.Create; Lines := TStringList.Create;
+  Definition.Kind := eekHub; Definition.ExePath := ExeName;
+  AddOrUpdateParam(Params, 'path', 'string', 'valid', False);
+  SaveEngineParamsToJson(ParamName, 'hub', Params);
+  Lines.LoadFromFile(ParamName); Before := Lines.Text;
+  Form := TEngineEditForm.Create(nil);
+  try
+    Form.LoadEngine(Definition); Grid := nil;
+    for I := 0 to Form.ComponentCount - 1 do
+      if Form.Components[I] is TStringGrid then Grid := TStringGrid(Form.Components[I]);
+    Check(Grid <> nil, 'engine parameter grid exists'); Row := -1;
+    for I := 1 to Grid.RowCount - 1 do if Grid.Cells[0, I] = 'path' then Row := I;
+    Check(Row > 0, 'saved parameter loaded into editor');
+    Grid.Cells[2, Row] := 'bad"quote';
+    GuiTestConfirmationResult := mrOk;
+    try ButtonWithCaption(Form, 'Launched correctly').Click;
+    finally GuiTestConfirmationResult := 0; end;
+    Check(Pos('path', GuiTestLastConfirmationText) > 0, 'editor identifies the invalid parameter');
+    Lines.LoadFromFile(ParamName);
+    Check(Lines.Text = Before, 'invalid editor parameter cannot overwrite saved settings');
+  finally Form.Free; Definition.Free; Lines.Free; DeleteFile(ExeName); DeleteFile(ParamName); end;
+end;
+
 var Reporter: TExceptionReporter;
 begin
   if ParamStr(1) = '--boundary-hub' then begin FakeHub; Halt(0); end;
@@ -390,6 +419,7 @@ begin
     CheckAmbiguousCapture;
     CheckReplacementPrompt;
     CheckAnalysisControls;
+    CheckInvalidEngineParameters;
     Application.OnException := nil; Reporter.Free;
     WriteLn('OK');
   except on E: Exception do begin WriteLn('FAIL: ', E.ClassName, ': ', E.Message); DumpExceptionBackTrace(Output); Halt(1); end; end;

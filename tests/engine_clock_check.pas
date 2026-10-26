@@ -47,6 +47,35 @@ begin
   Check(ExtractHubArgument('id name="other" missing', 'absent') = '', 'Hub absent argument terminates');
 end;
 
+procedure CheckHubSaveValidation;
+var Params: TEngineParamArray; Lines: TStringList; Name, BeforeText: string;
+  Raised: Boolean; I: Integer;
+begin
+  Name := GetTempFileName(GetTempDir, 'gwdparams'); DeleteFile(Name); Lines := TStringList.Create;
+  try
+    AddOrUpdateParam(Params, 'path', 'string', 'C:\space path\', False);
+    AddOrUpdateParam(Params, 'gui-hub-launch-argument', 'string', '"quoted argument"', False);
+    AddOrUpdateParam(Params, 'gui-hub-init', 'string', 'init' + LineEnding, False);
+    SaveEngineParamsToJson(Name, 'hub', Params);
+    Lines.LoadFromFile(Name); BeforeText := Lines.Text;
+    for I := 0 to 2 do
+    begin
+      case I of
+        0: Params[0].Value := 'bad"quote';
+        1: Params[0].Value := 'bad' + #10 + 'line';
+        2: Params[0].Value := 'bad' + #13 + 'line';
+      end;
+      Raised := False;
+      try SaveEngineParamsToJson(Name, 'hub', Params);
+      except on E: EConvertError do Raised := Pos('path', E.Message) > 0; end;
+      Check(Raised, 'invalid Hub value is rejected at save with its parameter name');
+      Lines.LoadFromFile(Name); Check(Lines.Text = BeforeText, 'failed validation preserves the existing parameter file');
+    end;
+    SaveEngineParamsToJson(Name, 'dxp', Params);
+    Lines.LoadFromFile(Name); Check(Pos('dxp', Lines.Text) > 0, 'DXP values are not subject to Hub grammar');
+  finally Lines.Free; DeleteFile(Name); end;
+end;
+
 procedure CheckTypedClockCompatibility;
 var Engine: TClockProbe;
 begin
@@ -398,6 +427,7 @@ begin
   else
   begin
     CheckHubArguments;
+  CheckHubSaveValidation;
     CheckBoundedEngineLog;
     CheckClockedThink('--flood-hub', dsWhite, 2, 0, False);
     CheckStartupTimeout;

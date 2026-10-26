@@ -5,6 +5,14 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Reject invalid Hub parameters before saving (D20)
+
+- Validate transmitted Hub parameter names/values before accepting the editor or
+  writing its parameter file. Name the invalid parameter and keep the editor open.
+- Preserve existing files on validation failure; allow quotes in GUI-only launch
+  arguments and line breaks in initialization commands, and retain DXP behavior.
+- Add save-preservation/grammar regressions and an actual GTK editor rejection check.
+
 ### 2026-10-26 — Separate fresh and duplicate import measurements (F8)
 
 - Add a real SQLite import benchmark with fresh/duplicate and logging on/off cases;

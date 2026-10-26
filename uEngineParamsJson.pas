@@ -26,6 +26,7 @@ function EngineParamsFileName(const AEngineFileName: string): string;
 function EngineParamShouldSendToHub(const AName: string): Boolean;
 function ExtractHubArgument(const ALine, AName: string): string;
 function HubParamQuote(const AValue: string): string;
+procedure ValidateHubParams(const AParams: TEngineParamArray);
 procedure LoadEngineParamsFromJson(const AFileName, ASection: string;
   var AParams: TEngineParamArray);
 procedure SeedDefaultGuiParams(var AParams: TEngineParamArray;
@@ -202,6 +203,20 @@ begin
   end;
   // protocol.txt defines delimiters, not C-style escapes. Backslashes are literal.
   if NeedsQuotes then Result := '"' + AValue + '"' else Result := AValue;
+end;
+
+procedure ValidateHubParams(const AParams: TEngineParamArray);
+var I: Integer;
+begin
+  for I := 0 to High(AParams) do
+    if EngineParamShouldSendToHub(AParams[I].Name) then
+      try
+        HubParamQuote(AParams[I].Name);
+        HubParamQuote(AParams[I].Value);
+      except
+        on E: EConvertError do
+          raise EConvertError.Create('Invalid Hub parameter "' + AParams[I].Name + '": ' + E.Message);
+      end;
 end;
 
 function ExtractHubArgument(const ALine, AName: string): string;
@@ -386,6 +401,7 @@ begin
     Exit;
 
   Section := NormalizeSectionName(ASection);
+  if Section = 'hub' then ValidateHubParams(AParams);
   Data := TJSONObject.Create;
   try
     if FileExists(AFileName) then

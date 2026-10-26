@@ -90,7 +90,7 @@ type
 implementation
 
 uses
-  LCLType;
+  LCLType, uGuiDialogs;
 
 const
   HubArgsHint =
@@ -497,6 +497,17 @@ begin
   StoreArgumentParams;
   FreeAndNil(FAcceptedEngine);
   FAcceptedEngine := CurrentEngineDefinition;
+  if FAcceptedEngine.Kind = eekHub then
+    try
+      ValidateHubParams(FCapturedParams);
+    except
+      on E: EConvertError do
+      begin
+        Log('[cannot save: ' + E.Message + ']');
+        ShowGuiOkDialog(Self, 'Invalid engine parameter', E.Message);
+        Exit;
+      end;
+    end;
   Accepted := True;
   if Assigned(FOnAccepted) then
     FOnAccepted(Self, FAcceptedEngine, Accepted);

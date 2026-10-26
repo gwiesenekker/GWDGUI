@@ -2,6 +2,13 @@
 
 ## Review of afd9c54 — 2026-10-26
 
+D20 is fixed at the settings boundary: validate Hub-only transmitted parameters
+before the acceptance callback can modify the registry and before parameter-file
+writes. Report the parameter name, retain existing files and keep the editor open.
+Headless tests cover quotes/CR/LF, GUI-only exceptions and DXP; the GTK editor test
+checks that an invalid edit cannot overwrite its saved settings. MANUAL updated.
+
+
 A8's proposed use-after-free overlooks `TAnalyzerRunnerThread.Destroy`, which
 already calls `PostShutdown; WaitFor` before freeing any fields. FPC's Windows
 `WaitFor` waits on the OS thread handle even when `Finished` is true. The GUI's

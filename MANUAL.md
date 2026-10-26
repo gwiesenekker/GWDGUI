@@ -136,7 +136,9 @@ Choose this setting to match the engine's protocol output. An incorrect choice
 causes the evaluation graph to change sign on the wrong moves.
 
 Hub parameter values cannot contain a double quote (`"`); the protocol has no
-escape for it, and GWDGUI rejects such values when initializing the engine.
+escape for it. GWDGUI rejects double quotes and line breaks in Hub parameters
+before saving the engine settings and names the parameter to correct. Command-line
+arguments and initialization commands are separate settings and may contain quotes.
 
 Older parameter files may contain `gui-single-captures-include-captured-square`;
 it does not control current capture notation. Capture paths are determined from
