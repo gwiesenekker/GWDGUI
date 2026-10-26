@@ -5,6 +5,13 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Use ordinal legal-move comparisons (F12)
+
+- Make the legal-move list case-sensitive and locale-independent. Input still
+  normalizes before lookup; generated move order and capture aliases are unchanged.
+- Add uppercase/zero-padded landing-path and reordered-capture regressions,
+  duplicate detection and copied-board lookup checks. Board and DXP suites pass.
+
 ### 2026-10-26 — Extract analysis request and snapshot preparation
 
 - Move analyzer/MCTS request preparation, prior-search cancellation, selected-base

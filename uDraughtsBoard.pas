@@ -368,6 +368,8 @@ begin
   inherited Create;
   FMovesPlayed := TStringList.Create;
   FLegalMoves := TStringList.Create;
+  FLegalMoves.UseLocale := False;
+  FLegalMoves.CaseSensitive := True;
   FLegalPdnPaths := TStringList.Create;
   SetBeginPosition;
 end;

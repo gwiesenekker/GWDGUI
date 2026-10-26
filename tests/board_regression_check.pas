@@ -48,6 +48,31 @@ begin
     'capture move notation is canonicalized');
 end;
 
+procedure CheckLegalMoveComparison;
+var Board, CopyBoard: TDraughtsBoard; Canonical, Key: string;
+  Moves: TStringList; I, J: Integer;
+begin
+  Board := TDraughtsBoard.Create; CopyBoard := TDraughtsBoard.Create;
+  Moves := TStringList.Create;
+  try
+    Board.LoadFromFEN('W:W32:B17,27');
+    Check(Board.TryGetLegalMove('032X021X012', Canonical), 'uppercase landing capture alias remains legal');
+    CheckEqual(Canonical, '32x12x27x17', 'uppercase alias resolves canonical captured set');
+    Check(Board.IsLegalMove('032X012X017X027'), 'uppercase reordered capture remains legal');
+    Check(not Board.IsLegalMove('32X12X17X28'), 'different captured set remains illegal');
+    Board.CopyLegalMovesTo(Moves);
+    for I := 0 to Moves.Count - 1 do
+      for J := I + 1 to Moves.Count - 1 do
+        Check(Moves[I] <> Moves[J], 'legal move generation keeps unique canonical moves');
+    CopyBoard.AssignFrom(Board);
+    Board.PlayMove('032X021X012'); CopyBoard.PlayMove('32x12x17x27');
+    CheckEqual(Board.PositionKey, CopyBoard.PositionKey, 'copied board lookup keeps alias semantics');
+    Key := Board.PositionKey;
+    Check(not Board.IsLegalMove('1-50'), 'invalid lookup remains false');
+    CheckEqual(Board.PositionKey, Key, 'lookup never mutates position');
+  finally Moves.Free; CopyBoard.Free; Board.Free; end;
+end;
+
 procedure CheckDxpMoveConversion;
 var
   MoveText: string;
@@ -466,6 +491,7 @@ end;
 
 begin
   CheckMoveNormalization;
+  CheckLegalMoveComparison;
   CheckDxpHistoryReconciliation;
   CheckStrictDxpPackets;
   CheckDxpMoveConversion;
