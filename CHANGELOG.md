@@ -5,6 +5,17 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Render notation with incremental boards (F10)
+
+- Advance one board along each notation line and copy at variation boundaries.
+  Capture captions no longer replay their entire ancestry. Invalid legacy paths
+  still fall back to raw move text.
+- Verify compact/export text and all navigation metadata against a frozen
+  pre-change digest over all 256 filter combinations. Add a deterministic bound
+  of one board move per displayed model node; PDN and GTK checks pass.
+- Headless benchmark on Claude's 151-ply fixture, 100 renders: 12.45 s before,
+  0.54 s after with identical output (same ordinal move-comparison setting).
+
 ### 2026-10-26 — Use ordinal legal-move comparisons (F12)
 
 - Make the legal-move list case-sensitive and locale-independent. Input still

@@ -6,12 +6,39 @@ procedure Check(Value: Boolean; const Text: string);
 begin
   if not Value then raise Exception.Create(Text);
 end;
+var RenderDigest: QWord = QWord($CBF29CE484222325);
+procedure DigestText(const Text: string);
+var I: Integer;
+begin
+  for I := 1 to Length(Text) do
+    RenderDigest := (RenderDigest xor Ord(Text[I])) * QWord(1099511628211);
+  RenderDigest := (RenderDigest xor 0) * QWord(1099511628211);
+end;
+function CountMoveNodes(Node: TGameTreePlyNode): Integer;
+var I: Integer;
+begin
+  Result := 0;
+  for I := 0 to Node.ChildCount - 1 do
+    Inc(Result, 1 + CountMoveNodes(Node.Children[I]));
+end;
 procedure CheckRender(Presenter: TNotationPresentation; Tree: TGameTree;
   const Options: TGameTreePdnRenderOptions);
 var Rendered: TGameTreePdnRenderResult; Hit: TMoveVariationHit;
   Range: TNotationRange; I: Integer;
 begin
   RenderGameTreeMovesToPdn(Tree, Options, Rendered);
+  DigestText(Rendered.Text);
+  DigestText(GameTreeToPdnTextEx(Tree, Options));
+  for I := 0 to High(Rendered.MoveStarts) do
+    DigestText(IntToStr(Rendered.MoveStarts[I]) + ':' + IntToStr(Rendered.MoveLengths[I]));
+  for I := 0 to High(Rendered.VariationStarts) do
+    DigestText(IntToStr(Rendered.VariationStarts[I]) + ':' + IntToStr(Rendered.VariationLengths[I]) +
+      ':' + IntToStr(Rendered.VariationNodeIds[I]) + ':' + BoolToStr(Rendered.VariationBeforeMoves[I]) +
+      ':' + IntToStr(Rendered.VariationPlies[I]) + ':' + IntToStr(Rendered.VariationBasePlies[I]) +
+      ':' + Rendered.VariationMovesTexts[I]);
+  Check((Rendered.BoardMovesApplied >= Tree.MainlineCount) and
+    (Rendered.BoardMovesApplied <= CountMoveNodes(Tree.Root)),
+    'incremental rendering applies at most one move per visible model node');
   Presenter.Render(Tree, Options);
   Check(Presenter.Text = Rendered.Text, 'presenter preserves renderer text exactly');
   Check(Presenter.MoveCount = Length(Rendered.MoveStarts), 'mainline count');
@@ -206,5 +233,8 @@ begin
     Tree := nil;
     Check(Presenter.Text = Before, 'presenter owns projection without retaining tree');
   finally Presenter.Free; CaptureTree.Free; Tree.Free; end;
+  // Captured from a8795c9 before incremental rendering: compact/export text
+  // and every navigation field for all 256 filter combinations.
+  Check(RenderDigest = QWord($4C6CCFC3132F4DBA), 'text and navigation ranges match pre-optimization renderer');
   Writeln('Notation presentation checks passed');
 end.

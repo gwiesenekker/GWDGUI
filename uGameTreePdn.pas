@@ -26,6 +26,7 @@ type
 
   TGameTreePdnRenderResult = record
     Text: string;
+    BoardMovesApplied: Integer; // Work counter: no root replay per capture caption.
     MoveStarts: TGameTreePdnIntArray;
     MoveLengths: TGameTreePdnIntArray;
     VariationStarts: TGameTreePdnIntArray;
@@ -97,9 +98,8 @@ begin
     Result := '*';
 end;
 
-function NodeMoveCaption(AGameTree: TGameTree; ANode: TGameTreePlyNode; AForceMoveNumber: Boolean;
+function NodeMoveCaption(ABoard: TDraughtsBoard; ANode: TGameTreePlyNode; AForceMoveNumber: Boolean;
   ACompact: Boolean; out MoveText: string): string;
-var Board: TDraughtsBoard;
 begin
   Result := '';
   if ANode = nil then
@@ -116,14 +116,8 @@ begin
       Result += ' ';
   end;
   MoveText := ANode.MoveText;
-  if Pos('x', MoveText) > 0 then
-  begin
-    Board := TDraughtsBoard.Create;
-    try
-      if AGameTree.TryBuildBoardAtNode(ANode.Parent, Board) then
-        MoveText := Board.PdnMoveNotation(MoveText);
-    finally Board.Free; end;
-  end;
+  if (ABoard <> nil) and (Pos('x', MoveText) > 0) then
+    MoveText := ABoard.PdnMoveNotation(MoveText);
   Result += MoveText;
 end;
 
@@ -407,6 +401,7 @@ begin
   ARenderResult.Text := '';
   SetLength(ARenderResult.MoveStarts, 0);
   SetLength(ARenderResult.MoveLengths, 0);
+  ARenderResult.BoardMovesApplied := 0;
   SetLength(ARenderResult.VariationStarts, 0);
   SetLength(ARenderResult.VariationNodeIds, 0);
   SetLength(ARenderResult.VariationBeforeMoves, 0);
@@ -416,15 +411,24 @@ begin
   SetLength(ARenderResult.VariationMovesTexts, 0);
 end;
 
+procedure AdvanceRenderBoard(var ABoard: TDraughtsBoard; const AMove: string;
+  var AResult: TGameTreePdnRenderResult);
+begin
+  if ABoard = nil then Exit;
+  Inc(AResult.BoardMovesApplied);
+  try ABoard.PlayMove(AMove, True, True);
+  except FreeAndNil(ABoard); end; // Preserve raw captions beyond invalid legacy paths.
+end;
+
 function RenderVariationLine(AGameTree: TGameTree; ANode, APreviousPosition: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions; ACompact: Boolean;
   var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer;
-  AIncludeSiblings: Boolean = False; AForceMoveNumber: Boolean = True): string; forward;
+  var ABoard: TDraughtsBoard; AIncludeSiblings: Boolean = False; AForceMoveNumber: Boolean = True): string; forward;
 
 function RenderChildVariations(AGameTree: TGameTree; ANode, AContinuation: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions; ACompact: Boolean;
   var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer;
-  ABasePlyFilter: Integer = -1): string;
+  AParentBoard: TDraughtsBoard; ABasePlyFilter: Integer = -1): string;
 var
   I: Integer;
   LBasePlyNumber: Integer;
@@ -432,6 +436,7 @@ var
   LLineOffset: Integer;
   LText: string;
   LVariationPlyNumber: Integer;
+  VariationBoard: TDraughtsBoard;
 begin
   Result := '';
   if ANode = nil then
@@ -452,8 +457,16 @@ begin
     if Result <> '' then
       Inc(LLineOffset);
     Inc(LLineOffset);
-    LText := RenderVariationLine(AGameTree, LChild, ANode, AOptions, ACompact,
-      ARenderResult, LLineOffset);
+    VariationBoard := nil;
+    if AParentBoard <> nil then
+    begin
+      VariationBoard := TDraughtsBoard.Create;
+      VariationBoard.AssignFrom(AParentBoard);
+    end;
+    try
+      LText := RenderVariationLine(AGameTree, LChild, ANode, AOptions, ACompact,
+        ARenderResult, LLineOffset, VariationBoard);
+    finally VariationBoard.Free; end;
     if LText = '' then
       Continue;
     LBasePlyNumber := ANode.PlyNumber;
@@ -476,7 +489,7 @@ end;
 function RenderVariationLine(AGameTree: TGameTree; ANode, APreviousPosition: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions; ACompact: Boolean;
   var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer;
-  AIncludeSiblings, AForceMoveNumber: Boolean): string;
+  var ABoard: TDraughtsBoard; AIncludeSiblings, AForceMoveNumber: Boolean): string;
 var
   LBasePlyNumber: Integer;
   LContinuation: TGameTreePlyNode;
@@ -495,7 +508,7 @@ begin
       (not AOptions.ShowAnnotatorFullPV) then
       LContinuation := nil;
 
-  Result := NodeMoveCaption(AGameTree, ANode, AForceMoveNumber, ACompact, LRenderedMove) +
+  Result := NodeMoveCaption(ABoard, ANode, AForceMoveNumber, ACompact, LRenderedMove) +
     NodeAnnotation(ANode, AOptions, not ACompact);
   if APreviousPosition <> nil then
     if ACompact and NodeIsAnnotatorAlternative(APreviousPosition, ANode) and
@@ -524,16 +537,17 @@ begin
   if AIncludeSiblings then
   begin
     LNested := RenderChildVariations(AGameTree, APreviousPosition, ANode, AOptions,
-      ACompact, ARenderResult, ABaseOffset + Length(Result) + 1);
+      ACompact, ARenderResult, ABaseOffset + Length(Result) + 1, ABoard);
     if LNested <> '' then
       Result += ' ' + LNested;
   end;
+  AdvanceRenderBoard(ABoard, ANode.MoveText, ARenderResult);
   if LContinuation <> nil then
   begin
     if Result <> '' then
       Result += ' ';
     Result += RenderVariationLine(AGameTree, LContinuation, ANode, AOptions,
-      ACompact, ARenderResult, ABaseOffset + Length(Result), True, False);
+      ACompact, ARenderResult, ABaseOffset + Length(Result), ABoard, True, False);
   end;
 end;
 
@@ -549,6 +563,7 @@ var
   LResultText: string;
   LSegment, LRenderedMove: string;
   LRootVariationRendered: Boolean;
+  Board: TDraughtsBoard;
 
   procedure AppendAnalysisVariation(ABaseNode: TGameTreePlyNode;
     const APv, AScore, AScorePrefix: string; AShowMove, AShowFull,
@@ -579,6 +594,10 @@ begin
   if (AGameTree = nil) or (AGameTree.Root = nil) then
     Exit;
 
+  Board := TDraughtsBoard.Create;
+  try
+    try Board.LoadFromFEN(AGameTree.StartingFEN);
+    except FreeAndNil(Board); end;
   Result := Trim(NodeAnnotation(AGameTree.Root, AOptions, not ACompact));
   for I := 1 to AGameTree.MainlineCount do
   begin
@@ -591,7 +610,7 @@ begin
     LPreviousPosition := AGameTree.Root;
     if LChild.PlyNumber > 1 then
       LPreviousPosition := AGameTree.MainlineNode[LChild.PlyNumber - 1];
-    LSegment := NodeMoveCaption(AGameTree, LChild, Result = '', ACompact, LRenderedMove) +
+    LSegment := NodeMoveCaption(Board, LChild, Result = '', ACompact, LRenderedMove) +
       NodeAnnotation(LChild, AOptions, not ACompact) +
       PreviousPositionAnnotation(LPreviousPosition, LChild, AOptions);
     LMoveStart := Pos(LRenderedMove, LSegment);
@@ -602,7 +621,7 @@ begin
     end;
     Result += LSegment;
     LNested := RenderChildVariations(AGameTree, LPreviousPosition, LChild, AOptions, ACompact,
-      ARenderResult, Length(Result) + 1);
+      ARenderResult, Length(Result) + 1, Board);
     if LNested <> '' then
       Result += ' ' + LNested;
     if (not LRootVariationRendered) and (LPreviousPosition = AGameTree.Root) then
@@ -625,6 +644,7 @@ begin
       AOptions.ShowAnnotatorScore);
     AppendAnalysisVariation(LChild, LChild.AutoPlayPV, '', '', True, True,
       False);
+    AdvanceRenderBoard(Board, LChild.MoveText, ARenderResult);
   end;
 
   if AGameTree.MainlineCount = 0 then
@@ -632,7 +652,7 @@ begin
   else
     LChild := AGameTree.MainlineNode[AGameTree.MainlineCount];
   LNested := RenderChildVariations(AGameTree, LChild, nil, AOptions, ACompact,
-    ARenderResult, Length(Result) + 1, AGameTree.MainlineCount);
+    ARenderResult, Length(Result) + 1, Board, AGameTree.MainlineCount);
   if LNested <> '' then
   begin
     if Result <> '' then
@@ -659,6 +679,7 @@ begin
       Result += ' ';
     Result += LResultText;
   end;
+  finally Board.Free; end;
 end;
 
 function GameTreeToPdnTextEx(AGameTree: TGameTree;
