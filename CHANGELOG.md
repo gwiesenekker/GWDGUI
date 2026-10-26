@@ -3,6 +3,25 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+## Version 2.23 — 2026-10-26
+
+This release includes the accumulated correctness fixes below since v2.22.
+
+- Consolidate game-tree data and cursor ownership; preserve nested variations,
+  standalone games, comments, analysis and clocks across navigation and PDN export.
+- Correct capture notation, game boundaries, malformed-variation recovery and
+  metadata round trips; retain readable, compact analysis metadata.
+- Protect tournament files, recover failed captures per row, distinguish engine
+  configurations, and improve Swiss matching, round-robin colours and autosaves.
+- Correct Hub/DXP history, clocks, startup and cancellation; restore live analysis
+  updates and isolate child-process pipes and network listeners.
+- Preserve complete database games, recognize legacy duplicates, recover interrupted
+  imports, compress storage and run GUI imports on a separate worker connection.
+- Publish a Linux x86_64 build and portable bundle. Windows binaries are not
+  included in this release; Windows-specific changes still need native validation.
+
+The following dated entries describe individual changes and their regression tests.
+
 ### 2026-10-25 — Recognize multiline metadata through the file reader (P21/P15)
 
 - Normalize whitespace introduced by file-line joining only for metadata edit
