@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Extract Auto Play coordination
+
+- Move Auto Play node/tree/search identity, temporary PV accumulation, continuation
+  policy and legal move-command preparation to TAutoPlayCoordinator.
+- Advance the preview only after an accepted actor command and keep cancellation,
+  runner stop requests and UI refresh ordering in the form.
+- Add regressions for historical-node attachment, preserved official continuation,
+  rejected moves/targets, game changes, restart/reset and late-result fencing.
+  GTK analysis-control and preservation checks pass.
+
 ### 2026-10-26 — Extract analysis search coordination
 
 - Add LCL-independent uAnalysisCoordinator for analysis search tracking, actor

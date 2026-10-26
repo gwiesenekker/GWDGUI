@@ -45,14 +45,8 @@ type
     FAnalyzerPvMemo: TMemo;
     FAnalyzerRunner: TAnalyzerRunnerThread;
     FAnalysis: TAnalysisCoordinator;
-    FAutoPlayActive: Boolean;
-    FAutoPlayBasePly: Integer;
+    FAutoPlay: TAutoPlayCoordinator;
     FAutoPlayButton: TButton;
-    FAutoPlayMoveCount: Integer;
-    FAutoPlayMovesText: string;
-    FAutoPlayNodeId: Int64;
-    FAutoPlaySearch: TGameTreeSearchRef;
-    FAutoPlayTreeId: Int64;
     FBoard: TDraughtsBoard;
     FBoardControl: TDraughtsBoardControl;
     FBoardFlipped: Boolean;
@@ -577,10 +571,10 @@ begin
   FGameState := gosWaiting;
   FGameResult := '*';
   FAnalysis := TAnalysisCoordinator.Create;
+  FAutoPlay := TAutoPlayCoordinator.Create;
   FDisplayedPosition := TDisplayedPosition.Create;
   FNotation := TNotationPresentation.Create;
   FGameTreeBrowseMode := False;
-  FAutoPlaySearch := EmptyGameTreeSearchRef;
   FGameLogSourceGameId := -1;
   FGameLogSourceLineCount := -1;
   FGameLogSourceShowStdout := False;
@@ -1250,6 +1244,7 @@ begin
   FreeAndNil(FGameTreeForm);
   FreeAndNil(FAnalyzerPvBrowser);
   FreeAndNil(FPvBrowser);
+  FAutoPlay.Free;
   FAnalysis.Free;
   FNotation.Free;
   FDisplayedPosition.Free;
@@ -1968,17 +1963,15 @@ end;
 
 procedure TMainForm.AutoPlayClick(Sender: TObject);
 begin
-  if FAutoPlayActive then
+  if FAutoPlay.Active then
     StopAutoPlay
   else
     StartAutoPlay;
 end;
 
-function TMainForm.AutoPlaySearchMatches(
-  const ASearch: TGameTreeSearchRef): Boolean;
+function TMainForm.AutoPlaySearchMatches(const ASearch: TGameTreeSearchRef): Boolean;
 begin
-  Result := FAutoPlayActive and IsValidGameTreeSearchRef(ASearch) and
-    SameGameTreeSearchRef(FAutoPlaySearch, ASearch);
+  Result := FAutoPlay.SearchMatches(ASearch);
 end;
 
 procedure TMainForm.StartAutoPlay;
@@ -2006,15 +1999,8 @@ begin
   if LNode = nil then
     Exit;
 
-  FAutoPlayBasePly := LNode.PlyNumber;
-  FAutoPlayNodeId := LNode.NodeId;
-  FAutoPlayMoveCount := 0;
-  FAutoPlayMovesText := '';
-
   CancelAnalyzerSearch;
-  FAutoPlayActive := True;
-  FAutoPlayTreeId := LGameTree.GameTreeId;
-  FAutoPlaySearch := EmptyGameTreeSearchRef;
+  FAutoPlay.BeginLine(LGameTree, LNode);
   InvalidateAnalyzerPositionSignature;
   UpdateAutoPlayButtonState;
   StartNextAutoPlaySearch;
@@ -2024,21 +2010,18 @@ procedure TMainForm.StopAutoPlay(const AReason: string);
 var
   LActor: TGameTreeActor;
 begin
-  if not FAutoPlayActive then
+  if not FAutoPlay.Active then
     Exit;
 
-  if IsValidGameTreeSearchRef(FAutoPlaySearch) then
+  if IsValidGameTreeSearchRef(FAutoPlay.Search) then
   begin
-    LActor := ActorForSearchRef(FAutoPlaySearch);
-    if CancelGameTreeSearch(LActor, FAutoPlaySearch) then
-      ReleaseGameTreeSearch(LActor, FAutoPlaySearch);
+    LActor := ActorForSearchRef(FAutoPlay.Search);
+    if CancelGameTreeSearch(LActor, FAutoPlay.Search) then
+      ReleaseGameTreeSearch(LActor, FAutoPlay.Search);
   end;
   if FAnalyzerRunner <> nil then
     FAnalyzerRunner.PostStopSearch;
-  FAutoPlayActive := False;
-  FAutoPlaySearch := EmptyGameTreeSearchRef;
-  FAutoPlayTreeId := 0;
-  FAutoPlayNodeId := 0;
+  FAutoPlay.Stop;
   if (Trim(AReason) <> '') and (FAnalyzerMemo <> nil) then
     FAnalyzerMemo.Lines.Add('Auto Play stopped; reason=' + Trim(AReason));
   InvalidateAnalyzerPositionSignature;
@@ -2055,11 +2038,10 @@ var
   LMovesText: string;
   LSearch: TGameTreeSearchRef;
 begin
-  if not FAutoPlayActive then
+  if not FAutoPlay.Active then
     Exit;
   LGameTree := ActiveGameTree;
-  if (LGameTree = nil) or (LGameTree.GameTreeId <> FAutoPlayTreeId) or
-    (StateForTree(LGameTree) <> gosStopped) then
+  if not FAutoPlay.CanContinue(LGameTree, StateForTree(LGameTree)) then
   begin
     StopAutoPlay('game is no longer the active stopped game');
     Exit;
@@ -2088,7 +2070,7 @@ begin
       StopAutoPlay(LErrorText);
       Exit;
     end;
-    FAutoPlaySearch := LSearch;
+    FAutoPlay.TrackSearch(LSearch);
     SetAnalyzerPvBase(LBoard, LMoveCount);
     FAnalyzerRunner.PostThinkOnce(StartingFenForTree(LGameTree), LMovesText,
       LBoard, LMoveCount, AnnotatorSeconds, LSearch, True);
@@ -2100,54 +2082,27 @@ end;
 function TMainForm.StoreAutoPlayMove(const AMoveText: string;
   out AErrorText: string): Boolean;
 var
-  LActor: TGameTreeActor;
-  LBoard: TDraughtsBoard;
-  LCommand: TGameTreeCommand;
-  LGameTree: TGameTree;
-  LMove: string;
-  LMovesText: string;
+  Actor: TGameTreeActor;
+  Board: TDraughtsBoard;
+  Command: TGameTreeCommand;
+  Tree: TGameTree;
 begin
   Result := False;
-  AErrorText := '';
-  LGameTree := ActiveGameTree;
-  LActor := ActorForGameTree(LGameTree);
-  if (LGameTree = nil) or (LActor = nil) or
-    (LGameTree.GameTreeId <> FAutoPlayTreeId) then
-  begin
-    AErrorText := 'game tree is no longer active';
-    Exit;
-  end;
-
-  LBoard := TDraughtsBoard.Create;
+  Tree := ActiveGameTree;
+  Actor := ActorForGameTree(Tree);
+  Board := TDraughtsBoard.Create;
   try
-    if not TryBuildDisplayedBoard(LGameTree, LBoard) or
-      (not LBoard.TryGetLegalMove(AMoveText, LMove)) then
-    begin
-      AErrorText := 'engine returned an illegal move: ' + Trim(AMoveText);
-      Exit;
-    end;
-  finally
-    LBoard.Free;
-  end;
-
-  LMovesText := Trim(FAutoPlayMovesText);
-  if LMovesText <> '' then
-    LMovesText += ' ';
-  LMovesText += LMove;
-  LCommand := LActor.CreateRecordAutoPlayPVCommand(FAutoPlayNodeId,
-    LMovesText);
+    if not TryBuildDisplayedBoard(Tree, Board) then FreeAndNil(Board);
+    Command := FAutoPlay.CreateMoveCommand(Actor, Tree, Board, AMoveText, AErrorText);
+  finally Board.Free; end;
+  if Command = nil then Exit;
   try
-    Result := ExecuteAndApplyGameTreeCommand(LActor, LGameTree, LCommand,
-      False, AErrorText);
-    if not Result then
-      Exit;
-    FAutoPlayMovesText := LMovesText;
-    Inc(FAutoPlayMoveCount);
-    ApplyAnnotatorVariationBrowsePly(FAutoPlayBasePly,
-      FAutoPlayMoveCount, LMovesText, LGameTree);
-  finally
-    LCommand.Free;
-  end;
+    Result := ExecuteAndApplyGameTreeCommand(Actor, Tree, Command, False, AErrorText);
+    if not Result then Exit;
+    FAutoPlay.MoveStored(Command);
+    ApplyAnnotatorVariationBrowsePly(FAutoPlay.BasePly, FAutoPlay.MoveCount,
+      FAutoPlay.MovesText, Tree);
+  finally Command.Free; end;
 end;
 
 procedure TMainForm.AnalyzerMove(Sender: TObject;
@@ -2195,7 +2150,7 @@ begin
       ReleaseGameTreeSearch(Actor, ASearch)
     else
       ReleaseRejectedSearchIfFinished(Actor, ASearch);
-    FAutoPlaySearch := EmptyGameTreeSearchRef;
+    FAutoPlay.ClearSearch;
     if not LAccepted then
     begin
       StopAutoPlay(LErrorText);
@@ -2493,7 +2448,7 @@ end;
 
 procedure TMainForm.CloseAnalyzerClick(Sender: TObject);
 begin
-  if FAutoPlayActive then
+  if FAutoPlay.Active then
     StopAutoPlay('annotator closed');
   CancelAnalyzerSearch;
   if FAnalyzerRunner <> nil then
@@ -2640,7 +2595,7 @@ var
   LTerminal: Boolean;
   Signature: string;
 begin
-  if FAutoPlayActive or (FAnalyzerRunner = nil) then
+  if FAutoPlay.Active or (FAnalyzerRunner = nil) then
     Exit;
 
   LGameTree := AGameTree;
@@ -4926,7 +4881,7 @@ procedure TMainForm.MainFormKeyDown(Sender: TObject; var Key: Word;
 begin
   if (Key = VK_ESCAPE) and (Shift = []) then
   begin
-    if FAutoPlayActive then
+    if FAutoPlay.Active then
     begin
       StopAutoPlay;
       if Trim(FDisplayedPosition.PreviewMoves) <> '' then
@@ -5511,7 +5466,7 @@ begin
           HandleMctsLog(TMctsLogGuiMessage(EventObject).Message)
         else if EventObject is TAnalyzerFinishedGuiMessage then
         begin
-          if FAutoPlayActive and
+          if FAutoPlay.Active and
             (FAnalyzerRunner = TAnalyzerFinishedGuiMessage(EventObject).Runner) then
             StopAutoPlay('annotator closed');
           CancelAnalyzerSearch;
@@ -5959,7 +5914,7 @@ var
 begin
   if FAutoPlayButton = nil then
     Exit;
-  if FAutoPlayActive then
+  if FAutoPlay.Active then
   begin
     FAutoPlayButton.Caption := 'Auto Playing';
     FAutoPlayButton.Enabled := False;

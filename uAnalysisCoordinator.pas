@@ -4,6 +4,33 @@ interface
 uses SysUtils, uDraughtsBoard, uGameTree, uGameTreeActor, uGameTreeSearchRef,
   uGameOrchestrator, uPvSnapshot;
 type
+  TAutoPlayCoordinator = class
+  private
+    FActive: Boolean;
+    FBasePly, FMoveCount: Integer;
+    FTreeId, FNodeId: Int64;
+    FMovesText: string;
+    FSearch: TGameTreeSearchRef;
+  public
+    procedure BeginLine(ATree: TGameTree; ANode: TGameTreePlyNode);
+    procedure Stop;
+    procedure TrackSearch(const ASearch: TGameTreeSearchRef);
+    procedure ClearSearch;
+    function SearchMatches(const ASearch: TGameTreeSearchRef): Boolean;
+    function CanContinue(ATree: TGameTree; AState: TGameOrchestratorState): Boolean;
+    function CreateMoveCommand(AActor: TGameTreeActor; ATree: TGameTree;
+      ABoard: TDraughtsBoard; const AMove: string;
+      out AErrorText: string): TGameTreeCommand;
+    procedure MoveStored(ACommand: TGameTreeCommand);
+    property Active: Boolean read FActive;
+    property Search: TGameTreeSearchRef read FSearch;
+    property TreeId: Int64 read FTreeId;
+    property NodeId: Int64 read FNodeId;
+    property BasePly: Integer read FBasePly;
+    property MoveCount: Integer read FMoveCount;
+    property MovesText: string read FMovesText;
+  end;
+
   // Main-thread coordination only. Actors, trees, snapshots and runners are borrowed.
   TAnalysisCoordinator = class
   private
@@ -252,4 +279,59 @@ begin
     AStartingFEN + #10 + AMovesText + #10 +
     IntToStr(Ord(AGameState));
 end;
+procedure TAutoPlayCoordinator.BeginLine(ATree: TGameTree; ANode: TGameTreePlyNode);
+begin
+  FBasePly := ANode.PlyNumber;
+  FNodeId := ANode.NodeId;
+  FMoveCount := 0;
+  FMovesText := '';
+  FActive := True;
+  FTreeId := ATree.GameTreeId;
+  FSearch := EmptyGameTreeSearchRef;
+end;
+procedure TAutoPlayCoordinator.Stop;
+begin
+  FActive := False;
+  FSearch := EmptyGameTreeSearchRef;
+  FTreeId := 0;
+  FNodeId := 0;
+end;
+procedure TAutoPlayCoordinator.TrackSearch(const ASearch: TGameTreeSearchRef);
+begin FSearch := ASearch; end;
+procedure TAutoPlayCoordinator.ClearSearch;
+begin FSearch := EmptyGameTreeSearchRef; end;
+function TAutoPlayCoordinator.SearchMatches(const ASearch: TGameTreeSearchRef): Boolean;
+begin
+  Result := FActive and IsValidGameTreeSearchRef(ASearch) and
+    SameGameTreeSearchRef(FSearch, ASearch);
+end;
+function TAutoPlayCoordinator.CanContinue(ATree: TGameTree;
+  AState: TGameOrchestratorState): Boolean;
+begin
+  Result := (ATree <> nil) and (ATree.GameTreeId = FTreeId) and (AState = gosStopped);
+end;
+function TAutoPlayCoordinator.CreateMoveCommand(AActor: TGameTreeActor;
+  ATree: TGameTree; ABoard: TDraughtsBoard; const AMove: string;
+  out AErrorText: string): TGameTreeCommand;
+var Move, Moves: string;
+begin
+  Result := nil;
+  AErrorText := '';
+  if (ATree = nil) or (AActor = nil) or (ATree.GameTreeId <> FTreeId) then
+  begin AErrorText := 'game tree is no longer active'; Exit; end;
+  if (ABoard = nil) or not ABoard.TryGetLegalMove(AMove, Move) then
+  begin AErrorText := 'engine returned an illegal move: ' + Trim(AMove); Exit; end;
+  Moves := Trim(FMovesText);
+  if Moves <> '' then Moves += ' ';
+  Moves += Move;
+  Result := AActor.CreateRecordAutoPlayPVCommand(FNodeId, Moves);
+end;
+procedure TAutoPlayCoordinator.MoveStored(ACommand: TGameTreeCommand);
+begin
+  // The form applies actor results before advancing the preview, as before.
+  if (ACommand = nil) or not ACommand.Accepted then Exit;
+  FMovesText := ACommand.PvText;
+  Inc(FMoveCount);
+end;
+
 end.

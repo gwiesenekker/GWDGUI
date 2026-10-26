@@ -10,11 +10,75 @@ begin
   try Actor.ExecuteCommand(Command); Check(Command.Accepted, Command.ErrorText);
   finally Command.Free; end;
 end;
+procedure CheckAutoPlay;
+var Actor, Other: TGameTreeActor; AutoPlay: TAutoPlayCoordinator;
+  Board: TDraughtsBoard; Command: TGameTreeCommand; Search: TGameTreeSearchRef;
+  Node: TGameTreePlyNode; ErrorText: string;
+begin
+  Actor := TGameTreeActor.Create; Other := TGameTreeActor.Create;
+  AutoPlay := TAutoPlayCoordinator.Create; Board := TDraughtsBoard.Create;
+  try
+    Execute(Actor, Actor.CreateAppendMainlineMoveCommand('32-28', gmsHuman));
+    Execute(Actor, Actor.CreateAppendMainlineMoveCommand('18-23', gmsHuman));
+    Node := Actor.GameTree.MainlineNode[1];
+    Check(Actor.GameTree.TryBuildBoardAtNode(Node, Board), 'historical Auto Play board');
+    AutoPlay.BeginLine(Actor.GameTree, Node);
+    Check(AutoPlay.Active and (AutoPlay.BasePly = 1) and (AutoPlay.NodeId = Node.NodeId) and
+      (AutoPlay.MoveCount = 0) and (AutoPlay.MovesText = ''), 'start resets temporary line at selected node');
+    Check(AutoPlay.CanContinue(Actor.GameTree, gosStopped), 'same stopped tree can continue');
+    Check(not AutoPlay.CanContinue(Other.GameTree, gosStopped), 'different selected game cannot continue');
+    Check(not AutoPlay.CanContinue(Actor.GameTree, gosRunning), 'resumed game cannot continue');
+    Check(StartAnalysisSearch(Actor, Node, Search, ErrorText), ErrorText);
+    AutoPlay.TrackSearch(Search);
+    Check(AutoPlay.SearchMatches(Search), 'Auto Play tracks one-shot identity');
+    Command := AutoPlay.CreateMoveCommand(Actor, Actor.GameTree, Board, '20-24', ErrorText);
+    Check(Command <> nil, ErrorText);
+    try
+      Check((AutoPlay.MoveCount = 0) and (Node.AutoPlayPV = ''), 'preparing move changes neither preview nor tree');
+      Actor.ExecuteCommand(Command); Check(Command.Accepted, Command.ErrorText);
+      AutoPlay.MoveStored(Command);
+    finally Command.Free; end;
+    Check((AutoPlay.MovesText = '20-24') and (AutoPlay.MoveCount = 1) and
+      (Node.AutoPlayPV = '20-24'), 'accepted move advances preview and selected-node PV');
+    Check((Actor.GameTree.MainlineCount = 2) and
+      (Actor.GameTree.MainlineNode[2].MoveText = '18-23'), 'official continuation preserved');
+    Board.PlayMove('20-24');
+    Command := AutoPlay.CreateMoveCommand(Actor, Actor.GameTree, Board, '38-32', ErrorText);
+    Check(Command <> nil, ErrorText);
+    try
+      Actor.ExecuteCommand(Command); Check(Command.Accepted, Command.ErrorText);
+      AutoPlay.MoveStored(Command);
+    finally Command.Free; end;
+    Check((AutoPlay.MovesText = '20-24 38-32') and (AutoPlay.MoveCount = 2), 'subsequent move extends PV in order');
+    Command := AutoPlay.CreateMoveCommand(Actor, Actor.GameTree, Board, '1-50', ErrorText);
+    Check((Command = nil) and (Pos('illegal move', ErrorText) > 0), 'illegal engine move creates no command');
+    Check(AutoPlay.MoveCount = 2, 'illegal engine move does not advance preview');
+    Command := AutoPlay.CreateMoveCommand(Actor, Other.GameTree, Board, '38-32', ErrorText);
+    Check((Command = nil) and (ErrorText = 'game tree is no longer active'), 'wrong tree cannot receive Auto Play');
+    Command := AutoPlay.CreateMoveCommand(Actor, Actor.GameTree, Board, '38-32', ErrorText);
+    Check(Command <> nil, ErrorText);
+    try
+      Command.NodeId := High(Int64); // Simulate a target removed before delivery.
+      Actor.ExecuteCommand(Command); Check(not Command.Accepted, 'actor rejects a missing PV target');
+      AutoPlay.MoveStored(Command);
+    finally Command.Free; end;
+    Check((AutoPlay.MoveCount = 2) and (Node.AutoPlayPV = '20-24 38-32'), 'rejected actor command preserves state and PV');
+    AutoPlay.ClearSearch;
+    Check(not AutoPlay.SearchMatches(Search), 'consumed search cannot match again');
+    AutoPlay.TrackSearch(Search); AutoPlay.Stop;
+    Check(not AutoPlay.Active and not AutoPlay.SearchMatches(Search) and
+      (AutoPlay.TreeId = 0) and (AutoPlay.NodeId = 0), 'stopping fences late results');
+    AutoPlay.BeginLine(Actor.GameTree, Actor.GameTree.Root);
+    Check((AutoPlay.MoveCount = 0) and (AutoPlay.MovesText = ''), 'new run discards previous temporary line');
+  finally Board.Free; AutoPlay.Free; Other.Free; Actor.Free; end;
+end;
+
 var Actor, Other: TGameTreeActor; Coordinator: TAnalysisCoordinator;
   Snapshot: TPvSnapshot; Board: TDraughtsBoard; Tree: TGameTree;
   Node, ResolvedNode: TGameTreePlyNode; Search, NewSearch: TGameTreeSearchRef;
   ErrorText, Key, Signature: string; State: TGameTreeSearchState;
 begin
+  CheckAutoPlay;
   Actor := TGameTreeActor.Create; Other := TGameTreeActor.Create;
   Coordinator := TAnalysisCoordinator.Create;
   Snapshot := TPvSnapshot.Create; Board := TDraughtsBoard.Create;
