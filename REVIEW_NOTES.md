@@ -2,6 +2,12 @@
 
 ## Review of afd9c54 — 2026-10-26
 
+D19: the registration listener now receives gui-dxp-peer-ip and uses the live
+listener's peer/address rules. Normalize the binding address in a worker-local
+variable; host/peer configuration is never rewritten while Stop reads it. Real
+TCP tests check localhost, explicit acceptance/rejection, and repeated immediate
+shutdown. The manual no longer lists this limitation.
+
 D20 is fixed at the settings boundary: validate Hub-only transmitted parameters
 before the acceptance callback can modify the registry and before parameter-file
 writes. Report the parameter name, retain existing files and keep the editor open.

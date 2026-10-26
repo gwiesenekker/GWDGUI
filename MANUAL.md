@@ -81,7 +81,7 @@ increment through DXP.
 DXP host fields accept dotted IPv4 addresses and `localhost` (mapped to
 `127.0.0.1`); DNS names and IPv6 are not supported. A listener bound to loopback
 accepts only local peers. `gui-dxp-peer-ip` can further restrict the peer of a
-live game listener; the registration connection test does not apply it yet.
+live game listener and the registration connection test.
 
 DXP is used for game communication. DXP game messages do not currently supply
 the Hub-style analysis score and PV data used by the score history.
@@ -113,7 +113,7 @@ Important GUI parameters include:
 | `gui-hub-launch-argument` | Hub command-line arguments |
 | `gui-dxp-id` | DXP identity used by GWDGUI |
 | `gui-dxp-ip` | DXP dotted IPv4 host, or `localhost` |
-| `gui-dxp-peer-ip` | Optional allowed peer IPv4 for the game listener; not applied by the registration connection test |
+| `gui-dxp-peer-ip` | Optional allowed peer IPv4 for game listeners and the registration connection test |
 | `gui-startup-timeout-ms` | Engine startup timeout; 0 means 60,000 ms; effective range 1,000–300,000 ms |
 | `gui-dxp-socket` | DXP port |
 | `gui-dxp-role` | `listen` or `connect` |

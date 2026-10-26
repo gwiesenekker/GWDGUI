@@ -14,6 +14,7 @@ type
   private
     FLock: TCriticalSection;
     FDxpHost: string;
+    FAllowedPeer: string;
     FDxpPort: Word;
     FLogText: string;
     FOnLog: TDxpTestLogEvent;
@@ -28,7 +29,7 @@ type
     procedure Execute; override;
   public
     constructor Create(const AHost: string; APort: Word; ARole: TDxpEngineRole;
-      AOnLog: TDxpTestLogEvent);
+      AOnLog: TDxpTestLogEvent; const AAllowedPeer: string = '');
     destructor Destroy; override;
     procedure StopConnection;
   end;
@@ -39,12 +40,13 @@ uses
   SysUtils, sockets, uSocketSafety;
 
 constructor TDxpTestConnectionThread.Create(const AHost: string; APort: Word;
-  ARole: TDxpEngineRole; AOnLog: TDxpTestLogEvent);
+  ARole: TDxpEngineRole; AOnLog: TDxpTestLogEvent; const AAllowedPeer: string);
 begin
   inherited Create(True);
   FreeOnTerminate := False;
   FLock := TCriticalSection.Create;
-  FDxpHost := AHost;
+  FDxpHost := Trim(AHost);
+  FAllowedPeer := Trim(AAllowedPeer);
   if Trim(FDxpHost) = '' then FDxpHost := '127.0.0.1';
   FDxpPort := APort;
   FRole := ARole;
@@ -65,9 +67,15 @@ end;
 
 procedure TDxpTestConnectionThread.AcceptConnection(Sender: TObject;
   Data: TSocketStream);
+var Peer: string;
 begin
-  if not DxpPeerAllowed(FDxpHost, '', NetAddrToStr(TInetSockAddr(Data.RemoteAddress).sin_addr)) then
-  begin Data.Free; Exit; end;
+  Peer := NetAddrToStr(TInetSockAddr(Data.RemoteAddress).sin_addr);
+  if not DxpPeerAllowed(DxpListenAddress(FDxpHost), FAllowedPeer, Peer) then
+  begin
+    Data.Free;
+    Log('[DXP rejected peer ' + Peer + ']');
+    Exit;
+  end;
   FSocket := Data;
   if FServer <> nil then
     FServer.StopAccepting(False);
@@ -106,14 +114,17 @@ procedure TDxpTestConnectionThread.Execute;
 var
   Attempt: Integer;
   InetSocket: TInetSocket;
+  ListenHost: string;
 begin
   try
     if FRole = derListen then
     begin
-      FDxpHost := DxpListenAddress(FDxpHost);
-      Log('[DXP listening on ' + FDxpHost + ':' + IntToStr(FDxpPort) + ']');
+      // Host/peer configuration remains immutable while StopConnection can read it.
+      ListenHost := DxpListenAddress(FDxpHost);
+      if FAllowedPeer <> '' then DxpListenAddress(FAllowedPeer);
+      Log('[DXP listening on ' + ListenHost + ':' + IntToStr(FDxpPort) + ']');
       FLock.Acquire;
-      try FServer := TInetServer.Create(FDxpHost, FDxpPort);
+      try FServer := TInetServer.Create(ListenHost, FDxpPort);
       finally FLock.Release; end;
       try
         FServer.ReuseAddress := True;

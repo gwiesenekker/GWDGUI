@@ -138,6 +138,44 @@ begin
   finally Listener.Free; end;
 end;
 
+type TConnectionLog = class
+  Connected, Rejected: Boolean;
+  Error: string;
+  procedure Log(Sender: TObject; const Text: string);
+end;
+procedure TConnectionLog.Log(Sender: TObject; const Text: string);
+begin
+  if Pos('socket connected', Text) > 0 then Connected := True;
+  if Pos('rejected peer', Text) > 0 then Rejected := True;
+  if Pos('socket error', Text) > 0 then Error := Text;
+end;
+procedure CheckRegistrationPeerRestriction;
+var Observer: TConnectionLog; Test: TDxpTestConnectionThread; Client: TInetSocket;
+  Port: Word; Tick: QWord; Mode: Integer; Peer: string;
+begin
+  for Mode := 0 to 1 do
+  begin
+    Observer := TConnectionLog.Create; Client := nil; Port := AvailablePort;
+    if Mode = 0 then Peer := '127.0.0.2' else Peer := '127.0.0.1';
+    Test := TDxpTestConnectionThread.Create('localhost', Port, derListen, @Observer.Log, Peer);
+    try
+      Tick := GetTickCount64;
+      repeat
+        CheckSynchronize(1);
+        try Client := TInetSocket.Create('127.0.0.1', Port, 100);
+        except on E: ESocketError do ; end;
+        Check(Observer.Error = '', Observer.Error);
+      until (Client <> nil) or (GetTickCount64 - Tick > 3000);
+      Check(Client <> nil, 'registration test binds localhost and accepts a TCP attempt');
+      Tick := GetTickCount64;
+      repeat CheckSynchronize(5);
+      until Observer.Connected or Observer.Rejected or (GetTickCount64 - Tick > 3000);
+      Check((Observer.Connected = (Mode = 1)) and (Observer.Rejected = (Mode = 0)),
+        'registration test honors the configured peer restriction');
+    finally Client.Free; Test.Free; Observer.Free; end;
+  end;
+end;
+
 procedure CheckListenerShutdownRaces;
 var I: Integer; Listener: TDxpAcceptThread; Test: TDxpTestConnectionThread;
 begin
@@ -309,6 +347,7 @@ begin
   CheckLoopbackBinding;
   CheckNamedListenerAndPeerRestriction;
   CheckListenerShutdownRaces;
+  CheckRegistrationPeerRestriction;
   CheckGameEndClaim('1', dsWhite, '0-2');
   CheckGameEndClaim('1', dsBlack, '2-0');
   CheckDisconnectedPeerFailsPromptly;

@@ -5,6 +5,15 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Apply DXP peer restrictions to connection tests (D19)
+
+- Pass gui-dxp-peer-ip through the engine editor to its registration listener,
+  using the same address/peer rules as live games; report rejected peers.
+- Keep host configuration immutable while Stop can read it; normalize a local
+  binding address instead of rewriting the shared string from the worker.
+- Add real TCP matching/rejected-peer checks alongside repeated immediate stops.
+  Update the manual to reflect the shared restriction.
+
 ### 2026-10-26 — Reject invalid Hub parameters before saving (D20)
 
 - Validate transmitted Hub parameter names/values before accepting the editor or

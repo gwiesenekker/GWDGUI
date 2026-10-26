@@ -837,7 +837,8 @@ begin
           IntToStr(Engine.DxpPort) + ']');
       FreeAndNil(FDxpThread);
       FDxpThread := TDxpTestConnectionThread.Create(Engine.DxpHost,
-        Engine.DxpPort, Engine.DxpRole, @DxpLog);
+        Engine.DxpPort, Engine.DxpRole, @DxpLog,
+        EngineParamValue(FCapturedParams, 'gui-dxp-peer-ip', ''));
       if Trim(FDxpIdEdit.Text) = '' then
         FDxpIdEdit.Text := ExtractFileName(Engine.ExePath);
       ReadForMs(1000);
