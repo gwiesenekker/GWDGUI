@@ -5,6 +5,15 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Characterize running-game and queued-message ownership
+
+- Verify copied engine setup and reservation keys, independently returned setup
+  definitions, and retained snapshot/PV/log data after the source is changed/freed.
+- Count snapshot destruction on consumption, queue clear, closed-queue rejection
+  and shutdown; verify finished messages borrow runner identities and move messages
+  retain exact tree/node/search references.
+- Validation: Lazarus nogui lifecycle and ownership checks pass before extraction.
+
 ### 2026-10-26 — Inventory the main-form refactor before the independent chess port
 
 - Document retain/replace/omit decisions, ownership invariants, extraction order

@@ -9,7 +9,7 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  Interfaces, Classes, SysUtils, SyncObjs, uMainForm, uGameRunnerThread,
+  Interfaces, Classes, SysUtils, SyncObjs, uThreadMessageQueue, uPvSnapshot, uAnalyzerRunnerThread, uGameTreeSearchRef, uMainForm, uGameRunnerThread,
   uEngineRegistry, uDraughtsBoard, uGameSetupForm, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
 
 type
@@ -308,8 +308,111 @@ begin
   end;
 end;
 
+type
+  TCountedRunnerSnapshot = class(TGameRunnerSnapshot)
+    destructor Destroy; override;
+  end;
+  TCountedPvSnapshot = class(TPvSnapshot)
+    destructor Destroy; override;
+  end;
+  TCountedObject = class
+    destructor Destroy; override;
+  end;
+var RunnerSnapshotsFreed, PvSnapshotsFreed, ObjectsFreed: Integer;
+destructor TCountedRunnerSnapshot.Destroy;
+begin Inc(RunnerSnapshotsFreed); inherited Destroy; end;
+destructor TCountedPvSnapshot.Destroy;
+begin Inc(PvSnapshotsFreed); inherited Destroy; end;
+destructor TCountedObject.Destroy;
+begin Inc(ObjectsFreed); inherited Destroy; end;
+
+procedure CheckOwnedSetupAndSnapshot;
+var Setup, CopySetup: TGameSetup; Game: TRunningGame;
+  Snapshot: TGameRunnerSnapshot; Data: TRunningSnapshotTreeInput;
+  Log: TRunningSnapshotLogInput; Keys: TStringList;
+begin
+  Setup := Default(TGameSetup); CopySetup := Default(TGameSetup);
+  Setup.StartingFEN := DefaultStartingFEN; Setup.TimeControl := DefaultTimeControl;
+  Setup.WhiteEngine := TExternalEngineDefinition.Create;
+  Setup.BlackEngine := TExternalEngineDefinition.Create;
+  Setup.WhiteEngine.Arguments := '--original-white'; Setup.BlackEngine.Arguments := '--original-black';
+  Keys := TStringList.Create; Keys.Add('reserved-engine');
+  Game := TRunningGame.Create(77, 'ownership', nil, pkRegistered, pkRegistered,
+    'white-key', 'black-key', 'White', 'Black', Keys, Setup);
+  Snapshot := TGameRunnerSnapshot.Create;
+  try
+    Setup.WhiteEngine.Arguments := 'mutated source';
+    FreeAndNil(Setup.WhiteEngine); FreeAndNil(Setup.BlackEngine); Keys.Clear;
+    Game.AssignSetupTo(CopySetup);
+    Check((CopySetup.WhiteEngine.Arguments = '--original-white') and
+      (CopySetup.BlackEngine.Arguments = '--original-black'), 'game owns independent setup definitions');
+    CopySetup.WhiteEngine.Arguments := 'mutated output';
+    FreeAndNil(CopySetup.WhiteEngine); FreeAndNil(CopySetup.BlackEngine);
+    Game.AssignSetupTo(CopySetup);
+    Check(CopySetup.WhiteEngine.Arguments = '--original-white', 'returned setup definitions are independent copies');
+    Game.AddReservationKeysTo(Keys);
+    Check((Keys.Count = 1) and (Keys[0] = 'reserved-engine'), 'game owns reservation-key copies');
+    Snapshot.LogLines.Add('retained log');
+    Snapshot.PvSnapshot.SetData(Snapshot.Board, 0, '32-28', '0.25', '12');
+    Game.AssignRunnerSnapshot(Snapshot);
+    Snapshot.LogLines.Clear; Snapshot.PvSnapshot.SetData(Snapshot.Board, 0, '34-30', '-1', '5');
+    FreeAndNil(Snapshot);
+    Game.SnapshotTreeInput(nil, 'ownership', Data); Game.SnapshotLogInput(Log);
+    Check((Data.GameId = 77) and (Data.PrincipalVariation = '32-28') and
+      (Data.PvScore = '0.25') and (Data.PvDepth = '12'), 'retained snapshot is independent of queued source lifetime');
+    Check((Log.LogLineCount = 1) and (Pos('retained log', Log.LogLinesText) > 0), 'retained logs do not alias the delivered snapshot');
+  finally
+    CopySetup.WhiteEngine.Free; CopySetup.BlackEngine.Free;
+    Setup.WhiteEngine.Free; Setup.BlackEngine.Free;
+    Snapshot.Free; Game.Free; Keys.Free;
+  end;
+end;
+
+procedure CheckGuiMessageOwnership;
+var Queue: TThreadMessageQueue; Item: TObject; Snapshot: TCountedRunnerSnapshot;
+  Pv: TCountedPvSnapshot; Borrowed: TCountedObject;
+  Message: TRunnerSnapshotGuiMessage; Search: TGameTreeSearchRef; MoveMessage: TAnalyzerMoveGuiMessage;
+begin
+  RunnerSnapshotsFreed := 0; PvSnapshotsFreed := 0; ObjectsFreed := 0;
+  Queue := TThreadMessageQueue.Create(True);
+  try
+    Snapshot := TCountedRunnerSnapshot.Create; Snapshot.LogLines.Add('queued');
+    Queue.Post(TRunnerSnapshotGuiMessage.Create(9, Snapshot));
+    Check(Queue.TryPop(Item), 'snapshot message is delivered');
+    Message := TRunnerSnapshotGuiMessage(Item);
+    Check((Message.GameId = 9) and (Message.Snapshot = Snapshot) and
+      (Message.Snapshot.LogLines[0] = 'queued'), 'queue preserves message payload and ownership');
+    Check(RunnerSnapshotsFreed = 0, 'popping does not destroy a snapshot before consumption');
+    Item.Free;
+    Check(RunnerSnapshotsFreed = 1, 'consumer disposal frees its owned runner snapshot exactly once');
+    Pv := TCountedPvSnapshot.Create;
+    Queue.Post(TAnalyzerSnapshotGuiMessage.Create(Pv)); Queue.Clear;
+    Check(PvSnapshotsFreed = 1, 'clearing queued analysis frees its snapshot exactly once');
+    Queue.Post(TRunnerSnapshotGuiMessage.Create(10, TCountedRunnerSnapshot.Create));
+    Queue.Close;
+    Check(not Queue.TryPost(TRunnerSnapshotGuiMessage.Create(11, TCountedRunnerSnapshot.Create)), 'closed queue rejects new snapshot messages');
+    Check(RunnerSnapshotsFreed = 2, 'rejected owned snapshot is freed immediately');
+    Queue.Clear;
+    Check(RunnerSnapshotsFreed = 3, 'pending snapshot is freed when queue drains on shutdown');
+    Borrowed := TCountedObject.Create;
+    try
+      // Finished notifications borrow an identity only; no runner methods are used.
+      TAnalyzerFinishedGuiMessage.Create(TAnalyzerRunnerThread(Borrowed)).Free;
+      TMctsFinishedGuiMessage.Create(TAnalyzerRunnerThread(Borrowed)).Free;
+      Check(ObjectsFreed = 0, 'finished notifications must never own their runner');
+    finally Borrowed.Free; end;
+    Check(ObjectsFreed = 1, 'runner identity remains the session owner responsibility');
+    Search := GameTreeSearchRef(1, 2, 3);
+    MoveMessage := TAnalyzerMoveGuiMessage.Create(Search, ' 32-28 ');
+    try Check(SameGameTreeSearchRef(MoveMessage.Search, Search) and (MoveMessage.MoveText = '32-28'), 'move message preserves exact search identity');
+    finally MoveMessage.Free; end;
+  finally Queue.Free; end;
+end;
+
 begin
   if ParamStr(1) = '--live-hub' then begin FakeLiveHub; Halt(0); end;
+  CheckOwnedSetupAndSnapshot;
+  CheckGuiMessageOwnership;
   CheckLiveInfoDuringThink;
   CheckCompletedResultSurvivesStop;
   CheckEditsWaitForRunner;
