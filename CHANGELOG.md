@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+## Unreleased
+
+### 2026-10-26 — Inventory the main-form refactor before the independent chess port
+
+- Document retain/replace/omit decisions, ownership invariants, extraction order
+  and missing regression coverage in REFACTORING.md.
+- Keep the draughts and chess applications independent, preserve current behaviour,
+  and leave the published v3.0 tag unchanged.
+
 ## Version 3.0 — 2026-10-26
 
 This release includes the accumulated correctness fixes below since v2.22.

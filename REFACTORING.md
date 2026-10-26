@@ -1,0 +1,74 @@
+# Main-form refactoring and chess-port inventory
+
+Working plan, 2026-10-26, starting from GWDGUI 3.0 (`9054215`).
+Draughts and chess will be separate applications, with no shared-component or
+interchangeable-game framework requirement. This work changes structure, not
+playing behaviour, file formats, protocols or released version numbers.
+
+## Ownership to preserve
+
+- The game tree owns persistent moves, ordered children, comments, clocks and
+  analysis. The actor validates mutations. Controllers must not create another
+  persistent move list, board or ply-indexed metadata store.
+- The cursor identifies a tree/node; displayed boards are validated projections
+  with a revision-scoped cache. A controller may own temporary selection state.
+- A running game owns its tree, actor, copied engine setup, retained snapshot and
+  runner. It waits for runner termination before freeing those objects.
+- The GUI queue owns posted messages. Snapshot messages own their snapshots;
+  finished messages identify runners without owning them. Consumers copy data
+  before a message is freed. Preserve queue coalescing and shutdown ordering.
+- Workers publish immutable snapshots; UI decisions and control updates stay on
+  the main thread. Keep tree/node/search IDs and cancellation fences intact.
+
+## Porting inventory
+
+“Retain” means a candidate to copy into the independent chess application, not
+an obligation to keep source or binaries shared between the applications.
+
+| Area | Current units | Draughts cleanup / chess disposition |
+|---|---|---|
+| Main window | `uMainForm` | Retain control layout and event wiring where useful; extract decisions and ownership in stages. |
+| Setup values | `uGameSetupForm` | Extract player/setup records from the LCL form; retain the simple value/ownership contract. |
+| Running games and messages | classes currently in `uMainForm`, `uThreadMessageQueue` | Extract classes mechanically; retain snapshot ownership, engine reservations and lifecycle transitions. |
+| Move interaction | selection and display methods in `uMainForm` | Isolate legal candidates, source/target selection, highlights and replay coordination. Keep a small draughts implementation; replace in chess without assuming a move is uniquely identified by two squares. |
+| Tree and cursor | `uGameTree`, `uGameTreeActor`, `uGameTreeBuilder`, `uGameTreeCursor`, `uGameTreeSearchRef` | Retain topology, node identity and actor/search contracts; replace draughts positions, validation and notation in the chess copy. |
+| Notation presentation | `uGameTreePdn`, memo range/highlight code | Reuse the existing renderer and ranges during extraction. Chess needs its own PGN/SAN rendering from the position before each move. |
+| Record import/export | `uPdn`, `uGameTreePdn` | Keep GWDGUI PDN compatibility; implement PGN in the chess application. Do not relabel PDN data as PGN. |
+| Rules and positions | `uDraughtsBoard`, `uDraughtsDrawRules`, `uGameOrchestrator` | Replace rules, FEN interpretation, move representation and termination logic for chess. Preserve orchestration concepts only after checking game-specific assumptions. |
+| Board display/setup | `uBoardControl`, `uPositionSetupForm` | Replace numbered 10×10 squares and piece artwork with chess geometry/pieces; support promotion choice and multi-square move effects. |
+| Analysis | `uAnalyzerRunnerThread`, `uPvBrowser`, `uPvSnapshot`, main-form coordination | Retain immutable updates, request identities and stale-result protection; replace board/notation/protocol details. |
+| Engine protocols | `uHubEngine`, `uDxpEngine`, `uDxpProtocol`, `uEngineRegistry`, `uEngineBase` | Retain transport, process isolation and cancellation lessons; implement UCI separately. Keep Hub/DXP supported in GWDGUI. |
+| MCTS | GWD-specific Hub extension and main-form controls | Keep existing GWDGUI behaviour. Omit from the initial chess port unless explicitly requested later. |
+| Database | `uGameDatabase`, `uDatabaseImportWorker`, `uDatabaseForm` | Retain transactional import, worker ownership and recovery patterns; replace position keys, notation and schema identification. Chess must not silently open a draughts database. |
+| Tournament | `uTournament*` | Retain durable records, identity, scheduling and file preservation; replace result conventions/scoring and game setup in the chess copy. |
+| Platform/UI support | `uPlatformProcess`, `uAtomicFile`, socket helpers, preferences, dialogs | Candidates to copy after checking game-specific settings; no shared-library project in this phase. |
+| Distribution | build scripts, regression runners, manuals | Keep GWDGUI release/tag unchanged; chess needs independent names, configuration locations, assets and documentation. |
+
+## Sequence and gates
+
+1. Inventory and characterization tests for gaps below.
+2. Extract setup value types without changing record layout or engine ownership.
+3. Move `TRunningGame` and its snapshot-input records to `uRunningGame`.
+   Move queued-message classes to `uGameGuiMessages` in a separate commit.
+4. Later: move interaction/display coordination, then notation presentation,
+   then analysis coordination. Reassess a session manager last; do not redesign
+   shutdown while merely moving the running-game class.
+
+Keep the existing GTK end-to-end checks. Add tests below the UI as boundaries
+become independent; do not replace integration coverage with controller tests.
+Line count and removal of every draughts type from the form are not hard gates.
+The gates are explicit ownership, preserved behaviour and independently testable
+operations. Each change gets relevant regressions and a local commit. Do not push
+or move the published v3.0 tag as part of this work.
+
+## Coverage inventory before extraction
+
+| Boundary | Existing coverage | Characterization to add first |
+|---|---|---|
+| Capture selection | legal move/capture ambiguity and export checks | Actual board source/target clicks with several legal captures; canonical node/board result. |
+| Board orientation | board geometry used by navigation checks | Flip with the real keyboard handler, verify square mapping on all 50 squares and unchanged model/cursor. |
+| Auto Play | one-shot analyzer searches and actor/node tests | Actual form start/stop, attachment to the selected historical node, and rejection of a late reply after stop. |
+| MCTS | headless runner position switching and shutdown | Actual form open/close and reservation release, including a late finished notification from an older runner. |
+| Unsaved standalone replacement | preservation when switching to running games; unexpected-dialog guard | Cancel prevents replacement; declining save permits it; selecting another running game does not discard/prompt for the standalone tree. |
+| Running-game ownership | real-runner stopping, edits waiting for completion, illegal/stale commands | Check copied setup ownership and retained snapshot independence before moving the class. |
+| Queue ownership | queue coalescing used by GUI runner-history checks | Count owned snapshot destruction on message disposal, replacement and queue shutdown; finished messages must not free runners. |
