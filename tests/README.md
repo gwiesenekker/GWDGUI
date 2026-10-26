@@ -104,3 +104,7 @@ restrictions and automatic/focused highlight ranges.
 The GTK standalone preservation check also exercises memo caret/selection edges
 and confirms that hiding/restoring annotations rebuilds ranges, preserves the
 selected board and leaves the exported tree unchanged.
+
+`analysis_coordinator_check.pas` covers analysis search identities, active/stale
+snapshots, cancellation and queued release, snapshot coalescing keys, independent
+analyzer/MCTS restart signatures and historical/terminal analysis policy.

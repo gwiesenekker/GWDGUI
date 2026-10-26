@@ -9,7 +9,7 @@ uses
   LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uBoardControl,
   uDraughtsBoard, uMoveInteraction, uEnginesDialog,
   uGameOrchestrator, uGameRunnerThread, uRunningGame, uGameSetupForm, uGameSetupTypes,
-  uEngineParamsJson, uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue, uGameGuiMessages,
+  uEngineParamsJson, uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue, uGameGuiMessages, uAnalysisCoordinator,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
   uGuiDialogs, uDatabaseForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
   uGameTreePdn, uNotationPresentation, uDisplayedPosition, uGameTreeSearchRef, uGameTreeView, uPositionSetupForm,
@@ -29,7 +29,6 @@ type
   private
     FAnalyzerCloseMenuItem: TMenuItem;
     FAnalyzerEngineKey: string;
-    FAnalyzerLastPositionSignature: string;
     FAnnotatorSecondsEdit: TEdit;
     FAnalyzerMiniBoard: TDraughtsBoard;
     FAnalyzerMiniBoardControl: TDraughtsBoardControl;
@@ -45,7 +44,7 @@ type
     FAnalyzerPvBrowser: TPvBrowser;
     FAnalyzerPvMemo: TMemo;
     FAnalyzerRunner: TAnalyzerRunnerThread;
-    FAnalyzerSearch: TGameTreeSearchRef;
+    FAnalysis: TAnalysisCoordinator;
     FAutoPlayActive: Boolean;
     FAutoPlayBasePly: Integer;
     FAutoPlayButton: TButton;
@@ -115,7 +114,6 @@ type
     FMiniBoardForm: TForm;
     FMctsCloseMenuItem: TMenuItem;
     FMctsEngineKey: string;
-    FMctsLastPositionSignature: string;
     FMctsMemo: TMemo;
     FMctsOpenMenuItem: TMenuItem;
     FMctsPopup: TPopupMenu;
@@ -217,17 +215,6 @@ type
     function ProcessQueuedGameTreeCommands: Integer;
     function TryStartGameTreeSearchForDisplayedNode(AGameTree: TGameTree;
       out ASearch: TGameTreeSearchRef; out AErrorText: string): Boolean;
-    function AnalyzerSearchMatches(const ASearch: TGameTreeSearchRef): Boolean;
-    function AnalyzerSnapshotIsTransient(ASnapshot: TPvSnapshot): Boolean;
-    function AcceptSearchMove(AActor: TGameTreeActor;
-      const ASearch: TGameTreeSearchRef; const AMoveText: string;
-      out AErrorText: string): Boolean;
-    function CancelGameTreeSearch(AActor: TGameTreeActor;
-      const ASearch: TGameTreeSearchRef): Boolean;
-    function ReleaseGameTreeSearch(AActor: TGameTreeActor;
-      const ASearch: TGameTreeSearchRef): Boolean;
-    function ReleaseRejectedSearchIfFinished(AActor: TGameTreeActor;
-      const ASearch: TGameTreeSearchRef): Boolean;
     function StoreMoveVariation(AActor: TGameTreeActor; AGameTree: TGameTree;
       ANodeId: Int64; const AMove: string; ASource: TGameTreeMoveSource;
       out AErrorText: string): Boolean;
@@ -243,13 +230,9 @@ type
     function TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
       out AActor: TGameTreeActor; out AGameTree: TGameTree;
       out ANode: TGameTreePlyNode): Boolean;
-    function TryResolveAnalyzerSnapshotNode(AGameTree: TGameTree;
-      ASnapshot: TPvSnapshot; out ANode: TGameTreePlyNode): Boolean;
     function TryResolveRunningSnapshotPvNode(AGameTree: TGameTree;
       const AInput: TRunningSnapshotTreeInput;
       out ANode: TGameTreePlyNode): Boolean;
-    procedure TrackAnalyzerSearch(const ASearch: TGameTreeSearchRef);
-    procedure ClearAnalyzerSearchTracking;
     procedure SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
     procedure SetAnalyzerPvBaseFromTree(AGameTree: TGameTree; ANodeId: Int64;
       AFallbackBasePly: Integer; AFallbackBoard: TDraughtsBoard);
@@ -309,9 +292,6 @@ type
     function DisplayedMovesText(AGameTree: TGameTree): string;
     function DisplayedMoveContext(AGameTree: TGameTree;
       out AMovesText: string; out AMoveCount: Integer): Boolean;
-    function DisplayedPositionSignature(AGameTree: TGameTree; ANodeId: Int64;
-      const AStartingFEN, AMovesText: string;
-      AGameState: TGameOrchestratorState): string;
     function DisplayedPositionIsTerminal(ADisplayedMoveCount,
       ATotalMoveCount: Integer; AGameState: TGameOrchestratorState): Boolean;
     function HasDisplayedGameToSave: Boolean;
@@ -596,6 +576,7 @@ begin
   FStartingFEN := FBoard.StartingFEN;
   FGameState := gosWaiting;
   FGameResult := '*';
+  FAnalysis := TAnalysisCoordinator.Create;
   FDisplayedPosition := TDisplayedPosition.Create;
   FNotation := TNotationPresentation.Create;
   FGameTreeBrowseMode := False;
@@ -1269,6 +1250,7 @@ begin
   FreeAndNil(FGameTreeForm);
   FreeAndNil(FAnalyzerPvBrowser);
   FreeAndNil(FPvBrowser);
+  FAnalysis.Free;
   FNotation.Free;
   FDisplayedPosition.Free;
   FMoveInteraction.Free;
@@ -1588,115 +1570,9 @@ end;
 function TMainForm.TryStartGameTreeSearchForDisplayedNode(
   AGameTree: TGameTree; out ASearch: TGameTreeSearchRef;
   out AErrorText: string): Boolean;
-var
-  Actor: TGameTreeActor;
-  Command: TGameTreeCommand;
-  Node: TGameTreePlyNode;
 begin
-  ASearch := EmptyGameTreeSearchRef;
-  AErrorText := '';
-  Result := False;
-
-  Actor := ActorForGameTree(AGameTree);
-  Node := CurrentDisplayedGameTreeNode(AGameTree);
-  if (Actor = nil) or (Node = nil) then
-  begin
-    AErrorText := 'no game-tree node';
-    Exit;
-  end;
-
-  Command := Actor.CreateStartSearchCommand(Node.NodeId, ASearch);
-  try
-    Result := ExecuteGameTreeCommand(Actor, Command, AErrorText);
-    if not Result then
-      ASearch := EmptyGameTreeSearchRef;
-  finally
-    Command.Free;
-  end;
-end;
-
-function TMainForm.AnalyzerSearchMatches(
-  const ASearch: TGameTreeSearchRef): Boolean;
-begin
-  Result := IsValidGameTreeSearchRef(ASearch) and
-    SameGameTreeSearchRef(FAnalyzerSearch, ASearch);
-end;
-
-function TMainForm.AnalyzerSnapshotIsTransient(
-  ASnapshot: TPvSnapshot): Boolean;
-begin
-  Result := (ASnapshot <> nil) and ASnapshot.Transient;
-end;
-
-function TMainForm.AcceptSearchMove(AActor: TGameTreeActor;
-  const ASearch: TGameTreeSearchRef; const AMoveText: string;
-  out AErrorText: string): Boolean;
-var
-  Command: TGameTreeCommand;
-begin
-  Result := False;
-  AErrorText := '';
-  if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
-  begin
-    AErrorText := 'invalid search';
-    Exit;
-  end;
-
-  Command := AActor.CreateSearchDoneCommand(ASearch, AMoveText);
-  try
-    Result := ExecuteGameTreeCommand(AActor, Command, AErrorText);
-  finally
-    Command.Free;
-  end;
-end;
-
-function TMainForm.CancelGameTreeSearch(AActor: TGameTreeActor;
-  const ASearch: TGameTreeSearchRef): Boolean;
-var
-  Command: TGameTreeCommand;
-  LErrorText: string;
-begin
-  Result := False;
-  if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
-    Exit;
-
-  Command := AActor.CreateCancelSearchCommand(ASearch);
-  try
-    Result := ExecuteGameTreeCommand(AActor, Command, LErrorText);
-  finally
-    Command.Free;
-  end;
-end;
-
-function TMainForm.ReleaseGameTreeSearch(AActor: TGameTreeActor;
-  const ASearch: TGameTreeSearchRef): Boolean;
-var
-  Command: TGameTreeCommand;
-begin
-  Result := False;
-  if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
-    Exit;
-
-  Command := AActor.CreateReleaseSearchCommand(ASearch);
-  try
-    Result := AActor.PostCommand(Command);
-    Command := nil;
-  finally
-    Command.Free;
-  end;
-end;
-
-function TMainForm.ReleaseRejectedSearchIfFinished(AActor: TGameTreeActor;
-  const ASearch: TGameTreeSearchRef): Boolean;
-var
-  LSearchState: TGameTreeSearchState;
-begin
-  Result := False;
-  if (AActor = nil) or (not IsValidGameTreeSearchRef(ASearch)) then
-    Exit;
-  if AActor.SearchState(ASearch, LSearchState) and
-    (LSearchState in [gssCancelled, gssFailed]) then
-    Result := ReleaseGameTreeSearch(AActor, ASearch);
+  Result := StartAnalysisSearch(ActorForGameTree(AGameTree),
+    CurrentDisplayedGameTreeNode(AGameTree), ASearch, AErrorText);
 end;
 
 function TMainForm.StoreMoveVariation(AActor: TGameTreeActor;
@@ -1794,66 +1670,11 @@ end;
 function TMainForm.TryResolveActiveSearchSnapshot(ASnapshot: TPvSnapshot;
   out AActor: TGameTreeActor; out AGameTree: TGameTree;
   out ANode: TGameTreePlyNode): Boolean;
-var
-  LSearch: TGameTreeSearchRef;
-  LSearchState: TGameTreeSearchState;
 begin
-  Result := False;
   AActor := nil;
-  AGameTree := nil;
-  ANode := nil;
-  if ASnapshot = nil then
-    LSearch := EmptyGameTreeSearchRef
-  else
-    LSearch := ASnapshot.SearchRef;
-  if not IsValidGameTreeSearchRef(LSearch) then
-    Exit;
-
-  AActor := ActorForSearchRef(LSearch);
-  if AActor = nil then
-    Exit;
-  if (not AActor.SearchState(LSearch, LSearchState)) or
-    (LSearchState <> gssActive) then
-  begin
-    AActor := nil;
-    Exit;
-  end;
-  ANode := AActor.GameTree.FindNodeById(LSearch.NodeId);
-  if ANode = nil then
-  begin
-    AActor := nil;
-    AGameTree := nil;
-    Exit;
-  end;
-
-  AGameTree := AActor.GameTree;
-  Result := AGameTree <> nil;
-end;
-
-function TMainForm.TryResolveAnalyzerSnapshotNode(AGameTree: TGameTree;
-  ASnapshot: TPvSnapshot; out ANode: TGameTreePlyNode): Boolean;
-var
-  LSearch: TGameTreeSearchRef;
-begin
-  Result := False;
-  ANode := nil;
-  if (AGameTree = nil) or (ASnapshot = nil) then
-    Exit;
-
-  LSearch := ASnapshot.SearchRef;
-  if IsValidGameTreeSearchRef(LSearch) and
-    (LSearch.GameTreeId = AGameTree.GameTreeId) and (LSearch.NodeId > 0) then
-    ANode := AGameTree.FindNodeById(LSearch.NodeId);
-
-  if ANode = nil then
-  begin
-    if ASnapshot.BasePly <= 0 then
-      ANode := AGameTree.Root
-    else
-      ANode := AGameTree.MainlineNode[ASnapshot.BasePly];
-  end;
-
-  Result := ANode <> nil;
+  if ASnapshot <> nil then AActor := ActorForSearchRef(ASnapshot.SearchRef);
+  Result := ResolveActiveAnalysisSnapshot(AActor, ASnapshot, AGameTree, ANode);
+  if not Result then AActor := nil;
 end;
 
 function TMainForm.TryResolveRunningSnapshotPvNode(AGameTree: TGameTree;
@@ -1873,21 +1694,6 @@ begin
   Result := ANode <> nil;
 end;
 
-procedure TMainForm.TrackAnalyzerSearch(const ASearch: TGameTreeSearchRef);
-begin
-  if not IsValidGameTreeSearchRef(ASearch) then
-  begin
-    ClearAnalyzerSearchTracking;
-    Exit;
-  end;
-
-  FAnalyzerSearch := ASearch;
-end;
-
-procedure TMainForm.ClearAnalyzerSearchTracking;
-begin
-  FAnalyzerSearch := EmptyGameTreeSearchRef;
-end;
 
 procedure TMainForm.SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
 begin
@@ -1927,12 +1733,12 @@ end;
 
 procedure TMainForm.InvalidateAnalyzerPositionSignature;
 begin
-  FAnalyzerLastPositionSignature := '';
+  FAnalysis.InvalidateAnalyzer;
 end;
 
 procedure TMainForm.InvalidateMctsPositionSignature;
 begin
-  FMctsLastPositionSignature := '';
+  FAnalysis.InvalidateMcts;
 end;
 
 procedure TMainForm.ApplyGameTreeCommandResult(AGameTree: TGameTree;
@@ -2420,8 +2226,8 @@ begin
       FAnalyzerMemo.Lines.Add('Annotator move accepted; move=' +
         Trim(AMoveText));
     ReleaseGameTreeSearch(Actor, ASearch);
-    if AnalyzerSearchMatches(ASearch) then
-      ClearAnalyzerSearchTracking;
+    if FAnalysis.SearchMatches(ASearch) then
+      FAnalysis.ClearSearch;
   end
   else
   begin
@@ -2707,14 +2513,14 @@ procedure TMainForm.CancelAnalyzerSearch;
 var
   Actor: TGameTreeActor;
 begin
-  if not IsValidGameTreeSearchRef(FAnalyzerSearch) then
+  if not IsValidGameTreeSearchRef(FAnalysis.Search) then
     Exit;
 
-  Actor := ActorForSearchRef(FAnalyzerSearch);
-  if CancelGameTreeSearch(Actor, FAnalyzerSearch) then
-    ReleaseGameTreeSearch(Actor, FAnalyzerSearch);
+  Actor := ActorForSearchRef(FAnalysis.Search);
+  if CancelGameTreeSearch(Actor, FAnalysis.Search) then
+    ReleaseGameTreeSearch(Actor, FAnalysis.Search);
 
-  ClearAnalyzerSearchTracking;
+  FAnalysis.ClearSearch;
 end;
 
 procedure TMainForm.MctsPopupPopup(Sender: TObject);
@@ -2858,9 +2664,7 @@ begin
 
     Signature := DisplayedPositionSignature(LGameTree, LNode.NodeId,
       LStartingFEN, LDisplayedMovesText, LGameState);
-    if Signature = FAnalyzerLastPositionSignature then
-      Exit;
-    FAnalyzerLastPositionSignature := Signature;
+    if not FAnalysis.RestartAnalyzerFor(Signature) then Exit;
     CancelAnalyzerSearch;
 
     if Trim(FDisplayedPosition.PreviewMoves) <> '' then
@@ -2880,7 +2684,7 @@ begin
     begin
       if TryStartGameTreeSearchForDisplayedNode(LGameTree, LSearch,
         LErrorText) then
-        TrackAnalyzerSearch(LSearch);
+        FAnalysis.TrackSearch(LSearch);
     end;
     FAnalyzerRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText,
       FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, LTerminal,
@@ -2925,9 +2729,7 @@ begin
 
     Signature := DisplayedPositionSignature(LGameTree, LNode.NodeId,
       LStartingFEN, LDisplayedMovesText, LGameState);
-    if Signature = FMctsLastPositionSignature then
-      Exit;
-    FMctsLastPositionSignature := Signature;
+    if not FAnalysis.RestartMctsFor(Signature) then Exit;
     ClearMctsStatsGrid;
 
     LTerminal := DisplayedPositionIsTerminal(LDisplayedMoveCount,
@@ -3395,26 +3197,13 @@ begin
   end;
 end;
 
-function TMainForm.DisplayedPositionSignature(AGameTree: TGameTree;
-  ANodeId: Int64; const AStartingFEN, AMovesText: string;
-  AGameState: TGameOrchestratorState): string;
-var
-  LGameTreeId: Int64;
-begin
-  LGameTreeId := 0;
-  if AGameTree <> nil then
-    LGameTreeId := AGameTree.GameTreeId;
-  Result := IntToStr(LGameTreeId) + #10 + IntToStr(ANodeId) + #10 +
-    AStartingFEN + #10 + AMovesText + #10 +
-    IntToStr(Ord(AGameState));
-end;
 
 function TMainForm.DisplayedPositionIsTerminal(ADisplayedMoveCount,
   ATotalMoveCount: Integer; AGameState: TGameOrchestratorState): Boolean;
 begin
-  Result := (not HasLegalDisplayedMove) or
-    ((Trim(FDisplayedPosition.PreviewMoves) = '') and (AGameState = gosGameOver) and
-      ((BrowseBasePly < 0) or (ADisplayedMoveCount >= ATotalMoveCount)));
+  Result := AnalysisPositionIsTerminal(HasLegalDisplayedMove,
+    Trim(FDisplayedPosition.PreviewMoves) <> '', BrowseBasePly,
+    ADisplayedMoveCount, ATotalMoveCount, AGameState);
 end;
 
 function TMainForm.HasDisplayedGameToSave: Boolean;
@@ -5534,18 +5323,9 @@ var
   SnapshotMessage: TRunnerSnapshotGuiMessage;
 
   function AnalyzerSnapshotKey(AMessage: TAnalyzerSnapshotGuiMessage): string;
-  var
-    Search: TGameTreeSearchRef;
   begin
-    Result := '';
-    if (AMessage = nil) or (AMessage.Snapshot = nil) then
-      Exit;
-    Search := AMessage.Snapshot.SearchRef;
-    if IsValidGameTreeSearchRef(Search) then
-      Result := 'search:' + IntToStr(Search.GameTreeId) + ':' +
-        IntToStr(Search.SearchId) + ':' + IntToStr(Search.NodeId)
-    else
-      Result := 'display';
+    if AMessage = nil then Exit('');
+    Result := AnalysisSnapshotKey(AMessage.Snapshot);
   end;
 
   procedure ApplyAnalyzerSnapshot(AMessage: TAnalyzerSnapshotGuiMessage);

@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Extract analysis search coordination
+
+- Add LCL-independent uAnalysisCoordinator for analysis search tracking, actor
+  start/done/cancel/release commands, snapshot identity checks and coalescing keys.
+- Move analyzer/MCTS restart signatures and terminal-position policy out of the
+  form. Keep actor lookup, queue delivery, engine ownership and shutdown there.
+- Add headless regressions for nested identities, stale results after cancellation
+  or completion, queued release, restart suppression and terminal/history policy.
+  GTK preservation and analysis-control checks pass.
+
 ### 2026-10-26 — Verify notation selections across filter rebuilds
 
 - Add a GTK regression using actual memo and popup handlers for caret endpoints,
