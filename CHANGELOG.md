@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Extract displayed-position coordination
+
+- Move the sole tree cursor, temporary PV preview, selected-path text and validated
+  board projection to uDisplayedPosition, independent of LCL. Keep tree ownership,
+  actor lookup, analysis cancellation and control updates in the form.
+- Preserve revision-scoped replay reuse during nested refreshes, copied cached
+  boards, cache disposal after the outer refresh, and atomic preview failure.
+- Add headless nested-branch, preview, selection/fallback and replay-cache tests.
+  GTK preservation and interaction checks pass.
+
 ### 2026-10-26 — Extract board move interaction
 
 - Move temporary source selection, legal candidates, ordered target squares and

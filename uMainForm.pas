@@ -12,7 +12,7 @@ uses
   uEngineParamsJson, uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue, uGameGuiMessages,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
   uGuiDialogs, uDatabaseForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameTreeCursor, uGameTreeSearchRef, uGameTreeView, uPositionSetupForm,
+  uGameTreePdn, uDisplayedPosition, uGameTreeSearchRef, uGameTreeView, uPositionSetupForm,
   uPreferences, uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm, uGameMoveHistory;
 
 type
@@ -28,11 +28,6 @@ type
     MovesText: string;
   end;
   TMoveVariationHitArray = array of TMoveVariationHit;
-
-  TDisplayReplayCacheEntry = record
-    TreeId, NodeId, Revision: Int64;
-    Board: TDraughtsBoard;
-  end;
 
   TDisplayedBoardInfo = record
     WhiteName: string;
@@ -86,8 +81,7 @@ type
     FGameLogMemoLineCount: Integer;
     FGameLogMemoShowStdout: Boolean;
     FGameLogMemo: TMemo;
-    FTreeCursor: TGameTreeCursor;
-    FPreviewPly: Integer;
+    FDisplayedPosition: TDisplayedPosition;
     FGameResult: string;
     FGames: TList;
     FGamesListBox: TListBox;
@@ -179,13 +173,7 @@ type
     FViewedGameId: Integer;
     FVariationHits: TMoveVariationHitArray;
 
-    FVariationBrowseMoves: string;
     FDisplayBoardFailed: Boolean;
-    FDisplayRefreshDepth: Integer;
-    FDisplayReplayCache: array of TDisplayReplayCacheEntry;
-    {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
-    FDisplayReplayBuildCount: Integer;
-    {$ENDIF}
     FWhiteClockLabel: TLabel;
     FWhitePlayerEdit: TEdit;
     procedure ApplyBoardFlipped;
@@ -512,7 +500,8 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
-    property LastDisplayReplayCount: Integer read FDisplayReplayBuildCount;
+    function GetLastDisplayReplayCount: Integer;
+    property LastDisplayReplayCount: Integer read GetLastDisplayReplayCount;
     {$ENDIF}
     function ActiveGameTree: TGameTree;
     function CurrentGameTreePdnText(const AEventName: string): string;
@@ -622,9 +611,8 @@ begin
   FStartingFEN := FBoard.StartingFEN;
   FGameState := gosWaiting;
   FGameResult := '*';
-  FTreeCursor := TGameTreeCursor.Create;
+  FDisplayedPosition := TDisplayedPosition.Create;
   FGameTreeBrowseMode := False;
-  FPreviewPly := 0;
   FAutoPlaySearch := EmptyGameTreeSearchRef;
   FGameLogSourceGameId := -1;
   FGameLogSourceLineCount := -1;
@@ -1295,7 +1283,7 @@ begin
   FreeAndNil(FGameTreeForm);
   FreeAndNil(FAnalyzerPvBrowser);
   FreeAndNil(FPvBrowser);
-  FTreeCursor.Free;
+  FDisplayedPosition.Free;
   FMoveInteraction.Free;
   FGameTreeActor.Free;
   FGameTree.Free;
@@ -1417,7 +1405,7 @@ var
   LGame: TRunningGame;
 begin
   Result := False;
-  if Trim(FVariationBrowseMoves) <> '' then
+  if Trim(FDisplayedPosition.PreviewMoves) <> '' then
     Exit;
 
   LGame := SelectedDisplayedGame;
@@ -1438,8 +1426,7 @@ end;
 
 procedure TMainForm.ClearVariationExploration;
 begin
-  FPreviewPly := 0;
-  FVariationBrowseMoves := '';
+  FDisplayedPosition.ClearPreview;
 end;
 
 procedure TMainForm.ToggleBoardFlipped;
@@ -1974,7 +1961,7 @@ begin
     (ACommand.CommandKind = gtcStoreMoveVariation) then
   begin
     ClearVariationExploration;
-    FTreeCursor.Select(AGameTree, AGameTree.FindNodeById(ACommand.CreatedNodeId));
+    FDisplayedPosition.Cursor.Select(AGameTree, AGameTree.FindNodeById(ACommand.CreatedNodeId));
   end;
 
   RefreshDisplayFromGameTree(AGameTree, True);
@@ -2061,7 +2048,7 @@ begin
         Node := ExecuteGameTreeAppendMainlineMove(Tree, Move, ASource);
         if Node = nil then Exit;
         ClearVariationExploration;
-        FTreeCursor.Follow;
+        FDisplayedPosition.Cursor.Follow;
         RefreshDisplayFromGameTree(Tree, True);
       end;
     mrVariation: AddVariationMove(Move, ASource);
@@ -2214,7 +2201,7 @@ begin
     ShowGuiOkDialog(Self, 'Auto Play', 'Open an annotator engine first.');
     Exit;
   end;
-  if (Trim(FVariationBrowseMoves) <> '') or
+  if (Trim(FDisplayedPosition.PreviewMoves) <> '') or
     BrowsingBranch then
   begin
     ShowGuiOkDialog(Self, 'Auto Play',
@@ -2889,7 +2876,7 @@ begin
     FAnalyzerLastPositionSignature := Signature;
     CancelAnalyzerSearch;
 
-    if Trim(FVariationBrowseMoves) <> '' then
+    if Trim(FDisplayedPosition.PreviewMoves) <> '' then
     begin
       SetAnalyzerPvBase(LBaseBoard, LDisplayedMoveCount);
     end
@@ -2902,7 +2889,7 @@ begin
       LTotalMoveCount, LGameState);
     if LTerminal and (FAnalyzerPvBrowser <> nil) then
       FAnalyzerPvBrowser.Clear;
-    if (not LTerminal) and (Trim(FVariationBrowseMoves) = '') then
+    if (not LTerminal) and (Trim(FDisplayedPosition.PreviewMoves) = '') then
     begin
       if TryStartGameTreeSearchForDisplayedNode(LGameTree, LSearch,
         LErrorText) then
@@ -2910,7 +2897,7 @@ begin
     end;
     FAnalyzerRunner.PostAnalyze(LStartingFEN, LDisplayedMovesText,
       FAnalyzerPvBaseBoard, FAnalyzerPvBasePly, LTerminal,
-      LSearch, Trim(FVariationBrowseMoves) <> '', AnnotatorSeconds);
+      LSearch, Trim(FDisplayedPosition.PreviewMoves) <> '', AnnotatorSeconds);
   finally
     LBaseBoard.Free;
   end;
@@ -3106,7 +3093,7 @@ begin
     FStandaloneBlackPlayerName := 'Black';
     FStandaloneEventName := '?';
     ClearVariationExploration;
-    FTreeCursor.Follow;
+    FDisplayedPosition.Cursor.Follow;
     ClearDisplayedPvCache(LBoard, 0);
     FViewedGameId := -1;
     if FGamesListBox <> nil then
@@ -3302,7 +3289,7 @@ begin
     FStandaloneBlackPlayerName := LBlackName;
     FStandaloneEventName := LEventName;
     ClearVariationExploration;
-    FTreeCursor.Select(FGameTree, FGameTree.Root);
+    FDisplayedPosition.Cursor.Select(FGameTree, FGameTree.Root);
     ImportPdnTree(FGameTree, AGame);
     ClearDisplayedPvCache(LBoard, CurrentMoveCount);
     FViewedGameId := -1;
@@ -3329,33 +3316,10 @@ end;
 
 procedure TMainForm.ApplyAnnotatorVariationBrowsePly(ABasePly,
   AVariationPly: Integer; const AMovesText: string; AGameTree: TGameTree);
-var
-  LMoveCount: Integer;
-  LMoves: TStringList;
 begin
   ClearHumanMoveSelection;
-  if (AGameTree = nil) or (ABasePly < 0) or (Trim(AMovesText) = '') then
-    Exit;
-
-  LMoves := TStringList.Create;
-  try
-    TextToMoveList(AMovesText, LMoves);
-    LMoveCount := LMoves.Count;
-  finally
-    LMoves.Free;
-  end;
-  if AVariationPly < 0 then
-    AVariationPly := 0
-  else if AVariationPly > LMoveCount then
-    AVariationPly := LMoveCount;
-
-  if ABasePly = 0 then
-    FTreeCursor.Select(AGameTree, AGameTree.Root)
-  else
-    FTreeCursor.Select(AGameTree, AGameTree.MainlineNode[ABasePly]);
-  FPreviewPly := AVariationPly;
-  FVariationBrowseMoves := Trim(AMovesText);
-  RefreshDisplayFromGameTree(AGameTree, False);
+  if FDisplayedPosition.SelectPreview(ABasePly, AVariationPly, AMovesText, AGameTree) then
+    RefreshDisplayFromGameTree(AGameTree, False);
 end;
 
 function TMainForm.CurrentMoveCount: Integer;
@@ -3371,45 +3335,27 @@ end;
 function TMainForm.CurrentDisplayedGameTreeNode(
   AGameTree: TGameTree): TGameTreePlyNode;
 begin
-  if AGameTree <> ActiveGameTree then
-  begin
-    if AGameTree = nil then Exit(nil);
-    if AGameTree.MainlineCount = 0 then Exit(AGameTree.Root);
-    Exit(AGameTree.MainlineNode[AGameTree.MainlineCount]);
-  end;
-  Result := FTreeCursor.Resolve(AGameTree);
+  Result := FDisplayedPosition.ResolveNode(AGameTree, AGameTree = ActiveGameTree);
 end;
 
 function TMainForm.GetBrowseBasePly: Integer;
-var Node: TGameTreePlyNode;
 begin
-  Node := FTreeCursor.Resolve(ActiveGameTree);
-  if FTreeCursor.Following or (Node = nil) then Exit(-1);
-  Result := Node.PlyNumber;
+  Result := FDisplayedPosition.BrowseBasePly(ActiveGameTree);
 end;
 
 function TMainForm.GetBrowsingBranch: Boolean;
-var Tree: TGameTree; Node: TGameTreePlyNode;
 begin
-  Tree := ActiveGameTree;
-  Node := FTreeCursor.Resolve(Tree);
-  Result := (Tree <> nil) and (Node <> nil) and not FTreeCursor.Following and
-    not Tree.IsMainlineNode(Node);
+  Result := FDisplayedPosition.BrowsingBranch(ActiveGameTree);
 end;
 
 function TMainForm.GetBrowseVariationPly: Integer;
 begin
-  Result := FPreviewPly;
+  Result := FDisplayedPosition.PreviewPly;
 end;
 
 function TMainForm.CurrentVariationMoveCount(AGameTree: TGameTree): Integer;
-var Moves: TStringList;
 begin
-  Moves := TStringList.Create;
-  try
-    TextToMoveList(FVariationBrowseMoves, Moves);
-    Result := Moves.Count;
-  finally Moves.Free; end;
+  Result := FDisplayedPosition.PreviewMoveCount;
 end;
 
 function TMainForm.GameTreeMainlineMovesText(AGameTree: TGameTree): string;
@@ -3436,37 +3382,8 @@ begin
 end;
 
 function TMainForm.DisplayedMovesText(AGameTree: TGameTree): string;
-var
-  I: Integer;
-  Moves, Preview: TStringList;
 begin
-  Result := '';
-  if AGameTree = nil then
-    Exit;
-  Moves := TStringList.Create;
-  Preview := TStringList.Create;
-  try
-    if not AGameTree.CopyNodeMovesTo(CurrentDisplayedGameTreeNode(AGameTree),
-      Moves) then
-      Exit;
-    if (Trim(FVariationBrowseMoves) <> '') and (BrowseVariationPly > 0) then
-    begin
-      TextToMoveList(FVariationBrowseMoves, Preview);
-      if BrowseVariationPly > Preview.Count then
-        Exit;
-      for I := 0 to BrowseVariationPly - 1 do
-        Moves.Add(Preview[I]);
-    end;
-    for I := 0 to Moves.Count - 1 do
-    begin
-      if Result <> '' then
-        Result += ' ';
-      Result += Moves[I];
-    end;
-  finally
-    Preview.Free;
-    Moves.Free;
-  end;
+  Result := FDisplayedPosition.MovesText(AGameTree, AGameTree = ActiveGameTree);
 end;
 
 function TMainForm.DisplayedMoveContext(AGameTree: TGameTree;
@@ -3509,7 +3426,7 @@ function TMainForm.DisplayedPositionIsTerminal(ADisplayedMoveCount,
   ATotalMoveCount: Integer; AGameState: TGameOrchestratorState): Boolean;
 begin
   Result := (not HasLegalDisplayedMove) or
-    ((Trim(FVariationBrowseMoves) = '') and (AGameState = gosGameOver) and
+    ((Trim(FDisplayedPosition.PreviewMoves) = '') and (AGameState = gosGameOver) and
       ((BrowseBasePly < 0) or (ADisplayedMoveCount >= ATotalMoveCount)));
 end;
 
@@ -3542,7 +3459,7 @@ begin
   ClearVariationExploration;
   FGameActive := False;
   FViewedGameId := -1;
-  FTreeCursor.Follow;
+  FDisplayedPosition.Cursor.Follow;
   FGamesListBox.ItemIndex := 0;
   SetDisplayedTreeTracking('', '', '', 0, -1);
   FGameLog.Clear;
@@ -3877,70 +3794,23 @@ end;
 
 function TMainForm.TryBuildTreeBoardAtNode(AGameTree: TGameTree;
   ANode: TGameTreePlyNode; ABoard: TDraughtsBoard): Boolean;
-var I: Integer; Revision: Int64; Actor: TGameTreeActor;
+var Actor: TGameTreeActor; Revision: Int64;
 begin
-  Result := False;
-  if (AGameTree = nil) or (ANode = nil) or (ABoard = nil) then Exit;
   Actor := ActorForGameTree(AGameTree);
   Revision := -1;
   if Actor <> nil then Revision := Actor.Revision;
-  if FDisplayRefreshDepth > 0 then
-    for I := 0 to High(FDisplayReplayCache) do
-      if (FDisplayReplayCache[I].TreeId = AGameTree.GameTreeId) and
-        (FDisplayReplayCache[I].NodeId = ANode.NodeId) and
-        (FDisplayReplayCache[I].Revision = Revision) then
-      begin ABoard.AssignFrom(FDisplayReplayCache[I].Board); Exit(True); end;
-  {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
-  if FDisplayRefreshDepth > 0 then Inc(FDisplayReplayBuildCount);
-  {$ENDIF}
-  Result := AGameTree.TryBuildBoardAtNode(ANode, ABoard);
-  if Result and (FDisplayRefreshDepth > 0) then
-  begin
-    I := Length(FDisplayReplayCache);
-    SetLength(FDisplayReplayCache, I + 1);
-    FDisplayReplayCache[I].TreeId := AGameTree.GameTreeId;
-    FDisplayReplayCache[I].NodeId := ANode.NodeId;
-    FDisplayReplayCache[I].Revision := Revision;
-    FDisplayReplayCache[I].Board := TDraughtsBoard.Create;
-    FDisplayReplayCache[I].Board.AssignFrom(ABoard);
-  end;
+  Result := FDisplayedPosition.TryBuildNodeBoard(AGameTree, ANode, Revision, ABoard);
 end;
 
 function TMainForm.TryBuildDisplayedBoard(AGameTree: TGameTree;
   ABoard: TDraughtsBoard): Boolean;
-var
-  I: Integer;
-  LNode: TGameTreePlyNode;
-  LMoves: TStringList;
-  Candidate: TDraughtsBoard;
+var Actor: TGameTreeActor; Revision: Int64;
 begin
-  Result := False;
-  if (AGameTree = nil) or (ABoard = nil) then
-    Exit;
-  LNode := CurrentDisplayedGameTreeNode(AGameTree);
-  LMoves := TStringList.Create;
-  Candidate := TDraughtsBoard.Create;
-  try
-    if not TryBuildTreeBoardAtNode(AGameTree, LNode, Candidate) then
-      Exit;
-    try
-      if (Trim(FVariationBrowseMoves) <> '') and (BrowseVariationPly > 0) then
-      begin
-        TextToMoveList(FVariationBrowseMoves, LMoves);
-        if BrowseVariationPly > LMoves.Count then
-          Exit;
-        for I := 0 to BrowseVariationPly - 1 do
-          Candidate.PlayMove(LMoves[I], True, True);
-      end;
-      ABoard.AssignFrom(Candidate);
-      Result := True;
-    except
-      Result := False;
-    end;
-  finally
-    Candidate.Free;
-    LMoves.Free;
-  end;
+  Actor := ActorForGameTree(AGameTree);
+  Revision := -1;
+  if Actor <> nil then Revision := Actor.Revision;
+  Result := FDisplayedPosition.TryBuildBoard(AGameTree, AGameTree = ActiveGameTree,
+    Revision, ABoard);
 end;
 
 function TMainForm.VisibleMainPvForTree(AGameTree: TGameTree;
@@ -4602,14 +4472,14 @@ begin
     LHighlightPly := CurrentMoveCount;
 
   if (FHighlightedGameMovePly = LHighlightPly) and
-    (not BrowsingBranch) and (Trim(FVariationBrowseMoves) = '') then
+    (not BrowsingBranch) and (Trim(FDisplayedPosition.PreviewMoves) = '') then
     Exit;
   for I := 0 to High(FVariationHits) do
-    if ((FVariationBrowseMoves = '') and not FVariationHits[I].BeforeMove and
-      (FVariationHits[I].NodeId > 0) and (FVariationHits[I].NodeId = FTreeCursor.NodeId)) or
-      ((FVariationBrowseMoves <> '') and (FVariationHits[I].MovesText = FVariationBrowseMoves) and
+    if ((FDisplayedPosition.PreviewMoves = '') and not FVariationHits[I].BeforeMove and
+      (FVariationHits[I].NodeId > 0) and (FVariationHits[I].NodeId = FDisplayedPosition.Cursor.NodeId)) or
+      ((FDisplayedPosition.PreviewMoves <> '') and (FVariationHits[I].MovesText = FDisplayedPosition.PreviewMoves) and
       (FVariationHits[I].BasePly = BrowseBasePly) and
-      (FVariationHits[I].VariationPly = FPreviewPly)) then
+      (FVariationHits[I].VariationPly = FDisplayedPosition.PreviewPly)) then
     begin
       FGameMoveMemo.SelStart := FVariationHits[I].Start;
       FGameMoveMemo.SelLength := FVariationHits[I].Length;
@@ -4726,14 +4596,14 @@ begin
   LMoveCount := CurrentMoveCount;
   if APly < 0 then APly := LMoveCount
   else if APly > LMoveCount then APly := 0;
-  if APly = 0 then FTreeCursor.Select(ActiveGameTree, ActiveGameTree.Root)
-  else FTreeCursor.Select(ActiveGameTree, ActiveGameTree.MainlineNode[APly]);
+  if APly = 0 then FDisplayedPosition.Cursor.Select(ActiveGameTree, ActiveGameTree.Root)
+  else FDisplayedPosition.Cursor.Select(ActiveGameTree, ActiveGameTree.MainlineNode[APly]);
   RefreshDisplayFromGameTree(ActiveGameTree, False);
 end;
 
 procedure TMainForm.ExitGameBrowseMode;
 begin
-  if Trim(FVariationBrowseMoves) <> '' then
+  if Trim(FDisplayedPosition.PreviewMoves) <> '' then
   begin
     ClearVariationExploration;
 
@@ -4747,7 +4617,7 @@ begin
     Exit;
   end;
   ClearVariationExploration;
-  FTreeCursor.Follow;
+  FDisplayedPosition.Cursor.Follow;
   RefreshDisplayFromGameTree(ActiveGameTree, False);
 end;
 
@@ -4802,7 +4672,7 @@ begin
     ClearHumanMoveSelection;
     ClearVariationExploration;
     FViewedGameId := AGame.Id;
-    FTreeCursor.Follow;
+    FDisplayedPosition.Cursor.Follow;
     SetDisplayedTreeTracking('', '', '', 0, -1);
   end;
 
@@ -5199,9 +5069,9 @@ begin
   LPos := LSelStart;
   for I := 0 to High(FVariationHits) do
   begin
-    if (Trim(FVariationBrowseMoves) <> '') and
+    if (Trim(FDisplayedPosition.PreviewMoves) <> '') and
       ((FVariationHits[I].BasePly <> BrowseBasePly) or
-       (FVariationHits[I].MovesText <> FVariationBrowseMoves)) then
+       (FVariationHits[I].MovesText <> FDisplayedPosition.PreviewMoves)) then
       Continue;
     if SelectionHitsRange(FVariationHits[I].Start,
       FVariationHits[I].Length) then
@@ -5211,9 +5081,9 @@ begin
         ClearHumanMoveSelection;
         ClearVariationExploration;
         if FVariationHits[I].BeforeMove then
-          FTreeCursor.SelectBefore(LGameTree, LGameTree.FindNodeById(FVariationHits[I].NodeId))
+          FDisplayedPosition.Cursor.SelectBefore(LGameTree, LGameTree.FindNodeById(FVariationHits[I].NodeId))
         else
-          FTreeCursor.Select(LGameTree, LGameTree.FindNodeById(FVariationHits[I].NodeId));
+          FDisplayedPosition.Cursor.Select(LGameTree, LGameTree.FindNodeById(FVariationHits[I].NodeId));
         RefreshDisplayFromGameTree(LGameTree, False);
       end
       else if Trim(FVariationHits[I].MovesText) <> '' then
@@ -5227,7 +5097,7 @@ begin
     end;
   end;
 
-  if Trim(FVariationBrowseMoves) <> '' then
+  if Trim(FDisplayedPosition.PreviewMoves) <> '' then
   begin
     Result := True;
     Exit;
@@ -5332,7 +5202,7 @@ begin
   FGameTreeBrowseMode := True;
   ClearHumanMoveSelection;
   ClearVariationExploration;
-  FTreeCursor.Select(Tree, Node);
+  FDisplayedPosition.Cursor.Select(Tree, Node);
   RefreshDisplayFromGameTree(Tree, False);
   if Visible and CanFocus and (FGameTreeView <> nil) and
     FGameTreeView.CanFocus then FGameTreeView.SetFocus;
@@ -5421,11 +5291,11 @@ var
 begin
   if FGameMoveMemo = nil then
     Exit;
-  if Trim(FVariationBrowseMoves) <> '' then
+  if Trim(FDisplayedPosition.PreviewMoves) <> '' then
   begin
     for I := 0 to High(FVariationHits) do
       if (FVariationHits[I].BasePly = BrowseBasePly) and
-        (FVariationHits[I].MovesText = FVariationBrowseMoves) and
+        (FVariationHits[I].MovesText = FDisplayedPosition.PreviewMoves) and
         (FVariationHits[I].VariationPly = BrowseVariationPly) then
       begin
         FGameMoveMemo.SelStart := FVariationHits[I].Start;
@@ -5436,7 +5306,7 @@ begin
       end;
   end;
   for I := 0 to High(FVariationHits) do
-    if (FVariationHits[I].NodeId = FTreeCursor.NodeId) and
+    if (FVariationHits[I].NodeId = FDisplayedPosition.Cursor.NodeId) and
       (FVariationHits[I].NodeId > 0) and not FVariationHits[I].BeforeMove then
     begin
       FGameMoveMemo.SelStart := FVariationHits[I].Start;
@@ -5465,21 +5335,21 @@ begin
     ExitGameBrowseMode
   else if Key in [VK_LEFT, VK_RIGHT] then
   begin
-    if FVariationBrowseMoves <> '' then
+    if FDisplayedPosition.PreviewMoves <> '' then
     begin
       Count := CurrentVariationMoveCount(Tree);
-      Ply := FPreviewPly;
+      Ply := FDisplayedPosition.PreviewPly;
       if Key = VK_LEFT then Dec(Ply) else Inc(Ply);
       if Ply < 0 then Ply := Count;
       if Ply > Count then Ply := 0;
       ApplyAnnotatorVariationBrowsePly(BrowseBasePly, Ply,
-        FVariationBrowseMoves, Tree);
+        FDisplayedPosition.PreviewMoves, Tree);
     end
     else
     begin
       ClearHumanMoveSelection;
-      if Key = VK_LEFT then FTreeCursor.StepLeft(Tree)
-      else FTreeCursor.StepRight(Tree);
+      if Key = VK_LEFT then FDisplayedPosition.Cursor.StepLeft(Tree)
+      else FDisplayedPosition.Cursor.StepRight(Tree);
       RefreshDisplayFromGameTree(Tree, False);
     end;
     HighlightGameMoveTextSelection(True, Tree);
@@ -5496,7 +5366,7 @@ begin
     if FAutoPlayActive then
     begin
       StopAutoPlay;
-      if Trim(FVariationBrowseMoves) <> '' then
+      if Trim(FDisplayedPosition.PreviewMoves) <> '' then
         HighlightGameMoveTextSelection(True, ActiveGameTree);
     end
     else
@@ -5810,7 +5680,7 @@ begin
 
   ClearHumanMoveSelection;
   SetDisplayedTreeTracking('', '', '', 0, -1);
-  FTreeCursor.Follow;
+  FDisplayedPosition.Cursor.Follow;
   FGameLogMemo.Clear;
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
@@ -6555,19 +6425,13 @@ var
   LGame: TRunningGame;
   LMainlineCount: Integer;
   LMovesText: string;
-  I: Integer;
 begin
   if (AGameTree = nil) or (AGameTree <> ActiveGameTree) then
     Exit;
 
-  {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
-  if FDisplayRefreshDepth = 0 then FDisplayReplayBuildCount := 0;
-  {$ENDIF}
-  Inc(FDisplayRefreshDepth);
+  FDisplayedPosition.BeginRefresh(AGameTree);
   try
   LGame := SelectedDisplayedGame;
-  // Resolve missing selections by identity before rendering any derived indexes.
-  FTreeCursor.Resolve(AGameTree);
 
   LMovesText := GameTreeMainlineMovesText(AGameTree);
   LAnnotationsText := GameTreeScoreAnnotationsText(AGameTree);
@@ -6585,14 +6449,16 @@ begin
   if LGame <> nil then
     UpdateGameListItem(LGame);
   finally
-    Dec(FDisplayRefreshDepth);
-    if FDisplayRefreshDepth = 0 then
-    begin
-      for I := 0 to High(FDisplayReplayCache) do FDisplayReplayCache[I].Board.Free;
-      SetLength(FDisplayReplayCache, 0);
-    end;
+    FDisplayedPosition.EndRefresh;
   end;
 end;
+
+{$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+function TMainForm.GetLastDisplayReplayCount: Integer;
+begin
+  Result := FDisplayedPosition.ReplayBuildCount;
+end;
+{$ENDIF}
 
 function TMainForm.TryGetDisplayedBoardFen(AGameTree: TGameTree;
   out AFen: string): Boolean;
@@ -6731,7 +6597,7 @@ begin
   Tree := ActiveGameTree;
   if (Tree = nil) or (FGameTreeView = nil) or
     (Tree.GameTreeId <> FGameTreeViewTreeId) then Exit;
-  Node := FTreeCursor.Resolve(Tree);
+  Node := FDisplayedPosition.Cursor.Resolve(Tree);
   if Node = nil then Exit;
   for I := 0 to FGameTreeView.Items.Count - 1 do
     if Int64(PtrUInt(FGameTreeView.Items[I].Data)) = Node.NodeId then

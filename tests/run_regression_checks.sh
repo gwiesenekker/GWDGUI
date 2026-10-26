@@ -18,6 +18,7 @@ CHECKS=(
   game_tree_validation_check.pas
   game_runner_history_check.pas
   running_game_lifecycle_check.pas
+  displayed_position_check.pas
   move_interaction_check.pas
   game_tree_cursor_check.pas
   game_preservation_check.pas
