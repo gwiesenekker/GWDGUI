@@ -107,6 +107,8 @@ type
     FStatusText: string;
     FMainline: TFPList;
     FNextNodeId: Int64;
+    FNodeIndexDirty: Boolean;
+    FNodeIndexRebuildCount: QWord;
     FNodeIndex: TFPHashList; // Non-owning; child nodes remain owned by the tree.
     FRoot: TGameTreePlyNode;
     FSignature: string;
@@ -133,7 +135,8 @@ type
     function GetMainlineNode(APlyNumber: Integer): TGameTreePlyNode;
     function GetMainlineCount: Integer;
     procedure AssignNodeId(ANode: TGameTreePlyNode);
-    procedure UnindexSubtree(ANode: TGameTreePlyNode);
+    procedure InvalidateNodeIndex;
+    procedure EnsureNodeIndex;
     procedure RemoveMainlineFrom(APlyNumber: Integer);
     procedure RemoveNodeFromParent(ANode: TGameTreePlyNode);
     procedure RemoveVariationNodes(ANode: TGameTreePlyNode);
@@ -141,6 +144,7 @@ type
       AWhiteRemainingSeconds, ABlackRemainingSeconds, AWhiteUsedSeconds,
       ABlackUsedSeconds: Double);
   public
+    property NodeIndexRebuildCount: QWord read FNodeIndexRebuildCount;
     function FindChildByMove(AParent: TGameTreePlyNode; const AMove: string): TGameTreePlyNode;
     function IsMainlineNode(ANode: TGameTreePlyNode): Boolean;
     function RecordBranchMove(AParent: TGameTreePlyNode; const AMove: string): TGameTreePlyNode;
@@ -384,6 +388,7 @@ end;
 procedure TGameTree.ClearStructure;
 begin
   FNodeIndex.Clear;
+  FNodeIndexDirty := False;
   FRoot.Free;
   FRoot := TGameTreePlyNode.Create;
   AssignNodeId(FRoot);
@@ -418,22 +423,37 @@ begin
     Exit;
   Inc(FNextNodeId);
   ANode.FNodeId := FNextNodeId;
-  FNodeIndex.Add(IntToStr(ANode.FNodeId), ANode);
+  if not FNodeIndexDirty then FNodeIndex.Add(IntToStr(ANode.FNodeId), ANode);
 end;
 
-procedure TGameTree.UnindexSubtree(ANode: TGameTreePlyNode);
-var I, Index: Integer;
+procedure TGameTree.InvalidateNodeIndex;
 begin
-  for I := 0 to ANode.ChildCount - 1 do UnindexSubtree(ANode.Children[I]);
-  Index := FNodeIndex.FindIndexOf(IntToStr(ANode.NodeId));
-  if Index >= 0 then FNodeIndex.Delete(Index);
+  if FNodeIndexDirty then Exit;
+  // Empty the non-owning map before freeing nodes; do not rehash per removed ID.
+  FNodeIndex.Clear;
+  FNodeIndexDirty := True;
+end;
+
+procedure TGameTree.EnsureNodeIndex;
+  procedure Visit(Node: TGameTreePlyNode);
+  var I: Integer;
+  begin
+    FNodeIndex.Add(IntToStr(Node.NodeId), Node);
+    for I := 0 to Node.ChildCount - 1 do Visit(Node.Children[I]);
+  end;
+begin
+  if not FNodeIndexDirty then Exit;
+  FNodeIndex.Clear;
+  Visit(FRoot);
+  FNodeIndexDirty := False;
+  Inc(FNodeIndexRebuildCount);
 end;
 
 procedure TGameTree.RemoveNodeFromParent(ANode: TGameTreePlyNode);
 begin
   if (ANode = nil) or (ANode.FParent = nil) then
     Exit;
-  UnindexSubtree(ANode);
+  InvalidateNodeIndex;
   ANode.FParent.FChildren.Remove(ANode);
 end;
 
@@ -451,7 +471,7 @@ begin
     Child := ANode.Children[I];
     if GetMainlineNode(Child.PlyNumber) <> Child then
     begin
-      UnindexSubtree(Child);
+      InvalidateNodeIndex;
       ANode.FChildren.Remove(Child);
     end
     else
@@ -926,6 +946,7 @@ function TGameTree.FindNodeById(ANodeId: Int64): TGameTreePlyNode;
 begin
   Result := nil;
   if ANodeId <= 0 then Exit;
+  EnsureNodeIndex;
   Result := TGameTreePlyNode(FNodeIndex.Find(IntToStr(ANodeId)));
 end;
 

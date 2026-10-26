@@ -148,3 +148,22 @@ archives, Unicode/apostrophes and exact manual text, plus the direct IDE fallbac
 The headless sweep runs it automatically. Isolated Lazarus builds regenerate
 embedded data and rebuild project units so commit/manual changes cannot reuse
 stale unit files.
+
+`runner_early_stop_check` repeatedly stops runners before their first execution
+and immediately after Start. It verifies actual termination, worker-thread
+completion exactly once, and no duplicate on disposal for games and analyzers.
+The GUI suite retains real form destruction/stop and annotator reservation checks.
+
+PDN identity checks include nested sibling-board restoration and conflicting
+metadata warnings, including the database import log. Board checks cover direct
+copy construction, legal capture paths and independent history. The performance
+harness also measures parsing and canonical PDN storage (`pdn_storage`).
+
+`performance_archive_check.py` runs the actual benchmark from a Git-less copy,
+asserting unknown metadata and successful operations without Git error output.
+The Help check accepts the explicit archive identity; build-info tests also guard
+against borrowing the identity of an unrelated enclosing repository.
+
+The index regression additionally removes 20,000 synthetic internal nodes and
+checks one lazy rebuild per batch, stale/surviving IDs, new nodes added before
+rebuilding, and bulk takebacks. It uses work counts, not timing thresholds.

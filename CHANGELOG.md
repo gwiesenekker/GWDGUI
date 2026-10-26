@@ -5,6 +5,17 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Rebuild the node index once after removal batches (F13)
+
+- Empty the non-owning index once before freeing nodes and rebuild it lazily
+  from survivors on the next lookup. New nodes added while invalidated are
+  included; normal insertions/lookups remain incremental.
+- Avoid per-node hash-list deletion/rehashing during branch clearing and takebacks.
+- Add a 20,000-node removal regression and rebuild-work assertions covering
+  surviving/stale IDs, insertion before lookup, bulk takeback and clear/ID reuse.
+- Validation: full headless/source-audit, GTK, real DXP, tournament and default
+  benchmark checks plus the application build pass. Nothing pushed.
+
 ### 2026-10-26 — Bring the user manual in line with current behavior (C9)
 
 - Correct selected-ply evaluation-bar precedence and tournament engine identities.

@@ -1,4 +1,37 @@
-# Response to Claude's review of 9c958ec
+# Responses to Claude's reviews
+
+## Review of 57647e7 — 2026-10-26
+
+Followed the agreed order in small local commits; no push, release or fork tag.
+The earlier intermittent shutdown hang was a real defect, not sufficient grounds
+for accepting a passing rerun. Deterministic early-stop regressions now cover it.
+
+| ID | Resolution |
+|---|---|
+| M8 | Deliver completion from the thread termination hook, including a runtime-skipped Execute; retain cancellation and shutdown ownership. Repeated pre-start/racing stops verify exactly one worker notification and safe disposal. |
+| F8 | Reuse one board along normalization lines, copying only at forks without initializing an unused starting position. Nested sibling/capture/storage regressions pass; same-session parse/storage median improved from 172 to 122 ms per ten operations, with identical output. |
+| U9 | Take the last move from validated displayed history, including branches/previews. Check nested Black-start variation destinations through the real GUI. |
+| P27 | Retain the first conflicting value, merge independent fields, and warn with move/ply/field names. Include warnings discovered during storage normalization in the database log. |
+| C8 | Accept explicit archive identity; benchmark metadata becomes unavailable/unknown without Git error output. Check real Git-less Help/benchmark builds and reject enclosing unrelated Git identity. |
+| C9 | Correct score-bar and engine-identity statements, document termination/settings/compatibility/controls/storage, lead with Getting started, and collect keyboard/Help references at the end. |
+| F13 | Invalidate the non-owning node index once per removal batch and rebuild from survivors on demand. Check 20,000 stale IDs, survivor identity, insertion before rebuild and bulk takebacks with work bounds. |
+
+The measured F8 operation excludes database I/O; it is not a claim about an
+entire bulk import. Older databases continue to upgrade matching identities
+lazily. F14's proposed automatic rewrite on open is deferred: first reduce
+redundant comparison work, then consider an explicit cancellable upgrade.
+
+Remaining items outside this agreed pass include U7, M7, D19, D20, T23, the
+qualified older-database identity differences (P22), and optional further cache/
+live-refresh optimization. Variation editing remains a feature decision. A
+common-origin list and fork-base tag can be established when the chess fork is
+requested; they have not been created as part of this repair.
+
+Validation: full headless/source-audit suite, GTK preservation/boundary/delivery/
+Help checks, real DXP, tournament checks, default benchmark and application build
+pass on this Linux host. Native Windows validation remains a release check.
+
+## Earlier response to Claude's review of 9c958ec
 
 Reviewed and addressed on 2026-10-25. Source: `claude/review-9c958ec.md`.
 Changes are local commits; nothing has been pushed or released.

@@ -25,7 +25,55 @@ begin
   Check(Tree.FindNodeById(-1) = nil, 'negative ID absent');
   Check(Tree.FindNodeById(High(Int64)) = nil, 'unknown ID absent');
 end;
+procedure CheckLargeRemovalBatches;
+const BranchCount = 40; Depth = 500;
+var LocalTree: TGameTree; Node, Added: TGameTreePlyNode;
+  Removed: array of Int64; Trimmed: array[6..200] of Int64;
+  I, J, K: Integer; RootId, TipId: Int64; Before: QWord;
 begin
+  LocalTree := TGameTree.Create;
+  try
+    RootId := LocalTree.Root.NodeId;
+    LocalTree.RecordMainlineMove(1, '32-28'); LocalTree.RecordMainlineMove(2, '18-23');
+    TipId := LocalTree.MainlineNode[2].NodeId;
+    SetLength(Removed, BranchCount * Depth); K := 0;
+    // Synthetic internal nodes exercise map lifecycle independently of rules.
+    for I := 1 to BranchCount do
+    begin
+      Node := LocalTree.RecordBranchMove(LocalTree.Root, '1-' + IntToStr(I));
+      Removed[K] := Node.NodeId; Inc(K);
+      for J := 2 to Depth do
+      begin Node := LocalTree.RecordBranchMove(Node, '6-11'); Removed[K] := Node.NodeId; Inc(K); end;
+    end;
+    Before := LocalTree.NodeIndexRebuildCount;
+    LocalTree.ClearBranches;
+    Check(LocalTree.NodeIndexRebuildCount = Before, 'bulk clearing does not rebuild for every removed node');
+    Added := LocalTree.RecordBranchMove(LocalTree.Root, '2-7');
+    Check(LocalTree.FindNodeById(Added.NodeId) = Added, 'nodes added during invalidation enter rebuilt index');
+    Check(LocalTree.FindNodeById(TipId) = LocalTree.MainlineNode[2], 'clearing retains official moves');
+    for I := 0 to High(Removed) do
+      Check(LocalTree.FindNodeById(Removed[I]) = nil, 'large removed subtree leaves no stale IDs');
+    Check(LocalTree.NodeIndexRebuildCount = Before + 1, 'one lazy rebuild covers all bulk-clear lookups');
+    LocalTree.RemoveBranch(Added);
+    Check(LocalTree.FindNodeById(RootId) = LocalTree.Root, 'single branch removal rebuilds surviving index');
+    for I := 3 to 200 do
+    begin
+      LocalTree.RecordMainlineMove(I, '1-6');
+      if I >= 6 then Trimmed[I] := LocalTree.MainlineNode[I].NodeId;
+    end;
+    Before := LocalTree.NodeIndexRebuildCount;
+    LocalTree.TrimMainlineToCount(5);
+    Check(LocalTree.NodeIndexRebuildCount = Before, 'trimming many mainline nodes defers one rebuild');
+    for I := 6 to 200 do Check(LocalTree.FindNodeById(Trimmed[I]) = nil, 'trimmed IDs absent');
+    Check(LocalTree.NodeIndexRebuildCount = Before + 1, 'one rebuild covers the entire takeback');
+    Check(LocalTree.FindNodeById(TipId) = LocalTree.MainlineNode[2], 'takeback keeps surviving node identity');
+    LocalTree.Clear;
+    Check((LocalTree.Root.NodeId <> RootId) and (LocalTree.FindNodeById(RootId) = nil), 'clear never reuses old node IDs');
+  finally LocalTree.Free; end;
+end;
+
+begin
+  CheckLargeRemovalBatches;
   Tree := TGameTree.Create; Seen := TStringList.Create; Live := TStringList.Create;
   try
     CheckIndex;

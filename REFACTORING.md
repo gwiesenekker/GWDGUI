@@ -145,7 +145,8 @@ or move the published v3.0 tag as part of this work.
   Frozen text/range fixtures and work counters protect compatibility and scaling.
 - The Game Tree window defaults to notation columns, offers the original nested
   layout, marks variations and retains expansion/selection for the same tree.
-- Node IDs resolve through a non-owning hash index. Batch PDN import validates
+- Node IDs resolve through a non-owning hash index. Removal batches invalidate
+  it once; the next lookup rebuilds it from survivors without changing IDs. Batch PDN import validates
   each visited move once inside the actor while preserving subtree warnings,
   canonical moves and metadata (F11). Index lifecycle tests cover stale pointers.
 - Headless measurements on Claude's long-game fixture: 100 notation renders
@@ -177,3 +178,16 @@ or move the published v3.0 tag as part of this work.
 - The pre-chess cleanup now has explicit capture choices, tested consumer message
   delivery and a reproducible draughts baseline. Further reduction of form line
   count or a new session manager is not a prerequisite for the separate chess app.
+
+## Review follow-up at 57647e7
+
+- Completion delivery now belongs to the runners' termination hooks, which also
+  run when an immediate stop prevents Execute from starting. Cancellation tokens,
+  engine interruption and session shutdown ownership remain unchanged.
+- Parsed PDN normalization advances a board along each line and saves only fork
+  positions. Conflicting merged metadata generates named warnings in GUI/import
+  diagnostics and database logs; first-value conflict policy is unchanged.
+- Highlight data comes from the actual validated displayed move, including branch
+  and preview positions. The manual and source-archive checks match current behavior.
+- Node-index removal work is bounded by one invalidation and one subsequent rebuild;
+  the regression checks 20,000 removed IDs and preserves surviving identities.
