@@ -153,6 +153,8 @@ end;
 destructor TAnalyzerRunnerThread.Destroy;
 begin
   PostShutdown;
+  // Finished is set before DoTerminate on FPC. Join explicitly on every platform
+  // before freeing fields that completion callbacks can still access.
   WaitFor;
   FEngine.Free;
   FEngineLifetimeLock.Free;

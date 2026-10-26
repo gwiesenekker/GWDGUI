@@ -1,5 +1,24 @@
 # Responses to Claude's reviews
 
+## Review of afd9c54 — 2026-10-26
+
+A8's proposed use-after-free overlooks `TAnalyzerRunnerThread.Destroy`, which
+already calls `PostShutdown; WaitFor` before freeing any fields. FPC's Windows
+`WaitFor` waits on the OS thread handle even when `Finished` is true. The GUI's
+FreeAndNil therefore joins the thread through the destructor. Keep that ownership
+boundary rather than duplicating waits at every call site. Document it and regress
+freeing an analyzer while its completion callback is deliberately blocked; disposal
+cannot finish until the callback returns. The existing early/racing-stop tests also
+pass on Linux. This is source-backed reasoning for Windows, not a native Windows
+execution result. A8 is not reproduced and requires no runtime repair.
+
+F8's measured remaining slowdown deserves investigation, but its suggested storage
+writer change is already present: `PdnGameToStorageText` sets StandardNotation to
+false, uses cached canonical moves and does not replay the tree. Public rendering
+still replays, including duplicate logs and legacy comparisons. Measure fresh and
+duplicate imports independently before changing the hot path.
+
+
 ## Review of 57647e7 — 2026-10-26
 
 Followed the agreed order in small local commits; no push, release or fork tag.

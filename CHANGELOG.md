@@ -5,6 +5,14 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Verify analyzer disposal during completion (A8)
+
+- Document the existing explicit thread join before analyzer resources are freed.
+- Add a blocked-completion regression: disposal must wait for the callback to
+  return, including when Execute was skipped by an immediate shutdown.
+- Validation: early-stop/racing-stop and blocked-completion checks pass on Linux.
+  Native Windows execution remains a release check; no runtime change was needed.
+
 ### 2026-10-26 — Rebuild the node index once after removal batches (F13)
 
 - Empty the non-owning index once before freeing nodes and rebuild it lazily
