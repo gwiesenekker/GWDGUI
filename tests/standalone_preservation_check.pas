@@ -152,6 +152,90 @@ begin
   finally Game.Free; end;
 end;
 
+procedure CheckNotationSelectionAndFilters(AForm: TMainForm);
+var
+  Game: TPdnGame;
+  Memo: TMemo;
+  Board: TDraughtsBoardControl;
+  Expected: TDraughtsBoard;
+  HideAnnotations: TMenuItem;
+  I, Start: Integer;
+  ExportBefore: string;
+  WasHidden: Boolean;
+
+  procedure SelectText(AStart, ALength: Integer);
+  begin
+    Memo.SelStart := AStart;
+    Memo.SelLength := ALength;
+    Memo.OnClick(Memo);
+  end;
+
+  procedure CheckPosition(const Path: string);
+  var Moves: TStringList; J: Integer;
+  begin
+    Expected.SetBeginPosition;
+    Moves := TStringList.Create;
+    try
+      TextToMoveList(Path, Moves);
+      for J := 0 to Moves.Count - 1 do Expected.PlayMove(Moves[J]);
+      Check(Board.Board.CurrentFEN = Expected.CurrentFEN,
+        'notation selection displays the selected path: ' + Path);
+      Check(GameTreeToPdnText(AForm.ActiveGameTree) = ExportBefore,
+        'notation selections and display filters preserve the game');
+    finally Moves.Free; end;
+  end;
+
+begin
+  Game := TPdnGame.Create;
+  Expected := TDraughtsBoard.Create;
+  HideAnnotations := nil;
+  WasHidden := False;
+  try
+    Game.MovesText := '32-28 18-23 37-32';
+    Game.InitialCommentText := 'Opening note';
+    Game.MoveAnnotationsText := 'First move note' + LineEnding;
+    AForm.LoadPdnGameToDisplay(Game);
+    Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Board := TDraughtsBoardControl(AForm.FindComponent('MainBoard'));
+    Check((Memo <> nil) and (Board <> nil) and (Memo.PopupMenu <> nil),
+      'notation selection controls exist');
+    for I := 0 to Memo.PopupMenu.Items.Count - 1 do
+      if Memo.PopupMenu.Items[I].Caption = 'Hide annotation' then
+        HideAnnotations := Memo.PopupMenu.Items[I];
+    Check(HideAnnotations <> nil, 'annotation filter is accessible through the real popup');
+    WasHidden := HideAnnotations.Checked;
+    if WasHidden then HideAnnotations.OnClick(HideAnnotations);
+    ExportBefore := GameTreeToPdnText(AForm.ActiveGameTree);
+    Start := Pos('32-28', Memo.Text) - 1;
+    Check(Start > 0, 'initial comment precedes first move');
+    SelectText(Start + Length('32-28'), 0);
+    CheckPosition('32-28');
+    Check(Memo.SelText = '32-28', 'caret at right edge highlights the whole first move');
+    SelectText(Start - 1, 1);
+    CheckPosition('');
+    SelectText(Pos('18-23', Memo.Text), 2);
+    CheckPosition('32-28 18-23');
+    Check(Memo.SelText = '18-23', 'selected text inside a move highlights its complete range');
+    HideAnnotations.OnClick(HideAnnotations);
+    Check((Pos('Opening note', Memo.Text) = 0) and
+      (Pos('First move note', Memo.Text) = 0), 'filter rebuild removes comments');
+    CheckPosition('32-28 18-23');
+    Check(Memo.SelText = '18-23', 'filter rebuild relocates the selected move range');
+    SelectText(Pos('37-32', Memo.Text) - 1 + Length('37-32'), 0);
+    CheckPosition('32-28 18-23 37-32');
+    Check(Memo.SelText = '37-32', 'filtered ranges remain clickable at their endpoints');
+    HideAnnotations.OnClick(HideAnnotations);
+    Check(Pos('Opening note', Memo.Text) > 0, 'filter restores introductory comment');
+    CheckPosition('32-28 18-23 37-32');
+    Check(Memo.SelText = '37-32', 'restored comments relocate selected range again');
+  finally
+    if (HideAnnotations <> nil) and (HideAnnotations.Checked <> WasHidden) then
+      HideAnnotations.OnClick(HideAnnotations);
+    Expected.Free;
+    Game.Free;
+  end;
+end;
+
 procedure CheckModalDatabaseImport(AForm: TMainForm);
 var Form: TDatabaseForm; Probe: TDatabaseModalProbe; Database: TGameDatabase;
   FileName, DbName: string; Text: TStringList; Games: TList; I: Integer;
@@ -1100,6 +1184,7 @@ begin
       CheckLandingCaptureImport(Form);
       CheckModalDatabaseImport(Form);
       CheckParsedLiteralComments(Form);
+      CheckNotationSelectionAndFilters(Form);
       CheckCoalescedRunnerHistory(Form);
       CheckStandaloneMainlineCanBeExtended(Form);
       CheckCompletedGameKeepsOfficialMainline(Form);

@@ -100,3 +100,7 @@ revision-scoped replay caching through nested display refreshes.
 renderer for every filter combination, capture captions and label invalidation.
 It also covers nested branch/PV hit targets, selection endpoints, preview click
 restrictions and automatic/focused highlight ranges.
+
+The GTK standalone preservation check also exercises memo caret/selection edges
+and confirms that hiding/restoring annotations rebuilds ranges, preserves the
+selected board and leaves the exported tree unchanged.

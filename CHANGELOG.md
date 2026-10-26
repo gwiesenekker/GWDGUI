@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Verify notation selections across filter rebuilds
+
+- Add a GTK regression using actual memo and popup handlers for caret endpoints,
+  selected-text overlap and hiding/restoring annotations. Verify rebuilt ranges
+  keep the selected board and exported game unchanged.
+- Update the refactoring inventory: notation presentation is extracted; analysis
+  coordination is next. Keep the published version and tag unchanged.
+- Validation: complete headless/source-audit sweep, GTK interaction/preservation
+  checks, GTK tournament check and application build pass.
+
 ### 2026-10-26 — Extract notation hit-testing and highlight selection
 
 - Move memo range hit-testing and automatic/focused highlight selection into
