@@ -5,6 +5,14 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Complete validation of the latest review pass
+
+- Headless/source-audit/archive, GTK preservation/boundary/delivery/Help, lifecycle,
+  real TCP DXP, tournament and default performance checks pass; application builds.
+- Record A8's existing protection, measured F8 costs, four correctness fixes and
+  remaining scope in REVIEW_NOTES. Native Windows execution remains unverified.
+- All changes are local commits; nothing pushed or released.
+
 ### 2026-10-26 — Publish the current PV with stdout enabled (M7)
 
 - Parse a complete Hub output chunk before notifying stdout log observers, so a

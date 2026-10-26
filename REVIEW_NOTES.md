@@ -2,53 +2,45 @@
 
 ## Review of afd9c54 — 2026-10-26
 
-M7: parse the complete Hub chunk before emitting its stdout log notification.
-Previously that notification could publish stale analysis and consume the 500 ms
-live-update interval, suppressing the subsequent parsed-info notification. The
-single-info-line regression (then silence until done) passes with stdout disabled,
-fails with it enabled before the fix, and passes in both modes afterwards.
+Followed the suggested order: verify A8's existing protection, measure F8's fresh
+and duplicate paths, then fix the small U7/M7/D19/D20 correctness items. Changes
+are separate local commits; no push, release or fork tag.
 
-U7: replace LoadFromStream on the running xrandr pipe with an explicit drain through
-process exit. A real child sends a short first chunk, 70 KB later, then the eDP-1
-line; the regression verifies every byte, including the final line and exit code.
-The existing protected auxiliary launch path remains in use.
+### A8 — Existing disposal protection verified
 
-D19: the registration listener now receives gui-dxp-peer-ip and uses the live
-listener's peer/address rules. Normalize the binding address in a worker-local
-variable; host/peer configuration is never rewritten while Stop reads it. Real
-TCP tests check localhost, explicit acceptance/rejection, and repeated immediate
-shutdown. The manual no longer lists this limitation.
-
-D20 is fixed at the settings boundary: validate Hub-only transmitted parameters
-before the acceptance callback can modify the registry and before parameter-file
-writes. Report the parameter name, retain existing files and keep the editor open.
-Headless tests cover quotes/CR/LF, GUI-only exceptions and DXP; the GTK editor test
-checks that an invalid edit cannot overwrite its saved settings. MANUAL updated.
-
-A8's proposed use-after-free overlooks `TAnalyzerRunnerThread.Destroy`, which
+The proposed use-after-free overlooks `TAnalyzerRunnerThread.Destroy`, which
 already calls `PostShutdown; WaitFor` before freeing any fields. FPC's Windows
 `WaitFor` waits on the OS thread handle even when `Finished` is true. The GUI's
-FreeAndNil therefore joins the thread through the destructor. Keep that ownership
-boundary rather than duplicating waits at every call site. Document it and regress
-freeing an analyzer while its completion callback is deliberately blocked; disposal
-cannot finish until the callback returns. The existing early/racing-stop tests also
-pass on Linux. This is source-backed reasoning for Windows, not a native Windows
-execution result. A8 is not reproduced and requires no runtime repair.
+FreeAndNil therefore joins through the destructor. Keep that ownership boundary
+rather than duplicating waits at every call site. Document it and regress freeing
+an analyzer while its completion callback is deliberately blocked: disposal cannot
+finish until the callback returns. Early/racing-stop tests also pass on Linux.
+This is source-backed reasoning for Windows, not a native Windows execution result.
+A8 is not reproduced and requires no runtime repair.
 
-F8's measured remaining slowdown deserves investigation, but its suggested storage
-writer change is already present: `PdnGameToStorageText` sets StandardNotation to
-false, uses cached canonical moves and does not replay the tree. Public rendering
-still replays, including duplicate logs and legacy comparisons. Measure fresh and
-duplicate imports independently before changing the hot path.
+### F8 — Separate import paths measured
+
+The remaining slowdown deserves investigation, but the suggested storage writer
+change is already present: `PdnGameToStorageText` sets StandardNotation to false,
+uses cached canonical moves and does not replay the tree. Public rendering still
+replays, including duplicate logs and legacy comparisons.
 
 The new real-database benchmark separates fresh and duplicate imports with logging
-on/off and asserts counts/retained rows. With 100 copies of the long fixture (unique
-White tags), -B -O2 on this host: fresh 2339/2358 ms, duplicate 1556/3002 ms, logging
-off/on respectively. This is a different fixture/host from Claude's 1,500 games;
-it does not establish recovery of the old baseline. Full duplicate PDN logging is
-an observable extra cost, not redundant canonical-storage rendering. Public export
-must retain standard capture notation; simply substituting cached internal move
-strings would be incorrect. F8 remains partly resolved; no speculative cache added.
+on/off and asserts insert/duplicate/error counts and retained rows. It is available
+through `tests/run_database_import_performance_checks.sh`; the headless suite runs
+a small correctness case. A single run with 100 copies of the long fixture (unique
+White tags), -B -O2 on this host measured:
+
+| Import | Logging off | Logging on |
+|---|---:|---:|
+| Fresh | 2339 ms | 2358 ms |
+| Duplicate | 1556 ms | 3002 ms |
+
+This is a different fixture/host from Claude's 1,500 games and does not establish
+recovery of the old baseline. Full duplicate PDN logging is a separate cost, not
+redundant canonical-storage rendering. Public export must retain standard capture
+notation; simply substituting cached internal move strings would be incorrect.
+F8 remains partly resolved; no speculative cache added.
 
 A symbolized Callgrind run of all four cases with three games each confirms the
 separate costs: normalization accounts for about 23% of aggregate instructions;
@@ -56,12 +48,25 @@ LogDuplicate accounts for about 16%, almost all in public PDN rendering. These a
 inclusive costs over the mixed workload, not fresh-import-only percentages. The
 profile output is a local diagnostic; the committed benchmark is reproducible.
 
-This pass addresses A8's protection and the small U7/M7/D19/D20 correctness items.
-T23's durable engine identity needs a separate migration design; do not silently
+### Correctness fixes
+
+| ID | Resolution and regression |
+|---|---|
+| D20 | Validate transmitted Hub parameter names/values before the acceptance callback can modify the registry and before parameter-file writes. Report the parameter name and keep the editor open. Headless tests cover quotes/CR/LF, GUI-only exceptions, DXP and file preservation; a GTK editor test checks invalid edits cannot overwrite saved settings. |
+| D19 | Pass gui-dxp-peer-ip to the registration listener and apply the live listener's address/peer rules. Normalize a worker-local binding address; never rewrite host/peer configuration while Stop reads it. Real TCP checks cover localhost, explicit acceptance/rejection and repeated immediate shutdown. |
+| U7 | Replace LoadFromStream on the running xrandr pipe with an explicit drain through process exit. A real child sends a short first chunk, 70 KB later, then the eDP-1 line; verify every byte and exit status. Retain the protected auxiliary launch path. |
+| M7 | Parse the complete Hub chunk before its stdout notification can publish stale analysis and consume the 500 ms live-update interval. A single-info-line regression, followed by silence, passes with stdout off, fails with it on before the fix, and passes in both modes afterwards. |
+
+MANUAL now describes save-time Hub validation and the registration peer restriction.
+T23's durable engine identity needs a separate migration design: do not silently
 reattach historical tournament results to a changed engine configuration. P22/F14
 legacy comparison/upgrade work, P21 export size, F9/F4 optimizations and C4 native
-Windows publication validation remain outside this pass. No fork tag or push.
+Windows publication validation remain outside this pass.
 
+Validation: full headless/source-audit/archive checks, GTK preservation/boundary/
+delivery/Help checks, lifecycle suite, real TCP DXP, tournament checks, default
+performance suite and application build all pass on Linux. The M7 test demonstrates
+the before/after failure. Native Windows execution remains a release check.
 
 ## Review of 57647e7 — 2026-10-26
 
