@@ -75,6 +75,8 @@ type
     FGameTreeBrowseMode: Boolean;
     FGameTreeForm: TForm;
     FGameTreeView: TTreeView;
+    FGameTreeViewLayout: TGameTreeViewLayout;
+    FGameTreeNestedMenuItem: TMenuItem;
     FGameTreeViewTreeId: Int64;
     FDisplayedAnnotationsSignature: string;
     FDisplayedMovesSignature: string;
@@ -395,6 +397,7 @@ type
     procedure SetupPositionAccepted(Sender: TObject; const AFEN: string);
     procedure SetupPositionClick(Sender: TObject);
     procedure ShowGameTreeClick(Sender: TObject);
+    procedure GameTreeLayoutClick(Sender: TObject);
     procedure ShowStdoutClick(Sender: TObject);
     procedure StopAllGames;
     procedure CloseMctsClick(Sender: TObject);
@@ -4345,6 +4348,17 @@ begin
   CloseAction := caHide;
 end;
 
+procedure TMainForm.GameTreeLayoutClick(Sender: TObject);
+begin
+  if FGameTreeViewLayout = gtvNested then
+    FGameTreeViewLayout := gtvNotation
+  else
+    FGameTreeViewLayout := gtvNested;
+  if FGameTreeNestedMenuItem <> nil then
+    FGameTreeNestedMenuItem.Checked := FGameTreeViewLayout = gtvNested;
+  UpdateGameTreeView(ActiveGameTree);
+end;
+
 procedure TMainForm.GameTreeViewClick(Sender: TObject);
 var
   Tree: TGameTree;
@@ -4427,6 +4441,12 @@ begin
     LMenuItem.Caption := 'Copy tree PDN to clipboard';
     LMenuItem.OnClick := @CopyGameTreePdnClick;
     LPopup.Items.Add(LMenuItem);
+    FGameTreeNestedMenuItem := TMenuItem.Create(FGameTreeForm);
+    FGameTreeNestedMenuItem.Name := 'GameTreeNestedLayout';
+    FGameTreeNestedMenuItem.Caption := 'Show each move under the previous move';
+    FGameTreeNestedMenuItem.Checked := FGameTreeViewLayout = gtvNested;
+    FGameTreeNestedMenuItem.OnClick := @GameTreeLayoutClick;
+    LPopup.Items.Add(FGameTreeNestedMenuItem);
     FGameTreeView.PopupMenu := LPopup;
   end;
 
@@ -5732,7 +5752,8 @@ begin
   if (FGameTreeView = nil) or (AGameTree = nil) then
     Exit;
 
-  PopulateGameTreeView(FGameTreeView, AGameTree);
+  PopulateGameTreeView(FGameTreeView, AGameTree, FGameTreeViewLayout,
+    FGameTreeViewTreeId = AGameTree.GameTreeId);
   FGameTreeViewTreeId := AGameTree.GameTreeId;
   SyncGameTreeViewSelection;
 end;

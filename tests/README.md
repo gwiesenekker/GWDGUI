@@ -114,3 +114,7 @@ checks cover copied bases, nested identities/fallbacks, latest-PV selection and
 complete display-cache keys. Request/snapshot checks cover cross-game cancellation,
 unchanged-position suppression, terminal and transient search eligibility,
 snapshot publication targets, stale rejection and transient display isolation.
+
+GTK notation-tree checks cover each model node exactly once in both layouts,
+variation headers, selection/expansion retention, game isolation, popup switching
+and standard capture captions. Caption traversal is also bounded by node count.

@@ -5,9 +5,10 @@ unit uGameTreePdn;
 interface
 
 uses
-  Classes, StrUtils, SysUtils, uDraughtsBoard, uGameTree;
+  Classes, StrUtils, SysUtils, fgl, uDraughtsBoard, uGameTree;
 
 type
+  TGameTreeMoveCaptionMap = specialize TFPGMap<Int64, string>;
   TGameTreePdnIntArray = array of Integer;
   TGameTreePdnNodeIdArray = array of Int64;
   TGameTreePdnBoolArray = array of Boolean;
@@ -38,6 +39,8 @@ type
     VariationMovesTexts: TGameTreePdnStringArray;
   end;
 
+procedure BuildGameTreeMoveCaptions(ATree: TGameTree;
+  ACaptions: TGameTreeMoveCaptionMap; out ABoardMovesApplied: Integer);
 function DefaultGameTreePdnRenderOptions: TGameTreePdnRenderOptions;
 function GameTreeToPdnText(AGameTree: TGameTree): string;
 function GameTreeToPdnTextEx(AGameTree: TGameTree;
@@ -418,6 +421,49 @@ begin
   Inc(AResult.BoardMovesApplied);
   try ABoard.PlayMove(AMove, True, True);
   except FreeAndNil(ABoard); end; // Preserve raw captions beyond invalid legacy paths.
+end;
+
+procedure BuildGameTreeMoveCaptions(ATree: TGameTree;
+  ACaptions: TGameTreeMoveCaptionMap; out ABoardMovesApplied: Integer);
+var Board: TDraughtsBoard; Work: TGameTreePdnRenderResult;
+  procedure AddMove(Node: TGameTreePlyNode; var Position: TDraughtsBoard);
+  var Caption: string;
+  begin
+    Caption := Node.MoveText;
+    if (Position <> nil) and (Pos('x', Caption) > 0) then
+      Caption := Position.PdnMoveNotation(Caption);
+    ACaptions.Add(Node.NodeId, Caption);
+    AdvanceRenderBoard(Position, Node.MoveText, Work);
+  end;
+  procedure Walk(Parent: TGameTreePlyNode; var Position: TDraughtsBoard);
+  var I: Integer; Branch: TDraughtsBoard;
+  begin
+    if Parent.ChildCount = 0 then Exit;
+    for I := 1 to Parent.ChildCount - 1 do
+    begin
+      Branch := nil;
+      if Position <> nil then
+      begin Branch := TDraughtsBoard.Create; Branch.AssignFrom(Position); end;
+      try
+        AddMove(Parent.Children[I], Branch);
+        Walk(Parent.Children[I], Branch);
+      finally Branch.Free; end;
+    end;
+    AddMove(Parent.Children[0], Position);
+    Walk(Parent.Children[0], Position);
+  end;
+begin
+  ACaptions.Clear;
+  ACaptions.Sorted := True;
+  ABoardMovesApplied := 0;
+  if ATree = nil then Exit;
+  Work.BoardMovesApplied := 0;
+  Board := TDraughtsBoard.Create;
+  try
+    try Board.LoadFromFEN(ATree.StartingFEN); except FreeAndNil(Board); end;
+    Walk(ATree.Root, Board);
+    ABoardMovesApplied := Work.BoardMovesApplied;
+  finally Board.Free; end;
 end;
 
 function RenderVariationLine(AGameTree: TGameTree; ANode, APreviousPosition: TGameTreePlyNode;

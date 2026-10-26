@@ -24,8 +24,14 @@ end;
 procedure CheckRender(Presenter: TNotationPresentation; Tree: TGameTree;
   const Options: TGameTreePdnRenderOptions);
 var Rendered: TGameTreePdnRenderResult; Hit: TMoveVariationHit;
-  Range: TNotationRange; I: Integer;
+  Range: TNotationRange; I, Work: Integer; Captions: TGameTreeMoveCaptionMap;
 begin
+  Captions := TGameTreeMoveCaptionMap.Create;
+  try
+    BuildGameTreeMoveCaptions(Tree, Captions, Work);
+    Check((Captions.Count = CountMoveNodes(Tree.Root)) and (Work = Captions.Count),
+      'tree captions include every node with one board move per node');
+  finally Captions.Free; end;
   RenderGameTreeMovesToPdn(Tree, Options, Rendered);
   DigestText(Rendered.Text);
   DigestText(GameTreeToPdnTextEx(Tree, Options));

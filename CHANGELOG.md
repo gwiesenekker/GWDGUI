@@ -5,6 +5,18 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Show the game tree as notation
+
+- Adopt Claude's notation-layout proposal: mainline moves are sibling rows and
+  alternatives nest under the move they replace. Mark variation headers and keep
+  the original nested layout available in the tree popup (session-only setting).
+- Preserve expanded nodes and selection by identity on same-tree rebuilds/layout
+  switches; reveal the selected path and avoid carrying state between games.
+- Build standard PDN capture captions in one incremental traversal, without
+  replaying from the root for each row.
+- Add GTK tests for exact node coverage, both layouts, nesting, expanded-state and
+  selection preservation, popup switching and capture captions. GTK checks pass.
+
 ### 2026-10-26 — Render notation with incremental boards (F10)
 
 - Advance one board along each notation line and copy at variation boundaries.

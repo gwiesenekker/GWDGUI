@@ -9,7 +9,7 @@ uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, Grids, LCLType, Controls, ComCtrls, Menus,
   uDatabaseForm, uGameDatabase, uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uRunningGame, uPdn, uPdnOpenDialog, uPvBrowser, uScoreHistoryControl, uGuiDialogs,
-  uGameTreeNodeData, uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uTreeTestUtils;
+  uGameTreeNodeData, uGameTreeView, uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uTreeTestUtils;
 
 type
   TDatabaseModalProbe = class
@@ -65,6 +65,74 @@ begin
   Key := VK_LEFT; Memo.OnKeyDown(Memo, Key, []);
   Check((Pos('Cannot display', AForm.Caption) = 0) and (Board.Board <> nil),
     'returning to a valid node restores the board and clears its diagnostic');
+end;
+
+procedure CheckNotationTreeLayouts;
+var Tree, Other: TGameTree; Host: TForm; View: TTreeView; Seen: TStringList;
+  Target, Header: Int64; I: Integer;
+  function Row(Id: Int64): TTreeNode;
+  var J: Integer;
+  begin
+    for J := 0 to View.Items.Count - 1 do
+      if Int64(PtrUInt(View.Items[J].Data)) = Id then Exit(View.Items[J]);
+    raise Exception.Create('Missing model row ' + IntToStr(Id));
+  end;
+  function CountNodes(Node: TGameTreePlyNode): Integer;
+  var J: Integer;
+  begin
+    Result := 1;
+    for J := 0 to Node.ChildCount - 1 do Inc(Result, CountNodes(Node.Children[J]));
+  end;
+  procedure CheckUnique;
+  var J: Integer; Id: string;
+  begin
+    Seen.Clear;
+    for J := 0 to View.Items.Count - 1 do
+      if View.Items[J].Data <> nil then
+      begin
+        Id := IntToStr(Int64(PtrUInt(View.Items[J].Data)));
+        Check(Seen.IndexOf(Id) < 0, 'layout must not duplicate a model node');
+        Seen.Add(Id);
+      end;
+    Check(Seen.Count = CountNodes(Tree.Root), 'layout includes every model node exactly once');
+  end;
+begin
+  Tree := TGameTree.Create; Other := TGameTree.Create;
+  Host := TForm.Create(nil);
+  View := TTreeView.Create(nil); View.Parent := Host; Seen := TStringList.Create;
+  try
+    Tree.RecordMainlineMove(1, '32-28'); Tree.RecordMainlineMove(2, '18-23');
+    Tree.RecordMainlineMove(3, '37-32');
+    AddFixtureBranch(Tree, 1, '20-24 38-32 14-20', '');
+    AddFixtureBranch(Tree, 1, '20-24 38-32 18-22', '');
+    Target := Tree.FindBranchNode(1, 3).NodeId;
+    Header := Tree.FindBranchNode(0, 1).NodeId;
+    PopulateGameTreeView(View, Tree); CheckUnique;
+    Check(Row(Tree.MainlineNode[1].NodeId).Parent = Row(Tree.MainlineNode[3].NodeId).Parent,
+      'notation mainline moves are sibling rows');
+    Check(Pos('Variation: ', Row(Header).Text) = 1, 'variation header is visibly marked');
+    Check(Row(Header).Parent = Row(Tree.MainlineNode[2].NodeId), 'alternative hangs under replaced move');
+    Row(Header).Expanded := True;
+    View.Selected := Row(Target); View.Selected.MakeVisible;
+    PopulateGameTreeView(View, Tree, gtvNotation, True); CheckUnique;
+    Check((SelectedGameTreeNodeId(View) = Target) and Row(Header).Expanded,
+      'refresh preserves selected identity and expanded variation');
+    PopulateGameTreeView(View, Tree, gtvNested, True); CheckUnique;
+    Check((SelectedGameTreeNodeId(View) = Target) and
+      (Row(Tree.MainlineNode[3].NodeId).Parent = Row(Tree.MainlineNode[2].NodeId)),
+      'nested layout keeps selection and original parent structure');
+    PopulateGameTreeView(View, Tree, gtvNotation, True); CheckUnique;
+    Check(SelectedGameTreeNodeId(View) = Target, 'layout round trip preserves selected node');
+    PopulateGameTreeView(View, Other, gtvNotation, False);
+    Check(SelectedGameTreeNodeId(View) <> Target, 'different tree cannot inherit selection by local node ID');
+    Tree.BeginRebuild('capture', '?', 'White', 'Black', '*', 'W:W32:B17,27');
+    Tree.RecordMainlineMove(1, '32x12x27x17');
+    for I := 0 to 1 do
+    begin
+      PopulateGameTreeView(View, Tree, TGameTreeViewLayout(I));
+      Check(Row(Tree.MainlineNode[1].NodeId).Text = '1.32x12', 'both layouts show standard capture caption');
+    end;
+  finally Seen.Free; View.Free; Host.Free; Other.Free; Tree.Free; end;
 end;
 
 procedure CheckEvaluationDisplay;
@@ -854,6 +922,7 @@ var
   Key: Word;
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
+  LayoutItem: TMenuItem;
 
   procedure CheckPosition(const MessageText: string);
   begin
@@ -892,6 +961,13 @@ begin
     Expected.PlayMove('18-22');
     CheckPosition('tree click must display that node on the main board');
     Check(Pos('18-22', Memo.SelText) > 0, 'tree click must select the matching memo move');
+    LayoutItem := TMenuItem(Window.FindComponent('GameTreeNestedLayout'));
+    Check((LayoutItem <> nil) and not LayoutItem.Checked, 'notation layout is the default');
+    LayoutItem.OnClick(LayoutItem);
+    Check(LayoutItem.Checked and (SelectedGameTreeNodeId(View) = Target), 'popup switches to nested without moving cursor');
+    CheckPosition('switching layout preserves displayed board');
+    LayoutItem.OnClick(LayoutItem);
+    Check(not LayoutItem.Checked and (SelectedGameTreeNodeId(View) = Target), 'popup returns to notation with same selection');
     Key := VK_LEFT;
     View.OnKeyDown(View, Key, []);
     Expected.SetBeginPosition;
@@ -1180,6 +1256,7 @@ begin
         'untouched initial board should not prompt to save');
       CheckInvalidDisplayIsVisible(Form);
       CheckEvaluationDisplay;
+      CheckNotationTreeLayouts;
       CheckNodeDataImport(Form);
       CheckLandingCaptureImport(Form);
       CheckModalDatabaseImport(Form);
