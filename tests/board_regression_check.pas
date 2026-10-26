@@ -489,7 +489,38 @@ begin
   end;
 end;
 
+procedure CheckCopyConstruction;
+var Original, Copied: TDraughtsBoard; Before: string; I: Integer; Raised: Boolean;
 begin
+  Original := TDraughtsBoard.Create;
+  try
+    Original.LoadFromFEN('W:WK21:B31,39,14,17,19');
+    Copied := TDraughtsBoard.CreateCopy(Original);
+    try
+      CheckEqual(Copied.CurrentFEN, Original.CurrentFEN, 'copy constructor preserves pieces and turn');
+      Check(Copied.LegalMoveCount = Original.LegalMoveCount, 'copy constructor preserves legal captures');
+      for I := 0 to Original.LegalMoveCount - 1 do
+        CheckEqual(Copied.PdnMoveNotation(Copied.LegalMoves[I]),
+          Original.PdnMoveNotation(Original.LegalMoves[I]), 'copy constructor preserves ambiguous landing paths');
+      Before := Original.PositionKey; Copied.PlayMove(Copied.LegalMoves[1]);
+      CheckEqual(Original.PositionKey, Before, 'mutating copied board leaves source unchanged');
+    finally Copied.Free; end;
+    Original.SetBeginPosition; Original.PlayMove('32-28');
+    Copied := TDraughtsBoard.CreateCopy(Original);
+    try
+      CheckEqual(Copied.StartingFEN, Original.StartingFEN, 'copy constructor preserves starting position');
+      CheckEqual(Copied.MovesPlayedText, '32-28', 'copy constructor preserves history');
+      Copied.PlayMove('18-23'); Check(Original.MovesPlayedCount = 1, 'copied history is independent');
+    finally Copied.Free; end;
+    Raised := False;
+    try Copied := TDraughtsBoard.CreateCopy(nil); Copied.Free;
+    except on E: EInvalidOperation do Raised := True; end;
+    Check(Raised, 'copy constructor rejects missing source');
+  finally Original.Free; end;
+end;
+
+begin
+  CheckCopyConstruction;
   CheckMoveNormalization;
   CheckLegalMoveComparison;
   CheckDxpHistoryReconciliation;

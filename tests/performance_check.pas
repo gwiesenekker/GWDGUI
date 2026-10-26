@@ -9,7 +9,7 @@ var
   Rendered: TGameTreePdnRenderResult;
   RenderCount, ImportCount, ReplayCount, Samples, Sample, I, J, Nodes, Warnings, ActualNodes, ActualWarnings: Integer;
   Tick: QWord; Elapsed: QWord;
-  RenderDigest, ImportDigest, ReplayDigest, Text, Digest: string;
+  RenderDigest, ImportDigest, ReplayDigest, StorageDigest, RawFixture, Text, Digest: string;
 procedure Check(Value: Boolean; const MessageText: string);
 begin if not Value then raise Exception.Create(MessageText); end;
 function CountArgument(Index, DefaultValue: Integer): Integer;
@@ -41,6 +41,19 @@ begin
     finally Command.Free; end;
   except Result.Free; raise; end;
 end;
+function StorageRoundTrip: string;
+var Parsed: TList; K: Integer;
+begin
+  Parsed := TList.Create;
+  try
+    LoadPdnGamesFromText(RawFixture, Parsed);
+    Check(Parsed.Count = 1, 'storage fixture must contain one game');
+    Result := PdnGameToStorageText(TPdnGame(Parsed[0]), nil);
+  finally
+    for K := 0 to Parsed.Count - 1 do TObject(Parsed[K]).Free;
+    Parsed.Free;
+  end;
+end;
 procedure Report(const Operation: string; Count: Integer; Milliseconds: QWord;
   const OutputText: string; var ExpectedDigest: string);
 var Hash: string;
@@ -61,6 +74,8 @@ begin
   try
     LoadPdnGamesFromFile(ParamStr(1), Games);
     Check(Games.Count = 1, 'Benchmark fixture must contain exactly one game');
+    Moves.LoadFromFile(ParamStr(1)); RawFixture := Moves.Text; Moves.Clear;
+    StorageDigest := MD5Print(MD5String(StorageRoundTrip));
     Game := TPdnGame(Games[0]); Root := Game.BuildMoveTree;
     TextToMoveList(Game.MovesText, Moves);
     TreeActor := ImportGame(Nodes, Warnings);
@@ -107,6 +122,14 @@ begin
         end;
       end;
       Report('actor_import', ImportCount, Elapsed, Text, ImportDigest);
+      Elapsed := 0;
+      for J := 1 to ImportCount do
+      begin
+        Tick := GetTickCount64; Text := StorageRoundTrip;
+        Elapsed += GetTickCount64 - Tick;
+        Check(MD5Print(MD5String(Text)) = StorageDigest, 'canonical PDN storage changed');
+      end;
+      Report('pdn_storage', ImportCount, Elapsed, Text, StorageDigest);
     end;
   finally
     TreeActor.Free; Root.Free; Board.Free; Moves.Free;

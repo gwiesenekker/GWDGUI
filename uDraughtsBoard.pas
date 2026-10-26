@@ -28,6 +28,7 @@ type
     FLegalMoves: TStringList;
     FLegalPdnPaths: TStringList;
     FMaxCaptureCount: Integer;
+    procedure InitializeLists;
     function GetLegalMove(AIndex: Integer): string;
     function GetLegalMoveCount: Integer;
     function GetMovePlayed(AIndex: Integer): string;
@@ -47,6 +48,7 @@ type
       const ACapturedText: string; ACaptureCount: Integer; const APdnPath: string);
   public
     constructor Create;
+    constructor CreateCopy(ASource: TDraughtsBoard);
     destructor Destroy; override;
 
     procedure AssignFrom(ASource: TDraughtsBoard);
@@ -363,15 +365,28 @@ begin
   finally Left.Free; Right.Free; end;
 end;
 
-constructor TDraughtsBoard.Create;
+procedure TDraughtsBoard.InitializeLists;
 begin
-  inherited Create;
   FMovesPlayed := TStringList.Create;
   FLegalMoves := TStringList.Create;
   FLegalMoves.UseLocale := False;
   FLegalMoves.CaseSensitive := True;
   FLegalPdnPaths := TStringList.Create;
+end;
+
+constructor TDraughtsBoard.Create;
+begin
+  inherited Create;
+  InitializeLists;
   SetBeginPosition;
+end;
+
+constructor TDraughtsBoard.CreateCopy(ASource: TDraughtsBoard);
+begin
+  inherited Create;
+  if ASource = nil then raise EInvalidOperation.Create('A source board is required');
+  InitializeLists;
+  AssignFrom(ASource);
 end;
 
 destructor TDraughtsBoard.Destroy;

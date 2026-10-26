@@ -72,6 +72,27 @@ begin
     finally Game.Free; end;
   finally Board.Free; end;
 end;
+procedure CheckSiblingBoardRestoration;
+var Game, Next: TPdnGame; Root: TPdnMoveNode; Storage: string; Cycle: Integer;
+begin
+  Game := ReadGame('1.32-28 (1.33-29 18-23 (1...20-24 2.29x20x24) 2.29x18x23) ' +
+    '(1.34-30 20-25 2.32-28 25x34x30) 18-23 2.37-32 *');
+  try
+    Storage := PdnGameToStorageText(Game, nil);
+    for Cycle := 1 to 3 do
+    begin
+      Root := Game.BuildMoveTree;
+      try
+        Check(Root.ChildCount = 3, 'multiple deep siblings survive normalization');
+        Check((Root.Children[1].ChildCount = 2) and
+          (Root.Children[1].Children[1].Children[0].MoveText <> ''), 'nested fork retains its continuation');
+      finally Root.Free; end;
+      Game.ValidateMoveTree; Check(Game.ImportWarningsText = '', 'every sibling uses its own fork position');
+      Next := ReadGame(PdnGameToText(Game)); Game.Free; Game := Next;
+      Check(PdnGameToStorageText(Game, nil) = Storage, 'nested capture identities stable after board reuse');
+    end;
+  finally Game.Free; end;
+end;
 procedure CheckDatabaseIdentity(const Fen, Moves: string);
 var Database: TGameDatabase; Game: TPdnGame; Lines: TStringList;
   DbName, PdnName, Exported: string; Imported, Duplicates, Errors: Integer;
@@ -102,7 +123,7 @@ begin
 end;
 
 begin
-  CheckEquivalentSiblings; CheckDistinctCaptures;
+  CheckEquivalentSiblings; CheckDistinctCaptures; CheckSiblingBoardRestoration;
   CheckDatabaseIdentity('W:W38:B33,24,K6',
     '(1. 38x20x24x33 {variation note} 6-11) *');
   CheckDatabaseIdentity('W:W31-50:B1-20',

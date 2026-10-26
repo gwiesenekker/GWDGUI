@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Reuse normalization boards along PDN lines (F8)
+
+- Advance one board along each parsed line and preserve positions only at forks.
+  Add independent board-copy construction without unused starting-move generation.
+- Test copy ownership/history/capture paths and nested sibling restoration through
+  repeated export/import, retaining malformed-subtree recovery and capture identity.
+- Add canonical PDN storage to the reproducible benchmark. Same-session median
+  for ten parse/storage operations: 172 → 122 ms, with identical complete output.
+- Validation: board, variation identity, PDN tree and database recovery checks pass.
+
 ### 2026-10-26 — Always deliver early runner completion (M8)
 
 - Publish game/analyzer completion from the thread termination hook, including

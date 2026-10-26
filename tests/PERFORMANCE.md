@@ -34,6 +34,9 @@ It warms each operation, then measures:
 - **Board replay:** load the starting FEN and legally replay the 151 mainline plies.
 - **Notation render:** render the already imported tree with default display
   filters and standard capture notation. Import, parsing and GUI painting are excluded.
+- **PDN storage:** parse a fresh fixture and normalize/serialize the complete
+  storage text on each iteration. Uses the import iteration count, includes
+  parsing/normalization/serialization/disposal, and excludes hashing and database I/O.
 - **Actor import:** create an actor, rebuild its mainline/header, import a cloned
   parsed tree with validation/recovery, and destroy the actor. Complete PDN export
   and hashing run outside the timed sections and must match the warm-up output
@@ -77,3 +80,11 @@ changes were present, with runtime code unchanged from the revision above.
 
 Future changes may intentionally change these fingerprints; explain that change
 before using the measurements to claim a performance improvement.
+
+## Normalization follow-up (F8)
+
+A same-session comparison using `20 10 10 3` measured the added `pdn_storage`
+operation at median 172 ms before and 122 ms after board reuse (ten iterations
+per sample). The 28,120-byte storage text had the same MD5 in all samples:
+`6d3e610291fadf1ceba04d58c1f079c4`. This measures parsing/canonical storage,
+not total bulk database import time; host load differs from the initial baseline.

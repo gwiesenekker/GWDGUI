@@ -1777,8 +1777,9 @@ procedure NormalizeParsedAliases(Root: TPdnMoveNode; const Fen: string);
 var Board: TDraughtsBoard;
   procedure Walk(Parent: TPdnMoveNode; Before: TDraughtsBoard);
   var Canonical: TStringList; I, Duplicate: Integer; Move: string;
-    Next: TDraughtsBoard;
+    Saved: TDraughtsBoard;
   begin
+    Saved := nil;
     Canonical := TStringList.Create;
     try
       I := 0;
@@ -1799,16 +1800,17 @@ var Board: TDraughtsBoard;
         Parent.Children[I].FCanonicalMove := Move;
         Canonical.Add(Move); Inc(I);
       end;
+      // Advance one board along a line. Preserve the fork position only when
+      // siblings need it; copying does not generate an unused initial position.
+      if Parent.ChildCount > 1 then Saved := TDraughtsBoard.CreateCopy(Before);
       for I := 0 to Parent.ChildCount - 1 do
       begin
-        if Canonical[I] = '' then Continue; // Preserve invalid text for existing warning/recovery paths.
-        Next := TDraughtsBoard.Create;
-        try
-          Next.AssignFrom(Before); Next.PlayMove(Canonical[I], False, False);
-          Walk(Parent.Children[I], Next);
-        finally Next.Free; end;
+        if Canonical[I] = '' then Continue; // Preserve invalid text for warning/recovery paths.
+        if (I > 0) and (Saved <> nil) then Before.AssignFrom(Saved);
+        Before.PlayMove(Canonical[I], False, False);
+        Walk(Parent.Children[I], Before);
       end;
-    finally Canonical.Free; end;
+    finally Saved.Free; Canonical.Free; end;
   end;
 begin
   Board := TDraughtsBoard.Create;
