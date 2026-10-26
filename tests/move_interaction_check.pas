@@ -66,12 +66,37 @@ begin
     Targets.Free; Choices.Free; Interaction.Free; Board.Free;
   end;
 end;
+procedure CheckHighlights;
+var Moves: TStringList; H: TMoveHighlights;
+begin
+  Moves := TStringList.Create;
+  try
+    Moves.Add('32-28'); Moves.Add('18-23');
+    H := CalculateMoveHighlights(Moves, -1, '37-32 12-18', True);
+    Check((H.LastMoveTargetSquare = 23) and (H.PvSourceSquare = 37) and
+      (H.HintSourceSquare = 12), 'following tip uses mainline target and matching PV sources');
+    H := CalculateMoveHighlights(Moves, 1, '20-24 38-32', False);
+    Check((H.LastMoveTargetSquare = 28) and (H.PvSourceSquare = 0) and
+      (H.HintSourceSquare = 0), 'historical position suppresses unrelated PV hints');
+    H := CalculateMoveHighlights(Moves, 0, '32-28', True);
+    Check((H.LastMoveTargetSquare = 0) and (H.PvSourceSquare = 32) and
+      (H.HintSourceSquare = 0), 'root has no last move, one-move PV has no second hint');
+    H := CalculateMoveHighlights(Moves, 99, '', True);
+    Check((H.LastMoveTargetSquare = 0) and (H.PvSourceSquare = 0) and
+      (H.HintSourceSquare = 0), 'empty PV and out-of-range ply clear highlights');
+    Moves.Clear;
+    H := CalculateMoveHighlights(Moves, -1, '', False);
+    Check(H.LastMoveTargetSquare = 0, 'empty game has no last target');
+  finally Moves.Free; end;
+end;
+
 var
   Actor: TGameTreeActor;
   Board: TDraughtsBoard;
   Move: string;
   Command: TGameTreeCommand;
 begin
+  CheckHighlights;
   CheckSelection('W:W31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50:B1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20');
   CheckSelection('W:WK32:B27,28');
   Actor := TGameTreeActor.Create;

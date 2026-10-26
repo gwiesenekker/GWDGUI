@@ -89,7 +89,8 @@ The lifecycle check also counts queued snapshot destruction and verifies that
 running games own independent setup definitions, reservations and snapshots.
 
 `move_interaction_check.pas` covers legal source/target selection, capture ordering,
-selection clearing and routing between mainline, variation and live runner moves.
+selection clearing, routing between mainline, variation and live runner moves,
+and last-move/PV highlight data.
 
 `displayed_position_check.pas` covers selected nested paths, temporary preview
 replay and atomic failure, inactive-game projection, cursor fallback and

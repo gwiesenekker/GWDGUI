@@ -3,6 +3,9 @@ unit uMoveInteraction;
 interface
 uses Classes, SysUtils, uDraughtsBoard, uGameTree;
 type
+  TMoveHighlights = record
+    LastMoveTargetSquare, PvSourceSquare, HintSourceSquare: Integer;
+  end;
   TMoveTargetSquares = array of Integer;
   TMoveRoute = (mrInvalid, mrNone, mrMainline, mrVariation, mrRunner);
   // Temporary click state only. Persistent selection remains the tree cursor.
@@ -20,11 +23,14 @@ type
     property SourceSquare: Integer read FSourceSquare;
     property Targets: TMoveTargetSquares read FTargets;
   end;
+function CalculateMoveHighlights(AMainlineMoves: TStrings; ADisplayedPly: Integer;
+  const APvText: string; APvMatchesPosition: Boolean): TMoveHighlights;
 function MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
 function RouteMove(ABoard: TDraughtsBoard; ATree: TGameTree;
   ANode: TGameTreePlyNode; const AMove: string; ACanExplore, ABrowsingBranch,
   AUnfinished, ARunnerHumanTurn: Boolean; out ANormalizedMove: string): TMoveRoute;
 implementation
+uses uGameTreeBuilder;
 function MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
 var
   I: Integer;
@@ -52,6 +58,27 @@ begin
     if LCount = ASquareIndex then
       Result := StrToIntDef(LNumberText, 0);
   end;
+end;
+
+function CalculateMoveHighlights(AMainlineMoves: TStrings; ADisplayedPly: Integer;
+  const APvText: string; APvMatchesPosition: Boolean): TMoveHighlights;
+var PvMoves: TStringList;
+begin
+  Result.LastMoveTargetSquare := 0;
+  Result.PvSourceSquare := 0;
+  Result.HintSourceSquare := 0;
+  // Preserve the existing marker policy, including when browsing a branch:
+  // the last-move marker uses the mainline move at the displayed base ply.
+  if ADisplayedPly < 0 then ADisplayedPly := AMainlineMoves.Count;
+  if (ADisplayedPly > 0) and (ADisplayedPly <= AMainlineMoves.Count) then
+    Result.LastMoveTargetSquare := MoveSquareAt(AMainlineMoves[ADisplayedPly - 1], 2);
+  if not APvMatchesPosition then Exit;
+  PvMoves := TStringList.Create;
+  try
+    TextToMoveList(APvText, PvMoves);
+    if PvMoves.Count > 0 then Result.PvSourceSquare := MoveSquareAt(PvMoves[0], 1);
+    if PvMoves.Count > 1 then Result.HintSourceSquare := MoveSquareAt(PvMoves[1], 1);
+  finally PvMoves.Free; end;
 end;
 
 constructor TMoveInteraction.Create;

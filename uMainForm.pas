@@ -4503,13 +4503,12 @@ end;
 procedure TMainForm.UpdateBoardHighlights(AGameTree: TGameTree);
 var
   LDisplayedBoard: TDraughtsBoard;
-  LDisplayedGamePly: Integer;
   LGameMoves: TStringList;
   LPvBaseBoard: TDraughtsBoard;
   LPvBasePly: Integer;
   LPvDepth: string;
   LPvHighlightsActive: Boolean;
-  LPvMoves: TStringList;
+  Highlights: TMoveHighlights;
   LPvScore: string;
   LPvTimeText: string;
   LPvText: string;
@@ -4521,7 +4520,6 @@ begin
 
   LDisplayedBoard := TDraughtsBoard.Create;
   LGameMoves := TStringList.Create;
-  LPvMoves := TStringList.Create;
   try
     AGameTree.CopyMainlineMovesTo(LGameMoves);
     if FPvHintSource = phsAnalyzer then
@@ -4534,33 +4532,16 @@ begin
     else
       VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
         LPvScore, LPvDepth, LPvTimeText);
-    TextToMoveList(LPvText, LPvMoves);
-    if BrowseBasePly < 0 then
-      LDisplayedGamePly := LGameMoves.Count
-    else
-      LDisplayedGamePly := BrowseBasePly;
-    if (LDisplayedGamePly > 0) and
-      (LDisplayedGamePly <= LGameMoves.Count) then
-      FBoardControl.LastMoveTargetSquare := MoveSquareAt(
-        LGameMoves[LDisplayedGamePly - 1], 2)
-    else
-      FBoardControl.LastMoveTargetSquare := 0;
-
     LPvHighlightsActive := (LPvBaseBoard <> nil) and
       TryBuildDisplayedBoard(AGameTree, LDisplayedBoard) and
       (LDisplayedBoard.PositionKey = LPvBaseBoard.PositionKey);
 
-    if LPvHighlightsActive and (LPvMoves.Count > 0) then
-      FBoardControl.PvSourceSquare := MoveSquareAt(LPvMoves[0], 1)
-    else
-      FBoardControl.PvSourceSquare := 0;
-
-    if LPvHighlightsActive and (LPvMoves.Count > 1) then
-      FBoardControl.HintSourceSquare := MoveSquareAt(LPvMoves[1], 1)
-    else
-      FBoardControl.HintSourceSquare := 0;
+    Highlights := CalculateMoveHighlights(LGameMoves, BrowseBasePly, LPvText,
+      LPvHighlightsActive);
+    FBoardControl.LastMoveTargetSquare := Highlights.LastMoveTargetSquare;
+    FBoardControl.PvSourceSquare := Highlights.PvSourceSquare;
+    FBoardControl.HintSourceSquare := Highlights.HintSourceSquare;
   finally
-    LPvMoves.Free;
     LGameMoves.Free;
     LDisplayedBoard.Free;
   end;

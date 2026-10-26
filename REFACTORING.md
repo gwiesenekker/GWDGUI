@@ -30,7 +30,7 @@ an obligation to keep source or binaries shared between the applications.
 | Main window | `uMainForm` | Retain control layout and event wiring where useful; extract decisions and ownership in stages. |
 | Setup values | `uGameSetupTypes`, `uGameSetupForm` | Player/setup records are extracted from the LCL form; retain the simple value/ownership contract. |
 | Running games and messages | `uRunningGame`, `uGameGuiMessages`, `uThreadMessageQueue` | Classes are extracted mechanically; retain snapshot ownership, engine reservations and lifecycle transitions. |
-| Move interaction | selection and display methods in `uMainForm` | Isolate legal candidates, source/target selection, highlights and replay coordination. Keep a small draughts implementation; replace in chess without assuming a move is uniquely identified by two squares. |
+| Move interaction | `uMoveInteraction`, `uDisplayedPosition`, board event wiring in `uMainForm` | Legal candidates, source/target selection, routing, highlight calculation and replay coordination are extracted. Keep the draughts implementation; replace in chess without assuming a move is uniquely identified by two squares. |
 | Tree and cursor | `uGameTree`, `uGameTreeActor`, `uGameTreeBuilder`, `uGameTreeCursor`, `uGameTreeSearchRef` | Retain topology, node identity and actor/search contracts; replace draughts positions, validation and notation in the chess copy. |
 | Notation presentation | `uGameTreePdn`, memo range/highlight code | Reuse the existing renderer and ranges during extraction. Chess needs its own PGN/SAN rendering from the position before each move. |
 | Record import/export | `uPdn`, `uGameTreePdn` | Keep GWDGUI PDN compatibility; implement PGN in the chess application. Do not relabel PDN data as PGN. |
@@ -50,9 +50,9 @@ an obligation to keep source or binaries shared between the applications.
 2. Extract setup value types without changing record layout or engine ownership.
 3. Move `TRunningGame` and its snapshot-input records to `uRunningGame`.
    Move queued-message classes to `uGameGuiMessages` in a separate commit.
-4. Later: move interaction/display coordination, then notation presentation,
-   then analysis coordination. Reassess a session manager last; do not redesign
-   shutdown while merely moving the running-game class.
+4. Extract move interaction/display coordination.
+5. Next: notation presentation, then analysis coordination. Reassess a session
+   manager last; do not redesign shutdown during these extractions.
 
 Keep the existing GTK end-to-end checks. Add tests below the UI as boundaries
 become independent; do not replace integration coverage with controller tests.
@@ -92,6 +92,18 @@ or move the published v3.0 tag as part of this work.
   inputs. `uGameGuiMessages` owns the unchanged eight message classes.
 - Ownership/lifecycle tests import these units directly and compile with plain
   FPC, without LCL or a display. GTK integration coverage remains in place.
-- `uMainForm` is reduced from 7,652 to 6,990 lines. This is a mechanical first
-  stage; move interaction, presentation, analysis and session management have not
-  been extracted. The published v3.0 tag stays at the release commit.
+- `uMoveInteraction` owns temporary legal candidate/target selection, move routing
+  and board-highlight calculation. It does not execute actor commands or runner
+  calls. The first legal capture candidate for a target remains the chosen move.
+- `uDisplayedPosition` owns the existing sole tree cursor, temporary PV preview
+  and copied replay cache. Trees are borrowed; actor revisions are passed by the
+  caller. The outer UI refresh bounds cache lifetime, including nested refreshes.
+  Failed previews leave the caller's board unchanged.
+- New headless interaction/display tests cover legal targets, route decisions,
+  highlight data, nested branch identity/replay, preview failure, cursor fallback,
+  copied cache boards, revision changes and nested refresh lifetime. Existing GTK
+  interaction/preservation checks continue to exercise real form event wiring.
+- `uMainForm` is reduced from 7,652 to 6,732 lines. Notation presentation, analysis
+  coordination and session management remain in the form. Control updates,
+  actor/runner dispatch, analysis cancellation and shutdown stay there during
+  these extractions. The published v3.0 tag stays at the release commit.

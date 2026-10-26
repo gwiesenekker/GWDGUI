@@ -5,6 +5,18 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Extract move-highlight calculation
+
+- Move last-move, PV-source and next-PV-source square calculation to
+  uMoveInteraction. The form supplies the existing displayed-position/PV match
+  and applies the returned values to controls.
+- Preserve the mainline-at-base-ply last-move marker and suppression of PV hints
+  for unrelated positions. Add regressions for historical/root/empty positions,
+  one-move PVs and cleared hints.
+- Update the refactoring inventory for the extracted move/display boundaries.
+- Validation: the complete headless/source-audit sweep, GTK preservation and
+  interaction checks, GTK tournament check and application build pass.
+
 ### 2026-10-26 — Extract displayed-position coordination
 
 - Move the sole tree cursor, temporary PV preview, selected-path text and validated
