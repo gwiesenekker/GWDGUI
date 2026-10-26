@@ -5,41 +5,6 @@ international draughts. It can play and browse games,
 run Hub and DXP engines, organize engine tournaments, display engine analysis,
 and store or search games in an SQLite database.
 
-## Menu shortcuts
-
-Use **Alt+F** for File, **Alt+D** for Database and **Alt+H** for Help. Keyboard
-shortcuts are also shown beside their menu items:
-
-| Action | Shortcut |
-|---|---|
-| Open PDN | Ctrl+O |
-| Save PDN | Ctrl+S |
-| Preferences | Ctrl+, |
-| Create database | Ctrl+Shift+N |
-| Open database | Ctrl+Shift+O |
-| Quit | Ctrl+Q |
-| Manual | F1 |
-| About GWDGUI | Shift+F1 |
-
-**File → Quit** uses the same save prompts and safe shutdown as closing the main
-window. Choose Cancel in a save prompt to keep working.
-
-### Help and build identification
-
-Choose **Help → Manual** (F1) to open this manual inside GWDGUI. The manual is
-read-only and available offline in builds made with `build.sh`.
-
-Type in **Find** to search without regard to letter case. The first match is
-highlighted and the result count is shown. **Next** / **Previous** move between
-matches and wrap at the ends; use **F3** / **Shift+F3** for the same actions.
-**Ctrl+F** focuses and selects the search query. **Enter** finds the next match,
-and **Escape** closes the manual window.
-
-**Help → About GWDGUI** shows the build description and full Git commit captured
-when the executable was built. A build made from modified tracked files is
-marked as including uncommitted changes. This identifies the running executable;
-it does not query whichever checkout happens to be on disk later.
-
 ## 1. Getting started
 
 When GWDGUI starts, the main window shows:
@@ -113,6 +78,11 @@ Use a separate port for each simultaneously active DXP connection. Enable
 `gui-dxp-supports-fischer` only when the engine really supports Fischer
 increment through DXP.
 
+DXP host fields accept dotted IPv4 addresses and `localhost` (mapped to
+`127.0.0.1`); DNS names and IPv6 are not supported. A listener bound to loopback
+accepts only local peers. `gui-dxp-peer-ip` can further restrict the peer of a
+live game listener; the registration connection test does not apply it yet.
+
 DXP is used for game communication. DXP game messages do not currently supply
 the Hub-style analysis score and PV data used by the score history.
 
@@ -142,18 +112,17 @@ Important GUI parameters include:
 | `gui-hub-id` | Hub identity used by GWDGUI |
 | `gui-hub-launch-argument` | Hub command-line arguments |
 | `gui-dxp-id` | DXP identity used by GWDGUI |
-| `gui-dxp-ip` | DXP host or IP address |
+| `gui-dxp-ip` | DXP dotted IPv4 host, or `localhost` |
+| `gui-dxp-peer-ip` | Optional allowed peer IPv4 for the game listener; not applied by the registration connection test |
+| `gui-startup-timeout-ms` | Engine startup timeout; 0 means 60,000 ms; effective range 1,000–300,000 ms |
 | `gui-dxp-socket` | DXP port |
 | `gui-dxp-role` | `listen` or `connect` |
 | `gui-dxp-launch-arguments` | DXP command-line arguments |
 | `gui-dxp-supports-fischer` | Whether the DXP engine supports increment |
 | `gui-ini-file` | Optional engine configuration file |
 | `gui-send-starting-position` | Whether the starting position is sent explicitly |
-| `gui-single-captures-include-captured-square` | Retained move-format compatibility setting |
 | `gui-engine-supports-mcts` | Makes a Hub engine available as an MCTS annotator |
 | `gui-score-perspective` | Perspective of scores reported by a Hub engine |
-| `gui-evaluation-bar-depth-min` | Retained engine-specific evaluation setting |
-| `gui-evaluation-bar-score-max` | Retained engine-specific evaluation setting |
 
 `gui-score-perspective` tells GWDGUI how to convert an engine score to White's
 perspective:
@@ -165,6 +134,14 @@ perspective:
 
 Choose this setting to match the engine's protocol output. An incorrect choice
 causes the evaluation graph to change sign on the wrong moves.
+
+Hub parameter values cannot contain a double quote (`"`); the protocol has no
+escape for it, and GWDGUI rejects such values when initializing the engine.
+
+Older parameter files may contain `gui-single-captures-include-captured-square`;
+it does not control current capture notation. Capture paths are determined from
+the legal position. The retained `gui-evaluation-bar-depth-min` and
+`gui-evaluation-bar-score-max` entries do not control the current graph.
 
 The current score graph takes its display maximum and scale from **File >
 Preferences**. The seeded per-engine `gui-evaluation-bar-*` values are retained
@@ -227,6 +204,31 @@ analysis features such as Auto Play.
 
 Selecting a running game follows its current position. Selecting a stopped or
 finished game lets you inspect its game tree and move history.
+
+### 3.3 How games end
+
+GWDGUI decides results from the legal position and clocks. A side with no legal
+move loses. A player that exhausts its allotted time loses; engine search limits
+follow the game clock. The game log records why play ended.
+
+The implemented draw rules are:
+
+- the same position, including the side to move, occurring three times;
+- 25 moves by each side consisting only of non-capturing king moves; a capture
+  or a man move resets this counter;
+- a 16-move limit per side once three pieces, including at least one king,
+  face a lone king;
+- a five-move limit per side once one or two pieces, including a king,
+  face a lone king.
+
+The endgame limits start when the material condition is first reached; captures
+do not restart an already active 16-move count. A win by leaving the opponent
+without a legal move takes precedence on the final allowed move.
+
+A DXP resignation concedes the game. A peer's other win/draw claims do not award
+an official result; if communication ends without an independently established
+result, the game can remain `*`. Stopping a game also leaves it unfinished;
+Stop does not replace an already completed result.
 
 ## 4. Browsing games and variations
 
@@ -345,6 +347,13 @@ browsed, press `Escape` again to leave variation browsing.
 
 Leave any other PV-browsing mode before starting Auto Play.
 
+### 5.6 Larger analysis boards
+
+Right-click the engine mini-board and choose **Pop out mini-board**, or right-click
+the annotator mini-board and choose **Pop out annotator mini-board**. Double-clicking
+one of these boards opens the same larger view. The pop-out follows that browser's
+selected analysis position and offers copying its FEN from the context menu.
+
 ## 6. Scores, score history, and evaluation bar
 
 All scores displayed by the score history and evaluation bar are normalized to
@@ -358,9 +367,9 @@ The graph can contain both the playing engine's score and the annotator score.
 For each played ply, the annotator score attached to that node is used; when it
 is absent, the preceding node's annotator score can supply that point.
 
-The evaluation bar uses the latest playing-engine score at or before the
-currently viewed ply. If no such engine score exists, it uses the latest
-annotator score. White occupies the lower part of the bar and Black the upper
+The evaluation bar uses only the selected ply's score, preferring its annotator
+score and then its playing-engine score. It does not substitute an earlier ply's
+score when the selected ply has none. White occupies the lower part of the bar and Black the upper
 part. A large positive score makes White fill upward from below; a large
 negative score makes Black fill downward from above.
 
@@ -427,6 +436,10 @@ Right-click a pairing to set its result manually to:
 - `1-1` for a draw;
 - `0-2` for a Black win.
 
+**Clear pairing** starts a fresh pairing/tournament after confirmation and keeps
+the earlier tournament files. It is unavailable while games are running or
+stopping. Use rescheduling to retry an individual game.
+
 A manually entered result is marked with the reason **Manual result**. Use
 **Reschedule selected game** to clear a game's result and make it pending again.
 
@@ -434,6 +447,21 @@ The cross table ranks engines by points, wins, Sonnenborn-Berger score, and then
 name. It also shows the individual matchup results.
 
 ### 7.4 Saving and loading tournaments
+
+- Changes and results save automatically. Use **Save** to choose the JSON file;
+  **Load** resumes a saved tournament while no tournament is running.
+- The tournament PDN is created beside the JSON when first saved outside recovery.
+  Move the JSON and its linked PDN together.
+- An older or externally changed PDN is preserved rather than overwritten.
+- Engine definitions must match the saved identities. Renaming an engine is safe;
+  changing its executable, protocol ID, arguments or INI contents can leave old
+  rows without a matching engine. See the details below.
+
+Before a file is chosen, recovery files live in the per-user application
+configuration directory. Save errors appear in the tournament title and pause
+scheduling so the error can be resolved without losing results.
+
+### 7.5 Tournament files in detail
 
 Tournament changes and results are saved automatically. Until you choose a file,
 GWDGUI uses a recovery file in its application configuration directory; **Load**
@@ -450,8 +478,11 @@ until any save error has been resolved, so unsaved results are retained.
 Use **Save** to write the tournament state as JSON. The file contains the
 settings, selected engine names, pairings, results, reasons, and concurrency
 limit. Use **Load** to resume it later. Loading is available only while the
-tournament is not running, and its engines must still be registered under the
-saved names.
+tournament is not running. Engines are matched by saved identity keys based on
+the executable, protocol ID, arguments, initialization text, INI path/contents
+and DXP connection settings. A display-name change is
+harmless. Changing those settings can leave older rows showing **Missing engine**;
+restore the earlier engine configuration to resume those rows.
 
 The JSON also contains each played game, its comments and variations, any manual
 result override, and earlier attempts of rescheduled pairings. Manual corrections
@@ -505,11 +536,25 @@ Choose a new filename when a one-game file is required.
 
 The Game Tree window can also copy the current tree as PDN to the clipboard.
 
-### 8.3 Working with FEN
+### 8.3 Compatibility with other PDN programs
+
+GWDGUI exports standard result spellings `1-0`, `1/2-1/2` and `0-1`; the tournament
+window uses draughts point results `2-0`, `1-1` and `0-2`. Both forms are accepted
+on import. The special result `0-0` is preserved; `*` denotes an unfinished game.
+
+Scores and clocks appear as readable comments. Additional `[%gwd ...]` comments
+preserve typed node metadata for GWDGUI round trips. Other programs may show
+these extensions as ordinary comments or ignore their meaning. Literal user
+comments resembling metadata are escaped on export. Equivalent capture spellings
+are merged; conflicting metadata keeps the first value and generates a warning
+naming the discarded fields. Comments and different continuations are retained.
+
+### 8.4 Working with FEN
 
 The FEN field shows the displayed position. Right-click the main board to:
 
 - copy its FEN;
+- choose **Paste FEN position from clipboard** to load a position;
 - open **Setup position**;
 - search that position in an open database.
 
@@ -533,6 +578,21 @@ shows imported games, errors, and duplicates, and allows the import to be
 stopped. An `.import.log` file is written beside the imported PDN file. It also records
 nonfatal warnings for skipped malformed variations.
 
+Duplicate detection compares complete canonical game content, including comments
+and variations. Equivalent capture spellings identify the same game; changed
+comments or branches remain separate records. Older database identities are
+compared and upgraded as matching games are encountered, so the first import
+against an older database may take longer.
+
+Opening a supported older database upgrades its internal format. An older GWDGUI
+that cannot understand the newer format refuses to open it. Keep a backup before
+upgrading when you need to continue using an older executable.
+
+The import progress window is modal: main-window menu shortcuts, including Quit,
+are unavailable while it is open. Use its Stop action to cancel. Closing the main
+window during import also requests cancellation and waits for the worker; games
+already committed remain in the database.
+
 Use **Rebuild position summary** only when the position index needs to be
 recreated, for example after repairing or migrating a database.
 
@@ -544,6 +604,8 @@ Event column heading to sort; click it again to reverse the order. Double-click
 a game to load it in the main window.
 
 ### 9.3 Searching for a position
+
+The database board's context menu also offers **Paste FEN position from clipboard**.
 
 Enter or paste a FEN in the position panel and click **Search**. The result lists
 continuation moves with game, win, draw, and loss counts and provides matching
@@ -642,3 +704,58 @@ bash tests/run_regression_checks.sh
 
 For protocol details, see [DXP Protocol.md](DXP%20Protocol.md) and
 [`protocol.txt`](protocol.txt) in the source tree.
+
+### 12.1 File locations and portability
+
+- `engines.json` and `prefs.json` live beside the GWDGUI executable. Keep that
+  directory writable. Per-engine `.params.json` files live beside the engine
+  executable they describe; launch/INI paths remain part of engine configuration.
+- PDN, database and saved tournament files live where you choose them. Import logs
+  use the imported PDN's filename with the `.import.log` extension beside that PDN.
+- Unsaved tournament recovery is the exception to portable storage: it uses the
+  operating system's per-user application configuration directory, under
+  `tournaments` (normally `~/.config/gwdgui/tournaments` on Linux). The tournament
+  **Load** dialog opens that recovery directory for an unnamed tournament.
+
+## 13. Keyboard reference
+
+Use **Alt+F** for File, **Alt+D** for Database and **Alt+H** for Help. Keyboard
+shortcuts are also shown beside their menu items:
+
+| Action | Shortcut |
+|---|---|
+| Open PDN | Ctrl+O |
+| Save PDN | Ctrl+S |
+| Preferences | Ctrl+, |
+| Create database | Ctrl+Shift+N |
+| Open database | Ctrl+Shift+O |
+| Quit | Ctrl+Q |
+| Manual | F1 |
+| About GWDGUI | Shift+F1 |
+| Flip the main board | F |
+| Browse the focused move list, tree or PV | Left / Right Arrow |
+| Stop Auto Play or leave game/PV browsing | Escape |
+| Find text in the manual | Ctrl+F |
+| Next manual match | F3 or Enter |
+| Previous manual match | Shift+F3 |
+| Close the manual | Escape |
+
+**File → Quit** uses the same save prompts and safe shutdown as closing the main
+window. Choose Cancel in a save prompt to keep working.
+
+
+## 14. Help and version
+
+Choose **Help → Manual** (F1) to open this manual inside GWDGUI. The manual is
+read-only and available offline in builds made with `build.sh`.
+
+Type in **Find** to search without regard to letter case. The first match is
+highlighted and the result count is shown. **Next** / **Previous** move between
+matches and wrap at the ends; use **F3** / **Shift+F3** for the same actions.
+**Ctrl+F** focuses and selects the search query. **Enter** finds the next match,
+and **Escape** closes the manual window.
+
+**Help → About GWDGUI** shows the build description and full Git commit captured
+when the executable was built. A build made from modified tracked files is
+marked as including uncommitted changes. This identifies the running executable;
+it does not query whichever checkout happens to be on disk later.

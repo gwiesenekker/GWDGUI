@@ -5,6 +5,17 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Bring the user manual in line with current behavior (C9)
+
+- Correct selected-ply evaluation-bar precedence and tournament engine identities.
+- Explain game termination/draw limits, startup and DXP settings/limitations,
+  metadata/result compatibility, duplicate detection, database upgrades/import
+  cancellation, FEN paste, mini-board pop-outs and Clear pairing.
+- Lead with Getting started; collect keyboard/Help references at the end. Summarize
+  tournament saving first and retain preservation/recovery details separately.
+- Distinguish inactive compatibility settings and consolidate portable/recovery
+  file locations. Validate the regenerated searchable manual with GTK Help checks.
+
 ### 2026-10-26 — Support Git-less archive checks (C8)
 
 - Accept explicit source-archive identity in Help checks. Benchmarks report

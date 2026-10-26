@@ -16,7 +16,7 @@ only after compilation succeeds. Run `./gwdgui` from this directory. This is a
 portable application: keep its directory writable for preferences, engine
 configuration and output files. Those local files are not published to GitHub.
 
-Run `bash tests/run_regression_checks.sh` for the headless checks (requires FPC
+Run `bash tests/run_regression_checks.sh` for the headless checks (requires FPC, Python 3
 and ripgrep); the GUI and tournament checks also require Lazarus/GTK2 and a display.
 See [the response to Claude's latest review](REVIEW_NOTES.md) for decisions and
 remaining limitations.
