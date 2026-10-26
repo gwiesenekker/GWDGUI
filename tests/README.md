@@ -95,3 +95,6 @@ and last-move/PV highlight data.
 `displayed_position_check.pas` covers selected nested paths, temporary preview
 replay and atomic failure, inactive-game projection, cursor fallback and
 revision-scoped replay caching through nested display refreshes.
+
+`notation_presentation_check.pas` checks presenter text/ranges against the PDN
+renderer for every filter combination, capture captions and label invalidation.

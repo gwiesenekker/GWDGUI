@@ -12,22 +12,11 @@ uses
   uEngineParamsJson, uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue, uGameGuiMessages,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
   uGuiDialogs, uDatabaseForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uDisplayedPosition, uGameTreeSearchRef, uGameTreeView, uPositionSetupForm,
+  uGameTreePdn, uNotationPresentation, uDisplayedPosition, uGameTreeSearchRef, uGameTreeView, uPositionSetupForm,
   uPreferences, uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm, uGameMoveHistory;
 
 type
-  TIntArray = array of Integer;
   TPvHintSource = (phsMain, phsAnalyzer);
-  TMoveVariationHit = record
-    NodeId: Int64;
-    BeforeMove: Boolean;
-    Start: Integer;
-    Length: Integer;
-    VariationPly: Integer;
-    BasePly: Integer;
-    MovesText: string;
-  end;
-  TMoveVariationHitArray = array of TMoveVariationHit;
 
   TDisplayedBoardInfo = record
     WhiteName: string;
@@ -90,9 +79,7 @@ type
     FGuiEventTimer: TTimer;
     FBlackPlayerEdit: TEdit;
     FFenEdit: TEdit;
-    FGameMoveLengths: TIntArray;
     FGameMoveMemo: TMemo;
-    FGameMoveStarts: TIntArray;
     FGameTree: TGameTree;
     FGameTreeActor: TGameTreeActor;
     FGameTreeBrowseMode: Boolean;
@@ -101,7 +88,7 @@ type
     FGameTreeViewTreeId: Int64;
     FDisplayedAnnotationsSignature: string;
     FDisplayedMovesSignature: string;
-    FDisplayedMoveLabelsSignature: string;
+    FNotation: TNotationPresentation;
     FDisplayedScoreHistorySignature: string;
     FDisplayedRunningSignature: string;
     FDisplayedGameTreeId: Int64;
@@ -171,7 +158,6 @@ type
     FStandaloneWhitePlayerName: string;
     FTournamentDialog: TTournamentDialog;
     FViewedGameId: Integer;
-    FVariationHits: TMoveVariationHitArray;
 
     FDisplayBoardFailed: Boolean;
     FWhiteClockLabel: TLabel;
@@ -379,8 +365,6 @@ type
       ABasePly: Integer);
     function FormatClock(ASeconds: Double): string;
     function CurrentFilteredGameTreePdnOptions: TGameTreePdnRenderOptions;
-    function GameTreeMoveLabelsSignature(AGameTree: TGameTree;
-      const AOptions: TGameTreePdnRenderOptions): string;
     function GameLogLineVisible(const ALine: string; AGame: TRunningGame): Boolean;
     function GameTitleEngineName(AEngine: TExternalEngineDefinition): string;
     function PlayerSetupDisplayName(AKind: TPlayerKind;
@@ -612,6 +596,7 @@ begin
   FGameState := gosWaiting;
   FGameResult := '*';
   FDisplayedPosition := TDisplayedPosition.Create;
+  FNotation := TNotationPresentation.Create;
   FGameTreeBrowseMode := False;
   FAutoPlaySearch := EmptyGameTreeSearchRef;
   FGameLogSourceGameId := -1;
@@ -1283,6 +1268,7 @@ begin
   FreeAndNil(FGameTreeForm);
   FreeAndNil(FAnalyzerPvBrowser);
   FreeAndNil(FPvBrowser);
+  FNotation.Free;
   FDisplayedPosition.Free;
   FMoveInteraction.Free;
   FGameTreeActor.Free;
@@ -3473,7 +3459,7 @@ procedure TMainForm.ClearTreeBranches(AGameTree: TGameTree);
 var
   Actor: TGameTreeActor;
 begin
-  SetLength(FVariationHits, 0);
+  FNotation.ClearVariationHits;
   Actor := ActorForGameTree(AGameTree);
   ClearGameTreeBranches(Actor);
   ClearVariationExploration;
@@ -3944,7 +3930,7 @@ procedure TMainForm.SetDisplayedTreeTracking(const AAnnotationsSignature,
 begin
   FDisplayedAnnotationsSignature := AAnnotationsSignature;
   FDisplayedMovesSignature := AMovesSignature;
-  FDisplayedMoveLabelsSignature := '';
+  FNotation.InvalidateSignature;
   FDisplayedScoreHistorySignature := '';
   FDisplayedRunningSignature := ARunningSignature;
   FDisplayedGameTreeId := AGameTreeId;
@@ -4033,48 +4019,14 @@ begin
 end;
 
 procedure TMainForm.RebuildGameMoveLabels(AGameTree: TGameTree);
-var
-  LGameTree: TGameTree;
-  I: Integer;
-  LOptions: TGameTreePdnRenderOptions;
-  LRenderResult: TGameTreePdnRenderResult;
-  LText: string;
 begin
-  if FGameMoveMemo = nil then
-    Exit;
-
-  LOptions := CurrentFilteredGameTreePdnOptions;
-  LGameTree := AGameTree;
-  if LGameTree = nil then
-    Exit;
-  FDisplayedMoveLabelsSignature :=
-    GameTreeMoveLabelsSignature(LGameTree, LOptions);
-  RenderGameTreeMovesToPdn(LGameTree, LOptions, LRenderResult);
-  LText := LRenderResult.Text;
-  SetLength(FGameMoveStarts, Length(LRenderResult.MoveStarts));
-  SetLength(FGameMoveLengths, Length(LRenderResult.MoveLengths));
-  for I := 0 to High(LRenderResult.MoveStarts) do
-  begin
-    FGameMoveStarts[I] := LRenderResult.MoveStarts[I];
-    FGameMoveLengths[I] := LRenderResult.MoveLengths[I];
-  end;
-  SetLength(FVariationHits, Length(LRenderResult.VariationStarts));
-  for I := 0 to High(LRenderResult.VariationStarts) do
-  begin
-    FVariationHits[I].NodeId := LRenderResult.VariationNodeIds[I];
-    FVariationHits[I].BeforeMove := LRenderResult.VariationBeforeMoves[I];
-    FVariationHits[I].Start := LRenderResult.VariationStarts[I];
-    FVariationHits[I].Length := LRenderResult.VariationLengths[I];
-    FVariationHits[I].VariationPly := LRenderResult.VariationPlies[I];
-    FVariationHits[I].BasePly := LRenderResult.VariationBasePlies[I];
-    FVariationHits[I].MovesText := LRenderResult.VariationMovesTexts[I];
-  end;
-
-  if FGameMoveMemo.Text <> LText then
+  if (FGameMoveMemo = nil) or (AGameTree = nil) then Exit;
+  FNotation.Render(AGameTree, CurrentFilteredGameTreePdnOptions);
+  if FGameMoveMemo.Text <> FNotation.Text then
   begin
     FGameMoveMemo.Lines.BeginUpdate;
     try
-      FGameMoveMemo.Text := LText;
+      FGameMoveMemo.Text := FNotation.Text;
       FHighlightedGameMovePly := -2;
     finally
       FGameMoveMemo.Lines.EndUpdate;
@@ -4454,18 +4406,11 @@ end;
 
 procedure TMainForm.UpdateGameMoveHighlight;
 var
-  LActiveGameTree: TGameTree;
   I: Integer;
   LHighlightPly: Integer;
 begin
   if FGameMoveMemo = nil then
     Exit;
-  if Length(FGameMoveStarts) <> Length(FGameMoveLengths) then
-  begin
-    LActiveGameTree := ActiveGameTree;
-    RebuildGameMoveLabels(LActiveGameTree);
-    Exit;
-  end;
 
   LHighlightPly := BrowseBasePly;
   if (LHighlightPly < 0) and (SelectedDisplayedGame <> nil) then
@@ -4474,22 +4419,22 @@ begin
   if (FHighlightedGameMovePly = LHighlightPly) and
     (not BrowsingBranch) and (Trim(FDisplayedPosition.PreviewMoves) = '') then
     Exit;
-  for I := 0 to High(FVariationHits) do
-    if ((FDisplayedPosition.PreviewMoves = '') and not FVariationHits[I].BeforeMove and
-      (FVariationHits[I].NodeId > 0) and (FVariationHits[I].NodeId = FDisplayedPosition.Cursor.NodeId)) or
-      ((FDisplayedPosition.PreviewMoves <> '') and (FVariationHits[I].MovesText = FDisplayedPosition.PreviewMoves) and
-      (FVariationHits[I].BasePly = BrowseBasePly) and
-      (FVariationHits[I].VariationPly = FDisplayedPosition.PreviewPly)) then
+  for I := 0 to FNotation.VariationCount - 1 do
+    if ((FDisplayedPosition.PreviewMoves = '') and not FNotation.VariationHits[I].BeforeMove and
+      (FNotation.VariationHits[I].NodeId > 0) and (FNotation.VariationHits[I].NodeId = FDisplayedPosition.Cursor.NodeId)) or
+      ((FDisplayedPosition.PreviewMoves <> '') and (FNotation.VariationHits[I].MovesText = FDisplayedPosition.PreviewMoves) and
+      (FNotation.VariationHits[I].BasePly = BrowseBasePly) and
+      (FNotation.VariationHits[I].VariationPly = FDisplayedPosition.PreviewPly)) then
     begin
-      FGameMoveMemo.SelStart := FVariationHits[I].Start;
-      FGameMoveMemo.SelLength := FVariationHits[I].Length;
+      FGameMoveMemo.SelStart := FNotation.VariationHits[I].Start;
+      FGameMoveMemo.SelLength := FNotation.VariationHits[I].Length;
       FHighlightedGameMovePly := -2;
       Exit;
     end;
-  if (LHighlightPly > 0) and (LHighlightPly <= Length(FGameMoveStarts)) then
+  if (LHighlightPly > 0) and (LHighlightPly <= FNotation.MoveCount) then
   begin
-    FGameMoveMemo.SelStart := FGameMoveStarts[LHighlightPly - 1];
-    FGameMoveMemo.SelLength := FGameMoveLengths[LHighlightPly - 1];
+    FGameMoveMemo.SelStart := FNotation.MoveRanges[LHighlightPly - 1].Start;
+    FGameMoveMemo.SelLength := FNotation.MoveRanges[LHighlightPly - 1].Length;
   end
   else
   begin
@@ -4898,66 +4843,6 @@ begin
   Result.ShowAnnotatorScore := FMoveShowAnnotatorScore;
 end;
 
-function TMainForm.GameTreeMoveLabelsSignature(AGameTree: TGameTree;
-  const AOptions: TGameTreePdnRenderOptions): string;
-var
-  I: Integer;
-
-  procedure AppendFlag(var AText: string; AValue: Boolean);
-  begin
-    if AValue then
-      AText += '1|'
-    else
-      AText += '0|';
-  end;
-
-  procedure AppendNode(var AText: string; ANode: TGameTreePlyNode);
-  var
-    ChildIndex: Integer;
-  begin
-    if ANode = nil then
-      Exit;
-    AText += IntToStr(ANode.PlyNumber) + '|' +
-      IntToStr(Ord(ANode.SideToMove)) + '|' + ANode.MoveText + '|' +
-      IntToStr(ANode.NodeId) + '|';
-    if not AOptions.HideAnnotations then
-    begin
-      if AOptions.ShowEngineScore then
-        AText += 'es=' + ANode.EngineScore + '|';
-      if AOptions.ShowAnnotatorScore then
-        AText += 'as=' + ANode.AnnotatorScore + '|';
-      AText += 'ct=' + ANode.CommentText + '|';
-      if AOptions.ShowClocks and ANode.HasClockInfo then
-        AText += 'clk=' + FormatFloat('0.000', ANode.WhiteRemainingSeconds) +
-          ',' + FormatFloat('0.000', ANode.BlackRemainingSeconds) + ',' +
-          FormatFloat('0.000', ANode.WhiteUsedSeconds) + ',' +
-          FormatFloat('0.000', ANode.BlackUsedSeconds) + '|';
-    end;
-    if AOptions.ShowEnginePVMove or AOptions.ShowEngineFullPV then
-      AText += 'epv=' + ANode.EnginePV + '|';
-    if AOptions.ShowAnnotatorPVMove or AOptions.ShowAnnotatorFullPV then
-      AText += 'apv=' + ANode.AnnotatorPV + '|';
-    AText += 'autopv=' + ANode.AutoPlayPV + '|';
-    AText += 'children=' + IntToStr(ANode.ChildCount) + '|';
-    for ChildIndex := 0 to ANode.ChildCount - 1 do
-      AppendNode(AText, ANode.Children[ChildIndex]);
-  end;
-
-begin
-  Result := '';
-  if AGameTree = nil then
-    Exit;
-  AppendFlag(Result, AOptions.HideAnnotations);
-  AppendFlag(Result, AOptions.ShowEngineScore);
-  AppendFlag(Result, AOptions.ShowClocks);
-  AppendFlag(Result, AOptions.ShowEnginePVMove);
-  AppendFlag(Result, AOptions.ShowEngineFullPV);
-  AppendFlag(Result, AOptions.ShowAnnotatorPVMove);
-  AppendFlag(Result, AOptions.ShowAnnotatorFullPV);
-  AppendFlag(Result, AOptions.ShowAnnotatorScore);
-  Result += 'main=' + IntToStr(AGameTree.MainlineCount) + '|';
-  AppendNode(Result, AGameTree.Root);
-end;
 
 function TMainForm.GameLogLineVisible(const ALine: string;
   AGame: TRunningGame): Boolean;
@@ -5048,28 +4933,28 @@ begin
   LSelStart := FGameMoveMemo.SelStart;
   LSelEnd := LSelStart + FGameMoveMemo.SelLength;
   LPos := LSelStart;
-  for I := 0 to High(FVariationHits) do
+  for I := 0 to FNotation.VariationCount - 1 do
   begin
     if (Trim(FDisplayedPosition.PreviewMoves) <> '') and
-      ((FVariationHits[I].BasePly <> BrowseBasePly) or
-       (FVariationHits[I].MovesText <> FDisplayedPosition.PreviewMoves)) then
+      ((FNotation.VariationHits[I].BasePly <> BrowseBasePly) or
+       (FNotation.VariationHits[I].MovesText <> FDisplayedPosition.PreviewMoves)) then
       Continue;
-    if SelectionHitsRange(FVariationHits[I].Start,
-      FVariationHits[I].Length) then
+    if SelectionHitsRange(FNotation.VariationHits[I].Start,
+      FNotation.VariationHits[I].Length) then
     begin
-      if FVariationHits[I].NodeId > 0 then
+      if FNotation.VariationHits[I].NodeId > 0 then
       begin
         ClearHumanMoveSelection;
         ClearVariationExploration;
-        if FVariationHits[I].BeforeMove then
-          FDisplayedPosition.Cursor.SelectBefore(LGameTree, LGameTree.FindNodeById(FVariationHits[I].NodeId))
+        if FNotation.VariationHits[I].BeforeMove then
+          FDisplayedPosition.Cursor.SelectBefore(LGameTree, LGameTree.FindNodeById(FNotation.VariationHits[I].NodeId))
         else
-          FDisplayedPosition.Cursor.Select(LGameTree, LGameTree.FindNodeById(FVariationHits[I].NodeId));
+          FDisplayedPosition.Cursor.Select(LGameTree, LGameTree.FindNodeById(FNotation.VariationHits[I].NodeId));
         RefreshDisplayFromGameTree(LGameTree, False);
       end
-      else if Trim(FVariationHits[I].MovesText) <> '' then
-        ApplyAnnotatorVariationBrowsePly(FVariationHits[I].BasePly,
-          FVariationHits[I].VariationPly, FVariationHits[I].MovesText,
+      else if Trim(FNotation.VariationHits[I].MovesText) <> '' then
+        ApplyAnnotatorVariationBrowsePly(FNotation.VariationHits[I].BasePly,
+          FNotation.VariationHits[I].VariationPly, FNotation.VariationHits[I].MovesText,
           LGameTree)
 ;
       HighlightGameMoveTextSelection(True, LGameTree);
@@ -5084,8 +4969,8 @@ begin
     Exit;
   end;
 
-  for I := 0 to High(FGameMoveStarts) do
-    if SelectionHitsRange(FGameMoveStarts[I], FGameMoveLengths[I]) then
+  for I := 0 to FNotation.MoveCount - 1 do
+    if SelectionHitsRange(FNotation.MoveRanges[I].Start, FNotation.MoveRanges[I].Length) then
     begin
       ApplyGameBrowsePly(I + 1);
       HighlightGameMoveTextSelection(True, LGameTree);
@@ -5093,9 +4978,9 @@ begin
       Exit;
     end;
 
-  if Length(FGameMoveStarts) > 0 then
+  if FNotation.MoveCount > 0 then
   begin
-    LFirstMoveStart := FGameMoveStarts[0];
+    LFirstMoveStart := FNotation.MoveRanges[0].Start;
     if LPos < LFirstMoveStart then
     begin
       ApplyGameBrowsePly(0);
@@ -5274,32 +5159,32 @@ begin
     Exit;
   if Trim(FDisplayedPosition.PreviewMoves) <> '' then
   begin
-    for I := 0 to High(FVariationHits) do
-      if (FVariationHits[I].BasePly = BrowseBasePly) and
-        (FVariationHits[I].MovesText = FDisplayedPosition.PreviewMoves) and
-        (FVariationHits[I].VariationPly = BrowseVariationPly) then
+    for I := 0 to FNotation.VariationCount - 1 do
+      if (FNotation.VariationHits[I].BasePly = BrowseBasePly) and
+        (FNotation.VariationHits[I].MovesText = FDisplayedPosition.PreviewMoves) and
+        (FNotation.VariationHits[I].VariationPly = BrowseVariationPly) then
       begin
-        FGameMoveMemo.SelStart := FVariationHits[I].Start;
-        FGameMoveMemo.SelLength := FVariationHits[I].Length;
+        FGameMoveMemo.SelStart := FNotation.VariationHits[I].Start;
+        FGameMoveMemo.SelLength := FNotation.VariationHits[I].Length;
         if AFocusMemo and Visible and CanFocus and FGameMoveMemo.CanFocus then
           FGameMoveMemo.SetFocus;
         Exit;
       end;
   end;
-  for I := 0 to High(FVariationHits) do
-    if (FVariationHits[I].NodeId = FDisplayedPosition.Cursor.NodeId) and
-      (FVariationHits[I].NodeId > 0) and not FVariationHits[I].BeforeMove then
+  for I := 0 to FNotation.VariationCount - 1 do
+    if (FNotation.VariationHits[I].NodeId = FDisplayedPosition.Cursor.NodeId) and
+      (FNotation.VariationHits[I].NodeId > 0) and not FNotation.VariationHits[I].BeforeMove then
     begin
-      FGameMoveMemo.SelStart := FVariationHits[I].Start;
-      FGameMoveMemo.SelLength := FVariationHits[I].Length;
+      FGameMoveMemo.SelStart := FNotation.VariationHits[I].Start;
+      FGameMoveMemo.SelLength := FNotation.VariationHits[I].Length;
       if AFocusMemo and Visible and CanFocus and FGameMoveMemo.CanFocus then
         FGameMoveMemo.SetFocus;
       Exit;
     end;
-  if (BrowseBasePly > 0) and (BrowseBasePly <= Length(FGameMoveStarts)) then
+  if (BrowseBasePly > 0) and (BrowseBasePly <= FNotation.MoveCount) then
   begin
-    FGameMoveMemo.SelStart := FGameMoveStarts[BrowseBasePly - 1];
-    FGameMoveMemo.SelLength := FGameMoveLengths[BrowseBasePly - 1];
+    FGameMoveMemo.SelStart := FNotation.MoveRanges[BrowseBasePly - 1].Start;
+    FGameMoveMemo.SelLength := FNotation.MoveRanges[BrowseBasePly - 1].Length;
   end;
   if AFocusMemo and Visible and CanFocus and FGameMoveMemo.CanFocus then
     FGameMoveMemo.SetFocus;
@@ -6557,11 +6442,11 @@ begin
   UpdateScoreHistory(AGameTree);
   LOptions := CurrentFilteredGameTreePdnOptions;
   LLabelSignature := GameTreeMoveLabelsSignature(AGameTree, LOptions);
-  if FDisplayedMoveLabelsSignature <> LLabelSignature then
+  if FNotation.Signature <> LLabelSignature then
     RebuildGameMoveLabels(AGameTree);
   if (not AForce) and (FDisplayedGameTreeId = LGameTreeId) and
     (FDisplayedGameTreeRevision = LRevision) and
-    (FDisplayedMoveLabelsSignature = LLabelSignature) then
+    (FNotation.Signature = LLabelSignature) then
     Exit;
 
   RefreshVisibleGameTreeView(AGameTree);

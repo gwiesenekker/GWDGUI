@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Extract notation rendering and range ownership
+
+- Add the LCL-independent uNotationPresentation presenter, using the existing
+  PDN renderer unchanged. It owns rendered text/ranges and the label signature;
+  the form no longer copies parallel mainline and variation arrays.
+- Preserve label invalidation rules and capture/branch navigation metadata.
+  Keep memo updates, focus and cursor commands in the form.
+- Add headless parity checks for all 256 filter combinations, nested branches,
+  capture captions and signature invalidation; GTK navigation checks pass.
+
 ### 2026-10-26 — Extract move-highlight calculation
 
 - Move last-move, PV-source and next-PV-source square calculation to
