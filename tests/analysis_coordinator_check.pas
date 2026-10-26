@@ -124,6 +124,86 @@ begin
   finally Board.Free; AutoPlay.Free; Other.Free; Actor.Free; end;
 end;
 
+procedure CheckRequestsAndSnapshots;
+var Actor, Previous: TGameTreeActor; Coordinator: TAnalysisCoordinator;
+  Display: TDisplayedPosition; Board, OtherBoard: TDraughtsBoard;
+  Position: TAnalysisPosition; Request, Mcts: TAnalysisRequest;
+  OldSearch: TGameTreeSearchRef; State: TGameTreeSearchState;
+  Snapshot: TPvSnapshot; Command: TGameTreeCommand; Tree: TGameTree;
+  ErrorText, Key: string;
+begin
+  Actor := TGameTreeActor.Create; Previous := TGameTreeActor.Create;
+  Coordinator := TAnalysisCoordinator.Create; Display := TDisplayedPosition.Create;
+  Board := TDraughtsBoard.Create; OtherBoard := TDraughtsBoard.Create;
+  Snapshot := TPvSnapshot.Create;
+  try
+    Position := Default(TAnalysisPosition);
+    Check(not Coordinator.PrepareAnalyzer(Position, nil, Display, Request), 'missing analysis position rejected');
+    Position.Tree := Actor.GameTree; Position.Node := Actor.GameTree.Root;
+    Position.Board := Board; Position.StartingFEN := Actor.GameTree.StartingFEN;
+    Position.BrowseBasePly := -1; Position.State := gosStopped;
+    Check(StartAnalysisSearch(Previous, Previous.GameTree.Root, OldSearch, ErrorText), ErrorText);
+    Coordinator.TrackSearch(OldSearch);
+    Check(Coordinator.PrepareAnalyzer(Position, Previous, Display, Request), 'prepare analyzer position');
+    Check(Previous.SearchState(OldSearch, State) and (State = gssCancelled), 'switching games cancels old actor search');
+    Previous.ProcessCommands;
+    Check(not Previous.SearchState(OldSearch, State), 'old game search queued for release');
+    Check(not Request.Terminal and not Request.Transient and
+      (Request.BaseBoard.PositionKey = Board.PositionKey), 'ordinary request uses selected base');
+    Coordinator.StartRequestSearch(Actor, Position.Node, Request);
+    Check(IsValidGameTreeSearchRef(Request.Search) and Coordinator.SearchMatches(Request.Search), 'ordinary request starts tracked actor search');
+    Check(not Coordinator.PrepareAnalyzer(Position, Actor, Display, Mcts), 'unchanged position suppressed');
+    Check(Actor.SearchState(Request.Search, State) and (State = gssActive), 'suppressed request retains active search');
+    Check(Coordinator.PrepareMcts(Position, Display, Mcts) and
+      not IsValidGameTreeSearchRef(Mcts.Search), 'MCTS request is independent and unscoped');
+    Snapshot.SetDataWithSearch(Board, 99, '32-28 18-23', '0.25', '8', '0.4', Request.Search, False);
+    Command := PrepareAnalysisSnapshotCommand(Actor, Previous.GameTree, Snapshot, Tree);
+    Check((Command <> nil) and (Tree = Actor.GameTree), 'snapshot targets search tree, not current fallback game');
+    try
+      Check(Command.NodeId = Position.Node.NodeId, 'scoped snapshot ignores conflicting fallback ply');
+      Actor.ExecuteCommand(Command); Check(Command.Accepted, Command.ErrorText);
+    finally Command.Free; end;
+    Check(Actor.GameTree.Root.AnnotatorPV = '32-28 18-23', 'snapshot stores metadata on exact search node');
+    Coordinator.CancelTrackedSearch(Actor);
+    Command := PrepareAnalysisSnapshotCommand(Actor, Actor.GameTree, Snapshot, Tree);
+    Check(Command = nil, 'late snapshot cannot publish after cancel');
+    Actor.ProcessCommands;
+    Board.PlayMove('32-28');
+    Position.MovesText := '32-28'; Position.MoveCount := 1;
+    Position.Preview := True; Position.BrowseBasePly := 0;
+    Check(Coordinator.PrepareAnalyzer(Position, Actor, Display, Request), 'prepare preview request');
+    Coordinator.StartRequestSearch(Actor, Position.Node, Request);
+    Check(Request.Transient and not Request.Terminal and
+      not IsValidGameTreeSearchRef(Request.Search), 'preview request never owns a persistent search');
+    Key := Request.BaseBoard.PositionKey;
+    Board.PlayMove('18-23');
+    Check(Request.BaseBoard.PositionKey = Key, 'request base is copied before caller changes input board');
+    Check(Coordinator.PrepareMcts(Position, Display, Mcts), 'MCTS preview request');
+    Check(Mcts.BaseBoard.PositionKey = OtherBoard.PositionKey,
+      'MCTS retains selected-node base policy when displaying a preview');
+    Snapshot.SetDataWithSearch(Request.BaseBoard, 1, '18-23', '0.1', '2', '', EmptyGameTreeSearchRef, False, True);
+    Check(CanDisplayTransientAnalysis(Snapshot, Request.BaseBoard), 'matching transient base accepted');
+    Check(not CanDisplayTransientAnalysis(Snapshot, Board), 'unrelated transient base ignored');
+    Command := PrepareAnalysisSnapshotCommand(Actor, Actor.GameTree, Snapshot, Tree);
+    Check(Command = nil, 'transient snapshot never persists');
+    Position.Preview := False; Position.MovesText := ''; Position.MoveCount := 0;
+    Position.State := gosGameOver; Position.BrowseBasePly := -1;
+    Board.SetBeginPosition;
+    Check(Coordinator.PrepareAnalyzer(Position, Actor, Display, Request) and Request.Terminal,
+      'completed following position prepares terminal request');
+    Coordinator.StartRequestSearch(Actor, Position.Node, Request);
+    Check(not IsValidGameTreeSearchRef(Request.Search), 'terminal request never starts search');
+    Snapshot.SetDataWithSearch(Board, 0, '32-28', '', '2', '', EmptyGameTreeSearchRef, False);
+    Command := PrepareAnalysisSnapshotCommand(Actor, Actor.GameTree, Snapshot, Tree);
+    Check(Command = nil, 'scoreless snapshot does not publish');
+    Snapshot.SetDataWithSearch(Board, 0, '32-28', '0.1', '2', '', EmptyGameTreeSearchRef, False);
+    Command := PrepareAnalysisSnapshotCommand(Actor, Actor.GameTree, Snapshot, Tree);
+    Check((Command <> nil) and (Command.NodeId = Actor.GameTree.Root.NodeId), 'legacy unscoped snapshot retains base-ply fallback');
+    Command.Free;
+  finally Snapshot.Free; OtherBoard.Free; Board.Free; Display.Free;
+    Coordinator.Free; Previous.Free; Actor.Free; end;
+end;
+
 var Actor, Other: TGameTreeActor; Coordinator: TAnalysisCoordinator;
   Snapshot: TPvSnapshot; Board: TDraughtsBoard; Tree: TGameTree;
   Node, ResolvedNode: TGameTreePlyNode; Search, NewSearch: TGameTreeSearchRef;
@@ -131,6 +211,7 @@ var Actor, Other: TGameTreeActor; Coordinator: TAnalysisCoordinator;
 begin
   CheckAutoPlay;
   CheckPvState;
+  CheckRequestsAndSnapshots;
   Actor := TGameTreeActor.Create; Other := TGameTreeActor.Create;
   Coordinator := TAnalysisCoordinator.Create;
   Snapshot := TPvSnapshot.Create; Board := TDraughtsBoard.Create;

@@ -5,6 +5,19 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Extract analysis request and snapshot preparation
+
+- Move analyzer/MCTS request preparation, prior-search cancellation, selected-base
+  choice and persistent-search eligibility into analysis coordination. The form
+  supplies a borrowed position description and posts the resulting request.
+- Move snapshot filtering/target preparation out of the form, preserving scoped
+  node identities, unscoped base-ply fallback and transient preview isolation.
+  Keep queue draining, UI updates, runner ownership and shutdown in place.
+- Add cross-game cancellation, unchanged-request, transient/terminal, copied-base,
+  persistent snapshot and late-snapshot rejection regressions. Update inventory.
+- Validation: full headless/source-audit sweep, GTK preservation/analysis-control
+  checks, GTK tournament check and application build pass. Nothing pushed.
+
 ### 2026-10-26 — Extract analysis PV base and display-cache ownership
 
 - Move copied analyzer/main PV base boards, node/base-ply association, engine and

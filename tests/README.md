@@ -111,4 +111,6 @@ analyzer/MCTS restart signatures and historical/terminal analysis policy. It als
 checks Auto Play historical-node attachment, command preparation/acceptance,
 preview accumulation, rejected targets and stop/restart identity fences. PV-state
 checks cover copied bases, nested identities/fallbacks, latest-PV selection and
-complete display-cache keys.
+complete display-cache keys. Request/snapshot checks cover cross-game cancellation,
+unchanged-position suppression, terminal and transient search eligibility,
+snapshot publication targets, stale rejection and transient display isolation.

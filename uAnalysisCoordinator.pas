@@ -60,6 +60,24 @@ type
     property MovesText: string read FMovesText;
   end;
 
+  TAnalysisPosition = record
+    Tree: TGameTree;
+    Node: TGameTreePlyNode;
+    Board: TDraughtsBoard; // Borrowed for this synchronous preparation only.
+    Revision: Int64;
+    StartingFEN, MovesText: string;
+    MoveCount, BrowseBasePly: Integer;
+    State: TGameOrchestratorState;
+    Preview: Boolean;
+  end;
+  TAnalysisRequest = record
+    StartingFEN, MovesText: string;
+    BaseBoard: TDraughtsBoard; // Borrowed from coordinator; runners copy on posting.
+    BasePly: Integer;
+    Terminal, Transient: Boolean;
+    Search: TGameTreeSearchRef;
+  end;
+
   // Main-thread coordination only. Actors, trees, snapshots and runners are borrowed.
   TAnalysisCoordinator = class
   private
@@ -76,9 +94,22 @@ type
     procedure InvalidateMcts;
     function RestartAnalyzerFor(const ASignature: string): Boolean;
     function RestartMctsFor(const ASignature: string): Boolean;
+    procedure CancelTrackedSearch(AActor: TGameTreeActor);
+    function PrepareAnalyzer(const APosition: TAnalysisPosition;
+      APreviousActor: TGameTreeActor; ADisplay: TDisplayedPosition;
+      out ARequest: TAnalysisRequest): Boolean;
+    procedure StartRequestSearch(AActor: TGameTreeActor; ANode: TGameTreePlyNode;
+      var ARequest: TAnalysisRequest);
+    function PrepareMcts(const APosition: TAnalysisPosition;
+      ADisplay: TDisplayedPosition; out ARequest: TAnalysisRequest): Boolean;
     property Pv: TAnalysisPvState read FPv;
     property Search: TGameTreeSearchRef read FSearch;
   end;
+function PrepareAnalysisSnapshotCommand(AActor: TGameTreeActor;
+  AFallbackTree: TGameTree; ASnapshot: TPvSnapshot;
+  out ATree: TGameTree): TGameTreeCommand;
+function CanDisplayTransientAnalysis(ASnapshot: TPvSnapshot;
+  ACurrentBase: TDraughtsBoard): Boolean;
 function EnginePvForTree(AGameTree: TGameTree; APly: Integer;
   out APV, AScore, ADepth, ATimeText: string): Boolean;
 function AnnotatorPvForTreeNode(AGameTree: TGameTree; ANodeId: Int64;
@@ -268,12 +299,12 @@ begin
   if (not AActor.SearchState(LSearch, LSearchState)) or
     (LSearchState <> gssActive) then
   begin
-      Exit;
+    Exit;
   end;
   ANode := AActor.GameTree.FindNodeById(LSearch.NodeId);
   if ANode = nil then
   begin
-      AGameTree := nil;
+    AGameTree := nil;
     Exit;
   end;
 
@@ -563,6 +594,89 @@ begin
     Exit(True);
   end;
   Result := Trim(APV) <> '';
+end;
+
+procedure TAnalysisCoordinator.CancelTrackedSearch(AActor: TGameTreeActor);
+begin
+  if not IsValidGameTreeSearchRef(FSearch) then Exit;
+  if CancelGameTreeSearch(AActor, FSearch) then ReleaseGameTreeSearch(AActor, FSearch);
+  ClearSearch;
+end;
+function TAnalysisCoordinator.PrepareAnalyzer(const APosition: TAnalysisPosition;
+  APreviousActor: TGameTreeActor; ADisplay: TDisplayedPosition;
+  out ARequest: TAnalysisRequest): Boolean;
+begin
+  ARequest := Default(TAnalysisRequest);
+  Result := False;
+  if (APosition.Tree = nil) or (APosition.Node = nil) or (APosition.Board = nil) then Exit;
+  if not RestartAnalyzerFor(DisplayedPositionSignature(APosition.Tree,
+    APosition.Node.NodeId, APosition.StartingFEN, APosition.MovesText, APosition.State)) then Exit;
+  CancelTrackedSearch(APreviousActor);
+  if APosition.Preview then FPv.SetAnalyzerBase(APosition.Board, APosition.MoveCount)
+  else FPv.SetAnalyzerBaseFromTree(APosition.Tree, APosition.Node.NodeId,
+    APosition.MoveCount, APosition.Board, ADisplay, APosition.Revision);
+  ARequest.StartingFEN := APosition.StartingFEN;
+  ARequest.MovesText := APosition.MovesText;
+  ARequest.BaseBoard := FPv.AnalyzerBaseBoard;
+  ARequest.BasePly := FPv.AnalyzerBasePly;
+  ARequest.Terminal := AnalysisPositionIsTerminal(APosition.Board.LegalMoveCount > 0,
+    APosition.Preview, APosition.BrowseBasePly, APosition.MoveCount,
+    APosition.Tree.MainlineCount, APosition.State);
+  ARequest.Transient := APosition.Preview;
+  Result := True;
+end;
+procedure TAnalysisCoordinator.StartRequestSearch(AActor: TGameTreeActor;
+  ANode: TGameTreePlyNode; var ARequest: TAnalysisRequest);
+var ErrorText: string;
+begin
+  if ARequest.Terminal or ARequest.Transient then Exit;
+  if StartAnalysisSearch(AActor, ANode, ARequest.Search, ErrorText) then
+    TrackSearch(ARequest.Search);
+end;
+function TAnalysisCoordinator.PrepareMcts(const APosition: TAnalysisPosition;
+  ADisplay: TDisplayedPosition; out ARequest: TAnalysisRequest): Boolean;
+begin
+  ARequest := Default(TAnalysisRequest);
+  Result := False;
+  if (APosition.Tree = nil) or (APosition.Node = nil) or (APosition.Board = nil) then Exit;
+  if not RestartMctsFor(DisplayedPositionSignature(APosition.Tree,
+    APosition.Node.NodeId, APosition.StartingFEN, APosition.MovesText, APosition.State)) then Exit;
+  ARequest.StartingFEN := APosition.StartingFEN;
+  ARequest.MovesText := APosition.MovesText;
+  ARequest.BasePly := APosition.MoveCount;
+  ARequest.Terminal := AnalysisPositionIsTerminal(APosition.Board.LegalMoveCount > 0,
+    APosition.Preview, APosition.BrowseBasePly, APosition.MoveCount,
+    APosition.Tree.MainlineCount, APosition.State);
+  if not ADisplay.TryBuildNodeBoard(APosition.Tree, APosition.Node,
+    APosition.Revision, FPv.MainBaseBoard) then FPv.MainBaseBoard.AssignFrom(APosition.Board);
+  ARequest.BaseBoard := FPv.MainBaseBoard;
+  Result := True;
+end;
+function PrepareAnalysisSnapshotCommand(AActor: TGameTreeActor;
+  AFallbackTree: TGameTree; ASnapshot: TPvSnapshot;
+  out ATree: TGameTree): TGameTreeCommand;
+var Node: TGameTreePlyNode;
+begin
+  Result := nil;
+  ATree := nil;
+  if (ASnapshot = nil) or AnalyzerSnapshotIsTransient(ASnapshot) then Exit;
+  if (Trim(ASnapshot.Score) = '') or (Trim(ASnapshot.PrincipalVariation) = '') then Exit;
+  Node := nil;
+  if IsValidGameTreeSearchRef(ASnapshot.SearchRef) then
+  begin
+    if not ResolveActiveAnalysisSnapshot(AActor, ASnapshot, ATree, Node) then Exit;
+  end
+  else ATree := AFallbackTree;
+  if (ATree = nil) or (AActor = nil) then Exit;
+  if (Node = nil) and not TryResolveAnalyzerSnapshotNode(ATree, ASnapshot, Node) then Exit;
+  Result := AActor.CreateRecordAnnotatorPVCommand(Node.NodeId, ASnapshot.Score,
+    ASnapshot.PrincipalVariation, ASnapshot.Depth, ASnapshot.TimeText);
+end;
+function CanDisplayTransientAnalysis(ASnapshot: TPvSnapshot;
+  ACurrentBase: TDraughtsBoard): Boolean;
+begin
+  Result := (ASnapshot <> nil) and (ACurrentBase <> nil) and
+    (ASnapshot.BaseBoard.PositionKey = ACurrentBase.PositionKey);
 end;
 
 end.

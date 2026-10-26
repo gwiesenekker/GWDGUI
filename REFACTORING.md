@@ -36,7 +36,7 @@ an obligation to keep source or binaries shared between the applications.
 | Record import/export | `uPdn`, `uGameTreePdn` | Keep GWDGUI PDN compatibility; implement PGN in the chess application. Do not relabel PDN data as PGN. |
 | Rules and positions | `uDraughtsBoard`, `uDraughtsDrawRules`, `uGameOrchestrator` | Replace rules, FEN interpretation, move representation and termination logic for chess. Preserve orchestration concepts only after checking game-specific assumptions. |
 | Board display/setup | `uBoardControl`, `uPositionSetupForm` | Replace numbered 10×10 squares and piece artwork with chess geometry/pieces; support promotion choice and multi-square move effects. |
-| Analysis | `uAnalyzerRunnerThread`, `uPvBrowser`, `uPvSnapshot`, main-form coordination | Retain immutable updates, request identities and stale-result protection; replace board/notation/protocol details. |
+| Analysis | `uAnalysisCoordinator`, `uAnalyzerRunnerThread`, `uPvBrowser`, `uPvSnapshot`, form event/runner wiring | Search/request, Auto Play and PV coordination are extracted without LCL. Retain immutable updates, request identities and stale-result protection; replace board/notation/protocol details in chess. |
 | Engine protocols | `uHubEngine`, `uDxpEngine`, `uDxpProtocol`, `uEngineRegistry`, `uEngineBase` | Retain transport, process isolation and cancellation lessons; implement UCI separately. Keep Hub/DXP supported in GWDGUI. |
 | MCTS | GWD-specific Hub extension and main-form controls | Keep existing GWDGUI behaviour. Omit from the initial chess port unless explicitly requested later. |
 | Database | `uGameDatabase`, `uDatabaseImportWorker`, `uDatabaseForm` | Retain transactional import, worker ownership and recovery patterns; replace position keys, notation and schema identification. Chess must not silently open a draughts database. |
@@ -52,8 +52,9 @@ an obligation to keep source or binaries shared between the applications.
    Move queued-message classes to `uGameGuiMessages` in a separate commit.
 4. Extract move interaction/display coordination.
 5. Extract notation presentation using the existing PDN renderer.
-6. Next: analysis coordination. Reassess a session manager last; do not redesign
-   shutdown during these extractions.
+6. Extract analysis coordination while retaining main-thread delivery and runner ownership.
+7. Next: reassess session management against the remaining form responsibilities.
+   Keep shutdown ordering stable; a new session manager is not an automatic requirement.
 
 Keep the existing GTK end-to-end checks. Add tests below the UI as boundaries
 become independent; do not replace integration coverage with controller tests.
@@ -115,7 +116,23 @@ or move the published v3.0 tag as part of this work.
   variation-first hit precedence, caret/selection endpoints and preview isolation.
   GTK tests additionally exercise selection edges and annotation-filter rebuilding
   through real controls, alongside existing branch/keyboard/PV checks.
-- `uMainForm` is reduced from 7,652 to 6,525 lines. Analysis coordination and
-  session management remain in the form. Control updates,
+- `uAnalysisCoordinator` owns ordinary search tracking, analyzer/MCTS restart
+  signatures and request preparation. Search start/done/cancel/release and
+  snapshot validation/preparation retain the actor boundary and full identities.
+  Snapshot delivery/coalescing, actor lookup and UI result application stay in
+  the form. Transient previews cannot publish persistent analysis metadata.
+- `TAutoPlayCoordinator` owns temporary line accumulation and selected-node/search
+  identity. It prepares legal move commands and advances only after actor
+  acceptance; official mainline moves remain unchanged.
+- `TAnalysisPvState` owns copied analyzer/main PV bases and display-cache state.
+  It borrows the existing displayed-position replay cache with actor revisions.
+  Request records borrow those boards synchronously; runner posting copies them.
+- Headless analysis checks cover cancelled/completed/foreign search identities,
+  queued releases, cross-game replacement, transient/terminal request policy,
+  snapshot preparation, PV copy/fallback/cache behaviour and Auto Play rejection,
+  reset and historical-node preservation. GTK frozen-PV and real analysis-control
+  checks remain in the sweep.
+- `uMainForm` is reduced from 7,652 to 5,871 lines. Session management, engine/menu
+  ownership and shutdown remain in the form. Control updates,
   actor/runner dispatch, analysis cancellation and shutdown stay there during
   these extractions. The published v3.0 tag stays at the release commit.
