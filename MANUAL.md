@@ -168,8 +168,10 @@ Click the source square and then the destination square. GWDGUI accepts only a
 legal move for the displayed position. You can also click a move in the
 **Legal moves** list.
 
-When a capture has multiple landing squares or paths, use the legal-move list
-to select the exact move if the board clicks are ambiguous.
+When several captures share a source and destination, board clicks open a chooser
+showing their distinct PDN paths. Select a path and choose **Play move**, or
+**Cancel** to leave the position unchanged. The legal-move list also lets you
+select the exact move.
 
 Press `F` to flip the board.
 

@@ -96,7 +96,8 @@ or move the published v3.0 tag as part of this work.
   FPC, without LCL or a display. GTK integration coverage remains in place.
 - `uMoveInteraction` owns temporary legal candidate/target selection, move routing
   and board-highlight calculation. It does not execute actor commands or runner
-  calls. The first legal capture candidate for a target remains the chosen move.
+  calls. Same-target captures require an explicit choice of standard PDN path;
+  cancellation and changes to the displayed position do not play a move.
 - `uDisplayedPosition` owns the existing sole tree cursor, temporary PV preview
   and copied replay cache. Trees are borrowed; actor revisions are passed by the
   caller. The outer UI refresh bounds cache lifetime, including nested refreshes.

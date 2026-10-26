@@ -5,12 +5,15 @@ unit uGuiDialogs;
 interface
 
 uses
-  Forms, Types;
+  Classes, Forms, Types;
 
 {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
 var GuiTestConfirmationResult: Integer = 0;
+    GuiTestChoiceOnShow: TNotifyEvent = nil;
 {$ENDIF}
 
+function ShowGuiChoiceDialog(AOwner: TCustomForm; const ACaption,
+  AText: string; AChoices: TStrings): Integer;
 function ShowGuiConfirmationDialog(AOwner: TCustomForm; const ACaption,
   AText, AAcceptCaption, ARejectCaption: string; ARejectResult: Integer): Integer;
 function ShowGuiOkDialog(AOwner: TCustomForm; const ACaption,
@@ -29,7 +32,7 @@ procedure ShowFormCenteredOnOwner(AForm, AOwner: TCustomForm);
 implementation
 
 uses
-  Classes, Controls, ExtCtrls, Graphics, Math, Process, StdCtrls, SysUtils, uPlatformProcess;
+  Controls, ExtCtrls, Graphics, Math, Process, StdCtrls, SysUtils, uPlatformProcess;
 
 const
   DialogWidth = 400;
@@ -279,6 +282,41 @@ begin
   finally
     Lines.Free;
   end;
+end;
+
+function ShowGuiChoiceDialog(AOwner: TCustomForm; const ACaption,
+  AText: string; AChoices: TStrings): Integer;
+var Dialog: TForm; Prompt: TLabel; Choices: TListBox; Button: TButton;
+begin
+  Result := -1;
+  if (AChoices = nil) or (AChoices.Count = 0) then Exit;
+  Dialog := TForm.Create(AOwner);
+  try
+    Dialog.BorderStyle := bsDialog; Dialog.Caption := ACaption;
+    Dialog.ClientWidth := 460; Dialog.ClientHeight := 290;
+    Prompt := TLabel.Create(Dialog); Prompt.Parent := Dialog;
+    Prompt.SetBounds(20, 16, 420, 40); Prompt.AutoSize := False;
+    Prompt.WordWrap := True; Prompt.Caption := AText;
+    Choices := TListBox.Create(Dialog); Choices.Parent := Dialog;
+    Choices.Name := 'Choices'; Choices.SetBounds(20, 60, 420, 170);
+    Choices.Items.Assign(AChoices); Choices.ItemIndex := 0;
+    Dialog.ActiveControl := Choices;
+    Button := TButton.Create(Dialog); Button.Parent := Dialog;
+    Button.Name := 'ChooseButton'; Button.Caption := 'Play move';
+    Button.SetBounds(252, 248, 90, 28); Button.ModalResult := mrOK;
+    Button.Default := True; Dialog.DefaultControl := Button;
+    Button := TButton.Create(Dialog); Button.Parent := Dialog;
+    Button.Name := 'CancelButton'; Button.Caption := 'Cancel';
+    Button.SetBounds(350, 248, 90, 28); Button.ModalResult := mrCancel;
+    Button.Cancel := True; Dialog.CancelControl := Button;
+    {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+    if not Assigned(GuiTestChoiceOnShow) then
+      raise EInvalidOperation.Create('Unexpected choice dialog: ' + ACaption);
+    Dialog.OnShow := GuiTestChoiceOnShow;
+    {$ENDIF}
+    CenterFormOnOwner(Dialog, AOwner);
+    if Dialog.ShowModal = mrOK then Result := Choices.ItemIndex;
+  finally Dialog.Free; end;
 end;
 
 function ShowGuiConfirmationDialog(AOwner: TCustomForm; const ACaption,

@@ -19,6 +19,7 @@ type
     destructor Destroy; override;
     procedure Clear;
     function SelectSource(ABoard: TDraughtsBoard; ASourceSquare: Integer): string;
+    procedure TargetChoices(ATargetSquare: Integer; AMoves: TStrings);
     function FindTarget(ATargetSquare: Integer; out AMove: string): Boolean;
     property SourceSquare: Integer read FSourceSquare;
     property Targets: TMoveTargetSquares read FTargets;
@@ -125,18 +126,24 @@ begin
     end;
   end;
 end;
-function TMoveInteraction.FindTarget(ATargetSquare: Integer;
-  out AMove: string): Boolean;
+procedure TMoveInteraction.TargetChoices(ATargetSquare: Integer; AMoves: TStrings);
 var I: Integer;
 begin
-  AMove := '';
+  AMoves.Clear;
   for I := 0 to FChoices.Count - 1 do
-    if MoveSquareAt(FChoices[I], 2) = ATargetSquare then
-    begin
-      AMove := FChoices[I];
-      Exit(True);
-    end;
-  Result := False;
+    if MoveSquareAt(FChoices[I], 2) = ATargetSquare then AMoves.Add(FChoices[I]);
+end;
+function TMoveInteraction.FindTarget(ATargetSquare: Integer;
+  out AMove: string): Boolean;
+var Choices: TStringList;
+begin
+  AMove := '';
+  Choices := TStringList.Create;
+  try
+    TargetChoices(ATargetSquare, Choices);
+    Result := Choices.Count = 1;
+    if Result then AMove := Choices[0];
+  finally Choices.Free; end;
 end;
 function RouteMove(ABoard: TDraughtsBoard; ATree: TGameTree;
   ANode: TGameTreePlyNode; const AMove: string; ACanExplore, ABrowsingBranch,

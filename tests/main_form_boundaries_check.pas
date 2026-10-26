@@ -10,6 +10,15 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF}
   uPositionSetupForm, uEngineRegistry, uEngineParamsJson;
 
 type
+  TCaptureChoice = class
+    Dialog: TForm;
+    Index: Integer;
+    Expected: TStringList;
+    MainForm: TMainForm;
+    ChangePosition: Boolean;
+    procedure Shown(Sender: TObject);
+    procedure Choose(Data: PtrInt);
+  end;
   TExceptionReporter = class
     procedure Report(Sender: TObject; Error: Exception);
   end;
@@ -101,6 +110,73 @@ begin
       (Form.ActiveGameTree.MainlineNode[1].NodeId = NodeId) and
       (Board.Board.CurrentFEN = Expected.CurrentFEN), 'flip preserves model, identity and displayed position');
   finally Expected.Free; Form.Free; end;
+end;
+
+procedure TCaptureChoice.Shown(Sender: TObject);
+var Choices: TListBox;
+begin
+  Dialog := TForm(Sender);
+  Choices := TListBox(Dialog.FindComponent('Choices'));
+  Check(Choices.Items.Text = Expected.Text, 'chooser shows distinct standard PDN paths in legal order');
+  Application.QueueAsyncCall(@Choose, 0);
+end;
+procedure TCaptureChoice.Choose(Data: PtrInt);
+begin
+  if ChangePosition then MainForm.LoadStandaloneFen(DefaultStartingFEN);
+  if Index < 0 then TButton(Dialog.FindComponent('CancelButton')).Click
+  else
+  begin
+    TListBox(Dialog.FindComponent('Choices')).ItemIndex := Index;
+    TButton(Dialog.FindComponent('ChooseButton')).Click;
+  end;
+end;
+procedure CheckAmbiguousCapture;
+const Fen = 'W:WK21:B31,39,14,17,19';
+var Form: TMainForm; Board: TDraughtsBoardControl; Expected: TDraughtsBoard;
+  Choice: TCaptureChoice; Moves: TStringList; I, Scenario: Integer; Before: string;
+begin
+  Choice := TCaptureChoice.Create; Expected := TDraughtsBoard.Create;
+  Moves := TStringList.Create; Choice.Expected := TStringList.Create;
+  try
+    Expected.LoadFromFEN(Fen);
+    Check(Expected.LegalMoveCount = 2, 'same-target fixture has two distinct captures');
+    for I := 0 to Expected.LegalMoveCount - 1 do
+    begin Moves.Add(Expected.LegalMoves[I]); Choice.Expected.Add(Expected.PdnMoveNotation(Moves[I])); end;
+    Check(Choice.Expected[0] <> Choice.Expected[1], 'capture path labels distinguish the choices');
+    GuiTestChoiceOnShow := @Choice.Shown;
+    for Scenario := -1 to 2 do
+    begin
+      Form := TMainForm.Create(nil);
+      try
+        Form.LoadStandaloneFen(Fen); Choice.MainForm := Form;
+        Choice.ChangePosition := Scenario = 2;
+        if Scenario = 2 then Choice.Index := 0 else Choice.Index := Scenario;
+        Board := TDraughtsBoardControl(Form.FindComponent('MainBoard'));
+        Board.SetBounds(0, 0, 500, 500);
+        Expected.LoadFromFEN(Fen);
+        Before := GameTreeToPdnText(Form.ActiveGameTree);
+        ClickSquare(Board, 21); ClickSquare(Board, 26);
+        if Scenario = -1 then
+          Check((GameTreeToPdnText(Form.ActiveGameTree) = Before) and
+            (Board.Board.CurrentFEN = Expected.CurrentFEN), 'cancel leaves tree and board untouched')
+        else if Scenario = 2 then
+        begin
+          Expected.SetBeginPosition;
+          Check((Form.ActiveGameTree.MainlineCount = 0) and
+            (Board.Board.CurrentFEN = Expected.CurrentFEN), 'position change while choosing rejects stale choice');
+        end
+        else
+        begin
+          Expected.LoadFromFEN(Fen); Expected.PlayMove(Moves[Scenario]);
+          Check((Form.ActiveGameTree.MainlineCount = 1) and
+            (Form.ActiveGameTree.MainlineNode[1].MoveText = Moves[Scenario]), 'explicit capture choice reaches actor');
+          Check(Board.Board.CurrentFEN = Expected.CurrentFEN, 'each selected capture displays the correct surviving pieces');
+        end;
+      finally Form.Free; end;
+    end;
+  finally
+    GuiTestChoiceOnShow := nil; Choice.Expected.Free; Choice.Free; Moves.Free; Expected.Free;
+  end;
 end;
 
 procedure CheckReplacementPrompt;
@@ -293,6 +369,7 @@ begin
   Reporter := TExceptionReporter.Create; Application.OnException := @Reporter.Report;
   try
     CheckCaptureAndFlip;
+    CheckAmbiguousCapture;
     CheckReplacementPrompt;
     CheckAnalysisControls;
     Application.OnException := nil; Reporter.Free;

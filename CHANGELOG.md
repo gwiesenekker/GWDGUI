@@ -5,6 +5,15 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Choose ambiguous board captures explicitly (U8)
+
+- Offer distinct standard PDN paths when legal captures share their source and
+  destination. Keep direct selection for unique moves and preserve the position
+  on Cancel; reject choices made against a position changed during the dialog.
+- Add headless candidate-selection checks and actual GTK chooser tests for both
+  captures, cancellation and a position change while the chooser is open.
+- Validation: move-interaction and full GTK preservation/boundary checks pass.
+
 ### 2026-10-26 — Stabilize database identities for capture variations (P23)
 
 - Store position-resolved canonical moves on every branch, including standalone

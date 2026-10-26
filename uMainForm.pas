@@ -1696,8 +1696,31 @@ end;
 
 function TMainForm.FindHumanMoveToTarget(ATargetSquare: Integer;
   out AMove: string): Boolean;
+var Choices, Captions: TStringList; Board: TDraughtsBoard;
+  I, Choice: Integer; TreeId, NodeId: Int64; Fen: string;
 begin
-  Result := FMoveInteraction.FindTarget(ATargetSquare, AMove);
+  AMove := '';
+  Choices := TStringList.Create; Captions := TStringList.Create;
+  Board := TDraughtsBoard.Create;
+  try
+    FMoveInteraction.TargetChoices(ATargetSquare, Choices);
+    Result := Choices.Count > 0;
+    if not Result then Exit;
+    if Choices.Count = 1 then begin AMove := Choices[0]; Exit; end;
+    if not TryBuildDisplayedBoard(ActiveGameTree, Board) then Exit;
+    TreeId := ActiveGameTree.GameTreeId;
+    NodeId := CurrentDisplayedGameTreeNode(ActiveGameTree).NodeId;
+    Fen := Board.CurrentFEN;
+    for I := 0 to Choices.Count - 1 do Captions.Add(Board.PdnMoveNotation(Choices[I]));
+    Choice := ShowGuiChoiceDialog(Self, 'Choose capture',
+      'Several captures reach this square. Choose the path to play.', Captions);
+    // A modal chooser pumps events. Never apply a choice to a changed position.
+    if (Choice < 0) or (Choice >= Choices.Count) or (ActiveGameTree = nil) then Exit;
+    if (ActiveGameTree.GameTreeId <> TreeId) or
+      (CurrentDisplayedGameTreeNode(ActiveGameTree).NodeId <> NodeId) then Exit;
+    if not TryBuildDisplayedBoard(ActiveGameTree, Board) or (Board.CurrentFEN <> Fen) then Exit;
+    AMove := Choices[Choice];
+  finally Board.Free; Captions.Free; Choices.Free; end;
 end;
 
 procedure TMainForm.PlayHumanMove(const AMove: string;
@@ -1810,7 +1833,7 @@ begin
 
   if (FMoveInteraction.SourceSquare > 0) and FindHumanMoveToTarget(LSquare, LMove) then
   begin
-    PlayHumanMove(LMove);
+    if LMove <> '' then PlayHumanMove(LMove);
     Exit;
   end;
 

@@ -9,14 +9,14 @@ procedure CheckSelection(const Fen: string);
 var
   Board: TDraughtsBoard;
   Interaction: TMoveInteraction;
-  Choices, Targets: TStringList;
+  Choices, Targets, Matches: TStringList;
   Source, I, J, Target, Multi: Integer;
   Move, Found: string;
 begin
   Board := TDraughtsBoard.Create;
   Interaction := TMoveInteraction.Create;
   Choices := TStringList.Create;
-  Targets := TStringList.Create;
+  Targets := TStringList.Create; Matches := TStringList.Create;
   Multi := 0;
   try
     Board.LoadFromFEN(Fen);
@@ -48,12 +48,15 @@ begin
         for I := 0 to Choices.Count - 1 do
         begin
           Target := MoveSquareAt(Choices[I], 2);
-          Check(Interaction.FindTarget(Target, Found), 'capture endpoint remains selectable');
-          // Multiple captures sharing an endpoint retain the first legal candidate.
+          Interaction.TargetChoices(Target, Matches);
           J := 0;
           while MoveSquareAt(Choices[J], 2) <> Target do Inc(J);
-          Check(Found = Choices[J],
-            'retain candidate order for this fixture');
+          if Matches.Count = 1 then
+            Check(Interaction.FindTarget(Target, Found) and (Found = Choices[J]), 'unique target plays directly')
+          else Check(not Interaction.FindTarget(Target, Found) and (Found = ''),
+            'ambiguous target requires an explicit choice');
+          for J := 0 to Matches.Count - 1 do
+            Check(Choices.IndexOf(Matches[J]) >= 0, 'chooser returns canonical legal moves');
         end;
       end;
     end;
@@ -63,7 +66,7 @@ begin
     Interaction.SelectSource(nil, 32);
     Check(Interaction.SourceSquare = 0, 'missing board clears selection');
   finally
-    Targets.Free; Choices.Free; Interaction.Free; Board.Free;
+    Matches.Free; Targets.Free; Choices.Free; Interaction.Free; Board.Free;
   end;
 end;
 procedure CheckHighlights;
@@ -99,6 +102,7 @@ begin
   CheckHighlights;
   CheckSelection('W:W31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50:B1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20');
   CheckSelection('W:WK32:B27,28');
+  CheckSelection('W:WK21:B31,39,14,17,19');
   Actor := TGameTreeActor.Create;
   Board := TDraughtsBoard.Create;
   try
