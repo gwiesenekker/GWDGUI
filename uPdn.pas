@@ -771,6 +771,8 @@ var
     LCommentText := NormalizePdnComment(LComment.ToString);
     LComment.Clear;
     if LCommentText = '' then Exit;
+    Target := nil;
+    if ATreeRoot <> nil then Target := Positions[LLastMoveIndex + 1];
     if LLastMoveIndex >= 0 then Actual := AAnnotations[LLastMoveIndex]
     else if AInitialComments <> nil then Actual := AInitialComments.Text
     else Actual := '';
@@ -791,13 +793,24 @@ var
     if (LLastMoveIndex < 0) or (LLastMoveIndex >= AAnnotations.Count) then
     begin
       if AInitialComments <> nil then
+      begin
         AInitialComments.Add(LCommentText);
+        if Target <> nil then
+        begin
+          Target.AnnotationText := NormalizePdnComment(AInitialComments.Text);
+          if Target.HasNodeData then Target.NodeData.CommentText := Target.AnnotationText;
+        end;
+      end;
       Exit;
     end;
     if AAnnotations[LLastMoveIndex] <> '' then
       LCommentText := AAnnotations[LLastMoveIndex] + '; ' + LCommentText;
     AAnnotations[LLastMoveIndex] := LCommentText;
-    if ATreeRoot <> nil then Positions[LLastMoveIndex + 1].AnnotationText := LCommentText;
+    if Target <> nil then
+    begin
+      Target.AnnotationText := LCommentText;
+      if Target.HasNodeData then Target.NodeData.CommentText := LCommentText;
+    end;
   end;
 
   function ReadParenthesizedText(out AClosed: Boolean): string;

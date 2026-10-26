@@ -5,6 +5,13 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Preserve comments following node metadata (P24)
+
+- Keep typed comments in sync when ordinary text follows a node-data comment,
+  including root, move and variation comments. Retain independent analysis data.
+- Add repeated writer/parser round trips and actor-restoration regressions.
+  Comment-preservation and PDN metadata/filter checks pass.
+
 ### 2026-10-26 — Validate PDN imports in one actor traversal (F11)
 
 - Replace one replaying move command per imported node with an actor command that
