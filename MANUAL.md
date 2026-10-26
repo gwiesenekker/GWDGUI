@@ -1,9 +1,25 @@
 # GWDGUI User Manual
 
-This is a first-version manual for the current GWDGUI application. GWDGUI is a
-graphical workbench for international draughts. It can play and browse games,
+This manual describes the current GWDGUI application, a graphical workbench for international draughts. It can play and browse games,
 run Hub and DXP engines, organize engine tournaments, display engine analysis,
 and store or search games in an SQLite database.
+
+## Menu shortcuts
+
+Use **Alt+F** for File and **Alt+D** for Database. Keyboard shortcuts are also
+shown beside their menu items:
+
+| Action | Shortcut |
+|---|---|
+| Open PDN | Ctrl+O |
+| Save PDN | Ctrl+S |
+| Preferences | Ctrl+, |
+| Create database | Ctrl+Shift+N |
+| Open database | Ctrl+Shift+O |
+| Quit | Ctrl+Q |
+
+**File → Quit** uses the same save prompts and safe shutdown as closing the main
+window. Choose Cancel in a save prompt to keep working.
 
 ## 1. Getting started
 

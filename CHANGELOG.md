@@ -5,6 +5,14 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Add menu accelerators and File → Quit
+
+- Add File/Database mnemonics and shortcuts for PDN open/save, preferences,
+  database create/open and Quit. Quit uses the existing close/save/shutdown path.
+- Document the shortcuts; add GTK menu checks for bindings and cancellation of
+  quitting an unsaved game, followed by normal close after declining save.
+- Validation: GTK menu/close regression passes. Nothing pushed.
+
 ### 2026-10-26 — Record a reproducible draughts performance baseline
 
 - Track the long-game profiling fixture and an opt-in headless harness for board

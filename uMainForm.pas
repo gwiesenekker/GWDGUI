@@ -342,6 +342,7 @@ type
     function CurrentDisplayedGameTreeNode(
       AGameTree: TGameTree): TGameTreePlyNode;
     function LiveGameCount: Integer;
+    procedure QuitClick(Sender: TObject);
     procedure MainFormKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
     procedure MiniBoardDblClick(Sender: TObject);
@@ -590,30 +591,43 @@ begin
 
   LMainMenu := TMainMenu.Create(Self);
   LFileMenu := TMenuItem.Create(Self);
-  LFileMenu.Caption := 'File';
+  LFileMenu.Caption := '&File';
   LMainMenu.Items.Add(LFileMenu);
   LMenuItem := TMenuItem.Create(Self);
-  LMenuItem.Caption := 'Open PDN...';
+  LMenuItem.Caption := '&Open PDN...';
+  LMenuItem.ShortCut := ShortCut(Ord('O'), [ssCtrl]);
   LMenuItem.OnClick := @OpenPdnClick;
   LFileMenu.Add(LMenuItem);
   LMenuItem := TMenuItem.Create(Self);
-  LMenuItem.Caption := 'Save PDN...';
+  LMenuItem.Caption := '&Save PDN...';
+  LMenuItem.ShortCut := ShortCut(Ord('S'), [ssCtrl]);
   LMenuItem.OnClick := @SavePdnClick;
   LFileMenu.Add(LMenuItem);
   LMenuItem := TMenuItem.Create(Self);
-  LMenuItem.Caption := 'Preferences...';
+  LMenuItem.Caption := '&Preferences...';
+  LMenuItem.ShortCut := ShortCut(Ord(','), [ssCtrl]);
   LMenuItem.OnClick := @PreferencesClick;
   LFileMenu.Add(LMenuItem);
 
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := '-'; LFileMenu.Add(LMenuItem);
+  LMenuItem := TMenuItem.Create(Self);
+  LMenuItem.Caption := '&Quit';
+  LMenuItem.ShortCut := ShortCut(Ord('Q'), [ssCtrl]);
+  LMenuItem.OnClick := @QuitClick;
+  LFileMenu.Add(LMenuItem);
+
   LDatabaseMenu := TMenuItem.Create(Self);
-  LDatabaseMenu.Caption := 'Database';
+  LDatabaseMenu.Caption := '&Database';
   LMainMenu.Items.Add(LDatabaseMenu);
   LMenuItem := TMenuItem.Create(Self);
-  LMenuItem.Caption := 'Create database...';
+  LMenuItem.Caption := '&Create database...';
+  LMenuItem.ShortCut := ShortCut(Ord('N'), [ssCtrl, ssShift]);
   LMenuItem.OnClick := @CreateDatabaseClick;
   LDatabaseMenu.Add(LMenuItem);
   LMenuItem := TMenuItem.Create(Self);
-  LMenuItem.Caption := 'Open database...';
+  LMenuItem.Caption := '&Open database...';
+  LMenuItem.ShortCut := ShortCut(Ord('O'), [ssCtrl, ssShift]);
   LMenuItem.OnClick := @OpenDatabaseClick;
   LDatabaseMenu.Add(LMenuItem);
   Menu := LMainMenu;
@@ -4517,6 +4531,11 @@ begin
   end
   else Exit;
   Key := 0;
+end;
+
+procedure TMainForm.QuitClick(Sender: TObject);
+begin
+  Close;
 end;
 
 procedure TMainForm.MainFormKeyDown(Sender: TObject; var Key: Word;

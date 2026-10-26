@@ -30,3 +30,12 @@ if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
   exit 1
 fi
 "$OUT_DIR/gui_delivery_check"
+
+
+echo "==> help_menu_check (GTK2, shortcuts and application help)"
+if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
+  "$ROOT_DIR/tests/help_menu_check.lpi" > "$OUT_DIR/help-build.log" 2>&1; then
+  cat "$OUT_DIR/help-build.log"
+  exit 1
+fi
+"$OUT_DIR/help_menu_check"
