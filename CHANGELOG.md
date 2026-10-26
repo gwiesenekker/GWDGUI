@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Always deliver early runner completion (M8)
+
+- Publish game/analyzer completion from the thread termination hook, including
+  when an immediate stop causes the runtime to skip Execute. Keep cancellation
+  tokens, engine interruption and shutdown ownership unchanged.
+- Add repeated deterministic pre-start stops and start/stop races, checking one
+  worker-thread notification, actual termination and no duplicate on disposal.
+- Validation: early-stop, analyzer shutdown, running-game lifecycle and GTK
+  lifecycle/preservation/delivery/help checks pass.
+
 ### 2026-10-26 — Add searchable offline Help and commit identification
 
 - Add Help → Manual (F1) with a read-only offline manual, case-insensitive Find,

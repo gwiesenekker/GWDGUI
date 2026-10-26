@@ -50,6 +50,7 @@ type
     procedure PostCommand(ACommand: TObject);
   protected
     procedure Execute; override;
+    procedure DoTerminate; override;
   public
     constructor Create(AEngineDefinition: TExternalEngineDefinition;
       ALogEvent: TAnalyzerRunnerLogEvent;
@@ -401,9 +402,15 @@ begin
     end;
     if Assigned(FOnLog) then
       FOnLog(Self, DisplayName + ' closed');
-    if Assigned(FOnFinished) then
-      FOnFinished(Self);
   end;
+end;
+
+procedure TAnalyzerRunnerThread.DoTerminate;
+begin
+  // Runs even when the RTL bypasses Execute after an immediate shutdown.
+  try
+    if Assigned(FOnFinished) then FOnFinished(Self);
+  finally inherited DoTerminate; end;
 end;
 
 procedure TAnalyzerRunnerThread.PostAnalyze(const AStartingFEN, AMovesText: string;

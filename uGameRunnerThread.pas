@@ -125,6 +125,7 @@ type
   protected
     procedure RuntimeLog(Sender: TObject; const AMessage: string);
     procedure Execute; override;
+    procedure DoTerminate; override;
   public
     constructor Create(const ASetup: TGameSetup; AGameId: Integer;
       ASnapshotEvent: TGameRunnerSnapshotEvent;
@@ -769,7 +770,6 @@ end;
 
 procedure TGameRunnerThread.Execute;
 begin
-  try
     try
       try
       FOrchestrator := TGameOrchestrator.Create;
@@ -843,9 +843,12 @@ begin
         PublishSnapshot;
       end;
     end;
-  finally
-    PublishFinished;
-  end;
+end;
+
+procedure TGameRunnerThread.DoTerminate;
+begin
+  // FPC can skip Execute entirely when Stop wins the scheduling race.
+  try PublishFinished; finally inherited DoTerminate; end;
 end;
 
 end.
