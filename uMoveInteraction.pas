@@ -24,8 +24,7 @@ type
     property SourceSquare: Integer read FSourceSquare;
     property Targets: TMoveTargetSquares read FTargets;
   end;
-function CalculateMoveHighlights(AMainlineMoves: TStrings; ADisplayedPly: Integer;
-  const APvText: string; APvMatchesPosition: Boolean): TMoveHighlights;
+function CalculateMoveHighlights(const ADisplayedMove, APvText: string; APvMatchesPosition: Boolean): TMoveHighlights;
 function MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
 function RouteMove(ABoard: TDraughtsBoard; ATree: TGameTree;
   ANode: TGameTreePlyNode; const AMove: string; ACanExplore, ABrowsingBranch,
@@ -61,18 +60,13 @@ begin
   end;
 end;
 
-function CalculateMoveHighlights(AMainlineMoves: TStrings; ADisplayedPly: Integer;
-  const APvText: string; APvMatchesPosition: Boolean): TMoveHighlights;
+function CalculateMoveHighlights(const ADisplayedMove, APvText: string; APvMatchesPosition: Boolean): TMoveHighlights;
 var PvMoves: TStringList;
 begin
   Result.LastMoveTargetSquare := 0;
   Result.PvSourceSquare := 0;
   Result.HintSourceSquare := 0;
-  // Preserve the existing marker policy, including when browsing a branch:
-  // the last-move marker uses the mainline move at the displayed base ply.
-  if ADisplayedPly < 0 then ADisplayedPly := AMainlineMoves.Count;
-  if (ADisplayedPly > 0) and (ADisplayedPly <= AMainlineMoves.Count) then
-    Result.LastMoveTargetSquare := MoveSquareAt(AMainlineMoves[ADisplayedPly - 1], 2);
+  Result.LastMoveTargetSquare := MoveSquareAt(ADisplayedMove, 2);
   if not APvMatchesPosition then Exit;
   PvMoves := TStringList.Create;
   try

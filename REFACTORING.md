@@ -95,7 +95,7 @@ or move the published v3.0 tag as part of this work.
 - Ownership/lifecycle tests import these units directly and compile with plain
   FPC, without LCL or a display. GTK integration coverage remains in place.
 - `uMoveInteraction` owns temporary legal candidate/target selection, move routing
-  and board-highlight calculation. It does not execute actor commands or runner
+  and board-highlight calculation from the actual displayed move. It does not execute actor commands or runner
   calls. Same-target captures require an explicit choice of standard PDN path;
   cancellation and changes to the displayed position do not play a move.
 - `uDisplayedPosition` owns the existing sole tree cursor, temporary PV preview

@@ -3834,7 +3834,8 @@ end;
 procedure TMainForm.UpdateBoardHighlights(AGameTree: TGameTree);
 var
   LDisplayedBoard: TDraughtsBoard;
-  LGameMoves: TStringList;
+  DisplayedMove: string;
+  PositionValid: Boolean;
   LPvBaseBoard: TDraughtsBoard;
   LPvBasePly: Integer;
   LPvDepth: string;
@@ -3850,9 +3851,11 @@ begin
     Exit;
 
   LDisplayedBoard := TDraughtsBoard.Create;
-  LGameMoves := TStringList.Create;
   try
-    AGameTree.CopyMainlineMovesTo(LGameMoves);
+    DisplayedMove := '';
+    PositionValid := TryBuildDisplayedBoard(AGameTree, LDisplayedBoard);
+    if PositionValid and (LDisplayedBoard.MovesPlayedCount > 0) then
+      DisplayedMove := LDisplayedBoard.MovesPlayed[LDisplayedBoard.MovesPlayedCount - 1];
     if FPvHintSource = phsAnalyzer then
     begin
       LPvBaseBoard := FAnalysis.Pv.AnalyzerBaseBoard;
@@ -3863,17 +3866,15 @@ begin
     else
       VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
         LPvScore, LPvDepth, LPvTimeText);
-    LPvHighlightsActive := (LPvBaseBoard <> nil) and
-      TryBuildDisplayedBoard(AGameTree, LDisplayedBoard) and
+    LPvHighlightsActive := PositionValid and (LPvBaseBoard <> nil) and
       (LDisplayedBoard.PositionKey = LPvBaseBoard.PositionKey);
 
-    Highlights := CalculateMoveHighlights(LGameMoves, BrowseBasePly, LPvText,
+    Highlights := CalculateMoveHighlights(DisplayedMove, LPvText,
       LPvHighlightsActive);
     FBoardControl.LastMoveTargetSquare := Highlights.LastMoveTargetSquare;
     FBoardControl.PvSourceSquare := Highlights.PvSourceSquare;
     FBoardControl.HintSourceSquare := Highlights.HintSourceSquare;
   finally
-    LGameMoves.Free;
     LDisplayedBoard.Free;
   end;
 end;

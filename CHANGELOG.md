@@ -5,6 +5,15 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Highlight the move actually displayed (U9)
+
+- Calculate the last-move target from the validated displayed position's history,
+  including variations and temporary previews, rather than its mainline ply.
+- Keep PV hint matching separate; remove the mainline-only input from the helper.
+- Add headless variation/capture checks and GTK assertions for nested Black-start
+  branches whose destinations differ from the replaced mainline moves.
+- Validation: move-interaction and GTK preservation/boundary/delivery/help checks pass.
+
 ### 2026-10-26 — Reuse normalization boards along PDN lines (F8)
 
 - Advance one board along each parsed line and preserve positions only at forks.

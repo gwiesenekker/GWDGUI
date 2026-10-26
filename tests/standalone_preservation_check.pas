@@ -8,7 +8,7 @@ program standalone_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, Grids, LCLType, Controls, ComCtrls, Menus,
-  uDatabaseForm, uGameDatabase, uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uRunningGame, uPdn, uPdnOpenDialog, uPvBrowser, uScoreHistoryControl, uGuiDialogs,
+  uDatabaseForm, uGameDatabase, uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uMoveInteraction, uRunningGame, uPdn, uPdnOpenDialog, uPvBrowser, uScoreHistoryControl, uGuiDialogs,
   uGameTreeNodeData, uGameTreeView, uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uTreeTestUtils;
 
 type
@@ -655,6 +655,8 @@ var
     for J := 0 to Moves.Count - 1 do Expected.PlayMove(Moves[J]);
     Check(Board.Board.CurrentFEN = Expected.CurrentFEN,
       'Black-start alternative must browse from its actual parent: ' + MoveText);
+    Check(Board.LastMoveTargetSquare = MoveSquareAt(Expected.MovesPlayed[Expected.MovesPlayedCount - 1], 2),
+      'branch marker follows the displayed move: ' + MoveText);
     Check(GameTreeToPdnText(AForm.ActiveGameTree) = BeforeText,
       'browsing Black-start alternatives must not mutate the game');
   end;
