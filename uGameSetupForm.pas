@@ -6,22 +6,9 @@ interface
 
 uses
   Classes, Controls, ExtCtrls, Forms, StdCtrls, SysUtils,
-  uEngineRegistry, uGameOrchestrator, uPreferences;
+  uEngineRegistry, uGameOrchestrator, uGameSetupTypes, uPreferences;
 
 type
-  TPlayerKind = (pkHuman, pkRegistered);
-
-  TGameSetup = record
-    StartingFEN: string;
-    WhitePlayer: TPlayerKind;
-    BlackPlayer: TPlayerKind;
-    WhiteEngine: TExternalEngineDefinition;
-    BlackEngine: TExternalEngineDefinition;
-    TimeControl: TTimeControl;
-  end;
-
-  TGameSetupAcceptedEvent = procedure(Sender: TObject; const ASetup: TGameSetup) of object;
-
   TGameSetupForm = class(TForm)
   private
     FBlackPlayerCombo: TComboBox;

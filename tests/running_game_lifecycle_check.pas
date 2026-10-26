@@ -10,7 +10,7 @@ uses
   cthreads,
   {$ENDIF}
   Interfaces, Classes, SysUtils, SyncObjs, uThreadMessageQueue, uPvSnapshot, uAnalyzerRunnerThread, uGameTreeSearchRef, uMainForm, uGameRunnerThread,
-  uEngineRegistry, uDraughtsBoard, uGameSetupForm, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
+  uEngineRegistry, uDraughtsBoard, uGameSetupTypes, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
 
 type
   TLogRunner = class(TGameRunnerThread)

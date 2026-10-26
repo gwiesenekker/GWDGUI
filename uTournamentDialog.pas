@@ -6,7 +6,7 @@ interface
 
 uses
   CheckLst, Classes, Contnrs, Controls, ExtCtrls, Forms, Grids, StdCtrls, SysUtils,
-  Menus, SyncObjs, Types, uEngineRegistry, uGameSetupForm, uTournamentGameRecord;
+  Menus, SyncObjs, Types, uEngineRegistry, uGameSetupTypes, uTournamentGameRecord;
 
 type
   TTournamentRunningGame = class

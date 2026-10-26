@@ -5,6 +5,14 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Separate setup values from the game-setup form
+
+- Move player kind, setup record and setup callback declarations unchanged to
+  uGameSetupTypes. Value-only users no longer import the LCL setup form.
+- Keep engine-definition ownership and record layout unchanged; the setup form
+  and main form explicitly import the value unit alongside UI dependencies.
+- Validation: ownership/lifecycle, GTK main-form and tournament checks pass.
+
 ### 2026-10-26 — Characterize main-form interaction and analysis boundaries
 
 - Add actual board capture-click and 50-square flip checks, replacement prompt

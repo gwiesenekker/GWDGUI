@@ -6,7 +6,7 @@ program main_form_boundaries_check;
 uses {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, Controls, StdCtrls, Menus, ExtCtrls,
   LCLType, Types, uMainForm, uBoardControl, uDraughtsBoard, uPdn,
-  uGameTree, uGameTreePdn, uGameTreeBuilder, uGameSetupForm, uGameOrchestrator, uGuiDialogs,
+  uGameTree, uGameTreePdn, uGameTreeBuilder, uGameSetupTypes, uGameOrchestrator, uGuiDialogs,
   uPositionSetupForm, uEngineRegistry, uEngineParamsJson;
 
 type

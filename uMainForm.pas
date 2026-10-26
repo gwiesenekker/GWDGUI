@@ -8,7 +8,7 @@ uses
   Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
   LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uBoardControl,
   uDraughtsBoard, uEnginesDialog,
-  uGameOrchestrator, uGameRunnerThread, uGameSetupForm,
+  uGameOrchestrator, uGameRunnerThread, uGameSetupForm, uGameSetupTypes,
   uEngineParamsJson, uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
   uGuiDialogs, uDatabaseForm, uGameTree, uGameTreeActor, uGameTreeBuilder,

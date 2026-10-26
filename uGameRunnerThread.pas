@@ -8,7 +8,7 @@ uses
   Classes, SyncObjs, SysUtils,
   uCancellationToken,
   uDraughtsBoard, uDxpEngine, uEngineBase, uEngineRegistry,
-  uGameOrchestrator, uGameMoveHistory, uGameSetupForm, uHubEngine, uPvSnapshot,
+  uGameOrchestrator, uGameMoveHistory, uGameSetupTypes, uHubEngine, uPvSnapshot,
   uThreadMessageQueue;
 
 type
