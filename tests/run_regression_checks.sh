@@ -22,6 +22,7 @@ CHECKS=(
   notation_presentation_check.pas
   displayed_position_check.pas
   move_interaction_check.pas
+  game_tree_index_check.pas
   game_tree_cursor_check.pas
   game_preservation_check.pas
   game_tree_topology_check.pas

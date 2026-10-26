@@ -107,6 +107,7 @@ type
     FStatusText: string;
     FMainline: TFPList;
     FNextNodeId: Int64;
+    FNodeIndex: TFPHashList; // Non-owning; child nodes remain owned by the tree.
     FRoot: TGameTreePlyNode;
     FSignature: string;
     FWhiteName: string;
@@ -132,6 +133,7 @@ type
     function GetMainlineNode(APlyNumber: Integer): TGameTreePlyNode;
     function GetMainlineCount: Integer;
     procedure AssignNodeId(ANode: TGameTreePlyNode);
+    procedure UnindexSubtree(ANode: TGameTreePlyNode);
     procedure RemoveMainlineFrom(APlyNumber: Integer);
     procedure RemoveNodeFromParent(ANode: TGameTreePlyNode);
     procedure RemoveVariationNodes(ANode: TGameTreePlyNode);
@@ -360,6 +362,7 @@ begin
   FGameTreeId := AllocateGameTreeId;
   FNextNodeId := 0;
   FMainline := TFPList.Create;
+  FNodeIndex := TFPHashList.Create;
   FRoot := TGameTreePlyNode.Create;
   Clear;
 end;
@@ -367,6 +370,7 @@ end;
 destructor TGameTree.Destroy;
 begin
   FRoot.Free;
+  FNodeIndex.Free;
   FMainline.Free;
   inherited Destroy;
 end;
@@ -379,6 +383,7 @@ end;
 
 procedure TGameTree.ClearStructure;
 begin
+  FNodeIndex.Clear;
   FRoot.Free;
   FRoot := TGameTreePlyNode.Create;
   AssignNodeId(FRoot);
@@ -413,12 +418,22 @@ begin
     Exit;
   Inc(FNextNodeId);
   ANode.FNodeId := FNextNodeId;
+  FNodeIndex.Add(IntToStr(ANode.FNodeId), ANode);
+end;
+
+procedure TGameTree.UnindexSubtree(ANode: TGameTreePlyNode);
+var I, Index: Integer;
+begin
+  for I := 0 to ANode.ChildCount - 1 do UnindexSubtree(ANode.Children[I]);
+  Index := FNodeIndex.FindIndexOf(IntToStr(ANode.NodeId));
+  if Index >= 0 then FNodeIndex.Delete(Index);
 end;
 
 procedure TGameTree.RemoveNodeFromParent(ANode: TGameTreePlyNode);
 begin
   if (ANode = nil) or (ANode.FParent = nil) then
     Exit;
+  UnindexSubtree(ANode);
   ANode.FParent.FChildren.Remove(ANode);
 end;
 
@@ -435,7 +450,10 @@ begin
   begin
     Child := ANode.Children[I];
     if GetMainlineNode(Child.PlyNumber) <> Child then
-      ANode.FChildren.Remove(Child)
+    begin
+      UnindexSubtree(Child);
+      ANode.FChildren.Remove(Child);
+    end
     else
       RemoveVariationNodes(Child);
     Dec(I);
@@ -905,27 +923,10 @@ begin
 end;
 
 function TGameTree.FindNodeById(ANodeId: Int64): TGameTreePlyNode;
-  function SearchNode(ANode: TGameTreePlyNode): TGameTreePlyNode;
-  var
-    I: Integer;
-  begin
-    Result := nil;
-    if ANode = nil then
-      Exit;
-    if ANode.FNodeId = ANodeId then
-      Exit(ANode);
-    for I := 0 to ANode.ChildCount - 1 do
-    begin
-      Result := SearchNode(ANode.Children[I]);
-      if Result <> nil then
-        Exit;
-    end;
-  end;
 begin
   Result := nil;
-  if ANodeId <= 0 then
-    Exit;
-  Result := SearchNode(FRoot);
+  if ANodeId <= 0 then Exit;
+  Result := TGameTreePlyNode(FNodeIndex.Find(IntToStr(ANodeId)));
 end;
 
 function TGameTree.SideForPly(APlyNumber: Integer): TDraughtsSide;

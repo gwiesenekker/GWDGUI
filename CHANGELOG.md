@@ -5,6 +5,14 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Index game-tree node identities (F11)
+
+- Replace recursive node-ID lookup with a non-owning hash index; nodes remain
+  owned by their parents and IDs keep their existing lifetime/scoping rules.
+- Remove complete subtrees from the index before deletion and clear it on rebuild.
+  Add repeated removal, trimming, replacement, branch-clear and rebuild checks
+  for live identities and stale pointers. Cursor/topology/validation checks pass.
+
 ### 2026-10-26 — Show the game tree as notation
 
 - Adopt Claude's notation-layout proposal: mainline moves are sibling rows and
