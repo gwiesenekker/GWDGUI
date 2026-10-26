@@ -3,7 +3,7 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
-## Version 2.23 — 2026-10-26
+## Version 3.0 — 2026-10-26
 
 This release includes the accumulated correctness fixes below since v2.22.
 
