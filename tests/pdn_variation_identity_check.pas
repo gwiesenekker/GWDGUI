@@ -54,6 +54,50 @@ begin
     end;
   finally Game.Free; end;
 end;
+procedure CheckConflictingMetadata;
+var Game: TPdnGame; Root: TPdnMoveNode; First, Second: TGameTreeNodeData; Warnings, SourceText, DbName, PdnName, LogName: string;
+  Database: TGameDatabase; Lines: TStringList; Imported, Duplicates, Errors: Integer;
+begin
+  First := Default(TGameTreeNodeData); First.EngineScore := '0.1'; First.EnginePV := '6-11';
+  First.HasClockInfo := True; First.WhiteRemainingSeconds := 50;
+  First.HasMoveTime := True; First.SecondsUsed := 1;
+  Second := First; Second.EngineScore := '-3.5'; Second.EnginePV := '6-1';
+  Second.AnnotatorScore := '0.2'; Second.WhiteRemainingSeconds := 40; Second.SecondsUsed := 2;
+  SourceText := '[FEN "W:W38:B33,24,K6"]' + LineEnding +
+    '1.38x20x33x24 {' + EncodeNodeData(First, '') + '} (1.38x20x24x33 {' +
+    EncodeNodeData(Second, '') + '}) *';
+  Game := ReadGame(SourceText);
+  try
+    Root := Game.BuildMoveTree;
+    try
+      Check((Root.ChildCount = 1) and (Root.Children[0].NodeData.EngineScore = '0.1') and
+        (Root.Children[0].NodeData.EnginePV = '6-11') and
+        (Root.Children[0].NodeData.AnnotatorScore = '0.2'), 'conflicts retain first values and independent analysis');
+    finally Root.Free; end;
+    Warnings := Game.ImportWarningsText;
+    Check((Pos('at ply 1', Warnings) > 0) and (Pos('EngineScore', Warnings) > 0) and
+      (Pos('EnginePV', Warnings) > 0) and (Pos('clocks', Warnings) > 0) and
+      (Pos('move time', Warnings) > 0), 'merge warnings identify discarded conflicting fields and move');
+    Check(Pos('AnnotatorScore', Warnings) = 0, 'independent metadata is not falsely reported as discarded');
+    Root := Game.BuildMoveTree; Root.Free; Game.ValidateMoveTree;
+    Check(Game.ImportWarningsText = Warnings, 'cached normalization and validation do not duplicate conflict warnings');
+    DbName := GetTempFileName(GetTempDir, 'gwd-conflict-db');
+    PdnName := GetTempFileName(GetTempDir, 'gwd-conflict-pdn');
+    LogName := GetTempFileName(GetTempDir, 'gwd-conflict-log'); DeleteFile(DbName);
+    Database := TGameDatabase.Create; Lines := TStringList.Create;
+    try
+      Lines.Text := SourceText; Lines.SaveToFile(PdnName); Database.CreateDatabase(DbName);
+      Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors, nil, LogName);
+      Check((Imported = 1) and (Errors = 0), 'conflicting alias metadata does not reject the game');
+      Lines.LoadFromFile(LogName);
+      Check((Pos('EngineScore', Lines.Text) > 0) and (Pos('kept first', Lines.Text) > 0),
+        'database log includes conflicts discovered while generating canonical storage');
+    finally
+      Database.Free; Lines.Free; DeleteFile(DbName); DeleteFile(DbName + '-wal');
+      DeleteFile(DbName + '-shm'); DeleteFile(PdnName); DeleteFile(LogName);
+    end;
+  finally Game.Free; end;
+end;
 procedure CheckDistinctCaptures;
 var Board: TDraughtsBoard; Game: TPdnGame; Root: TPdnMoveNode;
   First, Second: string;
@@ -123,7 +167,7 @@ begin
 end;
 
 begin
-  CheckEquivalentSiblings; CheckDistinctCaptures; CheckSiblingBoardRestoration;
+  CheckEquivalentSiblings; CheckConflictingMetadata; CheckDistinctCaptures; CheckSiblingBoardRestoration;
   CheckDatabaseIdentity('W:W38:B33,24,K6',
     '(1. 38x20x24x33 {variation note} 6-11) *');
   CheckDatabaseIdentity('W:W31-50:B1-20',

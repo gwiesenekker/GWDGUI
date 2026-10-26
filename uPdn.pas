@@ -11,8 +11,10 @@ type
   TPdnMoveNode = class
   private
     FParent: TPdnMoveNode;
+    FMergeWarnings: string;
     FCanonicalMove: string; // Cached against the parent board; keep MoveText for source spelling.
     FChildren: TObjectList;
+    procedure NoteMergeConflict(const Field: string);
     function GetChild(I: Integer): TPdnMoveNode;
     function GetChildCount: Integer;
     procedure MergePayload(Source: TPdnMoveNode);
@@ -146,9 +148,56 @@ begin
   else if Result <> Second then Result += '; ' + Second;
 end;
 
-procedure TPdnMoveNode.MergePayload(Source: TPdnMoveNode);
-var FirstComment, SecondComment: string;
+procedure TPdnMoveNode.NoteMergeConflict(const Field: string);
 begin
+  if Pos(#10 + Field + #10, #10 + FMergeWarnings + #10) > 0 then Exit;
+  if FMergeWarnings <> '' then FMergeWarnings += #10;
+  FMergeWarnings += Field;
+end;
+
+procedure TPdnMoveNode.MergePayload(Source: TPdnMoveNode);
+var FirstComment, SecondComment: string; Fields: TStringList; I: Integer;
+  procedure Conflict(const Field, First, Second: string);
+  begin
+    if (First <> '') and (Second <> '') and (First <> Second) then NoteMergeConflict(Field);
+  end;
+begin
+  if Source.FMergeWarnings <> '' then
+  begin
+    Fields := TStringList.Create;
+    try
+      Fields.Text := Source.FMergeWarnings;
+      for I := 0 to Fields.Count - 1 do NoteMergeConflict(Fields[I]);
+    finally Fields.Free; end;
+  end;
+  if HasNodeData and Source.HasNodeData then
+  begin
+    Conflict('OriginText', NodeData.OriginText, Source.NodeData.OriginText);
+    Conflict('EnginePV', NodeData.EnginePV, Source.NodeData.EnginePV);
+    Conflict('EngineScore', NodeData.EngineScore, Source.NodeData.EngineScore);
+    Conflict('EnginePVDepth', NodeData.EnginePVDepth, Source.NodeData.EnginePVDepth);
+    Conflict('EnginePVTimeText', NodeData.EnginePVTimeText, Source.NodeData.EnginePVTimeText);
+    Conflict('AnnotatorPV', NodeData.AnnotatorPV, Source.NodeData.AnnotatorPV);
+    Conflict('AnnotatorScore', NodeData.AnnotatorScore, Source.NodeData.AnnotatorScore);
+    Conflict('AnnotatorPVDepth', NodeData.AnnotatorPVDepth, Source.NodeData.AnnotatorPVDepth);
+    Conflict('AnnotatorPVTimeText', NodeData.AnnotatorPVTimeText, Source.NodeData.AnnotatorPVTimeText);
+    Conflict('AutoPlayPV', NodeData.AutoPlayPV, Source.NodeData.AutoPlayPV);
+    if (NodeData.HasClockInfo or (NodeData.WhiteRemainingSeconds <> 0) or
+      (NodeData.BlackRemainingSeconds <> 0) or (NodeData.WhiteUsedSeconds <> 0) or
+      (NodeData.BlackUsedSeconds <> 0)) and
+      (Source.NodeData.HasClockInfo or (Source.NodeData.WhiteRemainingSeconds <> 0) or
+      (Source.NodeData.BlackRemainingSeconds <> 0) or (Source.NodeData.WhiteUsedSeconds <> 0) or
+      (Source.NodeData.BlackUsedSeconds <> 0)) then
+      if (NodeData.HasClockInfo <> Source.NodeData.HasClockInfo) or
+        (NodeData.WhiteRemainingSeconds <> Source.NodeData.WhiteRemainingSeconds) or
+        (NodeData.BlackRemainingSeconds <> Source.NodeData.BlackRemainingSeconds) or
+        (NodeData.WhiteUsedSeconds <> Source.NodeData.WhiteUsedSeconds) or
+        (NodeData.BlackUsedSeconds <> Source.NodeData.BlackUsedSeconds) then NoteMergeConflict('clocks');
+    if (NodeData.HasMoveTime or (NodeData.SecondsUsed <> 0)) and
+      (Source.NodeData.HasMoveTime or (Source.NodeData.SecondsUsed <> 0)) then
+      if (NodeData.HasMoveTime <> Source.NodeData.HasMoveTime) or
+        (NodeData.SecondsUsed <> Source.NodeData.SecondsUsed) then NoteMergeConflict('move time');
+  end;
   if FCanonicalMove = '' then FCanonicalMove := Source.FCanonicalMove;
   FirstComment := AnnotationText;
   if HasNodeData then FirstComment := NodeData.CommentText;
@@ -207,6 +256,7 @@ begin
   try
     Result.MoveText := MoveText;
     Result.FCanonicalMove := FCanonicalMove;
+    Result.FMergeWarnings := FMergeWarnings;
     Result.AnnotationText := AnnotationText;
     Result.HasNodeData := HasNodeData;
     Result.NodeData := NodeData;
@@ -1773,12 +1823,16 @@ begin
   AppendTextFileDurably(AFileName, APdnText);
 end;
 
-procedure NormalizeParsedAliases(Root: TPdnMoveNode; const Fen: string);
+procedure NormalizeParsedAliases(Game: TPdnGame; Root: TPdnMoveNode; const Fen: string);
 var Board: TDraughtsBoard;
-  procedure Walk(Parent: TPdnMoveNode; Before: TDraughtsBoard);
+  procedure Walk(Parent: TPdnMoveNode; Before: TDraughtsBoard; Ply: Integer);
   var Canonical: TStringList; I, Duplicate: Integer; Move: string;
     Saved: TDraughtsBoard;
   begin
+    if Parent.FMergeWarnings <> '' then
+      Game.AddImportWarning('Merged equivalent move ' + Parent.MoveText + ' at ply ' +
+        IntToStr(Ply) + '; kept first values for conflicting fields: ' +
+        StringReplace(Parent.FMergeWarnings, #10, ', ', [rfReplaceAll]) + '.');
     Saved := nil;
     Canonical := TStringList.Create;
     try
@@ -1808,7 +1862,7 @@ var Board: TDraughtsBoard;
         if Canonical[I] = '' then Continue; // Preserve invalid text for warning/recovery paths.
         if (I > 0) and (Saved <> nil) then Before.AssignFrom(Saved);
         Before.PlayMove(Canonical[I], False, False);
-        Walk(Parent.Children[I], Before);
+        Walk(Parent.Children[I], Before, Ply + 1);
       end;
     finally Saved.Free; Canonical.Free; end;
   end;
@@ -1816,7 +1870,7 @@ begin
   Board := TDraughtsBoard.Create;
   try
     try Board.LoadFromFEN(Fen); except on E: EConvertError do Exit; end;
-    Walk(Root, Board);
+    Walk(Root, Board, 0);
   finally Board.Free; end;
 end;
 
@@ -1856,7 +1910,7 @@ begin
   end;
   if FNormalizedSignature <> TreeDataSignature then
   begin
-    NormalizeParsedAliases(FParsedRoot, StartingFEN);
+    NormalizeParsedAliases(Self, FParsedRoot, StartingFEN);
     FNormalizedSignature := TreeDataSignature;
   end;
   Result := FParsedRoot.Clone;

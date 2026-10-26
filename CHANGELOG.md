@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Report metadata discarded by equivalent-move merges (P27)
+
+- Retain first conflicting values and independent metadata as before, but record
+  import warnings naming the move, ply and conflicting analysis/clock/time fields.
+- Carry conflict diagnostics through descendant merges and clones; cached builds
+  and later validation do not duplicate warnings. Include late normalization
+  warnings in the database import log before duplicate detection.
+- Add conflict/independent-field, repeated-build and actual database-log regressions.
+  Variation identity and comment-preservation checks pass.
+
 ### 2026-10-26 — Highlight the move actually displayed (U9)
 
 - Calculate the last-move target from the validated displayed position's history,

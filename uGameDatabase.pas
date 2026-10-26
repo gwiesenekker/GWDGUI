@@ -627,9 +627,11 @@ procedure TDatabasePdnImporter.ImportGame(AGame: TPdnGame; ABytesRead,
 var
   LGameHash: THash128;
   Points: Integer;
+  InitialWarnings, NewWarnings: string;
 begin
   FGame := AGame;
   try
+    InitialWarnings := FGame.ImportWarningsText;
     if Trim(FGame.ImportWarningsText) <> '' then
       LogLine('warning' + #9 + 'event=' + LogField(FGame.EventName) + #9 +
         LogField(Trim(FGame.ImportWarningsText)));
@@ -657,6 +659,10 @@ begin
       end;
     end;
     FFullPdn := PdnGameToStorageText(FGame, FMoves);
+    // Canonicalization may merge aliases and discover metadata conflicts.
+    NewWarnings := Trim(Copy(FGame.ImportWarningsText, Length(InitialWarnings) + 1, MaxInt));
+    if NewWarnings <> '' then
+      LogLine('warning' + #9 + 'event=' + LogField(FGame.EventName) + #9 + LogField(NewWarnings));
     LGameHash := GameHash;
     if IsDuplicateGame(LGameHash) or IsLegacyDuplicate then
     begin
