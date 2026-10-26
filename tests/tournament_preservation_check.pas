@@ -6,7 +6,7 @@ program tournament_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, Grids, ExtCtrls, CheckLst, Controls, FPJSON, JSONParser, uGuiDialogs,
-  uEngineRegistry, uTournamentStorage, uTournamentDialog, uTournamentGridModel, uMainForm, uGameSetupTypes,
+  uEngineRegistry, uTournamentStorage, uTournamentDialog, uTournamentGridModel, uMainForm, uRunningGame, uGameSetupTypes,
   uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uPdn;
 
 type

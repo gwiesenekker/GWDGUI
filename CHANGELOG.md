@@ -5,6 +5,14 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Extract the running-game owner from the main form
+
+- Move TRunningGame, its lifecycle and snapshot-input records to uRunningGame,
+  preserving method bodies, copied setup/snapshot ownership and runner release order.
+- Import the model explicitly from the form, tournament integration and regression
+  checks. Keep session management, UI queue draining and shutdown in the form.
+- Validation: lifecycle/ownership, GTK interaction and tournament checks pass.
+
 ### 2026-10-26 — Separate setup values from the game-setup form
 
 - Move player kind, setup record and setup callback declarations unchanged to

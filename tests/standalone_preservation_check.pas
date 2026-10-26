@@ -8,7 +8,7 @@ program standalone_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, Grids, LCLType, Controls, ComCtrls, Menus,
-  uDatabaseForm, uGameDatabase, uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uPdn, uPdnOpenDialog, uPvBrowser, uScoreHistoryControl, uGuiDialogs,
+  uDatabaseForm, uGameDatabase, uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uRunningGame, uPdn, uPdnOpenDialog, uPvBrowser, uScoreHistoryControl, uGuiDialogs,
   uGameTreeNodeData, uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uTreeTestUtils;
 
 type

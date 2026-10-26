@@ -139,7 +139,7 @@ implementation
 
 uses
   Dialogs, SHA1, FPJSON, Graphics, JSONParser, Math, LazFileUtils, uGameOrchestrator,
-  uGuiDialogs, uMainForm, uTournamentGridModel, uTournamentModel,
+  uGuiDialogs, uMainForm, uRunningGame, uTournamentGridModel, uTournamentModel,
   uTournamentPairing, uTournamentResults, uTournamentTypes, uTournamentStorage,
   uAtomicFile, uGameTreePdn, uPdn;
 

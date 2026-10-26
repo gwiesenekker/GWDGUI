@@ -9,7 +9,7 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  Interfaces, Classes, SysUtils, SyncObjs, uThreadMessageQueue, uPvSnapshot, uAnalyzerRunnerThread, uGameTreeSearchRef, uMainForm, uGameRunnerThread,
+  Interfaces, Classes, SysUtils, SyncObjs, uThreadMessageQueue, uPvSnapshot, uAnalyzerRunnerThread, uGameTreeSearchRef, uMainForm, uRunningGame, uGameRunnerThread,
   uEngineRegistry, uDraughtsBoard, uGameSetupTypes, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
 
 type
