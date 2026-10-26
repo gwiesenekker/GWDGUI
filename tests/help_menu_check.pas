@@ -49,7 +49,8 @@ begin
     Check(FindMenu(Main, 'Manual...').ShortCut = ShortCut(VK_F1, []), 'manual F1 shortcut');
     Check(FindMenu(Main, 'About GWDGUI...').ShortCut = ShortCut(VK_F1, [ssShift]), 'about shortcut');
     CurrentCommit := AppBuildCommit;
-    Check((Length(CurrentCommit) = 40) and (Pos('unavailable', CurrentCommit) = 0), 'build embeds full commit identity');
+    Check(((Length(CurrentCommit) = 40) and (Pos('unavailable', CurrentCommit) = 0)) or
+      (CurrentCommit = 'unavailable (source archive)'), 'build identifies its commit or explicitly identifies an archive');
     GuiTestConfirmationResult := mrYes;
     FindMenu(Main, 'About GWDGUI...').Click;
     Check((Pos('GWDGUI', GuiTestLastConfirmationText) > 0) and

@@ -26,8 +26,9 @@ begin
 end.
 ''')
     for index, (manual, git_results, expected_commit, dirty) in enumerate([
-        ("# Manual\nDraughts player's guide — αβ\n", ['a'*40, 'v3.0-1-gaaaaaaa', ''], 'a'*40, False),
-        ("Changed manual's last line", ['b'*40, 'v3.0-2-gbbbbbbb', ' M MANUAL.md'], 'b'*40, True),
+        ("# Manual\nDraughts player's guide — αβ\n", [str(source), 'a'*40, 'v3.0-1-gaaaaaaa', ''], 'a'*40, False),
+        ("Changed manual's last line", [str(source), 'b'*40, 'v3.0-2-gbbbbbbb', ' M MANUAL.md'], 'b'*40, True),
+        ("Nested archive\n", [str(folder)], 'unavailable (source archive)', False),
         ("Source archive\n", OSError('no git'), 'unavailable (source archive)', False),
     ]):
         (source / 'MANUAL.md').write_text(manual, encoding='utf-8')

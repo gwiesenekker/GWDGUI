@@ -5,6 +5,15 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Support Git-less archive checks (C8)
+
+- Accept explicit source-archive identity in Help checks. Benchmarks report
+  unavailable revision/unknown worktree without Git errors or false modification.
+- Refuse to borrow commit identity from an enclosing unrelated repository.
+- Add real Git-less benchmark execution and nested-archive build-data coverage.
+- Validation: compiled build-data tests, actual archive benchmark and an actual
+  Git-less GTK Help/menu build all pass.
+
 ### 2026-10-26 — Report metadata discarded by equivalent-move merges (P27)
 
 - Retain first conflicting values and independent metadata as before, but record

@@ -9,8 +9,21 @@ if ! fpc -B -O2 -Fu"$ROOT_DIR" -FU"$OUT_DIR" -FE"$OUT_DIR" \
   cat "$OUT_DIR/compile.log"
   exit 1
 fi
-printf '# revision=%s\n' "$(git -C "$ROOT_DIR" rev-parse HEAD)"
-if ! git -C "$ROOT_DIR" diff --quiet HEAD --; then echo '# tracked_worktree=modified'; fi
+if revision="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null)" &&
+  git_root="$(git -C "$ROOT_DIR" rev-parse --show-toplevel 2>/dev/null)" &&
+  [[ "$git_root" == "$ROOT_DIR" ]]; then
+  printf '# revision=%s\n' "$revision"
+  if git -C "$ROOT_DIR" diff --quiet HEAD -- 2>/dev/null; then
+    echo '# tracked_worktree=clean'
+  else
+    result=$?
+    if [[ "$result" == 1 ]]; then echo '# tracked_worktree=modified'
+    else echo '# tracked_worktree=unknown'; fi
+  fi
+else
+  echo '# revision=unavailable (source archive)'
+  echo '# tracked_worktree=unknown'
+fi
 printf '# compiler=%s flags=-B -O2\n' "$(fpc -iV)"
 printf '# host=%s\n' "$(uname -srm)"
 printf '# fixture_sha256=%s\n' "$(sha256sum "$ROOT_DIR/tests/fixtures/performance-long.pdn" | cut -d ' ' -f 1)"

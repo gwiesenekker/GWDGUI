@@ -18,11 +18,13 @@ def generate(root, output):
     root = pathlib.Path(root).resolve()
     output = pathlib.Path(output)
     try:
+        if pathlib.Path(git(root, 'rev-parse', '--show-toplevel')).resolve() != root:
+            raise ValueError('Source folder is not the repository root')
         commit = git(root, 'rev-parse', '--verify', 'HEAD')
         revision = git(root, 'describe', '--tags', '--always')
         # Untracked local engines/configuration are not part of the executable.
         dirty = bool(git(root, 'status', '--porcelain', '--untracked-files=no'))
-    except (OSError, subprocess.CalledProcessError):
+    except (OSError, ValueError, subprocess.CalledProcessError):
         commit, revision, dirty = 'unavailable (source archive)', 'source build', False
     manual = (root / 'MANUAL.md').read_text(encoding='utf-8')
     lines = [
