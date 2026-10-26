@@ -5,6 +5,14 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Publish the current PV with stdout enabled (M7)
+
+- Parse a complete Hub output chunk before notifying stdout log observers, so a
+  throttled live snapshot contains the new analysis instead of the previous line.
+- Regress a single info line followed by silence with Show stdout both off and on;
+  the PV/score/depth must arrive before the move. The enabled case fails before
+  the fix and both modes pass afterwards.
+
 ### 2026-10-26 — Read complete monitor-query output (U7)
 
 - Drain auxiliary stdout while its process runs and after it exits, instead of

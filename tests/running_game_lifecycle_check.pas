@@ -94,7 +94,7 @@ begin
 end;
 
 procedure FakeLiveHub;
-var Line: string; I: Integer;
+var Line: string;
 begin
   while not EOF(Input) do
   begin
@@ -103,8 +103,10 @@ begin
     else if Line = 'init' then WriteLn('ready')
     else if Line = 'go think' then
     begin
-      for I := 1 to 20 do
-      begin WriteLn('info pv="32-28" score=0.4 depth=15 time=0.1'); Flush(Output); Sleep(100); end;
+      Sleep(600); // Let the initial state/log publication throttle expire.
+      // One info line only: a later line must not be needed to publish this PV.
+      WriteLn('info pv="32-28" score=0.4 depth=15 time=0.1'); Flush(Output);
+      Sleep(2000);
       WriteLn('done move=32-28');
     end
     else if Line = 'quit' then Exit;
@@ -112,7 +114,7 @@ begin
   end;
 end;
 
-procedure CheckLiveInfoDuringThink;
+procedure CheckLiveInfoDuringThink(ShowStdout: Boolean);
 var Setup: TGameSetup; Definition: TExternalEngineDefinition;
   Observer: TObserver; Runner: TGameRunnerThread;
 begin
@@ -125,9 +127,10 @@ begin
   Setup.WhiteEngine := Definition;
   Runner := TGameRunnerThread.Create(Setup, 7, @Observer.Snapshot, nil);
   try
+    Runner.PostShowStdout(ShowStdout);
     Runner.Start;
     Check(Observer.Ready.WaitFor(5000) = wrSignaled, 'live-info runner becomes ready');
-    Check(Observer.Live.WaitFor(1500) = wrSignaled, 'PV/score/log must arrive before a two-second think completes');
+    Check(Observer.Live.WaitFor(1500) = wrSignaled, 'PV/score/log must arrive before the think completes; stdout=' + BoolToStr(ShowStdout, True));
     Check(Observer.OneMove.WaitFor(0) <> wrSignaled, 'live update must precede accepted move');
     Check(Observer.OneMove.WaitFor(5000) = wrSignaled, 'runner publishes completed move after live updates');
   finally Runner.PostStop; Runner.WaitFor; Runner.Free; Observer.Free; Definition.Free; end;
@@ -410,7 +413,8 @@ begin
   if ParamStr(1) = '--live-hub' then begin FakeLiveHub; Halt(0); end;
   CheckOwnedSetupAndSnapshot;
   CheckGuiMessageOwnership;
-  CheckLiveInfoDuringThink;
+  CheckLiveInfoDuringThink(False);
+  CheckLiveInfoDuringThink(True);
   CheckCompletedResultSurvivesStop;
   CheckEditsWaitForRunner;
   CheckIllegalHumanInputIsRejected;

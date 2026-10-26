@@ -2,6 +2,12 @@
 
 ## Review of afd9c54 — 2026-10-26
 
+M7: parse the complete Hub chunk before emitting its stdout log notification.
+Previously that notification could publish stale analysis and consume the 500 ms
+live-update interval, suppressing the subsequent parsed-info notification. The
+single-info-line regression (then silence until done) passes with stdout disabled,
+fails with it enabled before the fix, and passes in both modes afterwards.
+
 U7: replace LoadFromStream on the running xrandr pipe with an explicit drain through
 process exit. A real child sends a short first chunk, 70 KB later, then the eDP-1
 line; the regression verifies every byte, including the final line and exit code.
@@ -18,7 +24,6 @@ before the acceptance callback can modify the registry and before parameter-file
 writes. Report the parameter name, retain existing files and keep the editor open.
 Headless tests cover quotes/CR/LF, GUI-only exceptions and DXP; the GTK editor test
 checks that an invalid edit cannot overwrite its saved settings. MANUAL updated.
-
 
 A8's proposed use-after-free overlooks `TAnalyzerRunnerThread.Destroy`, which
 already calls `PostShutdown; WaitFor` before freeing any fields. FPC's Windows
@@ -44,6 +49,18 @@ it does not establish recovery of the old baseline. Full duplicate PDN logging i
 an observable extra cost, not redundant canonical-storage rendering. Public export
 must retain standard capture notation; simply substituting cached internal move
 strings would be incorrect. F8 remains partly resolved; no speculative cache added.
+
+A symbolized Callgrind run of all four cases with three games each confirms the
+separate costs: normalization accounts for about 23% of aggregate instructions;
+LogDuplicate accounts for about 16%, almost all in public PDN rendering. These are
+inclusive costs over the mixed workload, not fresh-import-only percentages. The
+profile output is a local diagnostic; the committed benchmark is reproducible.
+
+This pass addresses A8's protection and the small U7/M7/D19/D20 correctness items.
+T23's durable engine identity needs a separate migration design; do not silently
+reattach historical tournament results to a changed engine configuration. P22/F14
+legacy comparison/upgrade work, P21 export size, F9/F4 optimizations and C4 native
+Windows publication validation remain outside this pass. No fork tag or push.
 
 
 ## Review of 57647e7 — 2026-10-26

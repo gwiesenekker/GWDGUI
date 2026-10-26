@@ -337,7 +337,6 @@ begin
     Exit;
   end;
 
-  Log('stdout; text=' + StringReplace(AText, LineEnding, '\n', [rfReplaceAll]));
   LoggedPvText := '';
   LoggedScoreText := '';
   LoggedDepthText := '';
@@ -414,6 +413,9 @@ begin
   finally
     FLineLock.Release;
   end;
+  // Log observers can publish throttled live snapshots. Parse the complete
+  // chunk first so stdout cannot publish the previous info and consume the slot.
+  Log('stdout; text=' + StringReplace(AText, LineEnding, '\n', [rfReplaceAll]));
   if LoggedPvText <> '' then
     Log('pv; text=' + LoggedPvText);
   if LoggedScoreText <> '' then
