@@ -35,6 +35,95 @@ begin
       (Hit.MovesText = Rendered.VariationMovesTexts[I]), 'all variation hit metadata unchanged');
   end;
 end;
+procedure CheckSelection(Presenter: TNotationPresentation; Tree: TGameTree);
+var
+  Selection: TNotationSelection;
+  Target: TNotationBrowseTarget;
+  Range, Expected: TNotationRange;
+  Hit, PvHit: TMoveVariationHit;
+  I, NodeHits, OpeningHits, PvHits: Integer;
+  IsVariation: Boolean;
+begin
+  Presenter.Render(Tree, DefaultGameTreePdnRenderOptions);
+  Selection := Default(TNotationSelection);
+  Selection.BasePly := -1;
+  NodeHits := 0; OpeningHits := 0; PvHits := 0;
+  PvHit := Default(TMoveVariationHit);
+  for I := 0 to Presenter.VariationCount - 1 do
+  begin
+    Hit := Presenter.VariationHits[I];
+    Target := Presenter.HitTest(Hit.Start + 1, 0, Selection);
+    if Hit.NodeId > 0 then
+    begin
+      Check(Target.Variation.NodeId = Hit.NodeId, 'branch click keeps real nested node identity');
+      if Hit.BeforeMove then
+      begin
+        Inc(OpeningHits);
+        Check(Target.Kind = nbBeforeNode, 'opening bracket selects position before child');
+      end
+      else
+      begin
+        Inc(NodeHits);
+        Check(Target.Kind = nbNode, 'branch move selects its node');
+        Selection.NodeId := Hit.NodeId;
+        Selection.BasePly := Hit.BasePly + Hit.VariationPly;
+        Range := Presenter.AutomaticHighlight(Selection, Selection.BasePly, IsVariation);
+        Check(IsVariation and (Range.Start = Hit.Start) and (Range.Length = Hit.Length),
+          'automatic branch highlight uses node identity instead of same-ply mainline');
+        Check(Presenter.SelectionHighlight(Selection, Range) and
+          (Range.Start = Hit.Start) and (Range.Length = Hit.Length),
+          'focused branch highlight uses its move, not opening bracket');
+      end;
+    end
+    else
+    begin
+      Inc(PvHits);
+      Check(Target.Kind = nbPreview, 'analysis range requests a temporary preview');
+      if Hit.VariationPly > 0 then PvHit := Hit;
+    end;
+  end;
+  Check((NodeHits > 2) and (OpeningHits > 1) and (PvHits > 1),
+    'fixture exercises nested nodes, opening brackets and analysis previews');
+  Selection := Default(TNotationSelection);
+  Selection.BasePly := -1;
+  Expected := Presenter.MoveRanges[0];
+  Target := Presenter.HitTest(Expected.Start + 1, 0, Selection);
+  Check((Target.Kind = nbMainline) and (Target.Ply = 1), 'mainline caret selects first move');
+  Target := Presenter.HitTest(Expected.Start + Expected.Length, 0, Selection);
+  Check((Target.Kind = nbMainline) and (Target.Ply = 1), 'caret includes move right endpoint');
+  Target := Presenter.HitTest(Expected.Start + Expected.Length, 1, Selection);
+  Check((Target.Kind <> nbMainline) or (Target.Ply <> 1), 'selection starting at right edge does not overlap move');
+  Target := Presenter.HitTest(Expected.Start - 1, 1, Selection);
+  Check((Target.Kind = nbMainline) and (Target.Ply = 0), 'selection ending at first move starts before game');
+  Target := Presenter.HitTest(0, 0, Selection);
+  Check((Target.Kind = nbMainline) and (Target.Ply = 0), 'introductory comment selects root');
+  Hit := Presenter.VariationHits[0];
+  Target := Presenter.HitTest(0, Length(Presenter.Text), Selection);
+  Check(Target.Variation.Start = Hit.Start, 'variation priority survives selection spanning mainline and branches');
+  Range := Presenter.AutomaticHighlight(Selection, Tree.MainlineCount, IsVariation);
+  Expected := Presenter.MoveRanges[Tree.MainlineCount - 1];
+  Check(not IsVariation and (Range.Start = Expected.Start), 'following running game highlights mainline tip');
+  Range := Presenter.AutomaticHighlight(Selection, -1, IsVariation);
+  Check((Range.Start = 0) and (Range.Length = 0), 'automatic empty/root highlight clears selection');
+  Check(not Presenter.SelectionHighlight(Selection, Range), 'explicit root highlight retains existing memo selection');
+  Selection.PreviewMoves := PvHit.MovesText;
+  Selection.BasePly := PvHit.BasePly;
+  Selection.PreviewPly := PvHit.VariationPly;
+  Range := Presenter.AutomaticHighlight(Selection, Selection.BasePly, IsVariation);
+  Check(IsVariation and (Range.Start = PvHit.Start) and (Range.Length = PvHit.Length),
+    'preview highlight uses full PV, base and preview ply');
+  Check(Presenter.SelectionHighlight(Selection, Range) and (Range.Start = PvHit.Start),
+    'explicit preview highlight locates same range');
+  Target := Presenter.HitTest(PvHit.Start + 1, 0, Selection);
+  Check((Target.Kind = nbPreview) and (Target.Variation.MovesText = PvHit.MovesText),
+    'active preview permits its own ranges');
+  Target := Presenter.HitTest(Presenter.MoveRanges[0].Start + 1, 0, Selection);
+  Check(Target.Kind = nbConsumed, 'active preview consumes unrelated mainline click');
+  Inc(Selection.BasePly, 99);
+  Target := Presenter.HitTest(PvHit.Start + 1, 0, Selection);
+  Check(Target.Kind = nbConsumed, 'same PV at a different base is unrelated');
+end;
+
 procedure CheckSignature(Tree: TGameTree);
 var Options: TGameTreePdnRenderOptions; Before: string;
 begin
@@ -100,6 +189,7 @@ begin
       CheckRender(Presenter, Tree, Options);
     end;
     Check(GameTreeToPdnText(Tree) = Before, 'presentation never mutates tree');
+    CheckSelection(Presenter, Tree);
     CheckSignature(Tree);
     CaptureTree.BeginRebuild('capture', '?', 'White', 'Black', '*', 'W:W32:B17,27');
     CaptureTree.RecordMainlineMove(1, '32x12x27x17');

@@ -98,3 +98,5 @@ revision-scoped replay caching through nested display refreshes.
 
 `notation_presentation_check.pas` checks presenter text/ranges against the PDN
 renderer for every filter combination, capture captions and label invalidation.
+It also covers nested branch/PV hit targets, selection endpoints, preview click
+restrictions and automatic/focused highlight ranges.

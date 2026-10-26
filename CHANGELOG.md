@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Extract notation hit-testing and highlight selection
+
+- Move memo range hit-testing and automatic/focused highlight selection into
+  uNotationPresentation. Return navigation targets and ranges; keep cursor,
+  preview, memo focus and control updates in the form.
+- Preserve variation-first hit priority, inclusive caret endpoints, exclusive
+  selected-text overlap, preview click restrictions and root-selection behaviour.
+- Add headless regressions for nested node/opening-bracket identity, PV context,
+  hit boundaries and automatic versus focused highlights. GTK checks pass.
+
 ### 2026-10-26 — Extract notation rendering and range ownership
 
 - Add the LCL-independent uNotationPresentation presenter, using the existing

@@ -430,6 +430,7 @@ type
     procedure ReplaySelectedGame(Sender: TObject);
     procedure SelectHumanMoveSource(ASourceSquare: Integer);
     procedure RebuildGameMoveLabels(AGameTree: TGameTree);
+    function CurrentNotationSelection: TNotationSelection;
     procedure UpdateGameMoveHighlight;
     procedure UpdateAutoPlayButtonState;
     procedure StartAutoPlay;
@@ -4404,44 +4405,32 @@ begin
   Result := GameTreeToPdnTextEx(AGame.GameTree, LOptions, AEventName);
 end;
 
+function TMainForm.CurrentNotationSelection: TNotationSelection;
+begin
+  // BrowseBasePly resolves the sole cursor before reading its node identity.
+  Result.BasePly := BrowseBasePly;
+  Result.NodeId := FDisplayedPosition.Cursor.NodeId;
+  Result.PreviewPly := BrowseVariationPly;
+  Result.PreviewMoves := FDisplayedPosition.PreviewMoves;
+end;
+
 procedure TMainForm.UpdateGameMoveHighlight;
 var
-  I: Integer;
-  LHighlightPly: Integer;
+  HighlightPly: Integer;
+  IsVariation: Boolean;
+  Range: TNotationRange;
 begin
-  if FGameMoveMemo = nil then
-    Exit;
-
-  LHighlightPly := BrowseBasePly;
-  if (LHighlightPly < 0) and (SelectedDisplayedGame <> nil) then
-    LHighlightPly := CurrentMoveCount;
-
-  if (FHighlightedGameMovePly = LHighlightPly) and
-    (not BrowsingBranch) and (Trim(FDisplayedPosition.PreviewMoves) = '') then
-    Exit;
-  for I := 0 to FNotation.VariationCount - 1 do
-    if ((FDisplayedPosition.PreviewMoves = '') and not FNotation.VariationHits[I].BeforeMove and
-      (FNotation.VariationHits[I].NodeId > 0) and (FNotation.VariationHits[I].NodeId = FDisplayedPosition.Cursor.NodeId)) or
-      ((FDisplayedPosition.PreviewMoves <> '') and (FNotation.VariationHits[I].MovesText = FDisplayedPosition.PreviewMoves) and
-      (FNotation.VariationHits[I].BasePly = BrowseBasePly) and
-      (FNotation.VariationHits[I].VariationPly = FDisplayedPosition.PreviewPly)) then
-    begin
-      FGameMoveMemo.SelStart := FNotation.VariationHits[I].Start;
-      FGameMoveMemo.SelLength := FNotation.VariationHits[I].Length;
-      FHighlightedGameMovePly := -2;
-      Exit;
-    end;
-  if (LHighlightPly > 0) and (LHighlightPly <= FNotation.MoveCount) then
-  begin
-    FGameMoveMemo.SelStart := FNotation.MoveRanges[LHighlightPly - 1].Start;
-    FGameMoveMemo.SelLength := FNotation.MoveRanges[LHighlightPly - 1].Length;
-  end
-  else
-  begin
-    FGameMoveMemo.SelStart := 0;
-    FGameMoveMemo.SelLength := 0;
-  end;
-  FHighlightedGameMovePly := LHighlightPly;
+  if FGameMoveMemo = nil then Exit;
+  HighlightPly := BrowseBasePly;
+  if (HighlightPly < 0) and (SelectedDisplayedGame <> nil) then
+    HighlightPly := CurrentMoveCount;
+  if (FHighlightedGameMovePly = HighlightPly) and
+    (not BrowsingBranch) and (Trim(FDisplayedPosition.PreviewMoves) = '') then Exit;
+  Range := FNotation.AutomaticHighlight(CurrentNotationSelection, HighlightPly, IsVariation);
+  FGameMoveMemo.SelStart := Range.Start;
+  FGameMoveMemo.SelLength := Range.Length;
+  if IsVariation then FHighlightedGameMovePly := -2
+  else FHighlightedGameMovePly := HighlightPly;
 end;
 
 
@@ -4905,89 +4894,34 @@ end;
 
 function TMainForm.ApplyGameMoveMemoCaretBrowse: Boolean;
 var
-  I: Integer;
-  LGameTree: TGameTree;
-  LFirstMoveStart: Integer;
-  LPos: Integer;
-  LSelEnd: Integer;
-  LSelStart: Integer;
-
-  function SelectionHitsRange(AStart, ALength: Integer): Boolean;
-  var
-    LRangeEnd: Integer;
-  begin
-    Result := False;
-    if ALength <= 0 then
-      Exit;
-    LRangeEnd := AStart + ALength;
-    if LSelEnd > LSelStart then
-      Result := (LSelStart < LRangeEnd) and (LSelEnd > AStart)
-    else
-      Result := (LSelStart >= AStart) and (LSelStart <= LRangeEnd);
-  end;
+  Tree: TGameTree;
+  Target: TNotationBrowseTarget;
 begin
   Result := False;
-  if FGameMoveMemo = nil then
-    Exit;
-  LGameTree := ActiveGameTree;
-  LSelStart := FGameMoveMemo.SelStart;
-  LSelEnd := LSelStart + FGameMoveMemo.SelLength;
-  LPos := LSelStart;
-  for I := 0 to FNotation.VariationCount - 1 do
-  begin
-    if (Trim(FDisplayedPosition.PreviewMoves) <> '') and
-      ((FNotation.VariationHits[I].BasePly <> BrowseBasePly) or
-       (FNotation.VariationHits[I].MovesText <> FDisplayedPosition.PreviewMoves)) then
-      Continue;
-    if SelectionHitsRange(FNotation.VariationHits[I].Start,
-      FNotation.VariationHits[I].Length) then
-    begin
-      if FNotation.VariationHits[I].NodeId > 0 then
+  if FGameMoveMemo = nil then Exit;
+  Tree := ActiveGameTree;
+  Target := FNotation.HitTest(FGameMoveMemo.SelStart, FGameMoveMemo.SelLength,
+    CurrentNotationSelection);
+  case Target.Kind of
+    nbNone: Exit;
+    nbConsumed: Exit(True);
+    nbNode, nbBeforeNode:
       begin
         ClearHumanMoveSelection;
         ClearVariationExploration;
-        if FNotation.VariationHits[I].BeforeMove then
-          FDisplayedPosition.Cursor.SelectBefore(LGameTree, LGameTree.FindNodeById(FNotation.VariationHits[I].NodeId))
+        if Target.Kind = nbBeforeNode then
+          FDisplayedPosition.Cursor.SelectBefore(Tree, Tree.FindNodeById(Target.Variation.NodeId))
         else
-          FDisplayedPosition.Cursor.Select(LGameTree, LGameTree.FindNodeById(FNotation.VariationHits[I].NodeId));
-        RefreshDisplayFromGameTree(LGameTree, False);
-      end
-      else if Trim(FNotation.VariationHits[I].MovesText) <> '' then
-        ApplyAnnotatorVariationBrowsePly(FNotation.VariationHits[I].BasePly,
-          FNotation.VariationHits[I].VariationPly, FNotation.VariationHits[I].MovesText,
-          LGameTree)
-;
-      HighlightGameMoveTextSelection(True, LGameTree);
-      Result := True;
-      Exit;
-    end;
+          FDisplayedPosition.Cursor.Select(Tree, Tree.FindNodeById(Target.Variation.NodeId));
+        RefreshDisplayFromGameTree(Tree, False);
+      end;
+    nbPreview:
+      ApplyAnnotatorVariationBrowsePly(Target.Variation.BasePly,
+        Target.Variation.VariationPly, Target.Variation.MovesText, Tree);
+    nbMainline: ApplyGameBrowsePly(Target.Ply);
   end;
-
-  if Trim(FDisplayedPosition.PreviewMoves) <> '' then
-  begin
-    Result := True;
-    Exit;
-  end;
-
-  for I := 0 to FNotation.MoveCount - 1 do
-    if SelectionHitsRange(FNotation.MoveRanges[I].Start, FNotation.MoveRanges[I].Length) then
-    begin
-      ApplyGameBrowsePly(I + 1);
-      HighlightGameMoveTextSelection(True, LGameTree);
-      Result := True;
-      Exit;
-    end;
-
-  if FNotation.MoveCount > 0 then
-  begin
-    LFirstMoveStart := FNotation.MoveRanges[0].Start;
-    if LPos < LFirstMoveStart then
-    begin
-      ApplyGameBrowsePly(0);
-      HighlightGameMoveTextSelection(True, LGameTree);
-      Result := True;
-    end;
-  end;
+  HighlightGameMoveTextSelection(True, Tree);
+  Result := True;
 end;
 
 procedure TMainForm.HideMoveAnnotationsClick(Sender: TObject);
@@ -5152,39 +5086,13 @@ end;
 
 procedure TMainForm.HighlightGameMoveTextSelection(AFocusMemo: Boolean;
   AGameTree: TGameTree);
-var
-  I: Integer;
+var Range: TNotationRange;
 begin
-  if FGameMoveMemo = nil then
-    Exit;
-  if Trim(FDisplayedPosition.PreviewMoves) <> '' then
+  if FGameMoveMemo = nil then Exit;
+  if FNotation.SelectionHighlight(CurrentNotationSelection, Range) then
   begin
-    for I := 0 to FNotation.VariationCount - 1 do
-      if (FNotation.VariationHits[I].BasePly = BrowseBasePly) and
-        (FNotation.VariationHits[I].MovesText = FDisplayedPosition.PreviewMoves) and
-        (FNotation.VariationHits[I].VariationPly = BrowseVariationPly) then
-      begin
-        FGameMoveMemo.SelStart := FNotation.VariationHits[I].Start;
-        FGameMoveMemo.SelLength := FNotation.VariationHits[I].Length;
-        if AFocusMemo and Visible and CanFocus and FGameMoveMemo.CanFocus then
-          FGameMoveMemo.SetFocus;
-        Exit;
-      end;
-  end;
-  for I := 0 to FNotation.VariationCount - 1 do
-    if (FNotation.VariationHits[I].NodeId = FDisplayedPosition.Cursor.NodeId) and
-      (FNotation.VariationHits[I].NodeId > 0) and not FNotation.VariationHits[I].BeforeMove then
-    begin
-      FGameMoveMemo.SelStart := FNotation.VariationHits[I].Start;
-      FGameMoveMemo.SelLength := FNotation.VariationHits[I].Length;
-      if AFocusMemo and Visible and CanFocus and FGameMoveMemo.CanFocus then
-        FGameMoveMemo.SetFocus;
-      Exit;
-    end;
-  if (BrowseBasePly > 0) and (BrowseBasePly <= FNotation.MoveCount) then
-  begin
-    FGameMoveMemo.SelStart := FNotation.MoveRanges[BrowseBasePly - 1].Start;
-    FGameMoveMemo.SelLength := FNotation.MoveRanges[BrowseBasePly - 1].Length;
+    FGameMoveMemo.SelStart := Range.Start;
+    FGameMoveMemo.SelLength := Range.Length;
   end;
   if AFocusMemo and Visible and CanFocus and FGameMoveMemo.CanFocus then
     FGameMoveMemo.SetFocus;
