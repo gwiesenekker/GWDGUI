@@ -13,6 +13,7 @@ function DecodeNodeData(const Text: string; out Data: TGameTreeNodeData;
   out Projection: string): Boolean;
 function NormalizeNodeComment(const Text: string): string;
 function NodeDataAnalysisCaption(const Data: TGameTreeNodeData): string;
+function IsNodeDataEnvelope(const Text: string): Boolean;
 function DecodeNodeDataComment(const Text, VisibleComment: string;
   out Data: TGameTreeNodeData; out Edited: Boolean): Boolean;
 implementation
@@ -105,6 +106,20 @@ begin
   Result += ']';
 end;
 
+function IsNodeDataEnvelope(const Text: string): Boolean;
+var I: Integer; Data: TGameTreeNodeData; Projection: string;
+begin
+  Result := False;
+  if Copy(Text, 1, 11) = '[%gwd-node ' then
+    Exit(DecodeNodeData(Text, Data, Projection));
+  // Current writers always start with a twelve-digit checksum. A bare prefix
+  // in prose is ordinary text, not evidence of a damaged metadata extension.
+  if (Length(Text) < 21) or (Copy(Text, 1, 8) <> '[%gwd h=') then Exit;
+  for I := 9 to 20 do
+    if not (Text[I] in ['0'..'9', 'a'..'f', 'A'..'F']) then Exit;
+  Result := Text[21] in [']', ' ', #9, #10, #13];
+end;
+
 function DecodeNodeDataComment(const Text, VisibleComment: string;
   out Data: TGameTreeNodeData; out Edited: Boolean): Boolean;
 var Obj: TJSONObject; Parsed: TJSONData; Parts: TStringList;
@@ -117,6 +132,7 @@ var Obj: TJSONObject; Parsed: TJSONData; Parts: TStringList;
   end;
 begin
   Data := Default(TGameTreeNodeData); Edited := False; Result := False;
+  if not IsNodeDataEnvelope(Text) then Exit;
   Actual := NormalizeNodeComment(VisibleComment);
   if Copy(Text, 1, 11) = '[%gwd-node ' then
   begin

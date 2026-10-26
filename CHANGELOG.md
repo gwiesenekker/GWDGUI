@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Keep metadata-like user comments literal (P25)
+
+- Recognize the current metadata envelope by its checksum header, rather than a
+  bare prefix. Ordinary prefix-like prose no longer produces metadata warnings.
+- Escape a literal leading metadata marker in file output and distinguish that
+  escape during parsing, including text that is itself a valid extension. Keep
+  genuine and legacy analysis extensions readable and edited-comment handling.
+- Add repeated public/storage/tree writer round trips for literal root and move
+  comments. Comment, metadata/filter and notation-compatibility checks pass.
+
 ### 2026-10-26 — Preserve comments following node metadata (P24)
 
 - Keep typed comments in sync when ordinary text follows a node-data comment,

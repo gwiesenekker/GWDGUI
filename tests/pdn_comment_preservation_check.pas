@@ -1,7 +1,7 @@
 program pdn_comment_preservation_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uPdn, uGameTreeNodeData,
-  uGameTreeActor, uGameTree;
+  uGameTreeActor, uGameTree, uGameTreePdn;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 function ReadGame(const Text: string): TPdnGame;
@@ -61,7 +61,59 @@ begin
     end;
   finally Game.Free; end;
 end;
+procedure CheckLiteralPrefixes;
+const Plain: array[0..2] of string = ('[%gwd a user note]',
+  '[%gwd h=not-a-checksum eval="0.1"]', '[%gwd-node a user note]');
+var Game, Next: TPdnGame; Root: TPdnMoveNode; I, Cycle: Integer;
+  Data: TGameTreeNodeData; Literal, Text: string; Tree: TGameTree;
 begin
+  for I := 0 to High(Plain) do
+  begin
+    Game := ReadGame('[Event "Literal comment"]' + LineEnding + '1. 32-28 {' + Plain[I] + '} *');
+    try
+      Check(Game.ImportWarningsText = '', 'ordinary metadata-like comment is not malformed metadata');
+      Root := Game.BuildMoveTree;
+      try Check(not Root.Children[0].HasNodeData and (Root.Children[0].AnnotationText = Plain[I]), 'raw literal prefix preserved');
+      finally Root.Free; end;
+    finally Game.Free; end;
+  end;
+  Data := Default(TGameTreeNodeData); Data.EnginePV := '32-28';
+  Literal := EncodeNodeData(Data, ''); // A literal that is also a syntactically valid extension.
+  for I := 0 to 2 do
+  begin
+    Game := TPdnGame.Create;
+    Game.MovesText := '32-28'; Game.InitialCommentText := Literal;
+    Game.MoveAnnotationsText := Literal + LineEnding;
+    try
+      for Cycle := 1 to 3 do
+      begin
+        if I = 0 then Text := PdnGameToText(Game)
+        else if I = 1 then Text := PdnGameToStorageText(Game, nil)
+        else
+        begin
+          Tree := TGameTree.Create;
+          try
+            Tree.RecordMainlineMove(1, '32-28');
+            Data.CommentText := Literal; Data.EnginePV := '32-28';
+            Tree.RestoreNodeData(Tree.Root.NodeId, Data);
+            Data.EnginePV := '18-23'; Tree.RestoreNodeData(Tree.MainlineNode[1].NodeId, Data);
+            Text := GameTreeToPdnText(Tree);
+          finally Tree.Free; end;
+        end;
+        Next := ReadGame(Text); Game.Free; Game := Next;
+        Check(Game.ImportWarningsText = '', 'escaped literal does not trigger edit warnings');
+        Root := Game.BuildMoveTree;
+        try
+          Check((Root.AnnotationText = Literal) and (Root.Children[0].AnnotationText = Literal), 'literal extension survives both root and move comments');
+          if I = 2 then Check(Root.NodeData.CommentText = Literal, 'typed metadata preserves literal note');
+        finally Root.Free; end;
+      end;
+    finally Game.Free; end;
+  end;
+end;
+
+begin
+  CheckLiteralPrefixes;
   CheckTrailingComment('root'); CheckTrailingComment('move'); CheckTrailingComment('variation');
   Writeln('PDN comment preservation checks passed');
 end.

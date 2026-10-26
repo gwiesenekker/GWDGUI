@@ -195,7 +195,9 @@ begin
     end;
   end;
   Projection := Result;
-  if Result <> '' then Result := ' {' + EscapePdnComment(Result) + '}';
+  if Result <> '' then
+    if AForFile then Result := ' {' + EscapePdnLiteralComment(Result) + '}'
+    else Result := ' {' + EscapePdnComment(Result) + '}';
   if AForFile then
   begin
     Data := ANode.NodeData;

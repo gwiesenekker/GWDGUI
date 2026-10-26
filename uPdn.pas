@@ -73,6 +73,7 @@ procedure AppendPdnTextToFile(const AFileName, APdnText: string);
 function PdnGameToText(AGame: TPdnGame): string;
 function PdnGameToStorageText(AGame: TPdnGame; CanonicalMainline: TStrings = nil): string;
 function PdnExportResult(const AText: string): string;
+function EscapePdnLiteralComment(const Text: string): string;
 function EscapePdnComment(const Text: string): string;
 function NormalizePdnComment(const Text: string): string;
 function AnnotationWithScore(const AAnnotation, AName, AScore: string): string;
@@ -300,6 +301,16 @@ begin
   Result := StringReplace(Text, '\', '\\', [rfReplaceAll]);
   Result := StringReplace(Result, '{', '\{', [rfReplaceAll]);
   Result := StringReplace(Result, '}', '\}', [rfReplaceAll]);
+end;
+
+function EscapePdnLiteralComment(const Text: string): string;
+var I: Integer;
+begin
+  Result := EscapePdnComment(Text);
+  I := 1;
+  while (I <= Length(Result)) and (Result[I] <= ' ') do Inc(I);
+  if (Copy(Result, I, 6) = '[%gwd ') or (Copy(Result, I, 11) = '[%gwd-node ') then
+    Insert('\', Result, I);
 end;
 
 function NormalizePdnResult(const AText: string): string;
@@ -718,6 +729,7 @@ var
   LBraceDepth: Integer;
   LComment: TStringBuilder;
   LInLineComment: Boolean;
+  LLiteralComment: Boolean;
   LLastMoveIndex: Integer;
   LToken: TStringBuilder;
   LVariationText: string;
@@ -764,19 +776,20 @@ var
   procedure ProcessComment;
   var
     LCommentText, Actual: string;
-    Edited: Boolean;
+    Edited, Literal: Boolean;
     Data: TGameTreeNodeData;
     Target: TPdnMoveNode;
   begin
     LCommentText := NormalizePdnComment(LComment.ToString);
     LComment.Clear;
+    Literal := LLiteralComment; LLiteralComment := False;
     if LCommentText = '' then Exit;
     Target := nil;
     if ATreeRoot <> nil then Target := Positions[LLastMoveIndex + 1];
     if LLastMoveIndex >= 0 then Actual := AAnnotations[LLastMoveIndex]
     else if AInitialComments <> nil then Actual := AInitialComments.Text
     else Actual := '';
-    if DecodeNodeDataComment(LCommentText, Actual, Data, Edited) then
+    if (not Literal) and DecodeNodeDataComment(LCommentText, Actual, Data, Edited) then
     begin
       Target := nil;
       if Edited then Warn('Visible node comment edited; retained independent analysis metadata.');
@@ -788,7 +801,7 @@ var
       begin AInitialComments.Clear; if Data.CommentText <> '' then AInitialComments.Add(Data.CommentText); end;
       Exit;
     end;
-    if (Copy(LCommentText, 1, 11) = '[%gwd-node ') or (Copy(LCommentText, 1, 6) = '[%gwd ') then
+    if (not Literal) and IsNodeDataEnvelope(LCommentText) then
       Warn('Malformed node-data comment retained as text.');
     if (LLastMoveIndex < 0) or (LLastMoveIndex >= AAnnotations.Count) then
     begin
@@ -900,6 +913,7 @@ var
         if LInitialComments.Count > 0 then
         begin
           LComment.Append(Trim(LInitialComments.Text));
+          LLiteralComment := True; // Already interpreted in the nested parser.
           ProcessComment;
           Warn('Retained a comment-only variation as a position comment.');
         end;
@@ -984,6 +998,7 @@ begin
   SetLength(Positions, 1);
   Positions[0] := ATreeRoot;
   LBraceDepth := 0;
+  LLiteralComment := False;
   LComment.Clear;
   LInLineComment := False;
   LLastMoveIndex := -1;
@@ -1004,6 +1019,12 @@ begin
 
     if LBraceDepth > 0 then
     begin
+      if (AText[I] = '\') and (I < Length(AText)) and (AText[I + 1] = '[') and
+        (Trim(LComment.ToString) = '') and
+        ((Copy(AText, I + 1, 6) = '[%gwd ') or (Copy(AText, I + 1, 11) = '[%gwd-node ')) then
+      begin
+        LLiteralComment := True; LComment.Append('['); Inc(I, 2); Continue;
+      end;
       if (AText[I] = '\') and (I < Length(AText)) and (AText[I + 1] in ['\', '{', '}']) then
       begin LComment.Append(AText[I + 1]); Inc(I, 2); Continue; end;
       J := I;
@@ -1039,6 +1060,7 @@ begin
           ProcessToken;
           Inc(LBraceDepth);
           LComment.Clear;
+          LLiteralComment := False;
         end;
       '(':
         begin
@@ -1573,7 +1595,7 @@ begin
       else
         Result += LMoves[I];
       if LAnnotations[I] <> '' then
-        Result += ' {' + EscapePdnComment(LAnnotations[I]) + '}';
+        Result += ' {' + EscapePdnLiteralComment(LAnnotations[I]) + '}';
     end;
   finally
     LAnnotations.Free;
@@ -1661,7 +1683,7 @@ begin
         LSide := dsWhite;
       end;
       if (I < LAnnotations.Count) and (Trim(LAnnotations[I]) <> '') then
-        LText += ' {' + EscapePdnComment(Trim(LAnnotations[I])) + '}';
+        LText += ' {' + EscapePdnLiteralComment(Trim(LAnnotations[I])) + '}';
       AppendVariationsAfterPly(I + 1);
       if Length(LText) > 78 then
       begin
@@ -1749,7 +1771,7 @@ var
   var Encoded: string;
   begin
     if Node.AnnotationText <> '' then
-      Output.Append(' {' + EscapePdnComment(Node.AnnotationText) + '}');
+      Output.Append(' {' + EscapePdnLiteralComment(Node.AnnotationText) + '}');
     if Node.HasNodeData then
     begin
       Encoded := EncodeNodeData(Node.NodeData, Node.AnnotationText);
