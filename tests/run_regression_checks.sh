@@ -12,6 +12,7 @@ CHECKS=(
   pdn_regression_check.pas
   database_import_recovery_check.pas
   database_import_worker_check.pas
+  pdn_variation_identity_check.pas
   pdn_comment_preservation_check.pas
   pdn_batch_import_check.pas
   pdn_tree_check.pas

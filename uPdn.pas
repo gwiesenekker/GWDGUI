@@ -14,6 +14,7 @@ type
     FChildren: TObjectList;
     function GetChild(I: Integer): TPdnMoveNode;
     function GetChildCount: Integer;
+    procedure MergePayload(Source: TPdnMoveNode);
   public
     MoveText, AnnotationText: string;
     HasNodeData: Boolean;
@@ -33,6 +34,7 @@ type
     FDeferredMoveText: string;
     FParsedRoot: TPdnMoveNode;
     FParsedSignature: string;
+    FNormalizedSignature: string;
     FHasResultTag: Boolean;
     FValidatedSignature: string;
     function GetDeferred: Boolean;
@@ -135,6 +137,56 @@ begin
   if AsContinuation then FChildren.Move(FChildren.IndexOf(Result), 0);
 end;
 
+function JoinedComments(const First, Second: string): string;
+begin
+  Result := First;
+  if Second = '' then Exit;
+  if Result = '' then Result := Second
+  else if Result <> Second then Result += '; ' + Second;
+end;
+
+procedure TPdnMoveNode.MergePayload(Source: TPdnMoveNode);
+var FirstComment, SecondComment: string;
+begin
+  FirstComment := AnnotationText;
+  if HasNodeData then FirstComment := NodeData.CommentText;
+  SecondComment := Source.AnnotationText;
+  if Source.HasNodeData then SecondComment := Source.NodeData.CommentText;
+  if Source.HasNodeData then
+  begin
+    if not HasNodeData then NodeData := Source.NodeData
+    else
+    begin
+      if NodeData.OriginText = '' then NodeData.OriginText := Source.NodeData.OriginText;
+      if NodeData.EnginePV = '' then NodeData.EnginePV := Source.NodeData.EnginePV;
+      if NodeData.EngineScore = '' then NodeData.EngineScore := Source.NodeData.EngineScore;
+      if NodeData.EnginePVDepth = '' then NodeData.EnginePVDepth := Source.NodeData.EnginePVDepth;
+      if NodeData.EnginePVTimeText = '' then NodeData.EnginePVTimeText := Source.NodeData.EnginePVTimeText;
+      if NodeData.AnnotatorPV = '' then NodeData.AnnotatorPV := Source.NodeData.AnnotatorPV;
+      if NodeData.AnnotatorScore = '' then NodeData.AnnotatorScore := Source.NodeData.AnnotatorScore;
+      if NodeData.AnnotatorPVDepth = '' then NodeData.AnnotatorPVDepth := Source.NodeData.AnnotatorPVDepth;
+      if NodeData.AnnotatorPVTimeText = '' then NodeData.AnnotatorPVTimeText := Source.NodeData.AnnotatorPVTimeText;
+      if NodeData.AutoPlayPV = '' then NodeData.AutoPlayPV := Source.NodeData.AutoPlayPV;
+
+      if not NodeData.HasClockInfo and (NodeData.WhiteRemainingSeconds = 0) and
+        (NodeData.BlackRemainingSeconds = 0) and (NodeData.WhiteUsedSeconds = 0) and
+        (NodeData.BlackUsedSeconds = 0) then
+      begin
+        NodeData.HasClockInfo := Source.NodeData.HasClockInfo;
+        NodeData.WhiteRemainingSeconds := Source.NodeData.WhiteRemainingSeconds;
+        NodeData.BlackRemainingSeconds := Source.NodeData.BlackRemainingSeconds;
+        NodeData.WhiteUsedSeconds := Source.NodeData.WhiteUsedSeconds;
+        NodeData.BlackUsedSeconds := Source.NodeData.BlackUsedSeconds;
+      end;
+      if not NodeData.HasMoveTime and (NodeData.SecondsUsed = 0) then
+      begin NodeData.HasMoveTime := Source.NodeData.HasMoveTime; NodeData.SecondsUsed := Source.NodeData.SecondsUsed; end;
+    end;
+    HasNodeData := True;
+  end;
+  AnnotationText := JoinedComments(AnnotationText, Source.AnnotationText);
+  if HasNodeData then NodeData.CommentText := JoinedComments(FirstComment, SecondComment);
+end;
+
 procedure TPdnMoveNode.MergeChildren(Source: TPdnMoveNode);
 var I: Integer; Child: TPdnMoveNode;
 begin
@@ -142,12 +194,7 @@ begin
   for I := 0 to Source.ChildCount - 1 do
   begin
     Child := AddMove(Source.Children[I].MoveText, False);
-    if Source.Children[I].HasNodeData then
-    begin Child.HasNodeData := True; Child.NodeData := Source.Children[I].NodeData; end;
-    if Child.AnnotationText = '' then Child.AnnotationText := Source.Children[I].AnnotationText
-    else if (Source.Children[I].AnnotationText <> '') and
-      (Child.AnnotationText <> Source.Children[I].AnnotationText) then
-      Child.AnnotationText += '; ' + Source.Children[I].AnnotationText;
+    Child.MergePayload(Source.Children[I]);
     Child.MergeChildren(Source.Children[I]);
   end;
 end;
@@ -194,6 +241,7 @@ begin
   FreeAndNil(FParsedRoot);
   if ASource.FParsedRoot <> nil then FParsedRoot := ASource.FParsedRoot.Clone;
   FParsedSignature := ASource.FParsedSignature;
+  FNormalizedSignature := ASource.FNormalizedSignature;
   FDeferredMoveText := ASource.FDeferredMoveText;
   EventName := ASource.EventName;
   TournamentId := ASource.TournamentId;
@@ -1174,6 +1222,7 @@ begin
   try
     FreeAndNil(ACurrent.FParsedRoot);
     ACurrent.FParsedRoot := TPdnMoveNode.Create;
+    ACurrent.FNormalizedSignature := '';
     ExtractPdnMoveData(AMoveLines.Text, LMoves, LAnnotations, LVariations,
       LVariationAnnotations, ACurrent.StartingFEN, LInitialComments, 0, LWarnings, ACurrent.FParsedRoot, @LMovetextResult);
     if LMovetextResult <> '' then
@@ -1721,6 +1770,50 @@ begin
   AppendTextFileDurably(AFileName, APdnText);
 end;
 
+procedure NormalizeParsedAliases(Root: TPdnMoveNode; const Fen: string);
+var Board: TDraughtsBoard;
+  procedure Walk(Parent: TPdnMoveNode; Before: TDraughtsBoard);
+  var Canonical: TStringList; I, Duplicate: Integer; Move: string;
+    Next: TDraughtsBoard;
+  begin
+    Canonical := TStringList.Create;
+    try
+      I := 0;
+      while I < Parent.ChildCount do
+      begin
+        Move := '';
+        if Before.TryGetLegalMove(Parent.Children[I].MoveText, Move) then
+        begin
+          Duplicate := Canonical.IndexOf(Move);
+          if Duplicate >= 0 then
+          begin
+            Parent.Children[Duplicate].MergePayload(Parent.Children[I]);
+            Parent.Children[Duplicate].MergeChildren(Parent.Children[I]);
+            Parent.FChildren.Delete(I);
+            Continue;
+          end;
+        end;
+        Canonical.Add(Move); Inc(I);
+      end;
+      for I := 0 to Parent.ChildCount - 1 do
+      begin
+        if Canonical[I] = '' then Continue; // Preserve invalid text for existing warning/recovery paths.
+        Next := TDraughtsBoard.Create;
+        try
+          Next.AssignFrom(Before); Next.PlayMove(Canonical[I], False, False);
+          Walk(Parent.Children[I], Next);
+        finally Next.Free; end;
+      end;
+    finally Canonical.Free; end;
+  end;
+begin
+  Board := TDraughtsBoard.Create;
+  try
+    try Board.LoadFromFEN(Fen); except on E: EConvertError do Exit; end;
+    Walk(Root, Board);
+  finally Board.Free; end;
+end;
+
 function TPdnGame.BuildMoveTree: TPdnMoveNode;
 var Moves, Annotations, Variations, VariationAnnotations: TStringList;
     Text: string;
@@ -1730,6 +1823,7 @@ begin
   begin
     FreeAndNil(FParsedRoot);
     FParsedRoot := TPdnMoveNode.Create;
+    FNormalizedSignature := '';
     Moves := TStringList.Create;
     Annotations := TStringList.Create;
     Variations := TStringList.Create;
@@ -1753,6 +1847,11 @@ begin
       Annotations.Free;
       Moves.Free;
     end;
+  end;
+  if FNormalizedSignature <> TreeDataSignature then
+  begin
+    NormalizeParsedAliases(FParsedRoot, StartingFEN);
+    FNormalizedSignature := TreeDataSignature;
   end;
   Result := FParsedRoot.Clone;
 end;

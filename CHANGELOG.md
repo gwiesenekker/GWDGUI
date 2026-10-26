@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Merge position-equivalent parsed moves (P26)
+
+- Resolve parsed sibling moves against their parent board before merging capture
+  aliases; retain the first spelling and keep different captured sets distinct.
+- Combine comments, independent analysis fields and child continuations. Retain
+  first nonempty values for conflicting metadata; cache normalization per parsed
+  game signature and leave invalid subtrees for existing warning/recovery paths.
+- Add stable repeated-export, metadata/continuation preservation and ambiguous
+  same-endpoint capture regressions. PDN, comment and GTK checks pass.
+
 ### 2026-10-26 — Keep metadata-like user comments literal (P25)
 
 - Recognize the current metadata envelope by its checksum header, rather than a
