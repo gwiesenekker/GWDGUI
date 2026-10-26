@@ -2989,31 +2989,8 @@ var
   Header: TGameTreeHeaderInput;
   StatusCommand: TGameTreeCommand;
   StatusError: string;
-
-  procedure ImportChildren(Source: TPdnMoveNode; ParentId: Int64);
-  var I: Integer; Command: TGameTreeCommand; ErrorText: string;
-  begin
-    if Source.HasNodeData then
-    begin
-      Command := Actor.CreateRestoreNodeDataCommand(ParentId, Source.NodeData);
-      try
-        if not ExecuteGameTreeCommand(Actor, Command, ErrorText) then
-          AGame.AddImportWarning('Cannot restore node data: ' + ErrorText);
-      finally Command.Free; end;
-    end;
-    for I := 0 to Source.ChildCount - 1 do
-    begin
-      Command := Actor.CreateImportNodeCommand(ParentId,
-        Source.Children[I].MoveText, Source.Children[I].AnnotationText);
-      try
-        if ExecuteGameTreeCommand(Actor, Command, ErrorText) then
-          ImportChildren(Source.Children[I], Command.CreatedNodeId)
-        else
-          AGame.AddImportWarning('Cannot load move ' + Source.Children[I].MoveText + ': ' + ErrorText);
-      finally Command.Free; end;
-    end;
-  end;
-
+  Command: TGameTreeCommand;
+  I: Integer;
 begin
   if (AGameTree = nil) or (AGame = nil) then Exit;
   Actor := ActorForGameTree(AGameTree);
@@ -3021,7 +2998,13 @@ begin
   ParsedRoot := AGame.BuildMoveTree;
   try
     ClearTreeBranches(AGameTree);
-    ImportChildren(ParsedRoot, AGameTree.Root.NodeId);
+    Command := Actor.CreateImportPdnTreeCommand(ParsedRoot);
+    try
+      if not ExecuteGameTreeCommand(Actor, Command, StatusError) then
+        AGame.AddImportWarning('Cannot load PDN tree: ' + StatusError);
+      for I := 0 to Command.ImportWarnings.Count - 1 do
+        AGame.AddImportWarning(Command.ImportWarnings[I]);
+    finally Command.Free; end;
     if Trim(AGame.ImportWarningsText) <> '' then
     begin
       Header := CurrentGameTreeHeaderInput(nil, AGameTree);

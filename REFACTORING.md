@@ -32,7 +32,7 @@ an obligation to keep source or binaries shared between the applications.
 | Running games and messages | `uRunningGame`, `uGameGuiMessages`, `uThreadMessageQueue` | Classes are extracted mechanically; retain snapshot ownership, engine reservations and lifecycle transitions. |
 | Move interaction | `uMoveInteraction`, `uDisplayedPosition`, board event wiring in `uMainForm` | Legal candidates, source/target selection, routing, highlight calculation and replay coordination are extracted. Keep the draughts implementation; replace in chess without assuming a move is uniquely identified by two squares. |
 | Tree and cursor | `uGameTree`, `uGameTreeActor`, `uGameTreeBuilder`, `uGameTreeCursor`, `uGameTreeSearchRef` | Retain topology, node identity and actor/search contracts; replace draughts positions, validation and notation in the chess copy. |
-| Notation presentation | `uGameTreePdn`, `uNotationPresentation`, memo event wiring in `uMainForm` | Existing PDN renderer is unchanged; the presenter owns text/ranges, signatures, hit targets and highlight selection. Chess needs its own PGN/SAN rendering from the position before each move. |
+| Notation presentation | `uGameTreePdn`, `uNotationPresentation`, memo event wiring in `uMainForm` | PDN format/ranges are preserved with incremental board traversal; the presenter owns text/ranges, signatures, hit targets and highlight selection. Chess needs its own PGN/SAN rendering from the position before each move. |
 | Record import/export | `uPdn`, `uGameTreePdn` | Keep GWDGUI PDN compatibility; implement PGN in the chess application. Do not relabel PDN data as PGN. |
 | Rules and positions | `uDraughtsBoard`, `uDraughtsDrawRules`, `uGameOrchestrator` | Replace rules, FEN interpretation, move representation and termination logic for chess. Preserve orchestration concepts only after checking game-specific assumptions. |
 | Board display/setup | `uBoardControl`, `uPositionSetupForm` | Replace numbered 10×10 squares and piece artwork with chess geometry/pieces; support promotion choice and multi-square move effects. |
@@ -106,7 +106,7 @@ or move the published v3.0 tag as part of this work.
   copied cache boards, revision changes and nested refresh lifetime. Existing GTK
   interaction/preservation checks continue to exercise real form event wiring.
 - `uNotationPresentation` owns rendered PDN text/ranges and label signatures,
-  with the existing `uGameTreePdn` renderer unchanged. It returns hit targets and
+  with PDN format/ranges preserved by `uGameTreePdn`. It returns hit targets and
   highlight ranges from a temporary selection description, without owning or
   changing a tree/cursor. Memo updates, focus and navigation commands stay in
   the form. Automatic root highlights clear selection; explicit navigation
@@ -136,3 +136,17 @@ or move the published v3.0 tag as part of this work.
   ownership and shutdown remain in the form. Control updates,
   actor/runner dispatch, analysis cancellation and shutdown stay there during
   these extractions. The published v3.0 tag stays at the release commit.
+
+## Profiling follow-up completed
+
+- Legal-move comparisons use ordinal normalized text (F12).
+- Notation and tree captions advance a board per line, copying at forks (F10).
+  Frozen text/range fixtures and work counters protect compatibility and scaling.
+- The Game Tree window defaults to notation columns, offers the original nested
+  layout, marks variations and retains expansion/selection for the same tree.
+- Node IDs resolve through a non-owning hash index. Batch PDN import validates
+  each visited move once inside the actor while preserving subtree warnings,
+  canonical moves and metadata (F11). Index lifecycle tests cover stale pointers.
+- Headless measurements on Claude's long-game fixture: 100 notation renders
+  12.45 s to 0.54 s; ten imports 4.57 s to 0.28 s. These compare the affected
+  operations, not desktop end-to-end latency. No published release is changed.

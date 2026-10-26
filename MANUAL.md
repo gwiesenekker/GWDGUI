@@ -232,7 +232,12 @@ other. They remain separate analysis lines.
 
 ### 4.2 The Game Tree window
 
-The Game Tree window exposes the game tree that owns the current game state.
+The Game Tree window shows each line as a column of moves. Variations are marked
+and nest under the move they replace, so indentation follows variation depth
+rather than move count. The context menu can switch to the original layout,
+"Show each move under the previous move"; this choice lasts for the current
+session. Selection and expanded branches are retained when the view refreshes.
+
 Nodes can show engine scores and PVs, annotator scores and PVs, Auto Play PVs,
 and clock information.
 

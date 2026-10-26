@@ -118,3 +118,8 @@ snapshot publication targets, stale rejection and transient display isolation.
 GTK notation-tree checks cover each model node exactly once in both layouts,
 variation headers, selection/expansion retention, game isolation, popup switching
 and standard capture captions. Caption traversal is also bounded by node count.
+
+`game_tree_index_check.pas` checks live/stale IDs through repeated structural edits.
+`pdn_batch_import_check.pas` compares batch import with the previous validated
+per-node path, including nested/invalid variations, metadata, capture aliases,
+payload ownership and a 200-ply line with one validation per visited move.

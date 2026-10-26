@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Contnrs, SysUtils,
-  uGameTree, uGameTreeBuilder, uGameTreeSearchRef, uThreadMessageQueue, uGameMoveHistory, uGameTreeNodeData;
+  uGameTree, uGameTreeBuilder, uGameTreeSearchRef, uThreadMessageQueue, uGameMoveHistory, uGameTreeNodeData, uPdn;
 
 type
   TGameTreeMoveSource = (
@@ -32,7 +32,8 @@ type
     gtcClearBranches,
     gtcRebuildFromInputs,
     gtcSetHeader,
-    gtcRestoreNodeData
+    gtcRestoreNodeData,
+    gtcImportPdnTree
   );
 
   TGameTreeSearchState = (
@@ -72,6 +73,9 @@ type
     MoveText: string;
     AnnotationText: string;
     ImportMoves: TGameTreeImportMoves;
+    ImportRoot: TPdnMoveNode;
+    ImportWarnings: TStringList;
+    ValidatedMoveCount, ImportedMoveCount: Integer;
     MoveSource: TGameTreeMoveSource;
     NodeData: TGameTreeNodeData;
     HeaderInput: TGameTreeHeaderInput;
@@ -109,6 +113,8 @@ type
     function MoveSourceOriginText(ASource: TGameTreeMoveSource): string;
     procedure ClearRebuildSignature;
     function ValidateMoveCommand(ACommand: TGameTreeCommand): Boolean;
+    procedure ExecuteImportPdnTree(ACommand: TGameTreeCommand;
+      var AInvalidateRebuildSignature: Boolean);
     function CreateCommand(AKind: TGameTreeActorCommandKind): TGameTreeCommand;
     function CreateRecordPVCommand(AKind: TGameTreeActorCommandKind;
       ANodeId: Int64; const AScore, APV, ADepth,
@@ -191,6 +197,7 @@ type
     function CreateStartSearchCommand(ANodeId: Int64;
       out ASearch: TGameTreeSearchRef): TGameTreeCommand; overload;
     function CreateRestoreNodeDataCommand(ANodeId: Int64; const Data: TGameTreeNodeData): TGameTreeCommand;
+    function CreateImportPdnTreeCommand(ARoot: TPdnMoveNode): TGameTreeCommand;
     function CreateImportNodeCommand(AParentNodeId: Int64;
       const AMoveText, AAnnotationText: string): TGameTreeCommand;
     function CreateImportBranchCommand(AParentNodeId: Int64;
@@ -243,7 +250,8 @@ const
     'game-tree-clear-branches',
     'game-tree-rebuild-from-inputs',
     'game-tree-set-header',
-    'game-tree-restore-node-data'
+    'game-tree-restore-node-data',
+    'game-tree-import-pdn-tree'
   );
 begin
   inherited Create(CommandNames[AKind]);
@@ -256,6 +264,8 @@ end;
 
 destructor TGameTreeCommand.Destroy;
 begin
+  ImportRoot.Free;
+  ImportWarnings.Free;
   MainlineInput.Annotations.Free;
   MainlineInput.Moves.Free;
   inherited Destroy;
@@ -798,6 +808,13 @@ begin
   ASearch := Result.SearchRef;
 end;
 
+function TGameTreeActor.CreateImportPdnTreeCommand(ARoot: TPdnMoveNode): TGameTreeCommand;
+begin
+  Result := CreateCommand(gtcImportPdnTree);
+  Result.ImportWarnings := TStringList.Create;
+  if ARoot <> nil then Result.ImportRoot := ARoot.Clone;
+end;
+
 function TGameTreeActor.CreateImportNodeCommand(AParentNodeId: Int64;
   const AMoveText, AAnnotationText: string): TGameTreeCommand;
 var Moves: TGameTreeImportMoves;
@@ -1010,6 +1027,82 @@ begin
   end;
 end;
 
+function FiniteNodeData(const Data: TGameTreeNodeData): Boolean;
+begin
+  Result := not (IsNan(Data.SecondsUsed) or IsInfinite(Data.SecondsUsed) or
+          IsNan(Data.WhiteRemainingSeconds) or IsInfinite(Data.WhiteRemainingSeconds) or
+          IsNan(Data.BlackRemainingSeconds) or IsInfinite(Data.BlackRemainingSeconds) or
+          IsNan(Data.WhiteUsedSeconds) or IsInfinite(Data.WhiteUsedSeconds) or
+          IsNan(Data.BlackUsedSeconds) or IsInfinite(Data.BlackUsedSeconds));
+end;
+
+procedure TGameTreeActor.ExecuteImportPdnTree(ACommand: TGameTreeCommand;
+  var AInvalidateRebuildSignature: Boolean);
+var Board: TDraughtsBoard; Changed: Boolean;
+  procedure Walk(Source: TPdnMoveNode; Target: TGameTreePlyNode;
+    Position: TDraughtsBoard);
+  var I: Integer; ParentCopy, Next: TDraughtsBoard;
+    Child: TGameTreePlyNode; Move: string;
+  begin
+    if Source.HasNodeData then
+      if not FiniteNodeData(Source.NodeData) then
+        ACommand.ImportWarnings.Add('Cannot restore node data: node metadata contains non-finite clock data')
+      else
+      begin
+        FGameTree.RestoreNodeData(Target.NodeId, Source.NodeData);
+        Changed := True;
+      end;
+    ParentCopy := nil;
+    if Source.ChildCount > 1 then
+    begin ParentCopy := TDraughtsBoard.Create; ParentCopy.AssignFrom(Position); end;
+    try
+      for I := 0 to Source.ChildCount - 1 do
+      begin
+        Next := Position;
+        if I > 0 then
+        begin Next := TDraughtsBoard.Create; Next.AssignFrom(ParentCopy); end;
+        try
+          Inc(ACommand.ValidatedMoveCount);
+          try
+            Next.PlayMove(Source.Children[I].MoveText, True, True);
+          except
+            on E: Exception do
+            begin
+              ACommand.ImportWarnings.Add('Cannot load move ' + Source.Children[I].MoveText + ': ' + E.Message);
+              Continue; // Reject only this subtree, preserving later valid siblings.
+            end;
+          end;
+          Move := Next.MovesPlayed[Next.MovesPlayedCount - 1];
+          Child := FGameTree.FindChildByMove(Target, Move);
+          if Child = nil then
+          begin
+            Child := FGameTree.RecordBranchMove(Target, Move);
+            FGameTree.SetNodeOrigin(Child, MoveSourceOriginText(ACommand.MoveSource));
+            Changed := True;
+          end;
+          Changed := FGameTree.RecordNodeAnnotation(Child, Source.Children[I].AnnotationText) or Changed;
+          Inc(ACommand.ImportedMoveCount);
+          Walk(Source.Children[I], Child, Next);
+        finally if I > 0 then Next.Free; end;
+      end;
+    finally ParentCopy.Free; end;
+  end;
+begin
+  if ACommand.ImportRoot = nil then
+  begin Reject(ACommand, 'PDN import has no root'); Exit; end;
+  Board := TDraughtsBoard.Create;
+  try
+    try Board.LoadFromFEN(FGameTree.StartingFEN);
+    except on E: Exception do begin Reject(ACommand, E.Message); Exit; end; end;
+    ACommand.ImportWarnings.Clear;
+    ACommand.ValidatedMoveCount := 0; ACommand.ImportedMoveCount := 0;
+    Changed := False;
+    Walk(ACommand.ImportRoot, FGameTree.Root, Board);
+    ACommand.Accepted := True;
+    if Changed then AcceptTreeMutation(ACommand, AInvalidateRebuildSignature);
+  finally Board.Free; end;
+end;
+
 procedure TGameTreeActor.ExecuteCommand(ACommand: TGameTreeCommand);
 var
   ImportIndex: Integer;
@@ -1050,13 +1143,10 @@ begin
   InvalidateRebuildSignature := False;
 
   case ACommand.CommandKind of
+    gtcImportPdnTree: ExecuteImportPdnTree(ACommand, InvalidateRebuildSignature);
     gtcRestoreNodeData:
       begin
-        if IsNan(ACommand.NodeData.SecondsUsed) or IsInfinite(ACommand.NodeData.SecondsUsed) or
-          IsNan(ACommand.NodeData.WhiteRemainingSeconds) or IsInfinite(ACommand.NodeData.WhiteRemainingSeconds) or
-          IsNan(ACommand.NodeData.BlackRemainingSeconds) or IsInfinite(ACommand.NodeData.BlackRemainingSeconds) or
-          IsNan(ACommand.NodeData.WhiteUsedSeconds) or IsInfinite(ACommand.NodeData.WhiteUsedSeconds) or
-          IsNan(ACommand.NodeData.BlackUsedSeconds) or IsInfinite(ACommand.NodeData.BlackUsedSeconds) then
+        if not FiniteNodeData(ACommand.NodeData) then
         begin Reject(ACommand, 'node metadata contains non-finite clock data'); Exit; end;
         if not FGameTree.RestoreNodeData(ACommand.NodeId, ACommand.NodeData) then
         begin Reject(ACommand, 'node metadata target does not exist'); Exit; end;

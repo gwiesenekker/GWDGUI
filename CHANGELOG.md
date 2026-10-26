@@ -5,6 +5,20 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Validate PDN imports in one actor traversal (F11)
+
+- Replace one replaying move command per imported node with an actor command that
+  owns a cloned parsed tree and advances boards along each line, copying only at
+  forks. Preserve actor ownership, move normalization and per-subtree recovery.
+- Keep ordered warnings, subsequent valid siblings, full metadata and non-finite
+  clock checks. Compare the new path with the previous per-node implementation;
+  add payload ownership, stale target and 200-ply validation-work regressions.
+- Headless benchmark on Claude's long-game fixture, ten imports with identical
+  exports: 4.57 s before, 0.28 s after (both using the node index and F12).
+- Update the manual for notation-style tree display and its alternate layout.
+- Validation: full headless/source-audit sweep, GTK preservation/interaction, DXP
+  and tournament checks, plus the application build, all pass. Nothing pushed.
+
 ### 2026-10-26 — Index game-tree node identities (F11)
 
 - Replace recursive node-ID lookup with a non-owning hash index; nodes remain

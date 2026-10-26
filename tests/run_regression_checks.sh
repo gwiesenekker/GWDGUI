@@ -12,6 +12,7 @@ CHECKS=(
   pdn_regression_check.pas
   database_import_recovery_check.pas
   database_import_worker_check.pas
+  pdn_batch_import_check.pas
   pdn_tree_check.pas
   game_tree_pdn_filter_check.pas
   game_tree_actor_check.pas
