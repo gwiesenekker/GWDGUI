@@ -5,6 +5,15 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Separate fresh and duplicate import measurements (F8)
+
+- Add a real SQLite import benchmark with fresh/duplicate and logging on/off cases;
+  assert insert/duplicate/error counts and retained rows, with a small regression run.
+- On this host, 100 long games took 2339/2358 ms for fresh import (logging off/on),
+  and 1556/3002 ms for duplicate import. These are local measurements, not thresholds.
+- Confirm storage already skips writer replay; duplicate logs and legacy comparisons
+  still request public PDN rendering. Keep its standard capture notation intact.
+
 ### 2026-10-26 — Verify analyzer disposal during completion (A8)
 
 - Document the existing explicit thread join before analyzer resources are freed.

@@ -18,6 +18,15 @@ false, uses cached canonical moves and does not replay the tree. Public renderin
 still replays, including duplicate logs and legacy comparisons. Measure fresh and
 duplicate imports independently before changing the hot path.
 
+The new real-database benchmark separates fresh and duplicate imports with logging
+on/off and asserts counts/retained rows. With 100 copies of the long fixture (unique
+White tags), -B -O2 on this host: fresh 2339/2358 ms, duplicate 1556/3002 ms, logging
+off/on respectively. This is a different fixture/host from Claude's 1,500 games;
+it does not establish recovery of the old baseline. Full duplicate PDN logging is
+an observable extra cost, not redundant canonical-storage rendering. Public export
+must retain standard capture notation; simply substituting cached internal move
+strings would be incorrect. F8 remains partly resolved; no speculative cache added.
+
 
 ## Review of 57647e7 — 2026-10-26
 
