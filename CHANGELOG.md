@@ -5,6 +5,17 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Extract queued GUI message classes
+
+- Move the eight runner, analyzer and MCTS message classes verbatim into
+  uGameGuiMessages. Snapshot messages retain ownership; finished messages continue
+  to borrow runner identities. Payloads and message kinds are unchanged.
+- Keep queue posting/coalescing, delivery and main-thread shutdown coordination
+  in the form; do not introduce a new session manager or callback mechanism.
+- Retarget ownership/lifecycle tests to the extracted units and compile them with
+  plain FPC in the standard headless sweep, proving they no longer require LCL.
+- Validation: headless ownership/lifecycle, GTK main-form and tournament checks pass.
+
 ### 2026-10-26 — Extract the running-game owner from the main form
 
 - Move TRunningGame, its lifecycle and snapshot-input records to uRunningGame,

@@ -17,6 +17,7 @@ CHECKS=(
   game_tree_actor_check.pas
   game_tree_validation_check.pas
   game_runner_history_check.pas
+  running_game_lifecycle_check.pas
   game_tree_cursor_check.pas
   game_preservation_check.pas
   game_tree_topology_check.pas
@@ -57,9 +58,3 @@ fpc -B -dGWDGUI_TEST_NO_HARDLINK -Fu"$ROOT_DIR" -FU"$OUT_DIR" -FE"$OUT_DIR" \
 "$OUT_DIR/atomic_file_check"
 
 bash "$ROOT_DIR/tests/source_audit_check.sh"
-
-if command -v lazbuild >/dev/null 2>&1; then
-  bash "$ROOT_DIR/tests/run_lifecycle_checks.sh"
-else
-  echo "SKIP: running_game_lifecycle_check needs Lazarus with the nogui widgetset"
-fi

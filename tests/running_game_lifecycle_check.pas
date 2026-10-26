@@ -1,15 +1,12 @@
 program running_game_lifecycle_check;
 
 {$mode objfpc}{$H+}
-{$IFNDEF GWDGUI_NONINTERACTIVE_TEST}
-  {$FATAL Build this test with its .lpi project to enable noninteractive dialogs}
-{$ENDIF}
 
 uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  Interfaces, Classes, SysUtils, SyncObjs, uThreadMessageQueue, uPvSnapshot, uAnalyzerRunnerThread, uGameTreeSearchRef, uMainForm, uRunningGame, uGameRunnerThread,
+  Classes, SysUtils, SyncObjs, uThreadMessageQueue, uPvSnapshot, uAnalyzerRunnerThread, uGameTreeSearchRef, uRunningGame, uGameGuiMessages, uGameRunnerThread,
   uEngineRegistry, uDraughtsBoard, uGameSetupTypes, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder;
 
 type

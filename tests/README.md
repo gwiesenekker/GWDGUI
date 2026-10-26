@@ -24,12 +24,12 @@ Current checks:
 - `game_preservation_check.pas` (variation storage and game-content preservation)
 - `source_audit_check.sh`
 
-When `lazbuild` is installed, the sweep also builds and runs
-`running_game_lifecycle_check.pas` with Lazarus's `nogui` widgetset. This tests
-the actual running-game model and runner without opening windows or needing a
-display. Run it separately with `bash tests/run_lifecycle_checks.sh`.
-The lifecycle check requires Lazarus/LCL; the other checks need only FPC and
-the source audit needs ripgrep.
+The sweep also compiles `running_game_lifecycle_check.pas` directly with FPC.
+It exercises the extracted running-game/message units and real runners without
+Lazarus/LCL or a display. Run it separately with
+`bash tests/run_lifecycle_checks.sh`. This is also a dependency check: importing
+these units must not pull in the main form or setup dialog. The source audit
+needs ripgrep.
 
 Run `bash tests/run_gui_checks.sh` with Lazarus's GTK2 widgetset and an X display
 to exercise the actual main form without showing its window. It verifies that

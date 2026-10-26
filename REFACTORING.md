@@ -28,8 +28,8 @@ an obligation to keep source or binaries shared between the applications.
 | Area | Current units | Draughts cleanup / chess disposition |
 |---|---|---|
 | Main window | `uMainForm` | Retain control layout and event wiring where useful; extract decisions and ownership in stages. |
-| Setup values | `uGameSetupForm` | Extract player/setup records from the LCL form; retain the simple value/ownership contract. |
-| Running games and messages | classes currently in `uMainForm`, `uThreadMessageQueue` | Extract classes mechanically; retain snapshot ownership, engine reservations and lifecycle transitions. |
+| Setup values | `uGameSetupTypes`, `uGameSetupForm` | Player/setup records are extracted from the LCL form; retain the simple value/ownership contract. |
+| Running games and messages | `uRunningGame`, `uGameGuiMessages`, `uThreadMessageQueue` | Classes are extracted mechanically; retain snapshot ownership, engine reservations and lifecycle transitions. |
 | Move interaction | selection and display methods in `uMainForm` | Isolate legal candidates, source/target selection, highlights and replay coordination. Keep a small draughts implementation; replace in chess without assuming a move is uniquely identified by two squares. |
 | Tree and cursor | `uGameTree`, `uGameTreeActor`, `uGameTreeBuilder`, `uGameTreeCursor`, `uGameTreeSearchRef` | Retain topology, node identity and actor/search contracts; replace draughts positions, validation and notation in the chess copy. |
 | Notation presentation | `uGameTreePdn`, memo range/highlight code | Reuse the existing renderer and ranges during extraction. Chess needs its own PGN/SAN rendering from the position before each move. |
@@ -83,3 +83,15 @@ or move the published v3.0 tag as part of this work.
   close/reopen and pending-update destruction are exercised through real callbacks.
 - The native save-file chooser's Yes path is not automated; Cancel and No exercise
   the replacement prompt, and existing export tests check saved content separately.
+
+## Completed in this stage
+
+- Inventory and pre-extraction characterization checks are committed first.
+- `uGameSetupTypes` owns the unchanged player/setup value declarations.
+- `uRunningGame` owns the unchanged running-game class, lifecycle and snapshot
+  inputs. `uGameGuiMessages` owns the unchanged eight message classes.
+- Ownership/lifecycle tests import these units directly and compile with plain
+  FPC, without LCL or a display. GTK integration coverage remains in place.
+- `uMainForm` is reduced from 7,652 to 6,990 lines. This is a mechanical first
+  stage; move interaction, presentation, analysis and session management have not
+  been extracted. The published v3.0 tag stays at the release commit.
