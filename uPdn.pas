@@ -11,6 +11,7 @@ type
   TPdnMoveNode = class
   private
     FParent: TPdnMoveNode;
+    FCanonicalMove: string; // Cached against the parent board; keep MoveText for source spelling.
     FChildren: TObjectList;
     function GetChild(I: Integer): TPdnMoveNode;
     function GetChildCount: Integer;
@@ -148,6 +149,7 @@ end;
 procedure TPdnMoveNode.MergePayload(Source: TPdnMoveNode);
 var FirstComment, SecondComment: string;
 begin
+  if FCanonicalMove = '' then FCanonicalMove := Source.FCanonicalMove;
   FirstComment := AnnotationText;
   if HasNodeData then FirstComment := NodeData.CommentText;
   SecondComment := Source.AnnotationText;
@@ -204,6 +206,7 @@ begin
   Result := TPdnMoveNode.Create;
   try
     Result.MoveText := MoveText;
+    Result.FCanonicalMove := FCanonicalMove;
     Result.AnnotationText := AnnotationText;
     Result.HasNodeData := HasNodeData;
     Result.NodeData := NodeData;
@@ -1793,6 +1796,7 @@ var Board: TDraughtsBoard;
             Continue;
           end;
         end;
+        Parent.Children[I].FCanonicalMove := Move;
         Canonical.Add(Move); Inc(I);
       end;
       for I := 0 to Parent.ChildCount - 1 do
@@ -1892,6 +1896,8 @@ var
       if Side = dsWhite then Output.Append('. ') else Output.Append('... ');
     end;
     Text := Node.MoveText;
+    if not StandardNotation and (Node.FCanonicalMove <> '') then
+      Text := Node.FCanonicalMove;
     if IsMainline and (CanonicalMainline <> nil) and (Ply < CanonicalMainline.Count) then
       Text := CanonicalMainline[Ply];
     if PositionValid then Text := Before.PdnMoveNotation(Text);

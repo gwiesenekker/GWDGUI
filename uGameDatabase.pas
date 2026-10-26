@@ -406,7 +406,7 @@ begin
   FGameInsertQuery := FDatabase.Query;
   FGameInsertQuery.SQL.Text :=
     'insert into games(game_hash_lo, game_hash_hi, white, black, event, result, starting_fen, moves_text, annotations_text, full_pdn, ply_count, hash_version) ' +
-    'values(:game_hash_lo, :game_hash_hi, :white, :black, :event, :result, :starting_fen, :moves_text, :annotations_text,  :full_pdn, :ply_count, 5)';
+    'values(:game_hash_lo, :game_hash_hi, :white, :black, :event, :result, :starting_fen, :moves_text, :annotations_text,  :full_pdn, :ply_count, 6)';
   FHashQuery := FDatabase.Query;
   FHashQuery.SQL.Text :=
     'select id from games where game_hash_lo = :game_hash_lo and game_hash_hi = :game_hash_hi limit 1';
@@ -514,7 +514,7 @@ function TDatabasePdnImporter.GameHash: THash128;
 var
   LHashText: string;
 begin
-  LHashText := 'gwdgui-db-v5-complete-game' + #10 + FFullPdn;
+  LHashText := 'gwdgui-db-v6-complete-game' + #10 + FFullPdn;
   Result := Fnv1a128Value(LHashText);
 end;
 
@@ -538,7 +538,7 @@ begin
   Result := False;
   Q := FDatabase.Query; Games := TList.Create; Canonical := '';
   try
-    Q.SQL.Text := 'select * from games where hash_version < 5 and white=:white and black=:black and event=:event and result=:result and ply_count=:ply_count';
+    Q.SQL.Text := 'select * from games where hash_version < 6 and white=:white and black=:black and event=:event and result=:result and ply_count=:ply_count';
     Q.ParamByName('white').AsUTF8String := FGame.WhiteName;
     Q.ParamByName('black').AsUTF8String := FGame.BlackName;
     Q.ParamByName('event').AsUTF8String := FGame.EventName;
@@ -573,7 +573,7 @@ begin
         begin
           Hash := GameHash; Update := FDatabase.Query;
           try
-            Update.SQL.Text := 'update games set game_hash_lo=:lo, game_hash_hi=:hi, hash_version=5, full_pdn=:pdn where id=:id';
+            Update.SQL.Text := 'update games set game_hash_lo=:lo, game_hash_hi=:hi, hash_version=6, full_pdn=:pdn where id=:id';
             Update.ParamByName('lo').AsLargeInt := Hash.Lo;
             Update.ParamByName('hi').AsLargeInt := Hash.Hi;
             Update.ParamByName('pdn').AsUTF8String := PackStoredPdn(FFullPdn);
@@ -896,6 +896,7 @@ end;
 procedure TGameDatabase.InitializeDatabase(const AFileName: string);
 var
   Q: TSQLQuery;
+  SchemaVersion: Integer;
 begin
   Close;
   FConnection.DatabaseName := AFileName;
@@ -908,7 +909,8 @@ begin
   try
     Q.SQL.Text := 'pragma user_version';
     Q.Open;
-    if Q.Fields[0].AsInteger > 5 then
+    SchemaVersion := Q.Fields[0].AsInteger;
+    if SchemaVersion > 6 then
       raise EInvalidOperation.Create('This database was created by a newer GWDGUI version');
     Q.Close;
     Q.SQL.Text :=
@@ -925,8 +927,9 @@ begin
       ExecuteSql('alter table games add column full_pdn text');
     if not TableColumnExists('games', 'hash_version') then
       ExecuteSql('alter table games add column hash_version integer not null default 0');
-    ExecuteSql('create index if not exists games_legacy_candidates on games(white, black, event, result, ply_count) where hash_version < 5');
-    ExecuteSql('pragma user_version=5');
+    if SchemaVersion < 6 then ExecuteSql('drop index if exists games_legacy_candidates');
+    ExecuteSql('create index if not exists games_legacy_candidates on games(white, black, event, result, ply_count) where hash_version < 6');
+    ExecuteSql('pragma user_version=6');
     Q.SQL.Text :=
       'create table if not exists positions (' +
       'id integer primary key autoincrement,' +

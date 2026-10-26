@@ -1,6 +1,6 @@
 program pdn_variation_identity_check;
 {$mode objfpc}{$H+}
-uses Classes, SysUtils, uDraughtsBoard, uPdn, uGameTreeNodeData;
+uses Classes, SysUtils, uDraughtsBoard, uPdn, uGameTreeNodeData, uGameDatabase;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 function ReadGame(const Text: string): TPdnGame;
@@ -72,7 +72,42 @@ begin
     finally Game.Free; end;
   finally Board.Free; end;
 end;
+procedure CheckDatabaseIdentity(const Fen, Moves: string);
+var Database: TGameDatabase; Game: TPdnGame; Lines: TStringList;
+  DbName, PdnName, Exported: string; Imported, Duplicates, Errors: Integer;
+begin
+  DbName := GetTempFileName(GetTempDir, 'gwd-identity'); DeleteFile(DbName);
+  PdnName := GetTempFileName(GetTempDir, 'gwd-pdn');
+  Database := TGameDatabase.Create; Lines := TStringList.Create;
+  try
+    Lines.Text := '[FEN "' + Fen + '"]' + LineEnding + Moves;
+    Lines.SaveToFile(PdnName); Database.CreateDatabase(DbName);
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
+    Check((Imported = 1) and (Errors = 0), 'capture variation imported');
+    Game := Database.LoadGameById(1);
+    try Exported := PdnGameToText(Game); finally Game.Free; end;
+    Lines.Text := Exported; Lines.SaveToFile(PdnName);
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
+    Check((Imported = 0) and (Duplicates = 1) and (Errors = 0),
+      'exported capture variation retains database identity');
+    Lines.Text := StringReplace(Exported, 'variation note', 'changed note', []);
+    Lines.SaveToFile(PdnName);
+    Database.ImportPdnFile(PdnName, Imported, Duplicates, Errors);
+    Check((Imported = 1) and (Errors = 0), 'different variation content remains distinct');
+  finally
+    Database.Free; Lines.Free;
+    DeleteFile(DbName); DeleteFile(DbName + '-wal'); DeleteFile(DbName + '-shm');
+    DeleteFile(PdnName);
+  end;
+end;
+
 begin
   CheckEquivalentSiblings; CheckDistinctCaptures;
+  CheckDatabaseIdentity('W:W38:B33,24,K6',
+    '(1. 38x20x24x33 {variation note} 6-11) *');
+  CheckDatabaseIdentity('W:W31-50:B1-20',
+    '1. 32-28 (1. 33-29 18-23 2. 29x18x23 {variation note}) *');
+  CheckDatabaseIdentity('W:WK21:B31,39,14,17,19',
+    '1. 21x26x17x19x39x31 (1. 21x26x17x14x39x31 {variation note}) *');
   Writeln('PDN variation identity checks passed');
 end.

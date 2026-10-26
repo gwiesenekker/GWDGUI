@@ -5,6 +5,19 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Stabilize database identities for capture variations (P23)
+
+- Store position-resolved canonical moves on every branch, including standalone
+  and nested variations, while keeping public PDN notation and source spelling.
+- Reuse parsed-tree normalization so storage needs no second board traversal.
+- Advance the internal database format and hash identity to 6. Compare complete
+  legacy game content before lazily upgrading old identities; rebuild the legacy
+  candidate index during migration. Older binaries refuse the newer format.
+- Add export/reimport regressions for full, short and ambiguous capture paths,
+  changed variation comments, and migration of version-5 variation identities.
+- Validation: full headless/source-audit sweep and application build pass. GTK
+  checks pass on rerun; the initial boundary test hung during game shutdown.
+
 ### 2026-10-26 — Merge position-equivalent parsed moves (P26)
 
 - Resolve parsed sibling moves against their parent board before merging capture
