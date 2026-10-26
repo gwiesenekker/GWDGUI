@@ -16,7 +16,7 @@ playing behaviour, file formats, protocols or released version numbers.
   runner. It waits for runner termination before freeing those objects.
 - The GUI queue owns posted messages. Snapshot messages own their snapshots;
   finished messages identify runners without owning them. Consumers copy data
-  before a message is freed. Preserve queue coalescing and shutdown ordering.
+  before a message is freed. Preserve consumer snapshot coalescing and shutdown ordering.
 - Workers publish immutable snapshots; UI decisions and control updates stay on
   the main thread. Keep tree/node/search IDs and cancellation fences intact.
 
@@ -73,7 +73,7 @@ or move the published v3.0 tag as part of this work.
 | MCTS | headless runner position switching and shutdown | Actual form open/close and reservation release, reopening and destruction with pending updates. |
 | Unsaved standalone replacement | preservation when switching to running games; unexpected-dialog guard | Cancel prevents replacement; declining save permits it; selecting another running game does not discard/prompt for the standalone tree. |
 | Running-game ownership | real-runner stopping, edits waiting for completion, illegal/stale commands | Check copied setup ownership and retained snapshot independence before moving the class. |
-| Queue ownership | queue coalescing used by GUI runner-history checks | Count owned snapshot destruction on message disposal, replacement and queue shutdown; finished messages must not free runners. |
+| Queue ownership | consumer coalescing used by GUI runner-history checks | Count owned snapshot destruction on message disposal, replacement and queue shutdown; finished messages must not free runners. |
 
 ## Characterization added
 
@@ -151,3 +151,15 @@ or move the published v3.0 tag as part of this work.
 - Headless measurements on Claude's long-game fixture: 100 notation renders
   12.45 s to 0.54 s; ten imports 4.57 s to 0.28 s. These compare the affected
   operations, not desktop end-to-end latency. No published release is changed.
+
+## Queue-delivery follow-up
+
+- Coalescing belongs to `GuiEventTimerTick`, not `TThreadMessageQueue`. The
+  consumer retains the latest snapshot per game/search and flushes before other
+  messages and at tick boundaries. Every popped message counts toward the
+  100-event timer budget; shutdown drains all pending messages.
+- `gui_delivery_check` feeds the actual consumer real-runner snapshots and checks
+  full/live history, independent games/searches, completion barriers, exact payload
+  destruction, cancellation, removal and form shutdown. The boundary check also
+  verifies that foreign finished notifications preserve active analyzer/MCTS
+  runners, searches and engine reservations. Shutdown ownership/order is unchanged.

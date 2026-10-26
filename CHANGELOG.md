@@ -5,6 +5,19 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Verify and fence GUI message delivery (C7)
+
+- Add actual-consumer GTK coverage for interleaved full/live runner snapshots,
+  per-search analyzer coalescing, flush-before-completion ordering, cancelled
+  searches, removed games and form shutdown, with exact payload destruction counts.
+- Count snapshot messages toward the existing 100-event timer limit; previously
+  snapshot-only streams bypassed it. Keep unlimited shutdown draining.
+- Ignore analyzer/MCTS completion messages from other runners before changing
+  search tracking or engine reservations. Test with a completed old runner while
+  a current annotator or MCTS runner remains active.
+- Correct the inventory: the GUI consumer coalesces snapshots; the queue is FIFO.
+- Validation: GTK preservation/boundary and expanded delivery checks pass.
+
 ### 2026-10-26 — Choose ambiguous board captures explicitly (U8)
 
 - Offer distinct standard PDN paths when legal captures share their source and

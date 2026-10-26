@@ -434,6 +434,12 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+    procedure TestRegisterGame(AGame: TRunningGame);
+    procedure TestDrainGuiEvents(ADrainAll: Boolean);
+    property TestGuiEventQueue: TThreadMessageQueue read FGuiEventQueue;
+    property TestAnalysis: TAnalysisCoordinator read FAnalysis;
+    property TestAnalyzerRunner: TAnalyzerRunnerThread read FAnalyzerRunner;
+    property TestMctsRunner: TAnalyzerRunnerThread read FMctsRunner;
     function GetLastDisplayReplayCount: Integer;
     property LastDisplayReplayCount: Integer read GetLastDisplayReplayCount;
     {$ENDIF}
@@ -5072,8 +5078,9 @@ begin
   DrainAllEvents := Sender = nil;
   ProcessedEvents := 0;
   try
-    while FGuiEventQueue.TryPop(EventObject) do
+    while DrainAllEvents or (ProcessedEvents < MaxGuiEventsPerTimerTick) do
     begin
+      if not FGuiEventQueue.TryPop(EventObject) then Break;
       Inc(ProcessedEvents);
       try
         if EventObject is TAnalyzerSnapshotGuiMessage then
@@ -5101,7 +5108,9 @@ begin
             TAnalyzerMoveGuiMessage(EventObject).MoveText)
         else if EventObject is TMctsLogGuiMessage then
           HandleMctsLog(TMctsLogGuiMessage(EventObject).Message)
-        else if EventObject is TAnalyzerFinishedGuiMessage then
+        else if (EventObject is TAnalyzerFinishedGuiMessage) and
+          (FAnalyzerRunner <> nil) and
+          (FAnalyzerRunner = TAnalyzerFinishedGuiMessage(EventObject).Runner) then
         begin
           if FAutoPlay.Active and
             (FAnalyzerRunner = TAnalyzerFinishedGuiMessage(EventObject).Runner) then
@@ -5113,7 +5122,9 @@ begin
           UpdateAutoPlayButtonState;
           InvalidateAnalyzerPositionSignature;
         end
-        else if EventObject is TMctsFinishedGuiMessage then
+        else if (EventObject is TMctsFinishedGuiMessage) and
+          (FMctsRunner <> nil) and
+          (FMctsRunner = TMctsFinishedGuiMessage(EventObject).Runner) then
         begin
           if FMctsRunner = TMctsFinishedGuiMessage(EventObject).Runner then
             FreeAndNil(FMctsRunner);
@@ -5140,9 +5151,6 @@ begin
       finally
         EventObject.Free;
       end;
-      if (not DrainAllEvents) and
-        (ProcessedEvents >= MaxGuiEventsPerTimerTick) then
-        Break;
     end;
     FlushPendingAnalyzerSnapshots;
     FlushPendingRunnerSnapshots;
@@ -5600,6 +5608,15 @@ begin
 end;
 
 {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+procedure TMainForm.TestRegisterGame(AGame: TRunningGame);
+begin
+  FGames.Add(AGame);
+  FGamesListBox.Items.AddObject(AGame.Title, AGame);
+end;
+procedure TMainForm.TestDrainGuiEvents(ADrainAll: Boolean);
+begin
+  if ADrainAll then GuiEventTimerTick(nil) else GuiEventTimerTick(Self);
+end;
 function TMainForm.GetLastDisplayReplayCount: Integer;
 begin
   Result := FDisplayedPosition.ReplayBuildCount;

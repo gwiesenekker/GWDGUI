@@ -46,6 +46,9 @@ type
     procedure AssignFrom(ASource: TGameRunnerSnapshot);
     procedure MarkStopped(const AReason: string);
 
+    {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+    property TestLiveUpdate: Boolean read FLiveUpdate write FLiveUpdate;
+    {$ENDIF}
     property LiveUpdate: Boolean read FLiveUpdate;
     property BlackRemainingSeconds: Double read FBlackRemainingSeconds;
     property BlackPlayerName: string read FBlackPlayerName;

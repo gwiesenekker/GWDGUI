@@ -7,7 +7,8 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, Controls, StdCtrls, Menus, ExtCtrls,
   LCLType, Types, uMainForm, uRunningGame, uBoardControl, uDraughtsBoard, uPdn,
   uGameTree, uGameTreePdn, uGameTreeBuilder, uGameSetupTypes, uGameOrchestrator, uGuiDialogs,
-  uPositionSetupForm, uEngineRegistry, uEngineParamsJson;
+  uPositionSetupForm, uEngineRegistry, uEngineParamsJson, uAnalyzerRunnerThread,
+  uGameGuiMessages, uGameTreeSearchRef;
 
 type
   TCaptureChoice = class
@@ -279,17 +280,21 @@ var Form: TMainForm; Engines: TExternalEngineList; Definition: TExternalEngineDe
   Tick: QWord; Keys: TStringList; Game: TRunningGame; Setup: TGameSetup; Memo: TMemo;
   NodeId: Int64; AutoText, Config, ParamFile: string; HadConfig, HadParams: Boolean;
   SavedConfig, SavedParams: TStringList; Key: Word; Button: TButton;
+  OldRunner, CurrentRunner: TAnalyzerRunnerThread; Search: TGameTreeSearchRef;
 begin
   Config := EnginesJsonFileName; ParamFile := EngineParamsFileName(ExpandFileName(ParamStr(0)));
   HadConfig := FileExists(Config); HadParams := FileExists(ParamFile);
   SavedConfig := TStringList.Create; SavedParams := TStringList.Create;
-  Engines := TExternalEngineList.Create; Keys := TStringList.Create; Form := nil;
+  Engines := TExternalEngineList.Create; Keys := TStringList.Create; Form := nil; OldRunner := nil;
   try
     if HadConfig then SavedConfig.LoadFromFile(Config);
     if HadParams then SavedParams.LoadFromFile(ParamFile);
     Definition := TExternalEngineDefinition.Create; Definition.Kind := eekHub;
     Definition.ExePath := ExpandFileName(ParamStr(0)); Definition.HubId := 'BoundaryHub'; Definition.Arguments := '--boundary-hub';
     Engines.Add(Definition); SaveExternalEngines(Config, Engines);
+    // Keep a completed old runner alive so its identity cannot be reused.
+    OldRunner := TAnalyzerRunnerThread.Create(Definition, nil, nil, nil);
+    OldRunner.Terminate; OldRunner.Start; OldRunner.WaitFor;
     Params := nil; AddOrUpdateParam(Params, 'gui-engine-supports-mcts', 'bool', 'true', False);
     SaveEngineParamsToJson(ParamFile, 'hub', Params);
     Form := TMainForm.Create(nil);
@@ -318,6 +323,14 @@ begin
     Tick := GetTickCount64;
     repeat Pump(Form); Keys.Clear; Form.CollectBusyEngineKeys(Keys); Sleep(5);
     until (Keys.Count = 1) or (GetTickCount64 - Tick > 5000);
+    CurrentRunner := Form.TestAnalyzerRunner; Search := Form.TestAnalysis.Search;
+    Check(IsValidGameTreeSearchRef(Search), 'annotator has an active search before foreign completion');
+    Form.TestGuiEventQueue.Post(TAnalyzerFinishedGuiMessage.Create(OldRunner));
+    Form.TestDrainGuiEvents(True);
+    Keys.Clear; Form.CollectBusyEngineKeys(Keys);
+    Check((Form.TestAnalyzerRunner = CurrentRunner) and (Keys.Count = 1) and
+      SameGameTreeSearchRef(Form.TestAnalysis.Search, Search),
+      'old analyzer completion preserves the current runner, search and reservation');
     Button := ButtonWithCaption(Form, 'Auto Play');
     Check(Button.Enabled, 'opening annotator enables Auto Play'); Button.Click;
     Tick := GetTickCount64;
@@ -346,6 +359,11 @@ begin
     Tick := GetTickCount64;
     repeat Pump(Form); Sleep(5); until HasLog(Form, 'go mcts') or (GetTickCount64 - Tick > 5000);
     Check(HasLog(Form, 'go mcts'), 'MCTS form action reaches the engine protocol');
+    CurrentRunner := Form.TestMctsRunner;
+    Form.TestGuiEventQueue.Post(TMctsFinishedGuiMessage.Create(OldRunner));
+    Form.TestDrainGuiEvents(True); Keys.Clear; Form.CollectBusyEngineKeys(Keys);
+    Check((Form.TestMctsRunner = CurrentRunner) and (Keys.Count = 1),
+      'old MCTS completion preserves current runner and reservation');
     Popup.OnPopup(Popup); Menu(Form, 'Close MCTS annotator').Click;
     Tick := GetTickCount64;
     Item := Menu(Form, 'Open MCTS annotator');
@@ -355,7 +373,7 @@ begin
     Item := Menu(Form, 'Open MCTS annotator'); Popup.OnPopup(Popup); Item.Items[0].Click;
     Form.Free; Form := nil; // Destruction must drain pending MCTS updates safely.
   finally
-    Form.Free; Keys.Free; Engines.Free;
+    Form.Free; OldRunner.Free; Keys.Free; Engines.Free;
     if HadConfig then SavedConfig.SaveToFile(Config) else DeleteFile(Config);
     if HadParams then SavedParams.SaveToFile(ParamFile) else DeleteFile(ParamFile);
     SavedConfig.Free; SavedParams.Free;
