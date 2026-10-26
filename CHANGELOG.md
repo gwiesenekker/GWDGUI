@@ -5,6 +5,21 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Record a reproducible draughts performance baseline
+
+- Track the long-game profiling fixture and an opt-in headless harness for board
+  replay, notation rendering and validated actor import. Build in isolated
+  temporary storage with fixed compiler settings; report revision, host, counts,
+  warnings, output sizes and fingerprints alongside repeated timing samples.
+- Check output stability across iterations/samples. Document the fixture's 19
+  recovered variation warnings and distinguish these measurements from GUI
+  latency and the older one-off benchmark configuration.
+- Record the baseline and comparison method in `tests/PERFORMANCE.md`; refresh
+  the testing/refactoring inventories for the completed pre-chess cleanup.
+- Validation: benchmark smoke/default runs, full headless/source-audit sweep,
+  GTK preservation/interaction/delivery, tournament checks and application build
+  all pass. Nothing pushed; the published release and tag remain unchanged.
+
 ### 2026-10-26 — Verify and fence GUI message delivery (C7)
 
 - Add actual-consumer GTK coverage for interleaved full/live runner snapshots,

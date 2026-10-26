@@ -84,12 +84,15 @@ all-square board flipping via the keyboard, cancel/decline replacement prompts,
 and preservation when switching from a standalone board to a running game.
 Its self-contained fake Hub engine exercises Auto Play on a stopped historical
 node, late replies after Stop, and MCTS open/close/reopen with queued shutdown.
-No private-field test hooks are used. The existing GTK suites remain intact.
+Test-only seams expose queue delivery and current runner/search identities; the
+capture chooser test operates its actual list and buttons. The existing GTK
+suites remain intact.
 The lifecycle check also counts queued snapshot destruction and verifies that
 running games own independent setup definitions, reservations and snapshots.
 
 `move_interaction_check.pas` covers legal source/target selection, capture ordering,
-selection clearing, routing between mainline, variation and live runner moves,
+explicit same-target capture choices, selection clearing, routing between
+mainline, variation and live runner moves,
 and last-move/PV highlight data.
 
 `displayed_position_check.pas` covers selected nested paths, temporary preview
@@ -123,3 +126,15 @@ and standard capture captions. Caption traversal is also bounded by node count.
 `pdn_batch_import_check.pas` compares batch import with the previous validated
 per-node path, including nested/invalid variations, metadata, capture aliases,
 payload ownership and a 200-ply line with one validation per visited move.
+
+`gui_delivery_check` runs in the GTK suite. It feeds the real GUI consumer full
+and live snapshots produced by a human runner, interleaves games and analysis
+searches, checks flush-before-completion ordering and the 100-event timer budget,
+counts payload destruction, and exercises cancelled searches, removal and form
+shutdown. The main-form boundary check injects old analyzer/MCTS completion
+notifications while a current runner remains active.
+
+For reproducible opt-in headless performance measurements, run
+`bash tests/run_performance_checks.sh`. See [PERFORMANCE.md](PERFORMANCE.md) for
+the fixture, timings, output fingerprints, compiler settings and comparison
+procedure. These timings are not pass/fail limits in the regression suite.

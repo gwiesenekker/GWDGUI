@@ -163,3 +163,17 @@ or move the published v3.0 tag as part of this work.
   destruction, cancellation, removal and form shutdown. The boundary check also
   verifies that foreign finished notifications preserve active analyzer/MCTS
   runners, searches and engine reservations. Shutdown ownership/order is unchanged.
+
+## Reproducible performance baseline
+
+- `bash tests/run_performance_checks.sh` builds with fixed `-B -O2` settings and
+  uses a tracked copy of the long-game fixture. It measures replay, notation
+  rendering and actor import without a GUI or external engine, reports revision,
+  compiler/host, counts, recovery warnings and output fingerprints, and checks
+  output stability between iterations/samples.
+- See `tests/PERFORMANCE.md` for the baseline and comparison method. Timing is
+  opt-in and has no noisy wall-clock threshold in the regression sweep. These
+  measurements do not replace end-to-end GUI profiling.
+- The pre-chess cleanup now has explicit capture choices, tested consumer message
+  delivery and a reproducible draughts baseline. Further reduction of form line
+  count or a new session manager is not a prerequisite for the separate chess app.
