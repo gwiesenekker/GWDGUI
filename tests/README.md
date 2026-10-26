@@ -87,3 +87,6 @@ node, late replies after Stop, and MCTS open/close/reopen with queued shutdown.
 No private-field test hooks are used. The existing GTK suites remain intact.
 The lifecycle check also counts queued snapshot destruction and verifies that
 running games own independent setup definitions, reservations and snapshots.
+
+`move_interaction_check.pas` covers legal source/target selection, capture ordering,
+selection clearing and routing between mainline, variation and live runner moves.

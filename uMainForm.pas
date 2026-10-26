@@ -7,7 +7,7 @@ interface
 uses
   Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
   LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uBoardControl,
-  uDraughtsBoard, uEnginesDialog,
+  uDraughtsBoard, uMoveInteraction, uEnginesDialog,
   uGameOrchestrator, uGameRunnerThread, uRunningGame, uGameSetupForm, uGameSetupTypes,
   uEngineParamsJson, uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue, uGameGuiMessages,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
@@ -126,8 +126,7 @@ type
     FMoveShowAnnotatorScore: Boolean;
     FMoveShowClocks: Boolean;
     FMoveShowEngineScore: Boolean;
-    FHumanMoveChoices: TStringList;
-    FHumanMoveSourceSquare: Integer;
+    FMoveInteraction: TMoveInteraction;
     FLegalMovesMemo: TMemo;
     FLastDatabaseSearchFEN: string;
     FMiniBoard: TDraughtsBoard;
@@ -451,7 +450,6 @@ type
     procedure PreferencesAccepted(Sender: TObject;
       const APreferences: TGuiPreferences);
     procedure PreferencesClick(Sender: TObject);
-    function MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
     procedure PlayHumanMove(const AMove: string;
       ASource: TGameTreeMoveSource = gmsHuman);
     procedure RemoveSelectedGame(Sender: TObject);
@@ -647,7 +645,7 @@ begin
   FPvHintSource := phsMain;
   FViewedGameId := -1;
   FGameLog := TStringList.Create;
-  FHumanMoveChoices := TStringList.Create;
+  FMoveInteraction := TMoveInteraction.Create;
   FGameTree := TGameTree.Create;
   FGameTreeActor := TGameTreeActor.Create(FGameTree, False);
   FGames := TList.Create;
@@ -1298,7 +1296,7 @@ begin
   FreeAndNil(FAnalyzerPvBrowser);
   FreeAndNil(FPvBrowser);
   FTreeCursor.Free;
-  FHumanMoveChoices.Free;
+  FMoveInteraction.Free;
   FGameTreeActor.Free;
   FGameTree.Free;
   FGameLog.Free;
@@ -1433,9 +1431,7 @@ end;
 
 procedure TMainForm.ClearHumanMoveSelection;
 begin
-  FHumanMoveSourceSquare := 0;
-  if FHumanMoveChoices <> nil then
-    FHumanMoveChoices.Clear;
+  FMoveInteraction.Clear;
   if FBoardControl <> nil then
     FBoardControl.ClearTargetSquares;
 end;
@@ -2025,83 +2021,52 @@ end;
 
 function TMainForm.FindHumanMoveToTarget(ATargetSquare: Integer;
   out AMove: string): Boolean;
-var
-  I: Integer;
 begin
-  AMove := '';
-  Result := False;
-  if FHumanMoveChoices = nil then
-    Exit;
-  for I := 0 to FHumanMoveChoices.Count - 1 do
-    if MoveSquareAt(FHumanMoveChoices[I], 2) = ATargetSquare then
-    begin
-      AMove := FHumanMoveChoices[I];
-      Exit(True);
-    end;
+  Result := FMoveInteraction.FindTarget(ATargetSquare, AMove);
 end;
 
 procedure TMainForm.PlayHumanMove(const AMove: string;
   ASource: TGameTreeMoveSource);
 var
-  LBoard: TDraughtsBoard;
-  LGame: TRunningGame;
-  LGameTree: TGameTree;
-  LMove: string;
-  LNode, LTip: TGameTreePlyNode;
-  LState: TGameOrchestratorState;
+  Board: TDraughtsBoard;
+  Game: TRunningGame;
+  Tree: TGameTree;
+  Move: string;
+  Node: TGameTreePlyNode;
+  State: TGameOrchestratorState;
+  Route: TMoveRoute;
+  RunnerHumanTurn: Boolean;
 begin
-  LMove := NormalizeMoveNotation(AMove);
-  LGameTree := ActiveGameTree;
-  if LGameTree = nil then
-    Exit;
-
-  LGame := SelectedDisplayedGame;
-  if (LGame <> nil) and LGame.IsStopOrRemoveRequested then
-    Exit;
-
-  LBoard := TDraughtsBoard.Create;
+  Tree := ActiveGameTree;
+  if Tree = nil then Exit;
+  Game := SelectedDisplayedGame;
+  if (Game <> nil) and Game.IsStopOrRemoveRequested then Exit;
+  if Game <> nil then State := Game.State else State := StateForTree(Tree);
+  RunnerHumanTurn := (Game <> nil) and (Game.Runner <> nil) and
+    ((State = gosRunning) or (Game.Lifecycle = rglStarting)) and Game.IsHumanToMove;
+  Board := TDraughtsBoard.Create;
   try
-    if (not TryBuildDisplayedBoard(LGameTree, LBoard)) or
-      (not LBoard.IsLegalMove(LMove)) then
-      Exit;
+    if not TryBuildDisplayedBoard(Tree, Board) then Exit;
+    Route := RouteMove(Board, Tree, CurrentDisplayedGameTreeNode(Tree), AMove,
+      CanExploreVariation, BrowsingBranch,
+      (ResultForTree(Tree) = '*') and (State <> gosGameOver), RunnerHumanTurn, Move);
   finally
-    LBoard.Free;
+    Board.Free;
   end;
-
+  if Route = mrInvalid then Exit;
   ClearHumanMoveSelection;
-  if LGame <> nil then
-    LState := LGame.State
-  else
-    LState := StateForTree(LGameTree);
-
-  if CanExploreVariation then
-  begin
-    if LGameTree.MainlineCount = 0 then
-      LTip := LGameTree.Root
-    else
-      LTip := LGameTree.MainlineNode[LGameTree.MainlineCount];
-    // Only an unfinished mainline can grow. A completed game's result and
-    // official move sequence remain intact while exploring continuations.
-    if (not BrowsingBranch) and
-      (CurrentDisplayedGameTreeNode(LGameTree) = LTip) and
-      (ResultForTree(LGameTree) = '*') and (LState <> gosGameOver) then
-    begin
-      LNode := ExecuteGameTreeAppendMainlineMove(LGameTree, LMove, ASource);
-      if LNode = nil then
-        Exit;
-      ClearVariationExploration;
-      FTreeCursor.Follow;
-      RefreshDisplayFromGameTree(LGameTree, True);
-    end
-    else
-      AddVariationMove(LMove, ASource);
-    Exit;
+  case Route of
+    mrMainline:
+      begin
+        Node := ExecuteGameTreeAppendMainlineMove(Tree, Move, ASource);
+        if Node = nil then Exit;
+        ClearVariationExploration;
+        FTreeCursor.Follow;
+        RefreshDisplayFromGameTree(Tree, True);
+      end;
+    mrVariation: AddVariationMove(Move, ASource);
+    mrRunner: Game.Runner.PostHumanMove(Move);
   end;
-
-  if (LGame <> nil) and (LGame.Runner <> nil) and
-    ((LState = gosRunning) or (LGame.Lifecycle = rglStarting)) and
-    LGame.IsHumanToMove then
-    LGame.Runner.PostHumanMove(LMove);
 end;
 
 procedure TMainForm.AddVariationMove(const AMove: string;
@@ -2133,63 +2098,21 @@ end;
 
 procedure TMainForm.SelectHumanMoveSource(ASourceSquare: Integer);
 var
-  I, J: Integer;
-  LBoard: TDraughtsBoard;
-  LGameTree: TGameTree;
-  LMove: string;
-  LTarget: Integer;
-  LTargets: TIntArray;
-  LTargetKnown: Boolean;
+  Board: TDraughtsBoard;
+  Move: string;
 begin
-  LTargets := nil;
   ClearHumanMoveSelection;
-  if (not CanAcceptHumanBoardMove) and (not CanExploreVariation) then
-    Exit;
-
-  LGameTree := ActiveGameTree;
-  LBoard := TDraughtsBoard.Create;
+  if (not CanAcceptHumanBoardMove) and (not CanExploreVariation) then Exit;
+  Board := TDraughtsBoard.Create;
   try
-    if not TryBuildDisplayedBoard(LGameTree, LBoard) then
-      Exit;
-
-    for I := 0 to LBoard.LegalMoveCount - 1 do
-    begin
-      LMove := Trim(LBoard.LegalMoves[I]);
-      if MoveSquareAt(LMove, 1) = ASourceSquare then
-        FHumanMoveChoices.Add(LMove);
-    end;
+    if not TryBuildDisplayedBoard(ActiveGameTree, Board) then Exit;
+    Move := FMoveInteraction.SelectSource(Board, ASourceSquare);
   finally
-    LBoard.Free;
+    Board.Free;
   end;
-
-  if FHumanMoveChoices.Count = 0 then
-    Exit;
-  if FHumanMoveChoices.Count = 1 then
-  begin
-    PlayHumanMove(FHumanMoveChoices[0]);
-    Exit;
-  end;
-
-  FHumanMoveSourceSquare := ASourceSquare;
-  SetLength(LTargets, 0);
-  for I := 0 to FHumanMoveChoices.Count - 1 do
-  begin
-    LTarget := MoveSquareAt(FHumanMoveChoices[I], 2);
-    LTargetKnown := False;
-    for J := 0 to High(LTargets) do
-      if LTargets[J] = LTarget then
-      begin
-        LTargetKnown := True;
-        Break;
-      end;
-    if (LTarget > 0) and (not LTargetKnown) then
-    begin
-      SetLength(LTargets, Length(LTargets) + 1);
-      LTargets[High(LTargets)] := LTarget;
-    end;
-  end;
-  if FBoardControl <> nil then
-    FBoardControl.SetTargetSquares(LTargets);
+  if Move <> '' then PlayHumanMove(Move)
+  else if FBoardControl <> nil then
+    FBoardControl.SetTargetSquares(FMoveInteraction.Targets);
 end;
 
 procedure TMainForm.BoardMouseDown(Sender: TObject; Button: TMouseButton;
@@ -2210,7 +2133,7 @@ begin
     Exit;
   end;
 
-  if (FHumanMoveSourceSquare > 0) and FindHumanMoveToTarget(LSquare, LMove) then
+  if (FMoveInteraction.SourceSquare > 0) and FindHumanMoveToTarget(LSquare, LMove) then
   begin
     PlayHumanMove(LMove);
     Exit;
@@ -4706,34 +4629,6 @@ begin
   FHighlightedGameMovePly := LHighlightPly;
 end;
 
-function TMainForm.MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
-var
-  I: Integer;
-  LCount: Integer;
-  LNumberText: string;
-begin
-  Result := 0;
-  LCount := 0;
-  LNumberText := '';
-  for I := 1 to Length(AMove) do
-  begin
-    if AMove[I] in ['0'..'9'] then
-      LNumberText += AMove[I]
-    else if LNumberText <> '' then
-    begin
-      Inc(LCount);
-      if LCount = ASquareIndex then
-        Exit(StrToIntDef(LNumberText, 0));
-      LNumberText := '';
-    end;
-  end;
-  if LNumberText <> '' then
-  begin
-    Inc(LCount);
-    if LCount = ASquareIndex then
-      Result := StrToIntDef(LNumberText, 0);
-  end;
-end;
 
 procedure TMainForm.UpdateBoardHighlights(AGameTree: TGameTree);
 var

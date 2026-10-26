@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Extract board move interaction
+
+- Move temporary source selection, legal candidates, ordered target squares and
+  move routing into the LCL-independent uMoveInteraction unit.
+- Preserve single-choice play, first-candidate capture selection, unfinished-tip
+  appends, historical/completed-game variations and live human runner delivery.
+  Actor mutations, runner calls and control updates remain in the form.
+- Add headless selection/routing regressions; GTK preservation and interaction
+  checks pass.
+
 ### 2026-10-26 — Extract queued GUI message classes
 
 - Move the eight runner, analyzer and MCTS message classes verbatim into
