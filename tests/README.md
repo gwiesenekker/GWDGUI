@@ -109,4 +109,6 @@ selected board and leaves the exported tree unchanged.
 snapshots, cancellation and queued release, snapshot coalescing keys, independent
 analyzer/MCTS restart signatures and historical/terminal analysis policy. It also
 checks Auto Play historical-node attachment, command preparation/acceptance,
-preview accumulation, rejected targets and stop/restart identity fences.
+preview accumulation, rejected targets and stop/restart identity fences. PV-state
+checks cover copied bases, nested identities/fallbacks, latest-PV selection and
+complete display-cache keys.

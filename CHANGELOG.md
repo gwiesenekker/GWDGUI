@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Extract analysis PV base and display-cache ownership
+
+- Move copied analyzer/main PV base boards, node/base-ply association, engine and
+  annotator PV lookup, visible-PV selection and display-cache tuple to analysis
+  coordination. Borrow the displayed-position replay cache and actor revision.
+- Preserve latest-engine-PV selection, nested analyzer bases, fallback positions,
+  nil-board behaviour and frozen browser updates; controls remain in the form.
+- Add headless copy/fallback/cache regressions. GTK preservation, frozen-PV and
+  analysis-control checks pass.
+
 ### 2026-10-26 — Extract Auto Play coordination
 
 - Move Auto Play node/tree/search identity, temporary PV accumulation, continuation

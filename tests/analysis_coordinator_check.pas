@@ -2,7 +2,7 @@ program analysis_coordinator_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uAnalysisCoordinator,
   uGameTree, uGameTreeActor, uGameTreeSearchRef, uGameOrchestrator,
-  uDraughtsBoard, uPvSnapshot, uTreeTestUtils;
+  uDraughtsBoard, uPvSnapshot, uTreeTestUtils, uDisplayedPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 procedure Execute(Actor: TGameTreeActor; Command: TGameTreeCommand);
@@ -10,6 +10,57 @@ begin
   try Actor.ExecuteCommand(Command); Check(Command.Accepted, Command.ErrorText);
   finally Command.Free; end;
 end;
+procedure CheckPvState;
+var Actor: TGameTreeActor; Pv: TAnalysisPvState; Display: TDisplayedPosition;
+  Board, Visible: TDraughtsBoard; Node: TGameTreePlyNode;
+  BasePly: Integer; Text, Score, Depth, TimeText, Key: string;
+begin
+  Actor := TGameTreeActor.Create; Pv := TAnalysisPvState.Create;
+  Display := TDisplayedPosition.Create; Board := TDraughtsBoard.Create;
+  try
+    Execute(Actor, Actor.CreateAppendMainlineMoveCommand('32-28', gmsHuman));
+    Execute(Actor, Actor.CreateAppendMainlineMoveCommand('18-23', gmsHuman));
+    Execute(Actor, ImportBranch(Actor, 1, '20-24 38-32 18-22', '', gmsHuman));
+    Node := Actor.GameTree.FindBranchNode(0, 3);
+    Check(Actor.GameTree.TryBuildBoardAtNode(Node, Board), 'PV nested board');
+    Key := Board.PositionKey;
+    Pv.SetAnalyzerBaseFromTree(Actor.GameTree, Node.NodeId, 1, nil, Display, Actor.Revision);
+    Check((Pv.AnalyzerBaseNodeId = Node.NodeId) and (Pv.AnalyzerBasePly = Node.PlyNumber) and
+      (Pv.AnalyzerBaseBoard.PositionKey = Key), 'analyzer base follows nested node, not fallback ply');
+    Pv.SetAnalyzerBase(Board, 99);
+    Board.SetBeginPosition;
+    Check((Pv.AnalyzerBaseNodeId = 0) and (Pv.AnalyzerBasePly = 99) and
+      (Pv.AnalyzerBaseBoard.PositionKey = Key), 'transient base copies board and clears persistent identity');
+    Pv.SetAnalyzerBase(nil, 98);
+    Check(Pv.AnalyzerBaseBoard.PositionKey = Key, 'nil base preserves last board');
+    Pv.SetAnalyzerBaseFromTree(Actor.GameTree, High(Int64), 1, nil, Display, Actor.Revision);
+    Check(Actor.GameTree.TryBuildBoardAtNode(Actor.GameTree.MainlineNode[1], Board), 'fallback board');
+    Check((Pv.AnalyzerBaseNodeId = 0) and (Pv.AnalyzerBasePly = 1) and
+      (Pv.AnalyzerBaseBoard.PositionKey = Board.PositionKey), 'missing node falls back to mainline base');
+    Pv.SetAnalyzerBaseFromTree(nil, 0, -1, Board, Display, -1);
+    Check((Pv.AnalyzerBasePly = -1) and (Pv.AnalyzerBaseNodeId = 0), 'unavailable tree uses supplied board');
+    Execute(Actor, Actor.CreateRecordEnginePVCommand(Actor.GameTree.MainlineNode[2].NodeId,
+      '0.25', '37-32 12-18', '8', '0.4'));
+    Check(Pv.VisibleMainPv(Actor.GameTree, Actor.GameTree.Root, True, Display,
+      Actor.Revision, Visible, BasePly, Text, Score, Depth, TimeText), 'visible latest engine PV');
+    Check((BasePly = 2) and (Text = '37-32 12-18') and (Score = '0.25') and
+      (Depth = '8') and (TimeText = '0.4'), 'historical display retains latest-engine-PV policy');
+    Check(Actor.GameTree.TryBuildBoardAtNode(Actor.GameTree.MainlineNode[2], Board), 'latest PV base board');
+    Check(Visible.PositionKey = Board.PositionKey, 'visible PV replays its actual mainline base');
+    Check(not Pv.VisibleMainPv(Actor.GameTree, Node, False, Display, Actor.Revision,
+      Visible, BasePly, Text, Score, Depth, TimeText) and (Text = '') and
+      (BasePly = Node.PlyNumber), 'unavailable engine source leaves selected board without PV');
+    Key := Visible.PositionKey;
+    Pv.SetCache('12-18', '0.2', '9', '0.1', Visible, BasePly);
+    Check(Pv.CacheMatches('12-18', '0.2', '9', '0.1', Key, BasePly), 'cache matches full display tuple');
+    Check(not Pv.CacheMatches('12-18', '0.2', '10', '0.1', Key, BasePly), 'depth change invalidates PV cache');
+    Check(not Pv.CacheMatches('12-18', '0.2', '9', '0.1', Key, BasePly + 1), 'base ply change invalidates PV cache');
+    Check(not Pv.CacheMatches('12-18', '0.2', '9', '0.1', 'other position', BasePly), 'board identity change invalidates PV cache');
+    Pv.SetCache('', '', '', '', nil, 0);
+    Check(Pv.CacheMatches('', '', '', '', '', 0), 'clear resets tuple including board key');
+  finally Board.Free; Display.Free; Pv.Free; Actor.Free; end;
+end;
+
 procedure CheckAutoPlay;
 var Actor, Other: TGameTreeActor; AutoPlay: TAutoPlayCoordinator;
   Board: TDraughtsBoard; Command: TGameTreeCommand; Search: TGameTreeSearchRef;
@@ -79,6 +130,7 @@ var Actor, Other: TGameTreeActor; Coordinator: TAnalysisCoordinator;
   ErrorText, Key, Signature: string; State: TGameTreeSearchState;
 begin
   CheckAutoPlay;
+  CheckPvState;
   Actor := TGameTreeActor.Create; Other := TGameTreeActor.Create;
   Coordinator := TAnalysisCoordinator.Create;
   Snapshot := TPvSnapshot.Create; Board := TDraughtsBoard.Create;
