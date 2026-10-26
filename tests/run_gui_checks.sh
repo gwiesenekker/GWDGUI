@@ -13,3 +13,11 @@ if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
 fi
 cd "$OUT_DIR"
 "$OUT_DIR/standalone_preservation_check"
+
+echo "==> main_form_boundaries_check (GTK2, interaction and analysis lifecycle)"
+if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
+  "$ROOT_DIR/tests/main_form_boundaries_check.lpi" > "$OUT_DIR/boundaries-build.log" 2>&1; then
+  cat "$OUT_DIR/boundaries-build.log"
+  exit 1
+fi
+"$OUT_DIR/main_form_boundaries_check"

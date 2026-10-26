@@ -68,7 +68,18 @@ or move the published v3.0 tag as part of this work.
 | Capture selection | legal move/capture ambiguity and export checks | Actual board source/target clicks with several legal captures; canonical node/board result. |
 | Board orientation | board geometry used by navigation checks | Flip with the real keyboard handler, verify square mapping on all 50 squares and unchanged model/cursor. |
 | Auto Play | one-shot analyzer searches and actor/node tests | Actual form start/stop, attachment to the selected historical node, and rejection of a late reply after stop. |
-| MCTS | headless runner position switching and shutdown | Actual form open/close and reservation release, including a late finished notification from an older runner. |
+| MCTS | headless runner position switching and shutdown | Actual form open/close and reservation release, reopening and destruction with pending updates. |
 | Unsaved standalone replacement | preservation when switching to running games; unexpected-dialog guard | Cancel prevents replacement; declining save permits it; selecting another running game does not discard/prompt for the standalone tree. |
 | Running-game ownership | real-runner stopping, edits waiting for completion, illegal/stale commands | Check copied setup ownership and retained snapshot independence before moving the class. |
 | Queue ownership | queue coalescing used by GUI runner-history checks | Count owned snapshot destruction on message disposal, replacement and queue shutdown; finished messages must not free runners. |
+
+## Characterization added
+
+- `tests/main_form_boundaries_check.pas`: actual GTK interaction and fake-engine
+  checks for the five form-level gaps above. Existing GUI tests remain unchanged.
+- `tests/running_game_lifecycle_check.pas`: copied setup/snapshot/reservation
+  ownership and counted queue/snapshot destruction before extraction.
+- A duplicate finished notification for an already freed runner is not injected;
+  close/reopen and pending-update destruction are exercised through real callbacks.
+- The native save-file chooser's Yes path is not automated; Cancel and No exercise
+  the replacement prompt, and existing export tests check saved content separately.

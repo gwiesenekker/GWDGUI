@@ -77,3 +77,13 @@ All generated binaries, preference files and fixtures stay outside the repo.
 The tournament checks also cover failed-load isolation, autosave recovery in a
 fresh form, stable PDN paths, unnamed recovery files and failure/retry behavior.
 `atomic_file_check` verifies replacement and cleanup after a failed atomic save.
+
+`main_form_boundaries_check` runs as part of `run_gui_checks.sh`. Before the
+main-form extraction it characterizes actual source/target capture clicks,
+all-square board flipping via the keyboard, cancel/decline replacement prompts,
+and preservation when switching from a standalone board to a running game.
+Its self-contained fake Hub engine exercises Auto Play on a stopped historical
+node, late replies after Stop, and MCTS open/close/reopen with queued shutdown.
+No private-field test hooks are used. The existing GTK suites remain intact.
+The lifecycle check also counts queued snapshot destruction and verifies that
+running games own independent setup definitions, reservations and snapshots.

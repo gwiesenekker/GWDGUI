@@ -5,6 +5,17 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Characterize main-form interaction and analysis boundaries
+
+- Add actual board capture-click and 50-square flip checks, replacement prompt
+  cancellation/decline checks, and preservation when selecting another game.
+- Exercise Auto Play on a historical node of a real stopped game, preserve its
+  official continuation, and reject a delayed reply after Escape stops playback.
+- Use a self-contained Hub process to exercise MCTS opening, protocol start,
+  closing/reopening, reservation release and destruction with pending updates.
+- Validation: existing and new GTK checks pass before extraction; UI tests use
+  real event handlers and popup actions without private-field hooks.
+
 ### 2026-10-26 — Characterize running-game and queued-message ownership
 
 - Verify copied engine setup and reservation keys, independently returned setup
