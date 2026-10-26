@@ -16,6 +16,23 @@ var First, Second: TPlatformProcess; Args: TStringList; Probe: TOutputProbe;
   Tick: QWord; Auxiliary: TProcess; Lines: TStringList;
   {$IFDEF LINUX}I: Integer; Target, InputPipe, OutputPipe, ErrorPipe: string;{$ENDIF}
 begin
+  if ParamStr(1) = '--chunked-output' then
+  begin
+    Write('first chunk'); Flush(Output); Sleep(30);
+    Write(StringOfChar('x', 70000)); Flush(Output); Sleep(30);
+    WriteLn; WriteLn('eDP-1 connected primary 1920x1080+0+0'); Flush(Output); Halt(0);
+  end;
+  Auxiliary := TProcess.Create(nil); Lines := TStringList.Create;
+  try
+    Auxiliary.Executable := ExpandFileName(ParamStr(0));
+    Auxiliary.Parameters.Add('--chunked-output'); Auxiliary.Options := [poUsePipes];
+    ExecuteAuxiliaryProcess(Auxiliary);
+    Lines.Text := ReadAuxiliaryProcessOutput(Auxiliary);
+    Check(Lines.Text = 'first chunk' + StringOfChar('x', 70000) + LineEnding +
+      'eDP-1 connected primary 1920x1080+0+0' + LineEnding,
+      'auxiliary output includes delayed chunks, output larger than the pipe, and final panel line');
+    Check(Auxiliary.ExitStatus = 0, 'output drain waits for actual process exit');
+  finally Lines.Free; Auxiliary.Free; end;
   {$IFDEF LINUX}
   if ParamStr(1) = '--fd-probe' then
   begin

@@ -69,6 +69,7 @@ type
 
 function CommandLineQuote(const AText: string): string;
 procedure ExecuteAuxiliaryProcess(AProcess: TProcess);
+function ReadAuxiliaryProcessOutput(AProcess: TProcess): string;
 
 implementation
 
@@ -99,6 +100,32 @@ begin
     end;
     {$ENDIF}
   finally LaunchLock.Release; end;
+end;
+
+function ReadAuxiliaryProcessOutput(AProcess: TProcess): string;
+var Buffer: array[0..4095] of Byte; Count: LongInt; Output: TStringStream;
+begin
+  Output := TStringStream.Create('');
+  try
+    // A pipe's Size is only the bytes currently available. LoadFromStream can
+    // therefore stop at the first chunk; drain while running and once after exit.
+    repeat
+      Count := AProcess.Output.NumBytesAvailable;
+      if Count > SizeOf(Buffer) then Count := SizeOf(Buffer);
+      if Count > 0 then
+      begin
+        Count := AProcess.Output.Read(Buffer, Count);
+        if Count > 0 then Output.WriteBuffer(Buffer, Count);
+      end
+      else if not AProcess.Running then
+      begin
+        if AProcess.Output.NumBytesAvailable = 0 then Break;
+      end
+      else Sleep(1);
+    until False;
+    AProcess.WaitOnExit;
+    Result := Output.DataString;
+  finally Output.Free; end;
 end;
 
 function CommandLineQuote(const AText: string): string;

@@ -5,6 +5,13 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-26 — Read complete monitor-query output (U7)
+
+- Drain auxiliary stdout while its process runs and after it exits, instead of
+  treating the currently available pipe size as the complete xrandr output.
+- Add a real child-process regression with delayed chunks, more than a pipe buffer
+  of output and the laptop-panel line last; verify complete output and exit status.
+
 ### 2026-10-26 — Apply DXP peer restrictions to connection tests (D19)
 
 - Pass gui-dxp-peer-ip through the engine editor to its registration listener,

@@ -191,8 +191,7 @@ begin
     Proc.Options := [poUsePipes];
     try
       ExecuteAuxiliaryProcess(Proc);
-      Lines.LoadFromStream(Proc.Output);
-      Proc.WaitOnExit;
+      Lines.Text := ReadAuxiliaryProcessOutput(Proc);
       if Proc.ExitStatus <> 0 then Exit;
     except
       Exit;

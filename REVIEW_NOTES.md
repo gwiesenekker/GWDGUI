@@ -2,6 +2,11 @@
 
 ## Review of afd9c54 — 2026-10-26
 
+U7: replace LoadFromStream on the running xrandr pipe with an explicit drain through
+process exit. A real child sends a short first chunk, 70 KB later, then the eDP-1
+line; the regression verifies every byte, including the final line and exit code.
+The existing protected auxiliary launch path remains in use.
+
 D19: the registration listener now receives gui-dxp-peer-ip and uses the live
 listener's peer/address rules. Normalize the binding address in a worker-local
 variable; host/peer configuration is never rewritten while Stop reads it. Real
