@@ -3,7 +3,26 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
-## Unreleased
+## Version 3.1 — 2026-10-26
+
+This release includes the accumulated improvements below since v3.0.
+
+- Extract running-game ownership, queued messages, move interaction, displayed
+  positions, notation presentation and analysis coordination from the main form.
+- Present the game tree as notation with stable selection and expansion; offer
+  explicit choices for ambiguous captures and preserve the displayed move marker.
+- Add menu shortcuts, File → Quit, a searchable offline manual and About with
+  the exact build commit. Update the manual for current behavior and settings.
+- Preserve PDN comments and metadata, normalize equivalent capture variations,
+  report conflicting metadata and improve database duplicate identities.
+- Fix early-stop completion, stale live PVs, DXP connection-test peer restrictions,
+  Hub parameter save validation and truncated monitor-query output.
+- Improve actor import, notation rendering, normalization and branch-removal costs;
+  add reproducible benchmarks, lifecycle and GUI delivery regressions.
+- Publish a Linux x86_64 executable and portable bundle with SHA256SUMS. No Windows
+  executable is included; native Windows validation remains outstanding.
+
+The dated entries below record development changes and validation before publication.
 
 ### 2026-10-26 — Complete validation of the latest review pass
 

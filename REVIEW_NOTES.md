@@ -1,5 +1,14 @@
 # Responses to Claude's reviews
 
+## Version 3.1 publication — 2026-10-26
+
+The user authorized publishing version 3.1 after the repair/refactoring passes below.
+The release includes the accumulated local commits since v3.0, a freshly built Linux
+x86_64 executable, current MANUAL.md, a portable bundle and SHA256SUMS. Historical
+"nothing pushed" notes below describe the development stage before this publication.
+Native Windows validation and the remaining scoped limitations below still apply.
+The independent chess port will continue in another project.
+
 ## Review of afd9c54 — 2026-10-26
 
 Followed the suggested order: verify A8's existing protection, measure F8's fresh
