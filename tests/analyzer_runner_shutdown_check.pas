@@ -85,13 +85,13 @@ var
   Engine: TExternalEngineDefinition;
   Observer: TRunnerObserver;
   Runner: TAnalyzerRunnerThread;
-  Board: TDraughtsBoard;
+  Board: TDraughtsPosition;
   Search: TGameTreeSearchRef;
   Tick: QWord;
 begin
   Engine := TExternalEngineDefinition.Create;
   Observer := TRunnerObserver.Create;
-  Board := TDraughtsBoard.Create;
+  Board := TDraughtsPosition.Create;
   Runner := nil;
   try
     Engine.Kind := eekHub;

@@ -5,12 +5,14 @@ unit uPvSnapshot;
 interface
 
 uses
-  SysUtils, uDraughtsBoard, uGameTreeSearchRef;
+  SysUtils, uGamePosition, uGameTreeSearchRef;
 
 type
+  // The PV and the position it starts from. BasePosition is an owned copy; it
+  // is nil until data with a base position is set.
   TPvSnapshot = class
   private
-    FBaseBoard: TDraughtsBoard;
+    FBasePosition: TGamePosition;
     FBasePly: Integer;
     FDepth: string;
     FGameTreeOnly: Boolean;
@@ -27,16 +29,16 @@ type
 
     procedure AssignFrom(ASource: TPvSnapshot);
     function SearchRef: TGameTreeSearchRef;
-    procedure SetData(ABaseBoard: TDraughtsBoard; ABasePly: Integer;
+    procedure SetData(ABasePosition: TGamePosition; ABasePly: Integer;
       const APv, AScore, ADepth: string; const ATimeText: string = '';
       AGameTreeId: Int64 = 0; ASearchId: Int64 = 0; ANodeId: Int64 = 0;
       AGameTreeOnly: Boolean = False);
-    procedure SetDataWithSearch(ABaseBoard: TDraughtsBoard;
+    procedure SetDataWithSearch(ABasePosition: TGamePosition;
       ABasePly: Integer; const APv, AScore, ADepth: string;
       const ATimeText: string; const ASearch: TGameTreeSearchRef;
       AGameTreeOnly: Boolean; ATransient: Boolean = False);
 
-    property BaseBoard: TDraughtsBoard read FBaseBoard;
+    property BasePosition: TGamePosition read FBasePosition;
     property BasePly: Integer read FBasePly;
     property Depth: string read FDepth;
     property GameTreeOnly: Boolean read FGameTreeOnly;
@@ -54,13 +56,12 @@ implementation
 constructor TPvSnapshot.Create;
 begin
   inherited Create;
-  FBaseBoard := TDraughtsBoard.Create;
   FBasePly := 0;
 end;
 
 destructor TPvSnapshot.Destroy;
 begin
-  FBaseBoard.Free;
+  FBasePosition.Free;
   inherited Destroy;
 end;
 
@@ -68,7 +69,7 @@ procedure TPvSnapshot.AssignFrom(ASource: TPvSnapshot);
 begin
   if ASource = nil then
     Exit;
-  SetDataWithSearch(ASource.BaseBoard, ASource.BasePly,
+  SetDataWithSearch(ASource.BasePosition, ASource.BasePly,
     ASource.PrincipalVariation, ASource.Score, ASource.Depth,
     ASource.TimeText, ASource.SearchRef, ASource.GameTreeOnly,
     ASource.Transient);
@@ -79,22 +80,21 @@ begin
   Result := GameTreeSearchRef(FGameTreeId, FSearchId, FNodeId);
 end;
 
-procedure TPvSnapshot.SetData(ABaseBoard: TDraughtsBoard; ABasePly: Integer;
+procedure TPvSnapshot.SetData(ABasePosition: TGamePosition; ABasePly: Integer;
   const APv, AScore, ADepth: string; const ATimeText: string;
   AGameTreeId: Int64; ASearchId: Int64; ANodeId: Int64;
   AGameTreeOnly: Boolean);
 begin
-  SetDataWithSearch(ABaseBoard, ABasePly, APv, AScore, ADepth, ATimeText,
+  SetDataWithSearch(ABasePosition, ABasePly, APv, AScore, ADepth, ATimeText,
     GameTreeSearchRef(AGameTreeId, ASearchId, ANodeId), AGameTreeOnly);
 end;
 
-procedure TPvSnapshot.SetDataWithSearch(ABaseBoard: TDraughtsBoard;
+procedure TPvSnapshot.SetDataWithSearch(ABasePosition: TGamePosition;
   ABasePly: Integer; const APv, AScore, ADepth: string;
   const ATimeText: string; const ASearch: TGameTreeSearchRef;
   AGameTreeOnly: Boolean; ATransient: Boolean);
 begin
-  if ABaseBoard <> nil then
-    FBaseBoard.AssignFrom(ABaseBoard);
+  AssignGamePosition(FBasePosition, ABasePosition);
   FBasePly := ABasePly;
   FGameTreeId := ASearch.GameTreeId;
   FSearchId := ASearch.SearchId;

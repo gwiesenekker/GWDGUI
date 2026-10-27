@@ -207,7 +207,7 @@ generic unit is converted; behaviour, formats and performance stay unchanged.
 | 3 | Variant into tree/actor/builder/cursor; `SameMove` replaces text comparison | Done |
 | 4 | Displayed position and move interaction (`MoveSquares`, `MovesBetween`) | Done |
 | 5 | Notation walker and presentation (`MoveNotation`) | Done |
-| 6 | Analysis coordination and PV state | |
+| 6 | Analysis coordination and PV state | Done |
 | 7 | `TGameRules`; orchestrator, runner and running game | |
 | 8 | Remaining main-form uses; list the chess replacement points | |
 
@@ -266,4 +266,24 @@ Step 5 notes:
   `uGameTreeView`; `game_tree_variant_check` renders a counter-game tree.
 - `TDraughtsPosition.MoveNotation` returns quiet moves without generating legal
   moves, as the walker did before.
+
+Step 6 notes:
+- `uAnalysisCoordinator` and `uPvSnapshot` hold `TGamePosition`s and are in the
+  source audit. PV bases replay straight into the coordinator's own positions
+  (previously a temporary draughts position per replay). Each base remembers its
+  game; a tree of another game replaces it before replaying (`BuildNodeBase`).
+- A snapshot's base position is `nil` until one is set (it was a start-position
+  board); `CanDisplayTransientAnalysis` and the PV browser treat `nil` as "no
+  base". New `AssignGamePosition` copies a position into a holder of unknown class.
+- The annotator runner (`uAnalyzerRunnerThread`) copies request positions with
+  `Clone`; a request without a base clears the runner's base.
+- The PV browser stays per-game: it takes game positions and shows draughts ones
+  on its mini board. The game runner keeps its orchestrator board until step 7 and
+  feeds snapshots through `TDraughtsPosition.AssignBoard`.
+- `TAnalysisPvState.SetCache` takes a position key; the form computes it as before.
+- Observed, not changed (behaviour kept): `UpdateDisplayedPvCacheFromTree` compares
+  an empty key when no PV is visible but stores the base position's key, so with
+  no PV the cache never matches and every running-game snapshot reports a PV change.
+- `uAnalysisCoordinator` still uses `uGameOrchestrator` for `TGameOrchestratorState`
+  (step 7).
 

@@ -14,7 +14,8 @@ uses
   cthreads,
   {$ENDIF}
   Classes, SysUtils, uGamePosition, uDraughtsPosition, uCounterGamePosition,
-  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameMoveHistory, uGameTreePdn;
+  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameMoveHistory, uGameTreePdn,
+  uAnalysisCoordinator, uDisplayedPosition, uPvSnapshot, uGameTreeSearchRef;
 
 var
   Failures: Integer = 0;
@@ -337,11 +338,88 @@ begin
   end;
 end;
 
+{ Analysis state and auto play on a tree of another game: PV bases are
+  positions of the tree's game, even when the state started with draughts. }
+procedure CheckAnalysisOnInjectedVariant;
+var
+  LVariant: TCounterVariant;
+  LTree: TGameTree;
+  LActor: TGameTreeActor;
+  LPv: TAnalysisPvState;
+  LDisplay: TDisplayedPosition;
+  LAutoPlay: TAutoPlayCoordinator;
+  LSnapshot: TPvSnapshot;
+  LBase, LPosition: TGamePosition;
+  LCommand: TGameTreeCommand;
+  LError, LText, LScore, LDepth, LTime: string;
+  LNodeId: Int64;
+  LPly: Integer;
+begin
+  LVariant := TCounterVariant.Create;
+  LTree := TGameTree.Create(LVariant);
+  LActor := TGameTreeActor.Create(LTree, False);
+  LPv := TAnalysisPvState.Create; // starts with the default game (draughts)
+  LDisplay := TDisplayedPosition.Create;
+  LAutoPlay := TAutoPlayCoordinator.Create;
+  LSnapshot := TPvSnapshot.Create;
+  LPosition := nil;
+  try
+    Check(LSnapshot.BasePosition = nil, 'a new snapshot has no base position');
+    Check(Execute(LActor, LActor.CreateAppendMainlineMoveCommand('p1', gmsHuman), LError, LNodeId),
+      'append: ' + LError);
+    Check(Execute(LActor, LActor.CreateAppendMainlineMoveCommand('two', gmsHuman), LError, LNodeId),
+      'append: ' + LError);
+
+    LPv.SetAnalyzerBaseFromTree(LTree, LNodeId, 2, nil, LDisplay, LActor.Revision);
+    Check((LPv.AnalyzerBasePosition is TCounterPosition) and
+      (LPv.AnalyzerBasePosition.ToFEN = 'W:3') and (LPv.AnalyzerBaseNodeId = LNodeId),
+      'analyzer base replays the counter tree, got ' + LPv.AnalyzerBasePosition.ToFEN);
+
+    Check(Execute(LActor, LActor.CreateRecordEnginePVCommand(LTree.MainlineNode[1].NodeId,
+      '0.1', 'two', '3', '0.2'), LError, LNodeId), 'engine PV: ' + LError);
+    Check(LPv.VisibleMainPv(LTree, LTree.MainlineNode[2], True, LDisplay, LActor.Revision,
+      LBase, LPly, LText, LScore, LDepth, LTime), 'visible PV on the counter tree');
+    Check((LPly = 1) and (LBase is TCounterPosition) and (LBase.ToFEN = 'B:1'),
+      'visible PV base is the counter position after ply 1');
+
+    LPosition := LVariant.CreatePositionFromFEN('B:1');
+    LSnapshot.SetDataWithSearch(LPosition, 1, 'two', '0.1', '3', '', EmptyGameTreeSearchRef,
+      False, True);
+    Check(CanDisplayTransientAnalysis(LSnapshot, LBase), 'transient analysis on the same counter position');
+    LSnapshot.SetDataWithSearch(nil, 1, 'two', '0.1', '3', '', EmptyGameTreeSearchRef, False, True);
+    Check(LSnapshot.BasePosition.ToFEN = 'B:1', 'a nil base keeps the snapshot base');
+
+    LAutoPlay.BeginLine(LTree, LTree.MainlineNode[1]);
+    LCommand := LAutoPlay.CreateMoveCommand(LActor, LTree, LPosition, 'p2', LError);
+    Check(LCommand <> nil, 'auto play accepts a counter alias: ' + LError);
+    try
+      LActor.ExecuteCommand(LCommand);
+      Check(LCommand.Accepted, LCommand.ErrorText);
+      LAutoPlay.MoveStored(LCommand);
+    finally
+      LCommand.Free;
+    end;
+    Check(LAutoPlay.MovesText = '+2', 'auto play stores the canonical move, got ' + LAutoPlay.MovesText);
+    LCommand := LAutoPlay.CreateMoveCommand(LActor, LTree, LPosition, '32-28', LError);
+    Check((LCommand = nil) and (Pos('illegal move', LError) > 0), 'draughts move rejected in auto play');
+  finally
+    LPosition.Free;
+    LSnapshot.Free;
+    LAutoPlay.Free;
+    LDisplay.Free;
+    LPv.Free;
+    LActor.Free;
+    LTree.Free;
+    LVariant.Free;
+  end;
+end;
+
 begin
   CheckRootSideFollowsVariant;
   CheckActorOnInjectedVariant;
   CheckCompletedMovesWithEquivalentSpellings;
   CheckNotationOnInjectedVariant;
+  CheckAnalysisOnInjectedVariant;
   if Failures > 0 then
   begin
     WriteLn(Failures, ' game tree variant checks failed');

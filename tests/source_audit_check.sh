@@ -57,6 +57,8 @@ GENERIC_UNITS=(
   uGameTreePdn
   uNotationPresentation
   uGameTreeView
+  uAnalysisCoordinator
+  uPvSnapshot
 )
 for unit_name in "${GENERIC_UNITS[@]}"; do
   unit_file="$ROOT_DIR/$unit_name.pas"

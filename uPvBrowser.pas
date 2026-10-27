@@ -6,11 +6,14 @@ interface
 
 uses
   Classes, LCLType, StdCtrls, SysUtils, uBoardControl, uDraughtsBoard,
-  uGameTreeBuilder, uPvSnapshot;
+  uGamePosition, uGameTreeBuilder, uPvSnapshot;
 
 type
   TIntArray = array of Integer;
 
+  // Draughts PV view with its mini board. Base positions arrive as game
+  // positions (analysis state, snapshots); positions of another game are
+  // ignored and keep the previous base.
   TPvBrowser = class
   private
     FBaseBoard: TDraughtsBoard;
@@ -62,7 +65,7 @@ type
 
     procedure Clear;
     procedure SetSnapshot(ASnapshot: TPvSnapshot; const AStartingFEN: string);
-    procedure SetData(ABaseBoard: TDraughtsBoard; ABasePly: Integer;
+    procedure SetData(ABasePosition: TGamePosition; ABasePly: Integer;
       const AStartingFEN, APv, AScore, ADepth, ATimeText: string);
 
     property PrincipalVariation: string read FVariation;
@@ -73,6 +76,16 @@ type
   end;
 
 implementation
+
+uses uDraughtsPosition;
+
+function DraughtsBoardOf(APosition: TGamePosition): TDraughtsBoard;
+begin
+  if APosition is TDraughtsPosition then
+    Result := TDraughtsPosition(APosition).Board
+  else
+    Result := nil;
+end;
 
 function FenSideToMove(const AFEN: string): TDraughtsSide;
 begin
@@ -441,9 +454,12 @@ begin
   HighlightSelection(False);
 end;
 
-procedure TPvBrowser.SetData(ABaseBoard: TDraughtsBoard; ABasePly: Integer;
+procedure TPvBrowser.SetData(ABasePosition: TGamePosition; ABasePly: Integer;
   const AStartingFEN, APv, AScore, ADepth, ATimeText: string);
+var
+  ABaseBoard: TDraughtsBoard;
 begin
+  ABaseBoard := DraughtsBoardOf(ABasePosition);
   if FBrowsePly >= 0 then
     StorePendingData(ABaseBoard, ABasePly, AStartingFEN, APv, AScore, ADepth,
       ATimeText)
@@ -458,7 +474,7 @@ begin
   if ASnapshot = nil then
     Clear
   else
-    SetData(ASnapshot.BaseBoard, ASnapshot.BasePly, AStartingFEN,
+    SetData(ASnapshot.BasePosition, ASnapshot.BasePly, AStartingFEN,
       ASnapshot.PrincipalVariation, ASnapshot.Score, ASnapshot.Depth,
       ASnapshot.TimeText);
 end;

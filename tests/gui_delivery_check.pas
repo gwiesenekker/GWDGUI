@@ -94,10 +94,14 @@ begin
 end;
 procedure Post(Form: TMainForm; Id: Integer; Sample: TGameRunnerSnapshot;
   Live: Boolean; const Score: string);
-var Data: TCountedSnapshot; I: Integer;
+var Data: TCountedSnapshot; I: Integer; Base: TDraughtsPosition;
 begin
   Data := TCountedSnapshot.Create; Data.AssignFrom(Sample); Data.TestLiveUpdate := Live;
-  Data.PvSnapshot.SetData(Data.Board, Data.PlyCount, '37-32', Score, '10');
+  Base := TDraughtsPosition.Create;
+  try
+    Base.AssignBoard(Data.Board);
+    Data.PvSnapshot.SetData(Base, Data.PlyCount, '37-32', Score, '10');
+  finally Base.Free; end;
   for I := 1 to Length(Score) do Data.LogLines.Add('delivery ' + Score);
   Form.TestGuiEventQueue.Post(TRunnerSnapshotGuiMessage.Create(Id, Data));
 end;
@@ -144,9 +148,9 @@ begin
   finally Form.Free; end;
 end;
 procedure PostAnalysis(Form: TMainForm; const Search: TGameTreeSearchRef; const Score: string);
-var Data: TCountedPv; Board: TDraughtsBoard;
+var Data: TCountedPv; Board: TDraughtsPosition;
 begin
-  Data := TCountedPv.Create; Board := TDraughtsBoard.Create;
+  Data := TCountedPv.Create; Board := TDraughtsPosition.Create;
   try Data.SetDataWithSearch(Board, 0, '32-28', Score, '12', '0.1', Search, True);
   finally Board.Free; end;
   Form.TestGuiEventQueue.Post(TAnalyzerSnapshotGuiMessage.Create(Data));

@@ -86,11 +86,11 @@ end;
 
 procedure CheckTransientPvSnapshot;
 var
-  Board: TDraughtsBoard;
+  Board: TDraughtsPosition;
   CopySnapshot: TPvSnapshot;
   Snapshot: TPvSnapshot;
 begin
-  Board := TDraughtsBoard.Create;
+  Board := TDraughtsPosition.Create;
   Snapshot := TPvSnapshot.Create;
   CopySnapshot := TPvSnapshot.Create;
   try

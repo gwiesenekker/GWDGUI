@@ -7,8 +7,8 @@ interface
 uses
   Classes, SyncObjs, SysUtils,
   uCancellationToken,
-  uDraughtsBoard, uDxpEngine, uEngineBase, uEngineRegistry,
-  uGameOrchestrator, uGameMoveHistory, uGameSetupTypes, uHubEngine, uPvSnapshot,
+  uDraughtsBoard, uDraughtsPosition, uDxpEngine, uEngineBase, uEngineRegistry,
+  uGameOrchestrator, uGameMoveHistory, uGamePosition, uGameSetupTypes, uHubEngine, uPvSnapshot,
   uThreadMessageQueue;
 
 type
@@ -36,7 +36,7 @@ type
     FWhiteUsedSeconds: Double;
     function GetMoveData: TGameMoveDataArray;
     function GetPrincipalVariation: string;
-    function GetPvBaseBoard: TDraughtsBoard;
+    function GetPvBasePosition: TGamePosition;
     function GetPvBasePly: Integer;
     function GetPvScore: string;
   public
@@ -65,7 +65,7 @@ type
     property PlyCount: Integer read FPlyCount;
     property PvScore: string read GetPvScore;
     property PrincipalVariation: string read GetPrincipalVariation;
-    property PvBaseBoard: TDraughtsBoard read GetPvBaseBoard;
+    property PvBasePosition: TGamePosition read GetPvBasePosition;
     property PvBasePly: Integer read GetPvBasePly;
     property PvSnapshot: TPvSnapshot read FPvSnapshot;
     property State: TGameOrchestratorState read FState;
@@ -90,7 +90,9 @@ type
     FLastLogSnapshotTick: QWord;
     FLogRevision: QWord;
     FLastPrincipalVariation: string;
-    FPvBaseBoard: TDraughtsBoard;
+    FPvBasePosition: TDraughtsPosition;
+    // Live-update base; used under FSnapshotLock only.
+    FLiveBasePosition: TDraughtsPosition;
     FPvBasePly: Integer;
     FRunnerError: string;
     FRunnerFailed: Boolean;
@@ -211,9 +213,9 @@ begin
   Result := FPvSnapshot.PrincipalVariation;
 end;
 
-function TGameRunnerSnapshot.GetPvBaseBoard: TDraughtsBoard;
+function TGameRunnerSnapshot.GetPvBasePosition: TGamePosition;
 begin
-  Result := FPvSnapshot.BaseBoard;
+  Result := FPvSnapshot.BasePosition;
 end;
 
 function TGameRunnerSnapshot.GetPvBasePly: Integer;
@@ -304,14 +306,16 @@ begin
   FLastFullSnapshot := TGameRunnerSnapshot.Create;
   FCommandQueue := TThreadMessageQueue.Create(True);
   FStopToken := TCancellationToken.Create;
-  FPvBaseBoard := TDraughtsBoard.Create;
+  FPvBasePosition := TDraughtsPosition.Create;
+  FLiveBasePosition := TDraughtsPosition.Create;
 end;
 
 destructor TGameRunnerThread.Destroy;
 begin
   DetachRuntimeLogHandlers;
   FreeAndNil(FOrchestrator);
-  FPvBaseBoard.Free;
+  FLiveBasePosition.Free;
+  FPvBasePosition.Free;
   FCommandQueue.Free;
   FBlackEngine.Free;
   FWhiteEngine.Free;
@@ -675,13 +679,13 @@ begin
   if LPvText <> '' then
   begin
     if (LPvText <> FLastPrincipalVariation) or
-      (FOrchestrator.Board.PositionKey <> FPvBaseBoard.PositionKey) then
+      (FOrchestrator.Board.PositionKey <> FPvBasePosition.PositionKey) then
     begin
       FLastPrincipalVariation := LPvText;
-      FPvBaseBoard.AssignFrom(FOrchestrator.Board);
+      FPvBasePosition.AssignBoard(FOrchestrator.Board);
       FPvBasePly := FOrchestrator.MoveHistory.Count;
     end;
-    Result.FPvSnapshot.SetData(FPvBaseBoard, FPvBasePly, LPvText, LPvScore,
+    Result.FPvSnapshot.SetData(FPvBasePosition, FPvBasePly, LPvText, LPvScore,
       LPvDepth, LPvTimeText);
   end;
 
@@ -744,7 +748,8 @@ begin
         Snapshot.FLogLines.Assign(FGameLog); Snapshot.FLogRevision := FLogRevision;
       finally FLogLock.Release; end;
       AEngine.ReadSearchInfo(Pv, Score, Depth, TimeText);
-      Snapshot.FPvSnapshot.SetData(Snapshot.FBoard, Snapshot.FPlyCount, Pv, Score, Depth, TimeText);
+      FLiveBasePosition.AssignBoard(Snapshot.FBoard);
+      Snapshot.FPvSnapshot.SetData(FLiveBasePosition, Snapshot.FPlyCount, Pv, Score, Depth, TimeText);
       if Assigned(FOnSnapshot) then
       begin FOnSnapshot(Self, Snapshot); Snapshot := nil; end;
     finally Snapshot.Free; end;

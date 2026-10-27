@@ -7,7 +7,7 @@ uses
   cthreads,
   {$ENDIF}
   Classes, SysUtils, SyncObjs, uAnalyzerRunnerThread, uEngineRegistry,
-  uDraughtsBoard, uPvSnapshot, uGameTreeSearchRef, uDraughtsPosition;
+  uDraughtsBoard, uGamePosition, uPvSnapshot, uGameTreeSearchRef, uDraughtsPosition;
 
 type
   TObserver = class
@@ -113,20 +113,20 @@ begin
     else if (Id in [1, 2, 4]) and (PV <> '') then
     begin
       FirstMove := Copy(PV, 1, Pos(' ', PV + ' ') - 1);
-      if not AData.BaseBoard.IsLegalMove(FirstMove) then
+      if (AData.BasePosition = nil) or not AData.BasePosition.IsLegal(FirstMove) then
         Errors.Add('illegal PV attached to search ' + IntToStr(Id));
       if (AData.NodeId <> Id) or (AData.GameTreeId <> 1) then
         Errors.Add('snapshot search reference changed');
       if Id in [1, 4] then
       begin
-        if (PV <> '32-28 19-23') or (AData.BaseBoard.SideToMove <> dsWhite) then
+        if (PV <> '32-28 19-23') or (AData.BasePosition.SideToMove <> gsWhite) then
           Errors.Add('wrong analysis for the initial position');
         if Id = 1 then
           Seen[1].SetEvent;
       end
       else
       begin
-        if (PV <> '19-23 28x19') or (AData.BaseBoard.SideToMove <> dsBlack) then
+        if (PV <> '19-23 28x19') or (AData.BasePosition.SideToMove <> gsBlack) then
           Errors.Add('old analysis attached to the browsed position');
         if Id = 2 then
           Seen[2].SetEvent;
@@ -156,14 +156,14 @@ var
   Definition: TExternalEngineDefinition;
   Observer: TObserver;
   Runner: TAnalyzerRunnerThread;
-  A, B: TDraughtsBoard;
+  A, B: TGamePosition;
   I: Integer;
   Received: array[1..4] of Boolean;
 begin
   Definition := TExternalEngineDefinition.Create;
   Observer := TObserver.Create;
-  A := TDraughtsBoard.Create;
-  B := TDraughtsBoard.Create;
+  A := DraughtsVariant.CreatePosition;
+  B := DraughtsVariant.CreatePosition;
   Runner := nil;
   try
     Definition.Kind := eekHub;

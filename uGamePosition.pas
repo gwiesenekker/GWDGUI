@@ -109,6 +109,11 @@ type
 
 function OppositeGameSide(ASide: TGameSide): TGameSide;
 
+{ Copies ASource into ATarget. ATarget is created (Clone) when it is nil or of
+  another class, so holders of a position need not know the game in advance.
+  ASource = nil leaves ATarget unchanged. }
+procedure AssignGamePosition(var ATarget: TGamePosition; ASource: TGamePosition);
+
 { The variant used when a generic object is created without one. A game unit
   registers itself in its initialization section, so a program selects its
   game by linking that unit (for draughts, the draughts position unit). }
@@ -139,6 +144,19 @@ begin
     Result := gsBlack
   else
     Result := gsWhite;
+end;
+
+procedure AssignGamePosition(var ATarget: TGamePosition; ASource: TGamePosition);
+begin
+  if ASource = nil then
+    Exit;
+  if (ATarget <> nil) and (ATarget.ClassType = ASource.ClassType) then
+    ATarget.AssignFrom(ASource)
+  else
+  begin
+    FreeAndNil(ATarget);
+    ATarget := ASource.Clone;
+  end;
 end;
 
 procedure TGamePosition.MovesBetween(AFrom, ATo: Integer; AMoves: TStrings);

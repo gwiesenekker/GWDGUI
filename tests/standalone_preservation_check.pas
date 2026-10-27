@@ -1032,11 +1032,20 @@ procedure CheckPvReplayIsValidated(AForm: TMainForm);
 var
   Browser: TPvBrowser;
   Base, Displayed, Expected: TDraughtsBoard;
+  BasePosition: TDraughtsPosition;
+
   Memo: TMemo;
   Info: TLabel;
   Key: Word;
+
+  function B: TDraughtsPosition;
+  begin
+    BasePosition.AssignBoard(Base);
+    Result := BasePosition;
+  end;
 begin
   Base := TDraughtsBoard.Create;
+  BasePosition := TDraughtsPosition.Create;
   Displayed := TDraughtsBoard.Create;
   Expected := TDraughtsBoard.Create;
   Memo := TMemo.Create(nil);
@@ -1048,7 +1057,7 @@ begin
     Base.SetBeginPosition;
     Expected.AssignFrom(Base);
     Expected.PlayMove('32-28');
-    Browser.SetData(Base, 0, DefaultStartingFEN, '32-28 28-23 19-24', '', '', '');
+    Browser.SetData(B, 0, DefaultStartingFEN, '32-28 28-23 19-24', '', '', '');
     Check(Displayed.CurrentFEN = Expected.CurrentFEN,
       'a wrong-side PV move must stop at the last legal position');
     Check(Pos('Invalid PV move 2: 28-23', Memo.Text) > 0,
@@ -1059,20 +1068,20 @@ begin
       (Memo.SelText = '1.32-28'),
       'clicking past an invalid PV move must select the last legal position');
     Check(Pos('browsing; Esc to resume', Info.Caption) > 0, 'PV label indicates browsing');
-    Browser.SetData(Base, 0, DefaultStartingFEN, '33-28', '0.2', '20', '1');
+    Browser.SetData(B, 0, DefaultStartingFEN, '33-28', '0.2', '20', '1');
     Check(Pos('newer PV pending', Info.Caption) > 0, 'PV label indicates pending update');
     Key := VK_ESCAPE;
     Memo.OnKeyDown(Memo, Key, []);
     Check((Pos('browsing', Info.Caption) = 0) and (Pos('score 0.2', Info.Caption) > 0),
       'Escape resumes newest PV and clears browsing label');
-    Browser.SetData(Base, 0, DefaultStartingFEN,
+    Browser.SetData(B, 0, DefaultStartingFEN,
       '32-28 19-23 46-41 23x32', '', '', '');
     Expected.PlayMove('19-23');
     Check(Displayed.CurrentFEN = Expected.CurrentFEN,
       'an impossible PV move must not change any board square');
     Check(Pos('Invalid PV move 3: 46-41', Memo.Text) > 0,
       'impossible PV continuation must be marked');
-    Browser.SetData(Base, 0, DefaultStartingFEN, 'nonsense 32-28', '', '', '');
+    Browser.SetData(B, 0, DefaultStartingFEN, 'nonsense 32-28', '', '', '');
     Check((Displayed.CurrentFEN = Base.CurrentFEN) and
       (Pos('Invalid PV move 1: nonsense', Memo.Text) > 0),
       'a malformed first PV move must show the base position with an explanation');
@@ -1081,7 +1090,7 @@ begin
     Expected.PlayMove('37x17');
     Expected.PlayMove('5-10');
     Expected.PlayMove('45-40');
-    Browser.SetData(Base, 0, Base.CurrentFEN, '37x17 5-10 45-40', '', '', '');
+    Browser.SetData(B, 0, Base.CurrentFEN, '37x17 5-10 45-40', '', '', '');
     Check(Displayed.CurrentFEN = Expected.CurrentFEN,
       'short-form multiple capture must replay the complete legal PV');
     Check(Pos('Invalid PV', Memo.Text) = 0, 'new legal PV must clear old warnings');
@@ -1090,7 +1099,7 @@ begin
     Expected.AssignFrom(Base);
     Expected.PlayMove('37x17');
     Base.SetBeginPosition;
-    Browser.SetData(Base, 0, DefaultStartingFEN, '19-24', '', '', '');
+    Browser.SetData(B, 0, DefaultStartingFEN, '19-24', '', '', '');
     Check(Displayed.CurrentFEN = Expected.CurrentFEN,
       'pending invalid PV must not replace a frozen legal position');
     Key := VK_ESCAPE;
@@ -1104,6 +1113,7 @@ begin
     Memo.Free;
     Expected.Free;
     Displayed.Free;
+    BasePosition.Free;
     Base.Free;
   end;
 end;

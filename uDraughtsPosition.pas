@@ -49,6 +49,9 @@ type
     // Draughts-specific access for draughts-only units. Legal moves are
     // brought up to date before the board is returned.
     property Board: TDraughtsBoard read GetBoard;
+    // Copies a draughts board (with its played-move history and legal moves)
+    // for draughts-only units that still hold boards.
+    procedure AssignBoard(ABoard: TDraughtsBoard);
   end;
 
   TDraughtsVariant = class(TGameVariant)
@@ -288,6 +291,14 @@ begin
       ' to a draughts position');
   FBoard.AssignFrom(TDraughtsPosition(ASource).FBoard);
   FLegalMovesStale := TDraughtsPosition(ASource).FLegalMovesStale;
+end;
+
+procedure TDraughtsPosition.AssignBoard(ABoard: TDraughtsBoard);
+begin
+  if ABoard = nil then
+    Exit;
+  FBoard.AssignFrom(ABoard);
+  FLegalMovesStale := False;
 end;
 
 function TDraughtsPosition.Clone: TGamePosition;

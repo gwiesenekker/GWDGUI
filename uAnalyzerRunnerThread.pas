@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SyncObjs, SysUtils,
-  uCancellationToken, uDraughtsBoard, uEngineBase, uEngineRegistry, uGameTreeSearchRef,
+  uCancellationToken, uEngineBase, uGamePosition, uEngineRegistry, uGameTreeSearchRef,
   uHubEngine, uPvSnapshot, uThreadMessageQueue;
 
 type
@@ -38,7 +38,7 @@ type
     FOnMove: TAnalyzerRunnerMoveEvent;
     FOnSnapshot: TAnalyzerRunnerSnapshotEvent;
     FRunMode: TAnalyzerRunMode;
-    FPvBaseBoard: TDraughtsBoard;
+    FPvBasePosition: TGamePosition; // nil when the request had none
     FPvBasePly: Integer;
     FPvLock: TCriticalSection;
     procedure ApplyPvContext(ACommand: TObject; AGameTreeOnly: Boolean);
@@ -61,11 +61,11 @@ type
     destructor Destroy; override;
 
     procedure PostAnalyze(const AStartingFEN, AMovesText: string;
-      ABaseBoard: TDraughtsBoard; ABasePly: Integer; ATerminal: Boolean;
+      ABasePosition: TGamePosition; ABasePly: Integer; ATerminal: Boolean;
       const ASearch: TGameTreeSearchRef; ATransient: Boolean = False;
       AAnalyzeSeconds: Double = 1000);
     procedure PostThinkOnce(const AStartingFEN, AMovesText: string;
-      ABaseBoard: TDraughtsBoard; ABasePly: Integer; AThinkSeconds: Double;
+      ABasePosition: TGamePosition; ABasePly: Integer; AThinkSeconds: Double;
       const ASearch: TGameTreeSearchRef; ATransient: Boolean = False);
     procedure PostStopSearch;
     procedure PostShutdown;
@@ -86,7 +86,7 @@ type
 
   TAnalyzerCommand = class(TThreadMessage)
   private
-    FBaseBoard: TDraughtsBoard;
+    FBasePosition: TGamePosition; // owned copy, nil when none was given
     FBasePly: Integer;
     FCommandKind: TAnalyzerCommandKind;
     FMovesText: string;
@@ -98,7 +98,7 @@ type
   public
     constructor Create(ACommandKind: TAnalyzerCommandKind); reintroduce;
     destructor Destroy; override;
-    property BaseBoard: TDraughtsBoard read FBaseBoard;
+    property BasePosition: TGamePosition read FBasePosition;
     property BasePly: Integer read FBasePly write FBasePly;
     property CommandKind: TAnalyzerCommandKind read FCommandKind;
     property MovesText: string read FMovesText write FMovesText;
@@ -120,12 +120,11 @@ const
 begin
   inherited Create(CommandNames[ACommandKind]);
   FCommandKind := ACommandKind;
-  FBaseBoard := TDraughtsBoard.Create;
 end;
 
 destructor TAnalyzerCommand.Destroy;
 begin
-  FBaseBoard.Free;
+  FBasePosition.Free;
   inherited Destroy;
 end;
 
@@ -141,7 +140,6 @@ begin
   FCommandQueue := TThreadMessageQueue.Create(True);
   FEngineLifetimeLock := TCriticalSection.Create;
   FStopToken := TCancellationToken.Create;
-  FPvBaseBoard := TDraughtsBoard.Create;
   FPvLock := TCriticalSection.Create;
   FOnLog := ALogEvent;
   FOnSnapshot := ASnapshotEvent;
@@ -160,7 +158,7 @@ begin
   FEngineLifetimeLock.Free;
   FStopToken.Free;
   FPvLock.Free;
-  FPvBaseBoard.Free;
+  FPvBasePosition.Free;
   FCommandQueue.Free;
   FEngineDefinition.Free;
   inherited Destroy;
@@ -203,7 +201,7 @@ begin
   Snapshot := TPvSnapshot.Create;
   FPvLock.Acquire;
   try
-    Snapshot.SetDataWithSearch(FPvBaseBoard, FPvBasePly,
+    Snapshot.SetDataWithSearch(FPvBasePosition, FPvBasePly,
       FEngine.PrincipalVariation, FEngine.LastScore, FEngine.LastDepth,
       FEngine.LastTimeText, FPvSearch, FPvGameTreeOnly, FPvTransient);
     FLastPublishedPv := FEngine.PrincipalVariation;
@@ -227,7 +225,10 @@ begin
 
   FPvLock.Acquire;
   try
-    FPvBaseBoard.AssignFrom(Command.BaseBoard);
+    if Command.BasePosition = nil then
+      FreeAndNil(FPvBasePosition)
+    else
+      AssignGamePosition(FPvBasePosition, Command.BasePosition);
     FPvBasePly := Command.BasePly;
     FPvSearch := Command.Search;
     FPvGameTreeOnly := AGameTreeOnly;
@@ -416,7 +417,7 @@ begin
 end;
 
 procedure TAnalyzerRunnerThread.PostAnalyze(const AStartingFEN, AMovesText: string;
-  ABaseBoard: TDraughtsBoard; ABasePly: Integer; ATerminal: Boolean;
+  ABasePosition: TGamePosition; ABasePly: Integer; ATerminal: Boolean;
   const ASearch: TGameTreeSearchRef; ATransient: Boolean;
   AAnalyzeSeconds: Double);
 var
@@ -430,13 +431,13 @@ begin
   Command.Search := ASearch;
   Command.Transient := ATransient;
   Command.ThinkSeconds := AAnalyzeSeconds;
-  if ABaseBoard <> nil then
-    Command.BaseBoard.AssignFrom(ABaseBoard);
+  if ABasePosition <> nil then
+    Command.FBasePosition := ABasePosition.Clone;
   PostCommand(Command);
 end;
 
 procedure TAnalyzerRunnerThread.PostThinkOnce(const AStartingFEN,
-  AMovesText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer;
+  AMovesText: string; ABasePosition: TGamePosition; ABasePly: Integer;
   AThinkSeconds: Double; const ASearch: TGameTreeSearchRef;
   ATransient: Boolean);
 var
@@ -449,8 +450,8 @@ begin
   Command.ThinkSeconds := AThinkSeconds;
   Command.Search := ASearch;
   Command.Transient := ATransient;
-  if ABaseBoard <> nil then
-    Command.BaseBoard.AssignFrom(ABaseBoard);
+  if ABasePosition <> nil then
+    Command.FBasePosition := ABasePosition.Clone;
   PostCommand(Command);
 end;
 

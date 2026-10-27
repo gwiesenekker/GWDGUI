@@ -216,9 +216,9 @@ type
     function TryResolveRunningSnapshotPvNode(AGameTree: TGameTree;
       const AInput: TRunningSnapshotTreeInput;
       out ANode: TGameTreePlyNode): Boolean;
-    procedure SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
+    procedure SetAnalyzerPvBase(APosition: TGamePosition; APly: Integer);
     procedure SetAnalyzerPvBaseFromTree(AGameTree: TGameTree; ANodeId: Int64;
-      AFallbackBasePly: Integer; AFallbackBoard: TDraughtsBoard);
+      AFallbackBasePly: Integer; AFallbackPosition: TGamePosition);
     procedure InvalidateAnalyzerPositionSignature;
     procedure InvalidateMctsPositionSignature;
     procedure ApplyGameTreeCommandResult(AGameTree: TGameTree;
@@ -301,7 +301,7 @@ type
     function TryBuildDisplayedPosition(AGameTree: TGameTree;
       APosition: TGamePosition): Boolean;
     function VisibleMainPvForTree(AGameTree: TGameTree;
-      out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV,
+      out ABasePosition: TGamePosition; out ABasePly: Integer; out APV,
       AScore, ADepth, ATimeText: string): Boolean;
     procedure RefreshMainPvBrowserFromTree(AGameTree: TGameTree;
       const AStartingFEN: string = '');
@@ -311,9 +311,9 @@ type
       AMovesSignature, ARunningSignature: string; AGameTreeId,
       AGameTreeRevision: Int64);
     procedure SetDisplayedPvCache(const APV, AScore, ADepth,
-      ATimeText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer);
+      ATimeText: string; ABasePosition: TGamePosition; ABasePly: Integer);
     function UpdateDisplayedPvCacheFromTree(AGameTree: TGameTree): Boolean;
-    procedure ClearDisplayedPvCache(ABaseBoard: TDraughtsBoard;
+    procedure ClearDisplayedPvCache(const ABasePositionKey: string;
       ABasePly: Integer);
     function FormatClock(ASeconds: Double): string;
     function CurrentFilteredGameTreePdnOptions: TGameTreePdnRenderOptions;
@@ -380,8 +380,8 @@ type
     procedure PlayHumanMove(const AMove: string;
       ASource: TGameTreeMoveSource = gmsHuman);
     procedure RemoveSelectedGame(Sender: TObject);
-    function TryBuildAnalysisPosition(ATree: TGameTree; ABoard: TDraughtsBoard;
-      out APosition: TAnalysisPosition): Boolean;
+    function TryBuildAnalysisPosition(ATree: TGameTree; APosition: TGamePosition;
+      out AAnalysisPosition: TAnalysisPosition): Boolean;
     procedure RestartAnalyzer(AGameTree: TGameTree);
     procedure RestartMctsAnnotator(AGameTree: TGameTree);
     procedure ReplaySelectedGame(Sender: TObject);
@@ -1659,17 +1659,17 @@ begin
 end;
 
 
-procedure TMainForm.SetAnalyzerPvBase(ABoard: TDraughtsBoard; APly: Integer);
-begin FAnalysis.Pv.SetAnalyzerBase(ABoard, APly); end;
+procedure TMainForm.SetAnalyzerPvBase(APosition: TGamePosition; APly: Integer);
+begin FAnalysis.Pv.SetAnalyzerBase(APosition, APly); end;
 
 procedure TMainForm.SetAnalyzerPvBaseFromTree(AGameTree: TGameTree;
-  ANodeId: Int64; AFallbackBasePly: Integer; AFallbackBoard: TDraughtsBoard);
+  ANodeId: Int64; AFallbackBasePly: Integer; AFallbackPosition: TGamePosition);
 var Actor: TGameTreeActor; Revision: Int64;
 begin
   Actor := ActorForGameTree(AGameTree); Revision := -1;
   if Actor <> nil then Revision := Actor.Revision;
   FAnalysis.Pv.SetAnalyzerBaseFromTree(AGameTree, ANodeId, AFallbackBasePly,
-    AFallbackBoard, FDisplayedPosition, Revision);
+    AFallbackPosition, FDisplayedPosition, Revision);
 end;
 
 procedure TMainForm.InvalidateAnalyzerPositionSignature;
@@ -2003,7 +2003,7 @@ end;
 
 procedure TMainForm.StartNextAutoPlaySearch;
 var
-  LBoard: TDraughtsBoard;
+  LPosition: TGamePosition;
   LErrorText: string;
   LGameTree: TGameTree;
   LMoveCount: Integer;
@@ -2019,14 +2019,14 @@ begin
     Exit;
   end;
 
-  LBoard := TDraughtsBoard.Create;
+  LPosition := LGameTree.Variant.CreatePosition;
   try
-    if not TryBuildDisplayedBoard(LGameTree, LBoard) then
+    if not TryBuildDisplayedPosition(LGameTree, LPosition) then
     begin
       StopAutoPlay('position could not be built');
       Exit;
     end;
-    if LBoard.LegalMoveCount = 0 then
+    if LPosition.LegalMoveCount = 0 then
     begin
       StopAutoPlay('no legal moves');
       Exit;
@@ -2043,11 +2043,11 @@ begin
       Exit;
     end;
     FAutoPlay.TrackSearch(LSearch);
-    SetAnalyzerPvBase(LBoard, LMoveCount);
+    SetAnalyzerPvBase(LPosition, LMoveCount);
     FAnalyzerRunner.PostThinkOnce(StartingFenForTree(LGameTree), LMovesText,
-      LBoard, LMoveCount, AnnotatorSeconds, LSearch, True);
+      LPosition, LMoveCount, AnnotatorSeconds, LSearch, True);
   finally
-    LBoard.Free;
+    LPosition.Free;
   end;
 end;
 
@@ -2055,18 +2055,22 @@ function TMainForm.StoreAutoPlayMove(const AMoveText: string;
   out AErrorText: string): Boolean;
 var
   Actor: TGameTreeActor;
-  Board: TDraughtsBoard;
+  LPosition: TGamePosition;
   Command: TGameTreeCommand;
   Tree: TGameTree;
 begin
   Result := False;
   Tree := ActiveGameTree;
   Actor := ActorForGameTree(Tree);
-  Board := TDraughtsBoard.Create;
+  LPosition := nil;
   try
-    if not TryBuildDisplayedBoard(Tree, Board) then FreeAndNil(Board);
-    Command := FAutoPlay.CreateMoveCommand(Actor, Tree, Board, AMoveText, AErrorText);
-  finally Board.Free; end;
+    if Tree <> nil then
+    begin
+      LPosition := Tree.Variant.CreatePosition;
+      if not TryBuildDisplayedPosition(Tree, LPosition) then FreeAndNil(LPosition);
+    end;
+    Command := FAutoPlay.CreateMoveCommand(Actor, Tree, LPosition, AMoveText, AErrorText);
+  finally LPosition.Free; end;
   if Command = nil then Exit;
   try
     Result := ExecuteAndApplyGameTreeCommand(Actor, Tree, Command, False, AErrorText);
@@ -2548,57 +2552,58 @@ begin
 end;
 
 function TMainForm.TryBuildAnalysisPosition(ATree: TGameTree;
-  ABoard: TDraughtsBoard; out APosition: TAnalysisPosition): Boolean;
+  APosition: TGamePosition; out AAnalysisPosition: TAnalysisPosition): Boolean;
 var Actor: TGameTreeActor;
 begin
-  APosition := Default(TAnalysisPosition);
+  AAnalysisPosition := Default(TAnalysisPosition);
   Result := False;
-  if ATree = nil then Exit;
-  APosition.Tree := ATree;
-  APosition.Node := CurrentDisplayedGameTreeNode(ATree);
-  if APosition.Node = nil then Exit;
-  if not TryBuildDisplayedBoard(ATree, ABoard) then Exit;
-  APosition.Board := ABoard;
-  APosition.StartingFEN := StartingFenForTree(ATree);
-  if not DisplayedMoveContext(ATree, APosition.MovesText, APosition.MoveCount) then Exit;
-  APosition.State := StateForTree(ATree);
-  APosition.BrowseBasePly := BrowseBasePly;
-  APosition.Preview := Trim(FDisplayedPosition.PreviewMoves) <> '';
+  if (ATree = nil) or (APosition = nil) then Exit;
+  AAnalysisPosition.Tree := ATree;
+  AAnalysisPosition.Node := CurrentDisplayedGameTreeNode(ATree);
+  if AAnalysisPosition.Node = nil then Exit;
+  if not TryBuildDisplayedPosition(ATree, APosition) then Exit;
+  AAnalysisPosition.Position := APosition;
+  AAnalysisPosition.StartingFEN := StartingFenForTree(ATree);
+  if not DisplayedMoveContext(ATree, AAnalysisPosition.MovesText,
+    AAnalysisPosition.MoveCount) then Exit;
+  AAnalysisPosition.State := StateForTree(ATree);
+  AAnalysisPosition.BrowseBasePly := BrowseBasePly;
+  AAnalysisPosition.Preview := Trim(FDisplayedPosition.PreviewMoves) <> '';
   Actor := ActorForGameTree(ATree);
-  APosition.Revision := -1;
-  if Actor <> nil then APosition.Revision := Actor.Revision;
+  AAnalysisPosition.Revision := -1;
+  if Actor <> nil then AAnalysisPosition.Revision := Actor.Revision;
   Result := True;
 end;
 
 procedure TMainForm.RestartAnalyzer(AGameTree: TGameTree);
-var Board: TDraughtsBoard; AnalysisPosition: TAnalysisPosition; Request: TAnalysisRequest;
+var LPosition: TGamePosition; AnalysisPosition: TAnalysisPosition; Request: TAnalysisRequest;
 begin
-  if FAutoPlay.Active or (FAnalyzerRunner = nil) then Exit;
-  Board := TDraughtsBoard.Create;
+  if FAutoPlay.Active or (FAnalyzerRunner = nil) or (AGameTree = nil) then Exit;
+  LPosition := AGameTree.Variant.CreatePosition;
   try
-    if not TryBuildAnalysisPosition(AGameTree, Board, AnalysisPosition) then Exit;
+    if not TryBuildAnalysisPosition(AGameTree, LPosition, AnalysisPosition) then Exit;
     if not FAnalysis.PrepareAnalyzer(AnalysisPosition, ActorForSearchRef(FAnalysis.Search),
       FDisplayedPosition, Request) then Exit;
     if Request.Terminal and (FAnalyzerPvBrowser <> nil) then FAnalyzerPvBrowser.Clear;
     FAnalysis.StartRequestSearch(ActorForGameTree(AGameTree), AnalysisPosition.Node, Request);
     FAnalyzerRunner.PostAnalyze(Request.StartingFEN, Request.MovesText,
-      Request.BaseBoard, Request.BasePly, Request.Terminal, Request.Search,
+      Request.BasePosition, Request.BasePly, Request.Terminal, Request.Search,
       Request.Transient, AnnotatorSeconds);
-  finally Board.Free; end;
+  finally LPosition.Free; end;
 end;
 
 procedure TMainForm.RestartMctsAnnotator(AGameTree: TGameTree);
-var Board: TDraughtsBoard; AnalysisPosition: TAnalysisPosition; Request: TAnalysisRequest;
+var LPosition: TGamePosition; AnalysisPosition: TAnalysisPosition; Request: TAnalysisRequest;
 begin
-  if FMctsRunner = nil then Exit;
-  Board := TDraughtsBoard.Create;
+  if (FMctsRunner = nil) or (AGameTree = nil) then Exit;
+  LPosition := AGameTree.Variant.CreatePosition;
   try
-    if not TryBuildAnalysisPosition(AGameTree, Board, AnalysisPosition) then Exit;
+    if not TryBuildAnalysisPosition(AGameTree, LPosition, AnalysisPosition) then Exit;
     if not FAnalysis.PrepareMcts(AnalysisPosition, FDisplayedPosition, Request) then Exit;
     ClearMctsStatsGrid;
     FMctsRunner.PostAnalyze(Request.StartingFEN, Request.MovesText,
-      Request.BaseBoard, Request.BasePly, Request.Terminal, Request.Search);
-  finally Board.Free; end;
+      Request.BasePosition, Request.BasePly, Request.Terminal, Request.Search);
+  finally LPosition.Free; end;
 end;
 
 function TMainForm.LiveGameCount: Integer;
@@ -2741,7 +2746,7 @@ begin
     FStandaloneEventName := '?';
     ClearVariationExploration;
     FDisplayedPosition.Cursor.Follow;
-    ClearDisplayedPvCache(LBoard, 0);
+    ClearDisplayedPvCache(LBoard.PositionKey, 0);
     FViewedGameId := -1;
     if FGamesListBox <> nil then
       FGamesListBox.ItemIndex := 0;
@@ -2890,7 +2895,7 @@ begin
     ClearVariationExploration;
     FDisplayedPosition.Cursor.Select(FGameTree, FGameTree.Root);
     ImportPdnTree(FGameTree, AGame);
-    ClearDisplayedPvCache(LBoard, CurrentMoveCount);
+    ClearDisplayedPvCache(LBoard.PositionKey, CurrentMoveCount);
     FViewedGameId := -1;
     if FGamesListBox <> nil then
       FGamesListBox.ItemIndex := 0;
@@ -3305,7 +3310,7 @@ begin
 end;
 
 function TMainForm.VisibleMainPvForTree(AGameTree: TGameTree;
-  out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV, AScore,
+  out ABasePosition: TGamePosition; out ABasePly: Integer; out APV, AScore,
   ADepth, ATimeText: string): Boolean;
 var Actor: TGameTreeActor; Revision: Int64;
 begin
@@ -3313,13 +3318,13 @@ begin
   if Actor <> nil then Revision := Actor.Revision;
   Result := FAnalysis.Pv.VisibleMainPv(AGameTree, CurrentDisplayedGameTreeNode(AGameTree),
     (GameForTree(AGameTree) <> nil) or (AGameTree = FGameTree), FDisplayedPosition,
-    Revision, ABaseBoard, ABasePly, APV, AScore, ADepth, ATimeText);
+    Revision, ABasePosition, ABasePly, APV, AScore, ADepth, ATimeText);
 end;
 
 procedure TMainForm.RefreshMainPvBrowserFromTree(AGameTree: TGameTree;
   const AStartingFEN: string);
 var
-  LPvBaseBoard: TDraughtsBoard;
+  LPvBase: TGamePosition;
   LPvBasePly: Integer;
   LPvDepth: string;
   LPvScore: string;
@@ -3334,9 +3339,9 @@ begin
   if LStartingFEN = '' then
     LStartingFEN := StartingFenForTree(AGameTree);
 
-  VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
+  VisibleMainPvForTree(AGameTree, LPvBase, LPvBasePly, LPvText,
     LPvScore, LPvDepth, LPvTimeText);
-  FPvBrowser.SetData(LPvBaseBoard, LPvBasePly, LStartingFEN, LPvText,
+  FPvBrowser.SetData(LPvBase, LPvBasePly, LStartingFEN, LPvText,
     LPvScore, LPvDepth, LPvTimeText);
 end;
 
@@ -3369,7 +3374,7 @@ begin
     end;
   end;
 
-  FAnalyzerPvBrowser.SetData(FAnalysis.Pv.AnalyzerBaseBoard, FAnalysis.Pv.AnalyzerBasePly,
+  FAnalyzerPvBrowser.SetData(FAnalysis.Pv.AnalyzerBasePosition, FAnalysis.Pv.AnalyzerBasePly,
     StartingFenForTree(AGameTree), LPvText, LPvScore, LPvDepth, LPvTimeText);
 end;
 
@@ -3387,15 +3392,18 @@ begin
 end;
 
 procedure TMainForm.SetDisplayedPvCache(const APV, AScore, ADepth,
-  ATimeText: string; ABaseBoard: TDraughtsBoard; ABasePly: Integer);
+  ATimeText: string; ABasePosition: TGamePosition; ABasePly: Integer);
+var LKey: string;
 begin
-  FAnalysis.Pv.SetCache(APV, AScore, ADepth, ATimeText, ABaseBoard, ABasePly);
+  LKey := '';
+  if ABasePosition <> nil then LKey := ABasePosition.PositionKey;
+  FAnalysis.Pv.SetCache(APV, AScore, ADepth, ATimeText, LKey, ABasePly);
 end;
 
 function TMainForm.UpdateDisplayedPvCacheFromTree(
   AGameTree: TGameTree): Boolean;
 var
-  LPvBaseBoard: TDraughtsBoard;
+  LPvBase: TGamePosition;
   LPvBasePly: Integer;
   LPvBasePositionKey: string;
   LPvDepth: string;
@@ -3403,15 +3411,15 @@ var
   LPvText: string;
   LPvTimeText: string;
 begin
-  LPvBaseBoard := nil;
+  LPvBase := nil;
   LPvBasePly := 0;
   LPvText := '';
   LPvScore := '';
   LPvDepth := '';
   LPvTimeText := '';
-  if VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
-    LPvScore, LPvDepth, LPvTimeText) and (LPvBaseBoard <> nil) then
-    LPvBasePositionKey := LPvBaseBoard.PositionKey
+  if VisibleMainPvForTree(AGameTree, LPvBase, LPvBasePly, LPvText,
+    LPvScore, LPvDepth, LPvTimeText) and (LPvBase <> nil) then
+    LPvBasePositionKey := LPvBase.PositionKey
   else
     LPvBasePositionKey := '';
 
@@ -3419,13 +3427,13 @@ begin
     LPvTimeText, LPvBasePositionKey, LPvBasePly);
   if Result then
     SetDisplayedPvCache(LPvText, LPvScore, LPvDepth, LPvTimeText,
-      LPvBaseBoard, LPvBasePly);
+      LPvBase, LPvBasePly);
 end;
 
-procedure TMainForm.ClearDisplayedPvCache(ABaseBoard: TDraughtsBoard;
+procedure TMainForm.ClearDisplayedPvCache(const ABasePositionKey: string;
   ABasePly: Integer);
 begin
-  SetDisplayedPvCache('', '', '', '', ABaseBoard, ABasePly);
+  FAnalysis.Pv.SetCache('', '', '', '', ABasePositionKey, ABasePly);
 end;
 
 function TMainForm.PlayerNameOrFallback(const AName, AFallback: string): string;
@@ -3869,7 +3877,7 @@ var
   LDisplayedBoard: TDraughtsBoard;
   DisplayedMove: string;
   PositionValid: Boolean;
-  LPvBaseBoard: TDraughtsBoard;
+  LPvBase: TGamePosition;
   LPvBasePly: Integer;
   LPvDepth: string;
   LPvHighlightsActive: Boolean;
@@ -3889,20 +3897,20 @@ begin
     PositionValid := TryBuildDisplayedBoard(AGameTree, LDisplayedBoard);
     if PositionValid and (LDisplayedBoard.MovesPlayedCount > 0) then
       DisplayedMove := LDisplayedBoard.MovesPlayed[LDisplayedBoard.MovesPlayedCount - 1];
-    LPvBaseBoard := nil;
+    LPvBase := nil;
     LPvText := '';
     if FPvHintSource = phsAnalyzer then
     begin
-      LPvBaseBoard := FAnalysis.Pv.AnalyzerBaseBoard;
+      LPvBase := FAnalysis.Pv.AnalyzerBasePosition;
       if not AnnotatorPvForTreeNode(AGameTree, FAnalysis.Pv.AnalyzerBaseNodeId,
         LPvText, LPvScore, LPvDepth, LPvTimeText) then
         LPvText := '';
     end
     else if FPvHintSource = phsMain then
-      VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
+      VisibleMainPvForTree(AGameTree, LPvBase, LPvBasePly, LPvText,
         LPvScore, LPvDepth, LPvTimeText);
-    LPvHighlightsActive := PositionValid and (LPvBaseBoard <> nil) and
-      (LDisplayedBoard.PositionKey = LPvBaseBoard.PositionKey);
+    LPvHighlightsActive := PositionValid and (LPvBase <> nil) and
+      (LDisplayedBoard.PositionKey = LPvBase.PositionKey);
 
     Highlights := CalculateMoveHighlights(AGameTree.Variant, DisplayedMove, LPvText,
       LPvHighlightsActive);
@@ -4929,7 +4937,7 @@ begin
   LBoard := TDraughtsBoard.Create;
   try
     LBoard.LoadFromFEN(ASetup.StartingFEN);
-    ClearDisplayedPvCache(LBoard, 0);
+    ClearDisplayedPvCache(LBoard.PositionKey, 0);
   finally
     LBoard.Free;
   end;
@@ -5017,9 +5025,9 @@ var
     if AnalyzerSnapshotIsTransient(AMessage.Snapshot) then
     begin
       if not CanDisplayTransientAnalysis(AMessage.Snapshot,
-        FAnalysis.Pv.AnalyzerBaseBoard) then
+        FAnalysis.Pv.AnalyzerBasePosition) then
         Exit;
-      SetAnalyzerPvBase(AMessage.Snapshot.BaseBoard,
+      SetAnalyzerPvBase(AMessage.Snapshot.BasePosition,
         AMessage.Snapshot.BasePly);
       if (not AMessage.Snapshot.GameTreeOnly) and
         (FAnalyzerPvBrowser <> nil) then
@@ -5036,7 +5044,7 @@ var
       Exit;
     LNodeId := LNode.NodeId;
     SetAnalyzerPvBaseFromTree(LGameTree, LNodeId,
-      AMessage.Snapshot.BasePly, AMessage.Snapshot.BaseBoard);
+      AMessage.Snapshot.BasePly, AMessage.Snapshot.BasePosition);
     if (not AMessage.Snapshot.GameTreeOnly) and
       (FAnalyzerPvBrowser <> nil) then
       RefreshAnalyzerPvBrowserFromTree(LGameTree, LNodeId,

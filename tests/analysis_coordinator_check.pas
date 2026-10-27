@@ -2,7 +2,7 @@ program analysis_coordinator_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uAnalysisCoordinator,
   uGameTree, uGameTreeActor, uGameTreeSearchRef, uGameOrchestrator,
-  uDraughtsBoard, uPvSnapshot, uTreeTestUtils, uDisplayedPosition, uDraughtsPosition;
+  uGamePosition, uPvSnapshot, uTreeTestUtils, uDisplayedPosition, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 procedure Execute(Actor: TGameTreeActor; Command: TGameTreeCommand);
@@ -12,31 +12,31 @@ begin
 end;
 procedure CheckPvState;
 var Actor: TGameTreeActor; Pv: TAnalysisPvState; Display: TDisplayedPosition;
-  Board, Visible: TDraughtsBoard; Node: TGameTreePlyNode;
+  Board, Visible: TGamePosition; Node: TGameTreePlyNode;
   BasePly: Integer; Text, Score, Depth, TimeText, Key: string;
 begin
   Actor := TGameTreeActor.Create; Pv := TAnalysisPvState.Create;
-  Display := TDisplayedPosition.Create; Board := TDraughtsBoard.Create;
+  Display := TDisplayedPosition.Create; Board := DraughtsVariant.CreatePosition;
   try
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('32-28', gmsHuman));
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('18-23', gmsHuman));
     Execute(Actor, ImportBranch(Actor, 1, '20-24 38-32 18-22', '', gmsHuman));
     Node := Actor.GameTree.FindBranchNode(0, 3);
-    Check(TryBuildDraughtsBoardAtNode(Actor.GameTree, Node, Board), 'PV nested board');
+    Check(Actor.GameTree.TryBuildPositionAtNode(Node, Board), 'PV nested board');
     Key := Board.PositionKey;
     Pv.SetAnalyzerBaseFromTree(Actor.GameTree, Node.NodeId, 1, nil, Display, Actor.Revision);
     Check((Pv.AnalyzerBaseNodeId = Node.NodeId) and (Pv.AnalyzerBasePly = Node.PlyNumber) and
-      (Pv.AnalyzerBaseBoard.PositionKey = Key), 'analyzer base follows nested node, not fallback ply');
+      (Pv.AnalyzerBasePosition.PositionKey = Key), 'analyzer base follows nested node, not fallback ply');
     Pv.SetAnalyzerBase(Board, 99);
-    Board.SetBeginPosition;
+    Board.LoadFromFEN(DraughtsVariant.DefaultStartingFEN);
     Check((Pv.AnalyzerBaseNodeId = 0) and (Pv.AnalyzerBasePly = 99) and
-      (Pv.AnalyzerBaseBoard.PositionKey = Key), 'transient base copies board and clears persistent identity');
+      (Pv.AnalyzerBasePosition.PositionKey = Key), 'transient base copies board and clears persistent identity');
     Pv.SetAnalyzerBase(nil, 98);
-    Check(Pv.AnalyzerBaseBoard.PositionKey = Key, 'nil base preserves last board');
+    Check(Pv.AnalyzerBasePosition.PositionKey = Key, 'nil base preserves last board');
     Pv.SetAnalyzerBaseFromTree(Actor.GameTree, High(Int64), 1, nil, Display, Actor.Revision);
-    Check(TryBuildDraughtsBoardAtNode(Actor.GameTree, Actor.GameTree.MainlineNode[1], Board), 'fallback board');
+    Check(Actor.GameTree.TryBuildPositionAtNode(Actor.GameTree.MainlineNode[1], Board), 'fallback board');
     Check((Pv.AnalyzerBaseNodeId = 0) and (Pv.AnalyzerBasePly = 1) and
-      (Pv.AnalyzerBaseBoard.PositionKey = Board.PositionKey), 'missing node falls back to mainline base');
+      (Pv.AnalyzerBasePosition.PositionKey = Board.PositionKey), 'missing node falls back to mainline base');
     Pv.SetAnalyzerBaseFromTree(nil, 0, -1, Board, Display, -1);
     Check((Pv.AnalyzerBasePly = -1) and (Pv.AnalyzerBaseNodeId = 0), 'unavailable tree uses supplied board');
     Execute(Actor, Actor.CreateRecordEnginePVCommand(Actor.GameTree.MainlineNode[2].NodeId,
@@ -45,34 +45,34 @@ begin
       Actor.Revision, Visible, BasePly, Text, Score, Depth, TimeText), 'visible latest engine PV');
     Check((BasePly = 2) and (Text = '37-32 12-18') and (Score = '0.25') and
       (Depth = '8') and (TimeText = '0.4'), 'historical display retains latest-engine-PV policy');
-    Check(TryBuildDraughtsBoardAtNode(Actor.GameTree, Actor.GameTree.MainlineNode[2], Board), 'latest PV base board');
+    Check(Actor.GameTree.TryBuildPositionAtNode(Actor.GameTree.MainlineNode[2], Board), 'latest PV base board');
     Check(Visible.PositionKey = Board.PositionKey, 'visible PV replays its actual mainline base');
     Check(not Pv.VisibleMainPv(Actor.GameTree, Node, False, Display, Actor.Revision,
       Visible, BasePly, Text, Score, Depth, TimeText) and (Text = '') and
       (BasePly = Node.PlyNumber), 'unavailable engine source leaves selected board without PV');
     Key := Visible.PositionKey;
-    Pv.SetCache('12-18', '0.2', '9', '0.1', Visible, BasePly);
+    Pv.SetCache('12-18', '0.2', '9', '0.1', Visible.PositionKey, BasePly);
     Check(Pv.CacheMatches('12-18', '0.2', '9', '0.1', Key, BasePly), 'cache matches full display tuple');
     Check(not Pv.CacheMatches('12-18', '0.2', '10', '0.1', Key, BasePly), 'depth change invalidates PV cache');
     Check(not Pv.CacheMatches('12-18', '0.2', '9', '0.1', Key, BasePly + 1), 'base ply change invalidates PV cache');
     Check(not Pv.CacheMatches('12-18', '0.2', '9', '0.1', 'other position', BasePly), 'board identity change invalidates PV cache');
-    Pv.SetCache('', '', '', '', nil, 0);
+    Pv.SetCache('', '', '', '', '', 0);
     Check(Pv.CacheMatches('', '', '', '', '', 0), 'clear resets tuple including board key');
   finally Board.Free; Display.Free; Pv.Free; Actor.Free; end;
 end;
 
 procedure CheckAutoPlay;
 var Actor, Other: TGameTreeActor; AutoPlay: TAutoPlayCoordinator;
-  Board: TDraughtsBoard; Command: TGameTreeCommand; Search: TGameTreeSearchRef;
+  Board: TGamePosition; Command: TGameTreeCommand; Search: TGameTreeSearchRef;
   Node: TGameTreePlyNode; ErrorText: string;
 begin
   Actor := TGameTreeActor.Create; Other := TGameTreeActor.Create;
-  AutoPlay := TAutoPlayCoordinator.Create; Board := TDraughtsBoard.Create;
+  AutoPlay := TAutoPlayCoordinator.Create; Board := DraughtsVariant.CreatePosition;
   try
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('32-28', gmsHuman));
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('18-23', gmsHuman));
     Node := Actor.GameTree.MainlineNode[1];
-    Check(TryBuildDraughtsBoardAtNode(Actor.GameTree, Node, Board), 'historical Auto Play board');
+    Check(Actor.GameTree.TryBuildPositionAtNode(Node, Board), 'historical Auto Play board');
     AutoPlay.BeginLine(Actor.GameTree, Node);
     Check(AutoPlay.Active and (AutoPlay.BasePly = 1) and (AutoPlay.NodeId = Node.NodeId) and
       (AutoPlay.MoveCount = 0) and (AutoPlay.MovesText = ''), 'start resets temporary line at selected node');
@@ -126,7 +126,7 @@ end;
 
 procedure CheckRequestsAndSnapshots;
 var Actor, Previous: TGameTreeActor; Coordinator: TAnalysisCoordinator;
-  Display: TDisplayedPosition; Board, OtherBoard: TDraughtsBoard;
+  Display: TDisplayedPosition; Board, OtherBoard: TGamePosition;
   Position: TAnalysisPosition; Request, Mcts: TAnalysisRequest;
   OldSearch: TGameTreeSearchRef; State: TGameTreeSearchState;
   Snapshot: TPvSnapshot; Command: TGameTreeCommand; Tree: TGameTree;
@@ -134,13 +134,13 @@ var Actor, Previous: TGameTreeActor; Coordinator: TAnalysisCoordinator;
 begin
   Actor := TGameTreeActor.Create; Previous := TGameTreeActor.Create;
   Coordinator := TAnalysisCoordinator.Create; Display := TDisplayedPosition.Create;
-  Board := TDraughtsBoard.Create; OtherBoard := TDraughtsBoard.Create;
+  Board := DraughtsVariant.CreatePosition; OtherBoard := DraughtsVariant.CreatePosition;
   Snapshot := TPvSnapshot.Create;
   try
     Position := Default(TAnalysisPosition);
     Check(not Coordinator.PrepareAnalyzer(Position, nil, Display, Request), 'missing analysis position rejected');
     Position.Tree := Actor.GameTree; Position.Node := Actor.GameTree.Root;
-    Position.Board := Board; Position.StartingFEN := Actor.GameTree.StartingFEN;
+    Position.Position := Board; Position.StartingFEN := Actor.GameTree.StartingFEN;
     Position.BrowseBasePly := -1; Position.State := gosStopped;
     Check(StartAnalysisSearch(Previous, Previous.GameTree.Root, OldSearch, ErrorText), ErrorText);
     Coordinator.TrackSearch(OldSearch);
@@ -149,7 +149,7 @@ begin
     Previous.ProcessCommands;
     Check(not Previous.SearchState(OldSearch, State), 'old game search queued for release');
     Check(not Request.Terminal and not Request.Transient and
-      (Request.BaseBoard.PositionKey = Board.PositionKey), 'ordinary request uses selected base');
+      (Request.BasePosition.PositionKey = Board.PositionKey), 'ordinary request uses selected base');
     Coordinator.StartRequestSearch(Actor, Position.Node, Request);
     Check(IsValidGameTreeSearchRef(Request.Search) and Coordinator.SearchMatches(Request.Search), 'ordinary request starts tracked actor search');
     Check(not Coordinator.PrepareAnalyzer(Position, Actor, Display, Mcts), 'unchanged position suppressed');
@@ -175,20 +175,20 @@ begin
     Coordinator.StartRequestSearch(Actor, Position.Node, Request);
     Check(Request.Transient and not Request.Terminal and
       not IsValidGameTreeSearchRef(Request.Search), 'preview request never owns a persistent search');
-    Key := Request.BaseBoard.PositionKey;
+    Key := Request.BasePosition.PositionKey;
     Board.PlayMove('18-23');
-    Check(Request.BaseBoard.PositionKey = Key, 'request base is copied before caller changes input board');
+    Check(Request.BasePosition.PositionKey = Key, 'request base is copied before caller changes input board');
     Check(Coordinator.PrepareMcts(Position, Display, Mcts), 'MCTS preview request');
-    Check(Mcts.BaseBoard.PositionKey = OtherBoard.PositionKey,
+    Check(Mcts.BasePosition.PositionKey = OtherBoard.PositionKey,
       'MCTS retains selected-node base policy when displaying a preview');
-    Snapshot.SetDataWithSearch(Request.BaseBoard, 1, '18-23', '0.1', '2', '', EmptyGameTreeSearchRef, False, True);
-    Check(CanDisplayTransientAnalysis(Snapshot, Request.BaseBoard), 'matching transient base accepted');
+    Snapshot.SetDataWithSearch(Request.BasePosition, 1, '18-23', '0.1', '2', '', EmptyGameTreeSearchRef, False, True);
+    Check(CanDisplayTransientAnalysis(Snapshot, Request.BasePosition), 'matching transient base accepted');
     Check(not CanDisplayTransientAnalysis(Snapshot, Board), 'unrelated transient base ignored');
     Command := PrepareAnalysisSnapshotCommand(Actor, Actor.GameTree, Snapshot, Tree);
     Check(Command = nil, 'transient snapshot never persists');
     Position.Preview := False; Position.MovesText := ''; Position.MoveCount := 0;
     Position.State := gosGameOver; Position.BrowseBasePly := -1;
-    Board.SetBeginPosition;
+    Board.LoadFromFEN(DraughtsVariant.DefaultStartingFEN);
     Check(Coordinator.PrepareAnalyzer(Position, Actor, Display, Request) and Request.Terminal,
       'completed following position prepares terminal request');
     Coordinator.StartRequestSearch(Actor, Position.Node, Request);
@@ -205,7 +205,7 @@ begin
 end;
 
 var Actor, Other: TGameTreeActor; Coordinator: TAnalysisCoordinator;
-  Snapshot: TPvSnapshot; Board: TDraughtsBoard; Tree: TGameTree;
+  Snapshot: TPvSnapshot; Board: TGamePosition; Tree: TGameTree;
   Node, ResolvedNode: TGameTreePlyNode; Search, NewSearch: TGameTreeSearchRef;
   ErrorText, Key, Signature: string; State: TGameTreeSearchState;
 begin
@@ -214,14 +214,14 @@ begin
   CheckRequestsAndSnapshots;
   Actor := TGameTreeActor.Create; Other := TGameTreeActor.Create;
   Coordinator := TAnalysisCoordinator.Create;
-  Snapshot := TPvSnapshot.Create; Board := TDraughtsBoard.Create;
+  Snapshot := TPvSnapshot.Create; Board := DraughtsVariant.CreatePosition;
   try
     Tree := Actor.GameTree;
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('32-28', gmsHuman));
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('18-23', gmsHuman));
     Execute(Actor, ImportBranch(Actor, 1, '20-24 38-32 18-22', '', gmsHuman));
     Node := Tree.FindBranchNode(0, 3);
-    Check(TryBuildDraughtsBoardAtNode(Tree, Node, Board), 'nested analysis position');
+    Check(Tree.TryBuildPositionAtNode(Node, Board), 'nested analysis position');
     Check(not StartAnalysisSearch(nil, Node, Search, ErrorText) and
       not IsValidGameTreeSearchRef(Search), 'missing actor cannot start a search');
     Check(StartAnalysisSearch(Actor, Node, Search, ErrorText), ErrorText);

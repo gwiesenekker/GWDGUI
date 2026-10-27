@@ -5,6 +5,21 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-27 — Analysis state on the position boundary (position interface, step 6)
+
+- The analysis coordinator, auto play and PV snapshots (`uAnalysisCoordinator`,
+  `uPvSnapshot`) no longer use the draughts board; the source audit covers them.
+  PV base positions belong to the analysed tree's game, and the annotator runner
+  passes them on as game positions.
+- Auto play validates engine moves with `TryParseMove`, so any accepted spelling
+  is stored in canonical form.
+- The PV browser keeps its draughts mini board and takes game positions.
+- `game_tree_variant_check` runs PV state, transient snapshots and auto play on a
+  second game.
+- Regression, lifecycle, DXP, GUI and tournament suites pass; performance outputs
+  are identical. GUI harness (8 interleaved runs, 14 for human moves; engine game
+  4 runs): all operations within the run-to-run spread. No push.
+
 ### 2026-10-27 — Notation walker on the position boundary (position interface, step 5)
 
 - PDN export, the notation view's walker and move captions (`uGameTreePdn`) no

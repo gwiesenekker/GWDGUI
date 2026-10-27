@@ -450,7 +450,7 @@ begin
     Command := Actor.CreateRecordAnnotatorPVCommand(Form.ActiveGameTree.Root.NodeId, '0', '34-30 20-25');
     try Actor.ExecuteCommand(Command); Check(Command.Accepted, Command.ErrorText); finally Command.Free; end;
     Form.TestAnalysis.Pv.SetAnalyzerBaseFromTree(Form.ActiveGameTree, Form.ActiveGameTree.Root.NodeId,
-      0, Board.Board, Display, Actor.Revision);
+      0, nil, Display, Actor.Revision);
     Before := GameTreeToPdnText(Form.ActiveGameTree); Fen := Board.Board.CurrentFEN;
     Main.Click;
     Check((Board.PvSourceSquare = 32) and (Board.HintSourceSquare = 18) and

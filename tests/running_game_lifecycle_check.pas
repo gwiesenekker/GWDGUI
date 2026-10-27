@@ -73,7 +73,7 @@ begin
     begin
       Check((AData.PlyCount = 0) and (AData.Board.MovesPlayedCount = 0) and
         (AData.Board[32] = pkWhiteMan) and (AData.Board[28] = pkEmpty) and
-        (AData.PvBaseBoard.PositionKey = AData.Board.PositionKey) and (AData.PvBasePly = 0), 'live update must retain the last immutable position/history');
+        (AData.PvBasePosition <> nil) and (AData.PvBasePosition.PositionKey = AData.Board.PositionKey) and (AData.PvBasePly = 0), 'live update must retain the last immutable position/history');
       Check((AData.PvScore = '0.4') and (AData.PvSnapshot.Depth = '15'),
         'live snapshot includes locked engine score and depth');
       Live.SetEvent;
@@ -353,9 +353,9 @@ begin
     Game.AddReservationKeysTo(Keys);
     Check((Keys.Count = 1) and (Keys[0] = 'reserved-engine'), 'game owns reservation-key copies');
     Snapshot.LogLines.Add('retained log');
-    Snapshot.PvSnapshot.SetData(Snapshot.Board, 0, '32-28', '0.25', '12');
+    Snapshot.PvSnapshot.SetData(nil, 0, '32-28', '0.25', '12');
     Game.AssignRunnerSnapshot(Snapshot);
-    Snapshot.LogLines.Clear; Snapshot.PvSnapshot.SetData(Snapshot.Board, 0, '34-30', '-1', '5');
+    Snapshot.LogLines.Clear; Snapshot.PvSnapshot.SetData(nil, 0, '34-30', '-1', '5');
     FreeAndNil(Snapshot);
     Game.SnapshotTreeInput(nil, 'ownership', Data); Game.SnapshotLogInput(Log);
     Check((Data.GameId = 77) and (Data.PrincipalVariation = '32-28') and
