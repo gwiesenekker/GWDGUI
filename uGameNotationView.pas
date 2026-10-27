@@ -1,7 +1,7 @@
 unit uGameNotationView;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, Math, Graphics, SynEdit, SynEditWrappedView,
+uses Classes, SysUtils, Types, Math, Graphics, SynEdit, SynEditTypes, SynEditWrappedView,
   uNotationPresentation, uNotationDocument, uNotationStyles, uNotationHighlighter;
 type
   // Public selection offsets match the presenter's zero-based UTF-8 byte ranges.
@@ -33,6 +33,9 @@ begin
   FNotationHighlighter := TNotationRangeHighlighter.Create(Self);
   ReadOnly := True; Gutter.Visible := False; RightGutter.Visible := False;
   RightEdge := 0; HideSelection := False; WantTabs := False; Color := clWhite;
+  // Like the former memo: a click right of a line's end puts the caret at
+  // the end of that line, not in empty space after it.
+  Options := Options - [eoScrollPastEol];
   ParentFont := False;
   Font.Name := DefaultNotationFontName;
   Font.Size := DefaultNotationFontSize;
@@ -74,13 +77,15 @@ begin Result := FDocument.Text; end;
 function TGameNotationView.GetByteStart: Integer;
 begin
   if FDocument.Text = '' then Exit(0);
-  if SelAvail then Result := FDocument.PointOffset(BlockBegin)
-  else Result := FDocument.PointOffset(LogicalCaretXY);
+  // Control positions can lie right of a line's end (QA: clicking after the
+  // moves of a short game raised "Column"); clamp them to the text.
+  if SelAvail then Result := FDocument.ClampedPointOffset(BlockBegin)
+  else Result := FDocument.ClampedPointOffset(LogicalCaretXY);
 end;
 function TGameNotationView.GetByteLength: Integer;
 begin
   if not SelAvail then Exit(0);
-  Result := FDocument.PointOffset(BlockEnd)-FDocument.PointOffset(BlockBegin);
+  Result := FDocument.ClampedPointOffset(BlockEnd)-FDocument.ClampedPointOffset(BlockBegin);
 end;
 procedure TGameNotationView.SetByteStart(Value: Integer);
 var P: TPoint;

@@ -5,6 +5,22 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-27 — Clicking after the moves no longer raises "Column"
+
+- QA: clicking in the moves window to the right of a short game's notation
+  showed "Column. Press OK to ignore and risk data corruption". SynEdit put the
+  caret past the end of the line, and the notation document rejected that
+  position. Present since the SynEdit moves window (3.3).
+- The moves window clamps caret and selection positions to the notation text
+  (`TNotationDocument.ClampedPointOffset`), and no longer lets the caret scroll
+  past the end of a line: a click right of the text selects the last move, as
+  with the former memo. Long games, whose single line exceeded SynEdit's
+  1,024-column caret limit, can now place the caret at their true end.
+- `main_form_boundaries_check` clicks past the end of a short game's line and
+  below the text through the real form (it fails with "Column" before the fix);
+  `notation_prototype_document_check` checks the clamping for every position.
+- Regression, lifecycle, DXP, GUI and tournament suites pass. No push.
+
 ### 2026-10-27 — Game tree on the position boundary (position interface, step 3)
 
 - `uGameTree`, `uGameTreeActor` and `uGameTreeBuilder` no longer use the

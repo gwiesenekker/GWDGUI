@@ -1,6 +1,6 @@
 program notation_prototype_document_check;
 {$mode objfpc}{$H+}{$codepage utf8}
-uses SysUtils, uGameTree, uGameTreePdn, uNotationPresentation, uNotationDocument, uNotationStyles,
+uses SysUtils, Types, uGameTree, uGameTreePdn, uNotationPresentation, uNotationDocument, uNotationStyles,
   uTreeTestUtils, uDraughtsPosition;
 procedure Check(B: Boolean; const S: string);
 begin if not B then raise Exception.Create(S); end;
@@ -30,6 +30,7 @@ begin
         if (I = Length(Doc.Text)) or ((Byte(Doc.Text[I+1]) and $C0) <> $80) then
         begin
           Check(Doc.PointOffset(Doc.LinePoint(I)) = I, 'line/byte round trip');
+          Check(Doc.ClampedPointOffset(Doc.LinePoint(I)) = I, 'clamped offset agrees inside the text');
           for U := 0 to 1 do for C := 0 to 1 do
             Check(Doc.NativeToByte(Doc.NativeOffset(I, U<>0, C<>0), U<>0, C<>0) = I,
               'Unicode/native offset round trip');
@@ -52,6 +53,18 @@ begin
         end;
       end;
       Check(GameTreeToPdnText(Tree) = Before, 'prototype must preserve model/export');
+      // Control positions right of a line's end or outside the document (QA:
+      // clicking after a short game's moves raised "Column") clamp to the text.
+      for I := 1 to Doc.LinePoint(Length(Doc.Text)).Y do
+      begin
+        R.Start := Doc.ClampedPointOffset(Point(1, I));
+        Check(Doc.ClampedPointOffset(Point(100000, I)) >= R.Start, 'past line end stays on the line');
+        Check((Doc.ClampedPointOffset(Point(100000, I)) = Length(Doc.Text)) or
+          (Doc.Text[Doc.ClampedPointOffset(Point(100000, I)) + 1] in [#10, #13]),
+          'past line end maps to the end of that line');
+      end;
+      Check(Doc.ClampedPointOffset(Point(100000, 100000)) = Length(Doc.Text), 'below the text maps to its end');
+      Check(Doc.ClampedPointOffset(Point(-5, -5)) = 0, 'before the text maps to its start');
     end;
     WriteLn('Notation prototype document checks passed');
   finally Doc.Free; Tree.Free; end;

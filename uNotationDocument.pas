@@ -26,6 +26,10 @@ type
     function NativeToByte(Native: Integer; Utf16, CRLF: Boolean): Integer;
     function LinePoint(ByteOffset: Integer): TPoint;
     function PointOffset(const Point: TPoint): Integer;
+    // For positions coming from the control (caret, selection, clicks): clamps
+    // the line to the document and the column to that line's text, so a click
+    // right of a line's end or below the text maps to the nearest text offset.
+    function ClampedPointOffset(const Point: TPoint): Integer;
     function StyleAt(ByteOffset: Integer): TNotationStyle;
     property Text: string read FText;
     property Spans: TNotationSpans read FSpans;
@@ -110,6 +114,27 @@ begin
   Result := FLines[Point.Y-1]+Point.X-1;
   if (Result < FLines[Point.Y-1]) or (Result > Length(FText)) then raise ERangeError.Create('Column');
 end;
+function TNotationDocument.ClampedPointOffset(const Point: TPoint): Integer;
+var
+  LLine, LStart, LEnd: Integer;
+begin
+  LLine := Point.Y;
+  if LLine < 1 then LLine := 1;
+  if LLine > Length(FLines) then LLine := Length(FLines);
+  LStart := FLines[LLine - 1];
+  // The line's text ends before its line break (#10, or #13#10).
+  if LLine < Length(FLines) then
+  begin
+    LEnd := FLines[LLine] - 1;
+    if (LEnd > LStart) and (FText[LEnd] = #13) then Dec(LEnd);
+  end
+  else
+    LEnd := Length(FText);
+  Result := LStart + Point.X - 1;
+  if Result < LStart then Result := LStart;
+  if Result > LEnd then Result := LEnd;
+end;
+
 function TNotationDocument.NativeOffset(ByteOffset: Integer; Utf16, CRLF: Boolean): Integer;
 begin
   if (ByteOffset < 0) or (ByteOffset > Length(FText)) then raise ERangeError.Create('Byte offset');

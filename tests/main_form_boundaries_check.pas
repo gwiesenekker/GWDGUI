@@ -78,6 +78,30 @@ procedure ClickSquare(Board: TDraughtsBoardControl; Square: Integer);
 var P: TPoint;
 begin P := PointForSquare(Board, Square); Board.OnMouseDown(Board, mbLeft, [], P.X, P.Y); end;
 
+{ QA 2026-10-27: clicking right of the moves of a short game raised
+  ERangeError "Column" from the notation document. }
+procedure CheckNotationClickPastLineEnd;
+var Form: TMainForm; Game: TPdnGame; View: TGameNotationView; Board: TDraughtsBoardControl;
+  Expected: TDraughtsBoard;
+begin
+  Form := TMainForm.Create(nil); Game := TPdnGame.Create; Expected := TDraughtsBoard.Create;
+  try
+    Game.MovesText := '32-28 18-23';
+    Form.LoadPdnGameToDisplay(Game);
+    View := TGameNotationView(Form.FindComponent('GameMoveMemo'));
+    Board := TDraughtsBoardControl(Form.FindComponent('MainBoard'));
+    Check((View.Lines.Count = 1) and (Length(View.Lines[0]) < 40), 'short single-line notation fixture');
+    View.LogicalCaretXY := Point(Length(View.Lines[0]) + 25, 1);
+    View.OnClick(View);
+    Check(View.SelStart <= Length(View.Text), 'caret right of the line maps into the text');
+    Expected.PlayMove('32-28'); Expected.PlayMove('18-23');
+    Check(Board.Board.CurrentFEN = Expected.CurrentFEN, 'click after the last move shows the final position');
+    View.LogicalCaretXY := Point(500, 10);
+    View.OnClick(View);
+    Check(View.SelStart <= Length(View.Text), 'caret below the text maps into the text');
+  finally Expected.Free; Game.Free; Form.Free; end;
+end;
+
 procedure CheckCaptureAndFlip;
 const Fen = 'W:WK32:B27,28';
 var Form: TMainForm; Board: TDraughtsBoardControl; Expected: TDraughtsBoard;
@@ -569,6 +593,7 @@ begin
   RequireDerivedFormResource := False; Application.Initialize;
   Reporter := TExceptionReporter.Create; Application.OnException := @Reporter.Report;
   try
+    CheckNotationClickPastLineEnd;
     CheckCaptureAndFlip;
     CheckAmbiguousCapture;
     CheckReplacementPrompt;
