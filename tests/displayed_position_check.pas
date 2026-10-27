@@ -3,7 +3,7 @@ program displayed_position_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uDraughtsBoard, uGameTree, uGameTreeActor,
-  uDisplayedPosition, uTreeTestUtils, uDraughtsPosition;
+  uDisplayedPosition, uTreeTestUtils, uGamePosition, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin
   if not Value then raise Exception.Create(Text);
@@ -18,7 +18,8 @@ end;
 var
   Actor, Other: TGameTreeActor;
   Display: TDisplayedPosition;
-  Board, Oracle: TDraughtsBoard;
+  Board: TGamePosition;
+  Oracle: TDraughtsBoard;
   Tree: TGameTree;
   Node: TGameTreePlyNode;
   Selected: Int64;
@@ -27,7 +28,7 @@ begin
   Actor := TGameTreeActor.Create;
   Other := TGameTreeActor.Create;
   Display := TDisplayedPosition.Create;
-  Board := TDraughtsBoard.Create;
+  Board := DraughtsVariant.CreatePosition;
   Oracle := TDraughtsBoard.Create;
   try
     Tree := Actor.GameTree;
@@ -48,7 +49,7 @@ begin
     Oracle.PlayMove('20-24', True, True);
     Oracle.PlayMove('38-32', True, True);
     Oracle.PlayMove('18-22', True, True);
-    Check(Display.TryBuildBoard(Tree, True, Actor.Revision, Board), 'nested replay');
+    Check(Display.TryBuildPosition(Tree, True, Actor.Revision, Board), 'nested replay');
     Check(Board.PositionKey = Oracle.PositionKey, 'nested replay matches legal path');
     Check(Display.ResolveNode(Other.GameTree, False) = Other.GameTree.Root,
       'nonselected game projects its tip');
@@ -61,12 +62,12 @@ begin
     Oracle.PlayMove('32-28', True, True);
     Oracle.PlayMove('20-24', True, True);
     Oracle.PlayMove('38-32', True, True);
-    Check(Display.TryBuildBoard(Tree, True, Actor.Revision, Board), 'legal preview replay');
+    Check(Display.TryBuildPosition(Tree, True, Actor.Revision, Board), 'legal preview replay');
     Check(Board.PositionKey = Oracle.PositionKey, 'preview replay matches path');
     Check(Tree.MainlineCount = 2, 'preview never modifies tree');
     Key := Board.PositionKey;
     Check(Display.SelectPreview(1, 2, '20-24 1-50', Tree), 'select invalid preview for validation');
-    Check(not Display.TryBuildBoard(Tree, True, Actor.Revision, Board), 'invalid later preview move fails');
+    Check(not Display.TryBuildPosition(Tree, True, Actor.Revision, Board), 'invalid later preview move fails');
     Check(Board.PositionKey = Key, 'failed preview leaves caller board intact');
     Check(Display.SelectPreview(1, -3, '20-24', Tree) and (Display.PreviewPly = 0),
       'negative preview clamps to base');
@@ -76,25 +77,25 @@ begin
     Display.Cursor.Select(Tree, Node);
     Display.BeginRefresh(Tree);
     try
-      Check(Display.TryBuildBoard(Tree, True, Actor.Revision, Board), 'first cached replay');
+      Check(Display.TryBuildPosition(Tree, True, Actor.Revision, Board), 'first cached replay');
       Key := Board.PositionKey;
       Board.LoadFromFEN('W:W32:B1');
       Display.BeginRefresh(Tree);
       try
-        Check(Display.TryBuildBoard(Tree, True, Actor.Revision, Board), 'nested refresh replay');
+        Check(Display.TryBuildPosition(Tree, True, Actor.Revision, Board), 'nested refresh replay');
         Check((Board.PositionKey = Key) and (Display.ReplayBuildCount = 1),
           'nested refresh reuses an owned board copy');
       finally Display.EndRefresh; end;
-      Check(Display.TryBuildBoard(Tree, True, Actor.Revision, Board) and
+      Check(Display.TryBuildPosition(Tree, True, Actor.Revision, Board) and
         (Display.ReplayBuildCount = 1), 'nested end retains outer cache');
       Execute(Actor, Actor.CreateAppendMainlineMoveCommand('37-32', gmsHuman));
-      Check(Display.TryBuildBoard(Tree, True, Actor.Revision, Board) and
+      Check(Display.TryBuildPosition(Tree, True, Actor.Revision, Board) and
         (Display.ReplayBuildCount = 2), 'actor revision invalidates cache even for same node');
       Check(Display.Cursor.NodeId = Selected, 'new mainline move preserves historical selection');
     finally Display.EndRefresh; end;
     Display.BeginRefresh(Tree);
     try
-      Check(Display.TryBuildBoard(Tree, True, Actor.Revision, Board) and
+      Check(Display.TryBuildPosition(Tree, True, Actor.Revision, Board) and
         (Display.ReplayBuildCount = 1), 'new refresh rebuilds after cache disposal');
     finally Display.EndRefresh; end;
     Execute(Actor, Actor.CreateClearBranchesCommand);
@@ -103,9 +104,9 @@ begin
       Check(Display.ResolveNode(Tree, True) = Tree.MainlineNode[1],
         'removed branch resolves surviving ancestor before display');
       Check(not Display.BrowsingBranch(Tree), 'fallback is mainline');
-      Check(Display.TryBuildBoard(Tree, True, Actor.Revision, Board), 'fallback replays');
+      Check(Display.TryBuildPosition(Tree, True, Actor.Revision, Board), 'fallback replays');
       Key := Board.PositionKey;
-      Check(not Display.TryBuildNodeBoard(Tree, Other.GameTree.Root, Actor.Revision, Board),
+      Check(not Display.TryBuildNodePosition(Tree, Other.GameTree.Root, Actor.Revision, Board),
         'foreign node rejected');
       Check(Board.PositionKey = Key, 'foreign node failure preserves board');
     finally Display.EndRefresh; end;

@@ -205,7 +205,7 @@ generic unit is converted; behaviour, formats and performance stay unchanged.
 | 1 | `uGamePosition`, `uDraughtsPosition`, `position_contract_check` (perft, FEN, notation, `SameMove`, choosers, trusted replay) | Done |
 | 2 | Source audit: listed generic units must not use the draughts board or parse move text | Done |
 | 3 | Variant into tree/actor/builder/cursor; `SameMove` replaces text comparison | Done |
-| 4 | Displayed position and move interaction (`MoveSquares`, `MovesBetween`) | |
+| 4 | Displayed position and move interaction (`MoveSquares`, `MovesBetween`) | Done |
 | 5 | Notation walker and presentation (`MoveNotation`) | |
 | 6 | Analysis coordination and PV state | |
 | 7 | `TGameRules`; orchestrator, runner and running game | |
@@ -230,4 +230,20 @@ time-control types) and, in its implementation, `uPdn` (PDN comment helpers).
 Both use the draughts board. Step 5 (notation) and step 7 (rules/orchestrator)
 remove these; until then `TryBuildDraughtsBoardAtNode` in `uDraughtsPosition`
 serves the units not yet converted.
+
+Step 4 notes:
+- `uDisplayedPosition` caches and returns `TGamePosition`s (`TryBuildNodePosition`,
+  `TryBuildPosition`); preview moves are validated with `PlayMoveText`.
+- `uMoveInteraction` takes candidates from `MovesFrom` and targets from
+  `MoveSquares`, routes with `TryParseMove` (canonical moves), and computes
+  highlights through the new `TGameVariant.MoveSquares`: PV hints lie several
+  plies away from any built position. It returns 0, 0 when move text alone does
+  not determine the squares; for a legal move it agrees with the position (checked
+  by the contract test). `MoveSquareAt` moved to `uDraughtsPosition`.
+- The form and the analysis coordinator still hold `TDraughtsBoard`s. They use
+  `TryBuildDraughtsNodeBoard`/`TryBuildDraughtsDisplayedBoard`; the form passes a
+  reused scratch position, because creating one per call (start position plus
+  legal moves) made a human move about 15% slower in the GUI harness.
+- The highlight's last move still comes from the draughts board's move history
+  in `UpdateBoardHighlights`; step 8 takes it from the displayed node instead.
 

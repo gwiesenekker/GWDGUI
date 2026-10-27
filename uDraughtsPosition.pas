@@ -12,7 +12,7 @@ unit uDraughtsPosition;
 interface
 
 uses
-  Classes, SysUtils, uGamePosition, uDraughtsBoard, uGameTree;
+  Classes, SysUtils, uGamePosition, uDraughtsBoard, uGameTree, uDisplayedPosition;
 
 type
   TDraughtsPosition = class(TGamePosition)
@@ -59,6 +59,7 @@ type
     function CreatePosition: TGamePosition; override;
     function CreatePositionFromFEN(const AFEN: string): TGamePosition; override;
     function SameMove(const A, B: string): Boolean; override;
+    procedure MoveSquares(const AMove: string; out AFrom, ATo: Integer); override;
   end;
 
 // Shared variant instance; owned by this unit.
@@ -72,6 +73,21 @@ function GameSideToDraughtsSide(ASide: TGameSide): TDraughtsSide;
   including the played-move history. ABoard is unchanged on failure. }
 function TryBuildDraughtsBoardAtNode(ATree: TGameTree; ANode: TGameTreePlyNode;
   ABoard: TDraughtsBoard): Boolean;
+
+{ Migration helpers for units that still hold TDraughtsBoard values (main form,
+  analysis coordination): the TDisplayedPosition replays, copied into ABoard
+  with its played-move history. ABoard is unchanged on failure. }
+// AScratch: an optional caller-owned position reused across calls, so frequent
+// callers do not set up a new start position each time; nil uses a temporary.
+function TryBuildDraughtsNodeBoard(ADisplay: TDisplayedPosition; ATree: TGameTree;
+  ANode: TGameTreePlyNode; ARevision: Int64; ABoard: TDraughtsBoard;
+  AScratch: TDraughtsPosition = nil): Boolean;
+function TryBuildDraughtsDisplayedBoard(ADisplay: TDisplayedPosition;
+  ATree: TGameTree; AActive: Boolean; ARevision: Int64; ABoard: TDraughtsBoard;
+  AScratch: TDraughtsPosition = nil): Boolean;
+
+// The ASquareIndex-th square number in draughts move text (1 = from, 2 = to).
+function MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
 
 implementation
 
@@ -116,6 +132,79 @@ begin
       ABoard.AssignFrom(LPosition.Board);
   finally
     LPosition.Free;
+  end;
+end;
+
+function TryBuildDraughtsNodeBoard(ADisplay: TDisplayedPosition; ATree: TGameTree;
+  ANode: TGameTreePlyNode; ARevision: Int64; ABoard: TDraughtsBoard;
+  AScratch: TDraughtsPosition): Boolean;
+var
+  LPosition: TDraughtsPosition;
+begin
+  Result := False;
+  if (ADisplay = nil) or (ABoard = nil) then
+    Exit;
+  LPosition := AScratch;
+  if LPosition = nil then
+    LPosition := TDraughtsPosition.Create;
+  try
+    Result := ADisplay.TryBuildNodePosition(ATree, ANode, ARevision, LPosition);
+    if Result then
+      ABoard.AssignFrom(LPosition.Board);
+  finally
+    if LPosition <> AScratch then
+      LPosition.Free;
+  end;
+end;
+
+function TryBuildDraughtsDisplayedBoard(ADisplay: TDisplayedPosition;
+  ATree: TGameTree; AActive: Boolean; ARevision: Int64; ABoard: TDraughtsBoard;
+  AScratch: TDraughtsPosition): Boolean;
+var
+  LPosition: TDraughtsPosition;
+begin
+  Result := False;
+  if (ADisplay = nil) or (ABoard = nil) then
+    Exit;
+  LPosition := AScratch;
+  if LPosition = nil then
+    LPosition := TDraughtsPosition.Create;
+  try
+    Result := ADisplay.TryBuildPosition(ATree, AActive, ARevision, LPosition);
+    if Result then
+      ABoard.AssignFrom(LPosition.Board);
+  finally
+    if LPosition <> AScratch then
+      LPosition.Free;
+  end;
+end;
+
+function MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
+var
+  I: Integer;
+  LCount: Integer;
+  LNumberText: string;
+begin
+  Result := 0;
+  LCount := 0;
+  LNumberText := '';
+  for I := 1 to Length(AMove) do
+  begin
+    if AMove[I] in ['0'..'9'] then
+      LNumberText += AMove[I]
+    else if LNumberText <> '' then
+    begin
+      Inc(LCount);
+      if LCount = ASquareIndex then
+        Exit(StrToIntDef(LNumberText, 0));
+      LNumberText := '';
+    end;
+  end;
+  if LNumberText <> '' then
+  begin
+    Inc(LCount);
+    if LCount = ASquareIndex then
+      Result := StrToIntDef(LNumberText, 0);
   end;
 end;
 
@@ -321,6 +410,11 @@ end;
 function TDraughtsVariant.SameMove(const A, B: string): Boolean;
 begin
   Result := SameDraughtsMove(A, B);
+end;
+
+procedure TDraughtsVariant.MoveSquares(const AMove: string; out AFrom, ATo: Integer);
+begin
+  CanonicalSquares(AMove, AFrom, ATo);
 end;
 
 function TDraughtsVariant.CreatePosition: TGamePosition;

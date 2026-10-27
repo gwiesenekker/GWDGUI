@@ -5,6 +5,21 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-27 — Displayed position and move interaction on the position boundary (position interface, step 4)
+
+- `uDisplayedPosition` and `uMoveInteraction` no longer use the draughts board;
+  the source audit now covers them. The displayed position caches game
+  positions; board clicks, the same-target chooser, move routing and highlights
+  use `MovesFrom`, `MoveSquares`, `TryParseMove` and `MoveNotation`.
+- New `TGameVariant.MoveSquares` (squares from move text, for PV hints several
+  plies ahead); `position_contract_check` checks that it agrees with the position.
+- The main form and analysis coordinator keep their draughts boards for now,
+  through helpers in `uDraughtsPosition`; `MoveSquareAt` moved there.
+- Regression, lifecycle, DXP, GUI and tournament suites pass; performance outputs
+  are identical. Benchmark timings are within noise (three interleaved runs);
+  in the GUI harness a human move is about 6% slower (6.4 to 6.8 ms median, within
+  the run-to-run spread), other operations unchanged. No push.
+
 ### 2026-10-27 — Position boundary: root side, second test game (review G9, C11)
 
 - G9: a tree's root now takes its side from the variant's default starting

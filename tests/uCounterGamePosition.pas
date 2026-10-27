@@ -55,6 +55,8 @@ type
     function SideFromFEN(const AFEN: string): TGameSide; override;
     function CreatePosition: TGamePosition; override;
     function SameMove(const A, B: string): Boolean; override;
+    // Counter squares depend on the position, not on the move text.
+    procedure MoveSquares(const AMove: string; out AFrom, ATo: Integer); override;
   end;
 
   // Same game, but Black moves first by default (review G9).
@@ -257,6 +259,12 @@ begin
   LA := CounterCanonicalMove(A);
   LB := CounterCanonicalMove(B);
   Result := (LA <> '') and (LA = LB);
+end;
+
+procedure TCounterVariant.MoveSquares(const AMove: string; out AFrom, ATo: Integer);
+begin
+  AFrom := 0;
+  ATo := 0;
 end;
 
 { TBlackStartCounterVariant }

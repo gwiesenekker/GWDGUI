@@ -136,6 +136,7 @@ function AnalysisPositionIsTerminal(AHasLegalMove, APreview: Boolean;
   ABrowseBasePly, ADisplayedMoveCount, ATotalMoveCount: Integer;
   AGameState: TGameOrchestratorState): Boolean;
 implementation
+uses uDraughtsPosition;
 function ExecuteAnalysisCommand(AActor: TGameTreeActor; ACommand: TGameTreeCommand;
   out AErrorText: string): Boolean;
 begin
@@ -444,7 +445,7 @@ begin
     LNode := AGameTree.FindNodeById(ANodeId);
 
   if (LNode <> nil) and
-    ADisplay.TryBuildNodeBoard(AGameTree, LNode, ARevision, FAnalyzerPvBaseBoard) then
+    TryBuildDraughtsNodeBoard(ADisplay, AGameTree, LNode, ARevision, FAnalyzerPvBaseBoard) then
   begin
     FAnalyzerPvBaseNodeId := LNode.NodeId;
     FAnalyzerPvBasePly := LNode.PlyNumber;
@@ -456,7 +457,7 @@ begin
     if AFallbackBasePly = 0 then FallbackNode := AGameTree.Root
     else if AFallbackBasePly > 0 then FallbackNode := AGameTree.MainlineNode[AFallbackBasePly];
   if (FallbackNode <> nil) and
-    ADisplay.TryBuildNodeBoard(AGameTree, FallbackNode, ARevision, FAnalyzerPvBaseBoard) then
+    TryBuildDraughtsNodeBoard(ADisplay, AGameTree, FallbackNode, ARevision, FAnalyzerPvBaseBoard) then
   begin
     FAnalyzerPvBaseNodeId := 0;
     FAnalyzerPvBasePly := AFallbackBasePly;
@@ -579,7 +580,7 @@ begin
   if ANode <> nil then
   begin
     ABasePly := ANode.PlyNumber;
-    if not ADisplay.TryBuildNodeBoard(ATree, ANode, ARevision, FMainBaseBoard) then
+    if not TryBuildDraughtsNodeBoard(ADisplay, ATree, ANode, ARevision, FMainBaseBoard) then
     begin
       ABasePly := 0;
       FMainBaseBoard.LoadFromFEN(AnalysisStartingFen(ATree));
@@ -589,7 +590,7 @@ begin
   if AUseLatest and LatestEnginePvForTree(ATree, ABasePly, APV, AScore, ADepth, ATimeText) then
   begin
     if ABasePly = 0 then BaseNode := ATree.Root else BaseNode := ATree.MainlineNode[ABasePly];
-    if ADisplay.TryBuildNodeBoard(ATree, BaseNode, ARevision, FMainBaseBoard) then
+    if TryBuildDraughtsNodeBoard(ADisplay, ATree, BaseNode, ARevision, FMainBaseBoard) then
       ABaseBoard := FMainBaseBoard;
     Exit(True);
   end;
@@ -647,7 +648,7 @@ begin
   ARequest.Terminal := AnalysisPositionIsTerminal(APosition.Board.LegalMoveCount > 0,
     APosition.Preview, APosition.BrowseBasePly, APosition.MoveCount,
     APosition.Tree.MainlineCount, APosition.State);
-  if not ADisplay.TryBuildNodeBoard(APosition.Tree, APosition.Node,
+  if not TryBuildDraughtsNodeBoard(ADisplay, APosition.Tree, APosition.Node,
     APosition.Revision, FPv.MainBaseBoard) then FPv.MainBaseBoard.AssignFrom(APosition.Board);
   ARequest.BaseBoard := FPv.MainBaseBoard;
   Result := True;

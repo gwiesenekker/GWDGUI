@@ -51,6 +51,8 @@ GENERIC_UNITS=(
   uGameTreeActor
   uGameTreeBuilder
   uGameTreeCursor
+  uDisplayedPosition
+  uMoveInteraction
 )
 for unit_name in "${GENERIC_UNITS[@]}"; do
   unit_file="$ROOT_DIR/$unit_name.pas"

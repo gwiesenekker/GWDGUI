@@ -7,7 +7,7 @@ interface
 uses
   Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
   LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uBoardControl,
-  uDraughtsBoard, uMoveInteraction, uEnginesDialog,
+  uDraughtsBoard, uGamePosition, uDraughtsPosition, uMoveInteraction, uEnginesDialog,
   uGameOrchestrator, uGameRunnerThread, uRunningGame, uGameSetupForm, uGameSetupTypes,
   uEngineParamsJson, uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue, uGameGuiMessages, uAnalysisCoordinator,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
@@ -61,6 +61,8 @@ type
     FGameLogMemoShowStdout: Boolean;
     FGameLogMemo: TMemo;
     FDisplayedPosition: TDisplayedPosition;
+    // Reused by the draughts board wrappers (main thread only).
+    FDraughtsScratch: TDraughtsPosition;
     FGameResult: string;
     FGames: TList;
     FGamesListBox: TListBox;
@@ -296,6 +298,8 @@ type
       ANode: TGameTreePlyNode; ABoard: TDraughtsBoard): Boolean;
     function TryBuildDisplayedBoard(AGameTree: TGameTree;
       ABoard: TDraughtsBoard): Boolean;
+    function TryBuildDisplayedPosition(AGameTree: TGameTree;
+      APosition: TGamePosition): Boolean;
     function VisibleMainPvForTree(AGameTree: TGameTree;
       out ABaseBoard: TDraughtsBoard; out ABasePly: Integer; out APV,
       AScore, ADepth, ATimeText: string): Boolean;
@@ -558,6 +562,7 @@ begin
   FAnalysis := TAnalysisCoordinator.Create;
   FAutoPlay := TAutoPlayCoordinator.Create;
   FDisplayedPosition := TDisplayedPosition.Create;
+  FDraughtsScratch := TDraughtsPosition.Create;
   FNotation := TNotationPresentation.Create;
   FGameTreeBrowseMode := False;
   FGameLogSourceGameId := -1;
@@ -1259,6 +1264,7 @@ begin
   FAnalysis.Free;
   FNotation.Free;
   FDisplayedPosition.Free;
+  FDraughtsScratch.Free;
   FMoveInteraction.Free;
   FGameTreeActor.Free;
   FGameTree.Free;
@@ -1736,37 +1742,39 @@ end;
 
 function TMainForm.FindHumanMoveToTarget(ATargetSquare: Integer;
   out AMove: string): Boolean;
-var Choices, Captions: TStringList; Board: TDraughtsBoard;
+var Choices, Captions: TStringList; LPosition: TGamePosition;
   I, Choice: Integer; TreeId, NodeId: Int64; Fen: string;
 begin
   AMove := '';
+  Result := False;
+  if ActiveGameTree = nil then Exit;
   Choices := TStringList.Create; Captions := TStringList.Create;
-  Board := TDraughtsBoard.Create;
+  LPosition := ActiveGameTree.Variant.CreatePosition;
   try
     FMoveInteraction.TargetChoices(ATargetSquare, Choices);
     Result := Choices.Count > 0;
     if not Result then Exit;
     if Choices.Count = 1 then begin AMove := Choices[0]; Exit; end;
-    if not TryBuildDisplayedBoard(ActiveGameTree, Board) then Exit;
+    if not TryBuildDisplayedPosition(ActiveGameTree, LPosition) then Exit;
     TreeId := ActiveGameTree.GameTreeId;
     NodeId := CurrentDisplayedGameTreeNode(ActiveGameTree).NodeId;
-    Fen := Board.CurrentFEN;
-    for I := 0 to Choices.Count - 1 do Captions.Add(Board.PdnMoveNotation(Choices[I]));
+    Fen := LPosition.ToFEN;
+    for I := 0 to Choices.Count - 1 do Captions.Add(LPosition.MoveNotation(Choices[I]));
     Choice := ShowGuiChoiceDialog(Self, 'Choose capture',
       'Several captures reach this square. Choose the path to play.', Captions);
     // A modal chooser pumps events. Never apply a choice to a changed position.
     if (Choice < 0) or (Choice >= Choices.Count) or (ActiveGameTree = nil) then Exit;
     if (ActiveGameTree.GameTreeId <> TreeId) or
       (CurrentDisplayedGameTreeNode(ActiveGameTree).NodeId <> NodeId) then Exit;
-    if not TryBuildDisplayedBoard(ActiveGameTree, Board) or (Board.CurrentFEN <> Fen) then Exit;
+    if not TryBuildDisplayedPosition(ActiveGameTree, LPosition) or (LPosition.ToFEN <> Fen) then Exit;
     AMove := Choices[Choice];
-  finally Board.Free; Captions.Free; Choices.Free; end;
+  finally LPosition.Free; Captions.Free; Choices.Free; end;
 end;
 
 procedure TMainForm.PlayHumanMove(const AMove: string;
   ASource: TGameTreeMoveSource);
 var
-  Board: TDraughtsBoard;
+  LPosition: TGamePosition;
   Game: TRunningGame;
   Tree: TGameTree;
   Move: string;
@@ -1782,14 +1790,14 @@ begin
   if Game <> nil then State := Game.State else State := StateForTree(Tree);
   RunnerHumanTurn := (Game <> nil) and (Game.Runner <> nil) and
     ((State = gosRunning) or (Game.Lifecycle = rglStarting)) and Game.IsHumanToMove;
-  Board := TDraughtsBoard.Create;
+  LPosition := Tree.Variant.CreatePosition;
   try
-    if not TryBuildDisplayedBoard(Tree, Board) then Exit;
-    Route := RouteMove(Board, Tree, CurrentDisplayedGameTreeNode(Tree), AMove,
+    if not TryBuildDisplayedPosition(Tree, LPosition) then Exit;
+    Route := RouteMove(LPosition, Tree, CurrentDisplayedGameTreeNode(Tree), AMove,
       CanExploreVariation, BrowsingBranch,
       (ResultForTree(Tree) = '*') and (State <> gosGameOver), RunnerHumanTurn, Move);
   finally
-    Board.Free;
+    LPosition.Free;
   end;
   if Route = mrInvalid then Exit;
   ClearHumanMoveSelection;
@@ -1836,17 +1844,18 @@ end;
 
 procedure TMainForm.SelectHumanMoveSource(ASourceSquare: Integer);
 var
-  Board: TDraughtsBoard;
+  LPosition: TGamePosition;
   Move: string;
 begin
   ClearHumanMoveSelection;
   if (not CanAcceptHumanBoardMove) and (not CanExploreVariation) then Exit;
-  Board := TDraughtsBoard.Create;
+  if ActiveGameTree = nil then Exit;
+  LPosition := ActiveGameTree.Variant.CreatePosition;
   try
-    if not TryBuildDisplayedBoard(ActiveGameTree, Board) then Exit;
-    Move := FMoveInteraction.SelectSource(Board, ASourceSquare);
+    if not TryBuildDisplayedPosition(ActiveGameTree, LPosition) then Exit;
+    Move := FMoveInteraction.SelectSource(LPosition, ASourceSquare);
   finally
-    Board.Free;
+    LPosition.Free;
   end;
   if Move <> '' then PlayHumanMove(Move)
   else if FBoardControl <> nil then
@@ -3269,7 +3278,8 @@ begin
   Actor := ActorForGameTree(AGameTree);
   Revision := -1;
   if Actor <> nil then Revision := Actor.Revision;
-  Result := FDisplayedPosition.TryBuildNodeBoard(AGameTree, ANode, Revision, ABoard);
+  Result := TryBuildDraughtsNodeBoard(FDisplayedPosition, AGameTree, ANode, Revision,
+    ABoard, FDraughtsScratch);
 end;
 
 function TMainForm.TryBuildDisplayedBoard(AGameTree: TGameTree;
@@ -3279,8 +3289,19 @@ begin
   Actor := ActorForGameTree(AGameTree);
   Revision := -1;
   if Actor <> nil then Revision := Actor.Revision;
-  Result := FDisplayedPosition.TryBuildBoard(AGameTree, AGameTree = ActiveGameTree,
-    Revision, ABoard);
+  Result := TryBuildDraughtsDisplayedBoard(FDisplayedPosition, AGameTree,
+    AGameTree = ActiveGameTree, Revision, ABoard, FDraughtsScratch);
+end;
+
+function TMainForm.TryBuildDisplayedPosition(AGameTree: TGameTree;
+  APosition: TGamePosition): Boolean;
+var Actor: TGameTreeActor; Revision: Int64;
+begin
+  Actor := ActorForGameTree(AGameTree);
+  Revision := -1;
+  if Actor <> nil then Revision := Actor.Revision;
+  Result := FDisplayedPosition.TryBuildPosition(AGameTree, AGameTree = ActiveGameTree,
+    Revision, APosition);
 end;
 
 function TMainForm.VisibleMainPvForTree(AGameTree: TGameTree;
@@ -3883,7 +3904,7 @@ begin
     LPvHighlightsActive := PositionValid and (LPvBaseBoard <> nil) and
       (LDisplayedBoard.PositionKey = LPvBaseBoard.PositionKey);
 
-    Highlights := CalculateMoveHighlights(DisplayedMove, LPvText,
+    Highlights := CalculateMoveHighlights(AGameTree.Variant, DisplayedMove, LPvText,
       LPvHighlightsActive);
     FBoardControl.LastMoveTargetSquare := Highlights.LastMoveTargetSquare;
     FBoardControl.PvSourceSquare := Highlights.PvSourceSquare;

@@ -95,6 +95,11 @@ type
     // the game's equivalent spellings). Generic code never compares move text
     // itself.
     function SameMove(const A, B: string): Boolean; virtual; abstract;
+    // Squares of a move from its text alone, for highlighting moves that lie
+    // several plies away from any built position (PV hints). Returns 0, 0 when
+    // the text does not determine the squares; for a legal move the result
+    // agrees with TGamePosition.MoveSquares in that move's position.
+    procedure MoveSquares(const AMove: string; out AFrom, ATo: Integer); virtual; abstract;
   end;
 
 function OppositeGameSide(ASide: TGameSide): TGameSide;

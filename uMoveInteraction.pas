@@ -1,7 +1,9 @@
 unit uMoveInteraction;
 {$mode objfpc}{$H+}
+{ Board-click interaction and highlight calculation, game-neutral: moves are
+  canonical strings and squares come from the game (uGamePosition). }
 interface
-uses Classes, SysUtils, uDraughtsBoard, uGameTree;
+uses Classes, SysUtils, uGamePosition, uGameTree;
 type
   TMoveHighlights = record
     LastMoveTargetSquare, PvSourceSquare, PvTargetSquare,
@@ -13,77 +15,49 @@ type
   TMoveInteraction = class
   private
     FChoices: TStringList;
+    FChoiceTargets: array of Integer; // target square of FChoices[I]
     FSourceSquare: Integer;
     FTargets: TMoveTargetSquares;
   public
     constructor Create;
     destructor Destroy; override;
     procedure Clear;
-    function SelectSource(ABoard: TDraughtsBoard; ASourceSquare: Integer): string;
+    // Collects the legal moves from ASourceSquare. Returns the move when there
+    // is exactly one; otherwise remembers the source and its distinct targets.
+    function SelectSource(APosition: TGamePosition; ASourceSquare: Integer): string;
     procedure TargetChoices(ATargetSquare: Integer; AMoves: TStrings);
     function FindTarget(ATargetSquare: Integer; out AMove: string): Boolean;
     property SourceSquare: Integer read FSourceSquare;
     property Targets: TMoveTargetSquares read FTargets;
   end;
-function CalculateMoveHighlights(const ADisplayedMove, APvText: string; APvMatchesPosition: Boolean): TMoveHighlights;
-function MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
-function RouteMove(ABoard: TDraughtsBoard; ATree: TGameTree;
+// ADisplayedMove: the move that led to the displayed position ('' at the start).
+// APvText: whitespace-separated moves from the displayed position.
+function CalculateMoveHighlights(AVariant: TGameVariant; const ADisplayedMove,
+  APvText: string; APvMatchesPosition: Boolean): TMoveHighlights;
+// Routes a move text played on the displayed position. ACanonicalMove is the
+// canonical form when the move is legal there, '' otherwise.
+function RouteMove(APosition: TGamePosition; ATree: TGameTree;
   ANode: TGameTreePlyNode; const AMove: string; ACanExplore, ABrowsingBranch,
-  AUnfinished, ARunnerHumanTurn: Boolean; out ANormalizedMove: string): TMoveRoute;
+  AUnfinished, ARunnerHumanTurn: Boolean; out ACanonicalMove: string): TMoveRoute;
 implementation
 uses uGameTreeBuilder;
-function MoveSquareAt(const AMove: string; ASquareIndex: Integer): Integer;
-var
-  I: Integer;
-  LCount: Integer;
-  LNumberText: string;
-begin
-  Result := 0;
-  LCount := 0;
-  LNumberText := '';
-  for I := 1 to Length(AMove) do
-  begin
-    if AMove[I] in ['0'..'9'] then
-      LNumberText += AMove[I]
-    else if LNumberText <> '' then
-    begin
-      Inc(LCount);
-      if LCount = ASquareIndex then
-        Exit(StrToIntDef(LNumberText, 0));
-      LNumberText := '';
-    end;
-  end;
-  if LNumberText <> '' then
-  begin
-    Inc(LCount);
-    if LCount = ASquareIndex then
-      Result := StrToIntDef(LNumberText, 0);
-  end;
-end;
 
-function CalculateMoveHighlights(const ADisplayedMove, APvText: string; APvMatchesPosition: Boolean): TMoveHighlights;
-var PvMoves: TStringList;
+function CalculateMoveHighlights(AVariant: TGameVariant; const ADisplayedMove,
+  APvText: string; APvMatchesPosition: Boolean): TMoveHighlights;
+var PvMoves: TStringList; Source: Integer;
 begin
-  Result.LastMoveTargetSquare := 0;
-  Result.PvSourceSquare := 0;
-  Result.HintSourceSquare := 0;
-  Result.PvTargetSquare := 0;
-  Result.HintTargetSquare := 0;
-  Result.LastMoveTargetSquare := MoveSquareAt(ADisplayedMove, 2);
+  Result := Default(TMoveHighlights);
+  if AVariant = nil then Exit;
+  if Trim(ADisplayedMove) <> '' then
+    AVariant.MoveSquares(Trim(ADisplayedMove), Source, Result.LastMoveTargetSquare);
   if not APvMatchesPosition then Exit;
   PvMoves := TStringList.Create;
   try
     TextToMoveList(APvText, PvMoves);
     if PvMoves.Count > 0 then
-    begin
-      Result.PvSourceSquare := MoveSquareAt(PvMoves[0], 1);
-      Result.PvTargetSquare := MoveSquareAt(PvMoves[0], 2);
-    end;
+      AVariant.MoveSquares(PvMoves[0], Result.PvSourceSquare, Result.PvTargetSquare);
     if PvMoves.Count > 1 then
-    begin
-      Result.HintSourceSquare := MoveSquareAt(PvMoves[1], 1);
-      Result.HintTargetSquare := MoveSquareAt(PvMoves[1], 2);
-    end;
+      AVariant.MoveSquares(PvMoves[1], Result.HintSourceSquare, Result.HintTargetSquare);
   finally PvMoves.Free; end;
 end;
 
@@ -101,26 +75,26 @@ procedure TMoveInteraction.Clear;
 begin
   FSourceSquare := 0;
   FChoices.Clear;
+  FChoiceTargets := nil;
   FTargets := nil;
 end;
-function TMoveInteraction.SelectSource(ABoard: TDraughtsBoard;
+function TMoveInteraction.SelectSource(APosition: TGamePosition;
   ASourceSquare: Integer): string;
-var I, J, Target: Integer; Move: string; Known: Boolean;
+var I, J, From, Target: Integer; Known: Boolean;
 begin
   Clear;
   Result := '';
-  if ABoard = nil then Exit;
-  for I := 0 to ABoard.LegalMoveCount - 1 do
-  begin
-    Move := Trim(ABoard.LegalMoves[I]);
-    if MoveSquareAt(Move, 1) = ASourceSquare then FChoices.Add(Move);
-  end;
+  if APosition = nil then Exit;
+  APosition.MovesFrom(ASourceSquare, FChoices);
+  SetLength(FChoiceTargets, FChoices.Count);
+  for I := 0 to FChoices.Count - 1 do
+    APosition.MoveSquares(FChoices[I], From, FChoiceTargets[I]);
   if FChoices.Count = 0 then Exit;
   if FChoices.Count = 1 then Exit(FChoices[0]);
   FSourceSquare := ASourceSquare;
   for I := 0 to FChoices.Count - 1 do
   begin
-    Target := MoveSquareAt(FChoices[I], 2);
+    Target := FChoiceTargets[I];
     Known := False;
     for J := 0 to High(FTargets) do
       if FTargets[J] = Target then begin Known := True; Break; end;
@@ -136,7 +110,7 @@ var I: Integer;
 begin
   AMoves.Clear;
   for I := 0 to FChoices.Count - 1 do
-    if MoveSquareAt(FChoices[I], 2) = ATargetSquare then AMoves.Add(FChoices[I]);
+    if FChoiceTargets[I] = ATargetSquare then AMoves.Add(FChoices[I]);
 end;
 function TMoveInteraction.FindTarget(ATargetSquare: Integer;
   out AMove: string): Boolean;
@@ -150,15 +124,19 @@ begin
     if Result then AMove := Choices[0];
   finally Choices.Free; end;
 end;
-function RouteMove(ABoard: TDraughtsBoard; ATree: TGameTree;
+function RouteMove(APosition: TGamePosition; ATree: TGameTree;
   ANode: TGameTreePlyNode; const AMove: string; ACanExplore, ABrowsingBranch,
-  AUnfinished, ARunnerHumanTurn: Boolean; out ANormalizedMove: string): TMoveRoute;
+  AUnfinished, ARunnerHumanTurn: Boolean; out ACanonicalMove: string): TMoveRoute;
 var Tip: TGameTreePlyNode;
 begin
-  ANormalizedMove := NormalizeMoveNotation(AMove);
+  ACanonicalMove := '';
   Result := mrInvalid;
-  if (ATree = nil) or (ABoard = nil) then Exit;
-  if not ABoard.IsLegalMove(ANormalizedMove) then Exit;
+  if (ATree = nil) or (APosition = nil) then Exit;
+  if not APosition.TryParseMove(AMove, ACanonicalMove) then
+  begin
+    ACanonicalMove := '';
+    Exit;
+  end;
   if ACanExplore then
   begin
     Tip := ATree.Root;

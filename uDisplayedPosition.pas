@@ -1,11 +1,11 @@
 unit uDisplayedPosition;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, uDraughtsBoard, uGameTree, uGameTreeCursor;
+uses Classes, SysUtils, uGamePosition, uGameTree, uGameTreeCursor;
 type
   TDisplayReplayCacheEntry = record
     TreeId, NodeId, Revision: Int64;
-    Board: TDraughtsBoard;
+    Position: TGamePosition; // owned copy
   end;
   // Owns one persistent cursor and temporary PV/replay state, never the tree.
   // Callers supply the actor revision and bracket one UI refresh with Begin/End.
@@ -30,17 +30,18 @@ type
     function MovesText(AGameTree: TGameTree; AActive: Boolean): string;
     procedure BeginRefresh(ATree: TGameTree);
     procedure EndRefresh;
-    function TryBuildNodeBoard(AGameTree: TGameTree; ANode: TGameTreePlyNode;
-      Revision: Int64; ABoard: TDraughtsBoard): Boolean;
-    function TryBuildBoard(AGameTree: TGameTree; AActive: Boolean;
-      ARevision: Int64; ABoard: TDraughtsBoard): Boolean;
+    // APosition must belong to AGameTree's variant; it is unchanged on failure.
+    function TryBuildNodePosition(AGameTree: TGameTree; ANode: TGameTreePlyNode;
+      Revision: Int64; APosition: TGamePosition): Boolean;
+    function TryBuildPosition(AGameTree: TGameTree; AActive: Boolean;
+      ARevision: Int64; APosition: TGamePosition): Boolean;
     property Cursor: TGameTreeCursor read FCursor;
     property PreviewPly: Integer read FPreviewPly;
     property PreviewMoves: string read FPreviewMoves;
     property ReplayBuildCount: Integer read FReplayBuildCount;
   end;
 implementation
-uses uGameTreeBuilder, uDraughtsPosition;
+uses uGameTreeBuilder;
 constructor TDisplayedPosition.Create;
 begin
   inherited Create;
@@ -55,7 +56,7 @@ end;
 procedure TDisplayedPosition.ClearReplayCache;
 var I: Integer;
 begin
-  for I := 0 to High(FReplayCache) do FReplayCache[I].Board.Free;
+  for I := 0 to High(FReplayCache) do FReplayCache[I].Position.Free;
   FReplayCache := nil;
 end;
 procedure TDisplayedPosition.BeginRefresh(ATree: TGameTree);
@@ -173,20 +174,20 @@ begin
     Moves.Free;
   end;
 end;
-function TDisplayedPosition.TryBuildNodeBoard(AGameTree: TGameTree;
-  ANode: TGameTreePlyNode; Revision: Int64; ABoard: TDraughtsBoard): Boolean;
+function TDisplayedPosition.TryBuildNodePosition(AGameTree: TGameTree;
+  ANode: TGameTreePlyNode; Revision: Int64; APosition: TGamePosition): Boolean;
 var I: Integer;
 begin
   Result := False;
-  if (AGameTree = nil) or (ANode = nil) or (ABoard = nil) then Exit;
+  if (AGameTree = nil) or (ANode = nil) or (APosition = nil) then Exit;
   if FRefreshDepth > 0 then
     for I := 0 to High(FReplayCache) do
       if (FReplayCache[I].TreeId = AGameTree.GameTreeId) and
         (FReplayCache[I].NodeId = ANode.NodeId) and
         (FReplayCache[I].Revision = Revision) then
-      begin ABoard.AssignFrom(FReplayCache[I].Board); Exit(True); end;
+      begin APosition.AssignFrom(FReplayCache[I].Position); Exit(True); end;
   if FRefreshDepth > 0 then Inc(FReplayBuildCount);
-  Result := TryBuildDraughtsBoardAtNode(AGameTree, ANode, ABoard);
+  Result := AGameTree.TryBuildPositionAtNode(ANode, APosition);
   if Result and (FRefreshDepth > 0) then
   begin
     I := Length(FReplayCache);
@@ -194,27 +195,25 @@ begin
     FReplayCache[I].TreeId := AGameTree.GameTreeId;
     FReplayCache[I].NodeId := ANode.NodeId;
     FReplayCache[I].Revision := Revision;
-    FReplayCache[I].Board := TDraughtsBoard.Create;
-    FReplayCache[I].Board.AssignFrom(ABoard);
+    FReplayCache[I].Position := APosition.Clone;
   end;
 end;
-function TDisplayedPosition.TryBuildBoard(AGameTree: TGameTree; AActive: Boolean;
-  ARevision: Int64;
-  ABoard: TDraughtsBoard): Boolean;
+function TDisplayedPosition.TryBuildPosition(AGameTree: TGameTree; AActive: Boolean;
+  ARevision: Int64; APosition: TGamePosition): Boolean;
 var
   I: Integer;
   LNode: TGameTreePlyNode;
   LMoves: TStringList;
-  Candidate: TDraughtsBoard;
+  Candidate: TGamePosition;
 begin
   Result := False;
-  if (AGameTree = nil) or (ABoard = nil) then
+  if (AGameTree = nil) or (APosition = nil) then
     Exit;
   LNode := ResolveNode(AGameTree, AActive);
   LMoves := TStringList.Create;
-  Candidate := TDraughtsBoard.Create;
+  Candidate := AGameTree.Variant.CreatePosition;
   try
-    if not TryBuildNodeBoard(AGameTree, LNode, ARevision, Candidate) then
+    if not TryBuildNodePosition(AGameTree, LNode, ARevision, Candidate) then
       Exit;
     try
       if (Trim(FPreviewMoves) <> '') and (FPreviewPly > 0) then
@@ -222,10 +221,11 @@ begin
         TextToMoveList(FPreviewMoves, LMoves);
         if FPreviewPly > LMoves.Count then
           Exit;
+        // Preview moves come from engines and PV text: validate each one.
         for I := 0 to FPreviewPly - 1 do
-          Candidate.PlayMove(LMoves[I], True, True);
+          Candidate.PlayMoveText(LMoves[I]);
       end;
-      ABoard.AssignFrom(Candidate);
+      APosition.AssignFrom(Candidate);
       Result := True;
     except
       Result := False;

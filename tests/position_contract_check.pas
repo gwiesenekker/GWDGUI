@@ -92,6 +92,7 @@ var
   LNotations, LBetween: TStringList;
   LChild, LTrusted: TGamePosition;
   LKeyBefore: string;
+  LTrustedSquare: Integer;
 begin
   LNotations := TStringList.Create;
   LBetween := TStringList.Create;
@@ -132,6 +133,9 @@ begin
 
       APosition.MoveSquares(LMove, LFrom, LTo);
       Check((LFrom > 0) and (LTo > 0), AContext + ': squares for ' + LMove);
+      Variant.MoveSquares(LMove, J, LTrustedSquare);
+      Check(((J = 0) and (LTrustedSquare = 0)) or ((J = LFrom) and (LTrustedSquare = LTo)),
+        AContext + ': variant squares are absent or agree with the position for ' + LMove);
       APosition.MovesBetween(LFrom, LTo, LBetween);
       Check(LBetween.IndexOf(LMove) >= 0, AContext + ': MovesBetween contains ' + LMove);
       for J := 0 to LBetween.Count - 1 do
