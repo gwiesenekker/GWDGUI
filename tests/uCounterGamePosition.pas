@@ -57,6 +57,7 @@ type
     function SameMove(const A, B: string): Boolean; override;
     // Counter squares depend on the position, not on the move text.
     procedure MoveSquares(const AMove: string; out AFrom, ATo: Integer); override;
+    function NormalizeMove(const AMove: string): string; override;
   end;
 
   // Same game, but Black moves first by default (review G9).
@@ -265,6 +266,13 @@ procedure TCounterVariant.MoveSquares(const AMove: string; out AFrom, ATo: Integ
 begin
   AFrom := 0;
   ATo := 0;
+end;
+
+function TCounterVariant.NormalizeMove(const AMove: string): string;
+begin
+  Result := CounterCanonicalMove(AMove);
+  if Result = '' then
+    Result := Trim(AMove);
 end;
 
 { TBlackStartCounterVariant }

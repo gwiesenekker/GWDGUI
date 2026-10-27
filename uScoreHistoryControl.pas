@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Controls, Forms, Graphics, LMessages, SysUtils, Types, uDraughtsBoard,
-  uPdn, uPreferences;
+  uPdn, uPdnText, uPreferences;
 
 type
   TScoreHistoryDisplayMode = (shdmAuto, shdmGraph, shdmBars);

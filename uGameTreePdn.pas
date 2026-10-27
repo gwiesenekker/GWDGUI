@@ -5,7 +5,7 @@ unit uGameTreePdn;
 interface
 
 uses
-  Classes, StrUtils, SysUtils, fgl, uDraughtsBoard, uGamePosition, uGameTree;
+  Classes, StrUtils, SysUtils, fgl, uGamePosition, uGameTree;
 
 type
   TGameTreeMoveCaptionMap = specialize TFPGMap<Int64, string>;
@@ -57,7 +57,7 @@ function GameTreeHasContent(AGameTree: TGameTree): Boolean;
 
 implementation
 
-uses uPdn, uGameTreeNodeData;
+uses uPdnText, uGameTreeNodeData;
 
 function GameTreeHasContent(AGameTree: TGameTree): Boolean;
 begin
@@ -65,7 +65,7 @@ begin
   if AGameTree = nil then
     Exit;
   Result := (AGameTree.MainlineCount > 0) or (AGameTree.BranchCount > 0) or
-    (AGameTree.StartingFEN <> DefaultStartingFEN) or
+    (AGameTree.StartingFEN <> AGameTree.Variant.DefaultStartingFEN) or
     (AGameTree.ResultText <> '*') or (AGameTree.EventName <> '?') or
     (AGameTree.WhiteName <> 'White') or (AGameTree.BlackName <> 'Black') or
     (AGameTree.Root.CommentText <> '') or (AGameTree.Root.EnginePV <> '') or
@@ -104,7 +104,7 @@ begin
     Result := '*';
 end;
 
-function NodeMoveCaption(ABoard: TDraughtsBoard; ANode: TGameTreePlyNode; AForceMoveNumber: Boolean;
+function NodeMoveCaption(APosition: TGamePosition; ANode: TGameTreePlyNode; AForceMoveNumber: Boolean;
   ACompact: Boolean; out MoveText: string): string;
 begin
   Result := '';
@@ -122,8 +122,9 @@ begin
       Result += ' ';
   end;
   MoveText := ANode.MoveText;
-  if (ABoard <> nil) and (Pos('x', MoveText) > 0) then
-    MoveText := ABoard.PdnMoveNotation(MoveText);
+  // Record notation is decided in the position before the move (SAN needs it).
+  if APosition <> nil then
+    MoveText := APosition.MoveNotation(MoveText);
   Result += MoveText;
 end;
 
@@ -147,7 +148,7 @@ begin
     Result += '; emt: ' + ClockSecondsCaption(ANode.SecondsUsed);
 end;
 
-function FirstPvMove(const APv: string): string;
+function FirstPvMove(AVariant: TGameVariant; const APv: string): string;
 var
   Moves: TStringList;
 begin
@@ -156,13 +157,13 @@ begin
   try
     ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(APv)), Moves);
     if Moves.Count > 0 then
-      Result := NormalizeMoveNotation(Moves[0]);
+      Result := AVariant.NormalizeMove(Moves[0]);
   finally
     Moves.Free;
   end;
 end;
 
-function NodeAnnotation(ANode: TGameTreePlyNode;
+function NodeAnnotation(AVariant: TGameVariant; ANode: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions; AForFile: Boolean = False): string;
 var
   LClockText, Projection, Encoded: string;
@@ -207,10 +208,10 @@ begin
     if not AOptions.ShowEngineScore then Data.EngineScore := '';
     if not AOptions.ShowAnnotatorScore then Data.AnnotatorScore := '';
     if not AOptions.ShowEngineFullPV then
-      if AOptions.ShowEnginePVMove then Data.EnginePV := FirstPvMove(Data.EnginePV)
+      if AOptions.ShowEnginePVMove then Data.EnginePV := FirstPvMove(AVariant, Data.EnginePV)
       else Data.EnginePV := '';
     if not AOptions.ShowAnnotatorFullPV then
-      if AOptions.ShowAnnotatorPVMove then Data.AnnotatorPV := FirstPvMove(Data.AnnotatorPV)
+      if AOptions.ShowAnnotatorPVMove then Data.AnnotatorPV := FirstPvMove(AVariant, Data.AnnotatorPV)
       else Data.AnnotatorPV := '';
     if not AOptions.ShowEngineFullPV and not AOptions.ShowEnginePVMove then
     begin Data.EnginePVDepth := ''; Data.EnginePVTimeText := ''; end;
@@ -227,7 +228,7 @@ begin
   end;
 end;
 
-function NodeIsAnnotatorAlternative(APrevious, ANode: TGameTreePlyNode): Boolean;
+function NodeIsAnnotatorAlternative(AVariant: TGameVariant; APrevious, ANode: TGameTreePlyNode): Boolean;
 var
   LPvMove: string;
 begin
@@ -236,9 +237,9 @@ begin
     Exit;
   if Trim(APrevious.AnnotatorPV) = '' then
     Exit;
-  LPvMove := FirstPvMove(APrevious.AnnotatorPV);
+  LPvMove := FirstPvMove(AVariant, APrevious.AnnotatorPV);
   Result := (LPvMove <> '') and
-    (not SameText(LPvMove, NormalizeMoveNotation(ANode.MoveText)));
+    (not SameText(LPvMove, AVariant.NormalizeMove(ANode.MoveText)));
 end;
 
 function SideForNextPly(ASide: TGameSide): TGameSide;
@@ -419,36 +420,36 @@ begin
   SetLength(ARenderResult.VariationMovesTexts, 0);
 end;
 
-procedure AdvanceRenderBoard(var ABoard: TDraughtsBoard; const AMove: string;
+procedure AdvanceRenderBoard(var ABoard: TGamePosition; const AMove: string;
   var AResult: TGameTreePdnRenderResult);
 begin
   if ABoard = nil then Exit;
   Inc(AResult.BoardMovesApplied);
-  try ABoard.PlayMove(AMove, True, True);
+  try ABoard.PlayMoveText(AMove);
   except FreeAndNil(ABoard); end; // Preserve raw captions beyond invalid legacy paths.
 end;
 
 procedure BuildGameTreeMoveCaptions(ATree: TGameTree;
   ACaptions: TGameTreeMoveCaptionMap; out ABoardMovesApplied: Integer);
-var Board: TDraughtsBoard; Work: TGameTreePdnRenderResult;
-  procedure AddMove(Node: TGameTreePlyNode; var Position: TDraughtsBoard);
+var Board: TGamePosition; Work: TGameTreePdnRenderResult;
+  procedure AddMove(Node: TGameTreePlyNode; var Position: TGamePosition);
   var Caption: string;
   begin
     Caption := Node.MoveText;
-    if (Position <> nil) and (Pos('x', Caption) > 0) then
-      Caption := Position.PdnMoveNotation(Caption);
+    if Position <> nil then
+      Caption := Position.MoveNotation(Caption);
     ACaptions.Add(Node.NodeId, Caption);
     AdvanceRenderBoard(Position, Node.MoveText, Work);
   end;
-  procedure Walk(Parent: TGameTreePlyNode; var Position: TDraughtsBoard);
-  var I: Integer; Branch: TDraughtsBoard;
+  procedure Walk(Parent: TGameTreePlyNode; var Position: TGamePosition);
+  var I: Integer; Branch: TGamePosition;
   begin
     if Parent.ChildCount = 0 then Exit;
     for I := 1 to Parent.ChildCount - 1 do
     begin
       Branch := nil;
       if Position <> nil then
-      begin Branch := TDraughtsBoard.Create; Branch.AssignFrom(Position); end;
+        Branch := Position.Clone;
       try
         AddMove(Parent.Children[I], Branch);
         Walk(Parent.Children[I], Branch);
@@ -463,9 +464,10 @@ begin
   ABoardMovesApplied := 0;
   if ATree = nil then Exit;
   Work.BoardMovesApplied := 0;
-  Board := TDraughtsBoard.Create;
+  Board := nil;
   try
-    try Board.LoadFromFEN(ATree.StartingFEN); except FreeAndNil(Board); end;
+    try Board := ATree.Variant.CreatePositionFromFEN(ATree.StartingFEN);
+    except Board := nil; end;
     Walk(ATree.Root, Board);
     ABoardMovesApplied := Work.BoardMovesApplied;
   finally Board.Free; end;
@@ -474,12 +476,12 @@ end;
 function RenderVariationLine(AGameTree: TGameTree; ANode, APreviousPosition: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions; ACompact: Boolean;
   var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer;
-  var ABoard: TDraughtsBoard; AIncludeSiblings: Boolean = False; AForceMoveNumber: Boolean = True): string; forward;
+  var ABoard: TGamePosition; AIncludeSiblings: Boolean = False; AForceMoveNumber: Boolean = True): string; forward;
 
 function RenderChildVariations(AGameTree: TGameTree; ANode, AContinuation: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions; ACompact: Boolean;
   var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer;
-  AParentBoard: TDraughtsBoard; ABasePlyFilter: Integer = -1): string;
+  AParentBoard: TGamePosition; ABasePlyFilter: Integer = -1): string;
 var
   I: Integer;
   LBasePlyNumber: Integer;
@@ -487,7 +489,7 @@ var
   LLineOffset: Integer;
   LText: string;
   LVariationPlyNumber: Integer;
-  VariationBoard: TDraughtsBoard;
+  VariationBoard: TGamePosition;
 begin
   Result := '';
   if ANode = nil then
@@ -500,7 +502,7 @@ begin
       Continue;
     if (ABasePlyFilter >= 0) and (ANode.PlyNumber <> ABasePlyFilter) then
       Continue;
-    if ACompact and NodeIsAnnotatorAlternative(ANode, LChild) and
+    if ACompact and NodeIsAnnotatorAlternative(AGameTree.Variant, ANode, LChild) and
       (not AOptions.ShowAnnotatorPVMove) and
       (not AOptions.ShowAnnotatorFullPV) then
       Continue;
@@ -510,10 +512,7 @@ begin
     Inc(LLineOffset);
     VariationBoard := nil;
     if AParentBoard <> nil then
-    begin
-      VariationBoard := TDraughtsBoard.Create;
-      VariationBoard.AssignFrom(AParentBoard);
-    end;
+      VariationBoard := AParentBoard.Clone;
     try
       LText := RenderVariationLine(AGameTree, LChild, ANode, AOptions, ACompact,
         ARenderResult, LLineOffset, VariationBoard);
@@ -540,7 +539,7 @@ end;
 function RenderVariationLine(AGameTree: TGameTree; ANode, APreviousPosition: TGameTreePlyNode;
   const AOptions: TGameTreePdnRenderOptions; ACompact: Boolean;
   var ARenderResult: TGameTreePdnRenderResult; ABaseOffset: Integer;
-  var ABoard: TDraughtsBoard; AIncludeSiblings, AForceMoveNumber: Boolean): string;
+  var ABoard: TGamePosition; AIncludeSiblings, AForceMoveNumber: Boolean): string;
 var
   LBasePlyNumber: Integer;
   LContinuation: TGameTreePlyNode;
@@ -555,14 +554,14 @@ begin
 
   LContinuation := FindContinuationChild(ANode);
   if APreviousPosition <> nil then
-    if ACompact and NodeIsAnnotatorAlternative(APreviousPosition, ANode) and
+    if ACompact and NodeIsAnnotatorAlternative(AGameTree.Variant, APreviousPosition, ANode) and
       (not AOptions.ShowAnnotatorFullPV) then
       LContinuation := nil;
 
   Result := NodeMoveCaption(ABoard, ANode, AForceMoveNumber, ACompact, LRenderedMove) +
-    NodeAnnotation(ANode, AOptions, not ACompact);
+    NodeAnnotation(AGameTree.Variant, ANode, AOptions, not ACompact);
   if APreviousPosition <> nil then
-    if ACompact and NodeIsAnnotatorAlternative(APreviousPosition, ANode) and
+    if ACompact and NodeIsAnnotatorAlternative(AGameTree.Variant, APreviousPosition, ANode) and
       AOptions.ShowAnnotatorScore and (not AOptions.HideAnnotations) and
       (Trim(APreviousPosition.AnnotatorScore) <> '') and
       (Trim(ANode.AnnotatorScore) = '') then
@@ -613,7 +612,7 @@ var
   LPreviousPosition: TGameTreePlyNode;
   LResultText: string;
   LSegment, LRenderedMove: string;
-  Board: TDraughtsBoard;
+  Board: TGamePosition;
 
   procedure AppendAnalysisVariation(ABaseNode: TGameTreePlyNode;
     const APv, AScore, AScorePrefix: string; ASource: TNotationAnalysisSource; AShowMove, AShowFull,
@@ -652,11 +651,11 @@ begin
   if (AGameTree = nil) or (AGameTree.Root = nil) then
     Exit;
 
-  Board := TDraughtsBoard.Create;
+  Board := nil;
   try
-    try Board.LoadFromFEN(AGameTree.StartingFEN);
-    except FreeAndNil(Board); end;
-  Result := Trim(NodeAnnotation(AGameTree.Root, AOptions, not ACompact));
+    try Board := AGameTree.Variant.CreatePositionFromFEN(AGameTree.StartingFEN);
+    except Board := nil; end;
+  Result := Trim(NodeAnnotation(AGameTree.Variant, AGameTree.Root, AOptions, not ACompact));
   for I := 1 to AGameTree.MainlineCount do
   begin
     LChild := AGameTree.MainlineNode[I];
@@ -669,7 +668,7 @@ begin
     if LChild.PlyNumber > 1 then
       LPreviousPosition := AGameTree.MainlineNode[LChild.PlyNumber - 1];
     LSegment := NodeMoveCaption(Board, LChild, Result = '', ACompact, LRenderedMove) +
-      NodeAnnotation(LChild, AOptions, not ACompact) +
+      NodeAnnotation(AGameTree.Variant, LChild, AOptions, not ACompact) +
       PreviousPositionAnnotation(LPreviousPosition, LChild, AOptions);
     LMoveStart := Pos(LRenderedMove, LSegment);
     if LMoveStart > 0 then
@@ -733,7 +732,7 @@ begin
     Lines.Add('[White "' + PdnQuote(AGameTree.WhiteName) + '"]');
     Lines.Add('[Black "' + PdnQuote(AGameTree.BlackName) + '"]');
     Lines.Add('[Result "' + PdnQuote(PdnExportResult(AGameTree.ResultText)) + '"]');
-    if AGameTree.StartingFEN <> DefaultStartingFEN then Lines.Add('[SetUp "1"]');
+    if AGameTree.StartingFEN <> AGameTree.Variant.DefaultStartingFEN then Lines.Add('[SetUp "1"]');
     Lines.Add('[FEN "' + PdnQuote(AGameTree.StartingFEN) + '"]');
     Lines.Add('');
     ClearRenderResult(RenderResult);

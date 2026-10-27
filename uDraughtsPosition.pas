@@ -60,6 +60,7 @@ type
     function CreatePositionFromFEN(const AFEN: string): TGamePosition; override;
     function SameMove(const A, B: string): Boolean; override;
     procedure MoveSquares(const AMove: string; out AFrom, ATo: Integer); override;
+    function NormalizeMove(const AMove: string): string; override;
   end;
 
 // Shared variant instance; owned by this unit.
@@ -374,6 +375,10 @@ end;
 
 function TDraughtsPosition.MoveNotation(const ACanonical: string): string;
 begin
+  // Quiet moves are written as stored; only captures need the legal-move list
+  // to choose between the short form and a landing path.
+  if Pos('x', ACanonical) = 0 then
+    Exit(ACanonical);
   EnsureLegalMoves;
   Result := FBoard.PdnMoveNotation(ACanonical);
 end;
@@ -415,6 +420,11 @@ end;
 procedure TDraughtsVariant.MoveSquares(const AMove: string; out AFrom, ATo: Integer);
 begin
   CanonicalSquares(AMove, AFrom, ATo);
+end;
+
+function TDraughtsVariant.NormalizeMove(const AMove: string): string;
+begin
+  Result := NormalizeMoveNotation(AMove);
 end;
 
 function TDraughtsVariant.CreatePosition: TGamePosition;

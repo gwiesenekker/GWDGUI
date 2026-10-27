@@ -206,7 +206,7 @@ generic unit is converted; behaviour, formats and performance stay unchanged.
 | 2 | Source audit: listed generic units must not use the draughts board or parse move text | Done |
 | 3 | Variant into tree/actor/builder/cursor; `SameMove` replaces text comparison | Done |
 | 4 | Displayed position and move interaction (`MoveSquares`, `MovesBetween`) | Done |
-| 5 | Notation walker and presentation (`MoveNotation`) | |
+| 5 | Notation walker and presentation (`MoveNotation`) | Done |
 | 6 | Analysis coordination and PV state | |
 | 7 | `TGameRules`; orchestrator, runner and running game | |
 | 8 | Remaining main-form uses; list the chess replacement points | |
@@ -246,4 +246,24 @@ Step 4 notes:
   legal moves) made a human move about 15% slower in the GUI harness.
 - The highlight's last move still comes from the draughts board's move history
   in `UpdateBoardHighlights`; step 8 takes it from the displayed node instead.
+
+Step 5 notes:
+- The board-free PDN text helpers (comment escaping, analysis annotations, result
+  normalization) moved from `uPdn` to the new `uPdnText`. `uGameTree` uses that
+  instead of `uPdn`, which removes one of the transitive dependencies above; the
+  orchestrator dependency remains for step 7.
+- `uGameTreePdn` (export, notation walker, move captions) replays with
+  `TGamePosition` from the tree's variant: `CreatePositionFromFEN`, `Clone` per
+  variation, `PlayMoveText`, and `MoveNotation` in the position before the move.
+  Invalid legacy moves still end the replay for that line and keep the raw text.
+- New `TGameVariant.NormalizeMove` for analysis text that is compared or stored
+  without replay (the first PV move in compact annotations, annotator
+  alternatives). The contract test checks that canonical moves are unchanged and
+  that a normalized spelling is the same move.
+- `GameTreeHasContent` and the `[SetUp "1"]` tag compare the start position with
+  the tree variant's default instead of the draughts constant.
+- The source audit covers `uPdnText`, `uGameTreePdn`, `uNotationPresentation` and
+  `uGameTreeView`; `game_tree_variant_check` renders a counter-game tree.
+- `TDraughtsPosition.MoveNotation` returns quiet moves without generating legal
+  moves, as the walker did before.
 

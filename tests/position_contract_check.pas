@@ -109,6 +109,8 @@ begin
       Check(APosition.IsLegal(LMove), AContext + ': legal move is IsLegal: ' + LMove);
       Check(APosition.SameMove(LMove, LMove), AContext + ': SameMove is reflexive: ' + LMove);
       Check(Variant.SameMove(LMove, LMove), AContext + ': variant SameMove is reflexive: ' + LMove);
+      Check(Variant.NormalizeMove(LMove) = LMove,
+        AContext + ': NormalizeMove keeps canonical move ' + LMove);
       Check(APosition.TryParseMove(LMove, LParsed) and APosition.SameMove(LParsed, LMove),
         AContext + ': canonical move parses to itself: ' + LMove);
 
@@ -280,6 +282,9 @@ begin
         'variant: ' + ASame[I] + ' and ' + ASame[I + 1] + ' are the same move');
       Check(LPosition.SameMove(ASame[I], ASame[I + 1]) and LPosition.SameMove(ASame[I + 1], ASame[I]),
         'position: ' + ASame[I] + ' and ' + ASame[I + 1] + ' are the same move');
+      Check(Variant.SameMove(Variant.NormalizeMove(ASame[I]), ASame[I]) and
+        Variant.SameMove(Variant.NormalizeMove(ASame[I + 1]), ASame[I + 1]),
+        'variant: NormalizeMove keeps the move of ' + ASame[I] + ' / ' + ASame[I + 1]);
       Inc(I, 2);
     end;
     I := 0;

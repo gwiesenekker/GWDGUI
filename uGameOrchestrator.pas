@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils,
-  uDraughtsDrawRules, uDraughtsBoard, uEngineBase, uGameMoveHistory, uPdn;
+  uDraughtsDrawRules, uDraughtsBoard, uEngineBase, uGameMoveHistory, uPdn, uPdnText;
 
 type
   TClockIncrementMode = (

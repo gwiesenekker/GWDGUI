@@ -14,7 +14,7 @@ uses
   cthreads,
   {$ENDIF}
   Classes, SysUtils, uGamePosition, uDraughtsPosition, uCounterGamePosition,
-  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameMoveHistory;
+  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameMoveHistory, uGameTreePdn;
 
 var
   Failures: Integer = 0;
@@ -290,10 +290,58 @@ begin
   end;
 end;
 
+{ The notation walker renders through the tree's variant: record notation
+  from the game, set-up detection against the game's own start position. }
+procedure CheckNotationOnInjectedVariant;
+var
+  LVariant: TCounterVariant;
+  LTree: TGameTree;
+  LActor: TGameTreeActor;
+  LError, LText: string;
+  LNodeId, LFirstId: Int64;
+  LHeader: TGameTreeHeaderInput;
+begin
+  LVariant := TCounterVariant.Create;
+  LTree := TGameTree.Create(LVariant);
+  LActor := TGameTreeActor.Create(LTree, False);
+  try
+    Check(not GameTreeHasContent(LTree), 'an empty counter tree has no content');
+    Check(Execute(LActor, LActor.CreateAppendMainlineMoveCommand('p1', gmsHuman), LError, LFirstId),
+      'append: ' + LError);
+    Check(Execute(LActor, LActor.CreateAppendMainlineMoveCommand('+2', gmsHuman), LError, LNodeId),
+      'append: ' + LError);
+    Check(Execute(LActor, LActor.CreateStoreMoveVariationCommand(LFirstId, 'p1', gmsHuman),
+      LError, LNodeId), 'variation: ' + LError);
+    LText := GameTreeToPdnText(LTree);
+    Check((Pos('one', LText) > 0) and (Pos('two', LText) > 0),
+      'moves are rendered in the game''s record notation: ' + LText);
+    Check((Pos('+1', LText) = 0) and (Pos('+2', LText) = 0),
+      'no canonical move text in the record: ' + LText);
+    Check(Pos('[SetUp', LText) = 0, 'the variant start position is not a set-up: ' + LText);
+    Check(Pos('[FEN "W:0"]', LText) > 0, 'FEN tag from the tree: ' + LText);
+
+    LHeader := Default(TGameTreeHeaderInput);
+    LHeader.EventName := 'Counter';
+    LHeader.WhiteName := 'W';
+    LHeader.BlackName := 'B';
+    LHeader.ResultText := '*';
+    LHeader.StartingFEN := 'W:1';
+    Check(Execute(LActor, LActor.CreateSetHeaderCommand(LHeader), LError, LNodeId),
+      'set-up header: ' + LError);
+    LText := GameTreeToPdnText(LTree);
+    Check(Pos('[SetUp "1"]', LText) > 0, 'another start position is a set-up: ' + LText);
+  finally
+    LActor.Free;
+    LTree.Free;
+    LVariant.Free;
+  end;
+end;
+
 begin
   CheckRootSideFollowsVariant;
   CheckActorOnInjectedVariant;
   CheckCompletedMovesWithEquivalentSpellings;
+  CheckNotationOnInjectedVariant;
   if Failures > 0 then
   begin
     WriteLn(Failures, ' game tree variant checks failed');

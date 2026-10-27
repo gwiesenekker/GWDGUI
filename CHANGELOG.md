@@ -5,6 +5,24 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-27 — Notation walker on the position boundary (position interface, step 5)
+
+- PDN export, the notation view's walker and move captions (`uGameTreePdn`) no
+  longer use the draughts board. They replay through the tree's game and write
+  each move in the game's record notation. The source audit now also covers
+  `uPdnText`, `uGameTreePdn`, `uNotationPresentation` and `uGameTreeView`.
+- New `uPdnText` holds the PDN text helpers that need no board; `uGameTree` no
+  longer depends on `uPdn`.
+- New `TGameVariant.NormalizeMove` for engine and annotator PV text; checked by
+  `position_contract_check`.
+- Set-up detection (`[SetUp "1"]`, "game has content") uses the game's own start
+  position. For draughts nothing changes; `game_tree_variant_check` covers a
+  second game.
+- Regression, lifecycle, DXP, GUI and tournament suites pass; performance outputs
+  are identical. Benchmark timings are within noise (`performance_check ... 1000
+  60 300 1`, four interleaved runs). GUI harness (12 interleaved runs of human
+  moves, 6 of load/browse/jump): all operations within the run-to-run spread. No push.
+
 ### 2026-10-27 — Displayed position and move interaction on the position boundary (position interface, step 4)
 
 - `uDisplayedPosition` and `uMoveInteraction` no longer use the draughts board;

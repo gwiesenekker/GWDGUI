@@ -100,6 +100,11 @@ type
     // the text does not determine the squares; for a legal move the result
     // agrees with TGamePosition.MoveSquares in that move's position.
     procedure MoveSquares(const AMove: string; out AFrom, ATo: Integer); virtual; abstract;
+    // The game's standard spelling of move text without a position (draughts:
+    // no leading zeros, one separator). Canonical moves are returned unchanged;
+    // text that is not move-like is returned trimmed. Used for analysis text
+    // (engine PVs) that is stored or compared without replaying it.
+    function NormalizeMove(const AMove: string): string; virtual; abstract;
   end;
 
 function OppositeGameSide(ASide: TGameSide): TGameSide;

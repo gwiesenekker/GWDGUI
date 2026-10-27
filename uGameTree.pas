@@ -247,7 +247,7 @@ function SideToMoveText(ASide: TGameSide): string;
 implementation
 
 uses
-  uPdn;
+  uPdnText;
 
 var
   NextGameTreeId: Int64 = 0;
