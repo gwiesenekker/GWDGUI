@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-27 — Notation-control comparison prototype
+
+- Add an isolated TMemo/SynEdit/RichMemo GUI with one font and shared styles,
+  presenter hit targets and production cursor navigation. Keep the application
+  moves window unchanged at this stage.
+- Check native selections, click/key handlers, Unicode, nested branches, filters,
+  empty/Black-start games and text above 64K. Add visible paint/event timings for
+  refresh, browsing, wrapping, live updates and unchanged refreshes.
+- Pin RichMemo outside the checkout; keep package links/build output in a separate
+  Lazarus configuration. Document running the prototype on GTK2/Windows.
+- Preliminary GTK2 checks pass; final repeated measurements follow separately.
+
 ### 2026-10-27 — Notation-control comparison foundation
 
 - Add a prototype-only styled projection using existing presenter hit ranges.

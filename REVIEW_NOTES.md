@@ -1,5 +1,17 @@
 # Responses to Claude's reviews
 
+## Notation-control comparison prototype — 2026-10-27
+
+The standalone GUI compares identical notation, one font family/size and the same
+played/branch/PV styles. TMemo remains the unformatted baseline. Native selection,
+click/key-handler, Unicode, nested branch, filter, empty/Black-start and above-64K
+checks precede visible paint/event timings. Offset conversion handles native
+Windows UTF-16 controls and TMemo CRLF separators. RichMemo is pinned externally;
+no production dependency is added. See tests/NOTATION_CONTROLS.md for method,
+reproduction and limitations. Preliminary GTK2 checks pass; Windows remains untested.
+At the user’s direction, the next integration will use SynEdit and add notation
+colour/bold/italic settings on a separate preferences tab. No push.
+
 ## Notation-control comparison foundation — 2026-10-27
 
 Start the requested TMemo/SynEdit/RichMemo experiment outside production code.

@@ -38,7 +38,7 @@ option('CompilerOptions/Other/CustomOptions', options + ' -dGWDGUI_EMBEDDED_HELP
 option('CompilerOptions/SearchPaths/UnitOutputDirectory', output / 'units')
 isolated = output / project.name
 tree.write(isolated, encoding='utf-8', xml_declaration=True)
-executable = output / project.stem
+executable = output / (project.stem + ('.exe' if widgetset == 'win32' else ''))
 executable.unlink(missing_ok=True)
 subprocess.run(['lazbuild', '--build-all', '--no-write-project', '--ws=' + widgetset,
                 '--pcp=' + str(output / 'config'), str(isolated)], check=True)

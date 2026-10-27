@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12"/>
+    <General><Flags><MainUnitHasCreateFormStatements Value="False"/></Flags><MainUnit Value="0"/><Title Value="Notation control comparison"/></General>
+    <RequiredPackages Count="3">
+      <Item1><PackageName Value="LCL"/></Item1>
+      <Item2><PackageName Value="SynEdit"/></Item2>
+      <Item3><PackageName Value="richmemopackage"/></Item3>
+    </RequiredPackages>
+    <Units Count="1"><Unit0><Filename Value="notation_controls_compare.pas"/><IsPartOfProject Value="True"/></Unit0></Units>
+  </ProjectOptions>
+  <CompilerOptions><Version Value="11"/><Target><Filename Value="notation_controls_compare"/></Target><SearchPaths><OtherUnitFiles Value=".."/></SearchPaths></CompilerOptions>
+</CONFIG>

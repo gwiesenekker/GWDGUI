@@ -180,3 +180,7 @@ against borrowing the identity of an unrelated enclosing repository.
 The index regression additionally removes 20,000 synthetic internal nodes and
 checks one lazy rebuild per batch, stale/surviving IDs, new nodes added before
 rebuilding, and bulk takebacks. It uses work counts, not timing thresholds.
+
+The standalone [notation-control comparison](NOTATION_CONTROLS.md) measures TMemo,
+SynEdit and pinned RichMemo with the real presenter/cursor. It is optional and
+does not add RichMemo to the production application or the normal GUI suite.
