@@ -5,12 +5,15 @@ program main_form_boundaries_check;
 {$ENDIF}
 uses {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, Controls, StdCtrls, Menus, ExtCtrls, Grids,
-  LCLType, Types, uMainForm, uRunningGame, uBoardControl, uDraughtsBoard, uPdn,
+  LCLType, Types, Graphics, uMainForm, uRunningGame, uBoardControl, uDraughtsBoard, uPdn,
   uGameTree, uGameTreePdn, uGameTreeBuilder, uGameSetupTypes, uGameOrchestrator, uGuiDialogs,
   uPositionSetupForm, uEngineRegistry, uEngineParamsJson, uAnalyzerRunnerThread,
   uGameGuiMessages, uGameTreeSearchRef, uEngineEditForm, uGameTreeActor, uDisplayedPosition;
 
 type
+  TBoardPaintAccess = class(TDraughtsBoardControl)
+    procedure Render(Image: TBitmap);
+  end;
   TCaptureChoice = class
     Dialog: TForm;
     Index: Integer;
@@ -23,6 +26,8 @@ type
   TExceptionReporter = class
     procedure Report(Sender: TObject; Error: Exception);
   end;
+procedure TBoardPaintAccess.Render(Image: TBitmap);
+begin PaintWindow(Image.Canvas.Handle); end;
 procedure TExceptionReporter.Report(Sender: TObject; Error: Exception);
 begin
   WriteLn('FAIL: ', Error.ClassName, ': ', Error.Message);
@@ -383,13 +388,35 @@ end;
 procedure CheckHintModes;
 var Form: TMainForm; Board: TDraughtsBoardControl; Actor: TGameTreeActor;
   Display: TDisplayedPosition; Command: TGameTreeCommand;
-  Main, Annotator, None: TMenuItem; Before, Fen: string; Key: Word; I: Integer;
+  Main, Annotator, None: TMenuItem; Before, Fen: string; Key: Word; I: Integer; Image: TBitmap;
+  function SquareHasColor(Square: Integer; Color: TColor): Boolean;
+  var X, Y: Integer;
+  begin
+    for Y := 0 to Board.ClientHeight - 1 do
+      for X := 0 to Board.ClientWidth - 1 do
+        if (Board.SquareAtPoint(X, Y) = Square) and
+          (ColorToRGB(Image.Canvas.Pixels[X, Y]) = ColorToRGB(Color)) then Exit(True);
+    Result := False;
+  end;
+  procedure CheckPaintedPairs(FirstSource, FirstTarget, ReplySource, ReplyTarget: Integer);
+  begin
+    Image.SetSize(Board.ClientWidth, Board.ClientHeight);
+    // Invoke the normal custom-control painting path with an offscreen DC;
+    // GTK PaintTo can copy the parent window instead of rendering this control.
+    TBoardPaintAccess(Board).Render(Image);
+    Check(SquareHasColor(FirstSource, Board.PvSourceSquareColor) and
+      SquareHasColor(FirstTarget, Board.PvSourceSquareColor), 'first PV move outlines both squares in the PV color');
+    Check(SquareHasColor(ReplySource, Board.HintSourceSquareColor) and
+      SquareHasColor(ReplyTarget, Board.HintSourceSquareColor), 'PV reply outlines both squares in the hint color');
+  end;
 begin
-  Form := TMainForm.Create(nil); Display := TDisplayedPosition.Create;
+  Form := TMainForm.Create(nil); Display := TDisplayedPosition.Create; Image := TBitmap.Create;
   Form.LoadStandaloneFen(DefaultStartingFEN);
   Actor := TGameTreeActor.Create(Form.ActiveGameTree, False);
   try
     Board := TDraughtsBoardControl(Form.FindComponent('MainBoard'));
+    Board.Align := alNone; Board.SetBounds(0, 0, 500, 500);
+    Board.PvSourceSquareColor := clFuchsia; Board.HintSourceSquareColor := clAqua;
     Main := Menu(Form, 'Show hints from main PV');
     Annotator := Menu(Form, 'Show hints from annotator PV');
     None := Menu(Form, 'Do not show hints');
@@ -402,16 +429,29 @@ begin
       0, Board.Board, Display, Actor.Revision);
     Before := GameTreeToPdnText(Form.ActiveGameTree); Fen := Board.Board.CurrentFEN;
     Main.Click;
-    Check((Board.PvSourceSquare = 32) and (Board.HintSourceSquare = 18), 'main PV supplies its hints');
+    Check((Board.PvSourceSquare = 32) and (Board.HintSourceSquare = 18) and
+      (Board.PvTargetSquare = 28) and (Board.HintTargetSquare = 23), 'main PV supplies its source/target hints');
+    CheckPaintedPairs(32, 28, 18, 23);
     Annotator.Click;
     Check(Annotator.Checked and not Main.Checked and not None.Checked, 'annotator choice is exclusive');
-    Check((Board.PvSourceSquare = 34) and (Board.HintSourceSquare = 20), 'annotator PV supplies its hints');
+    Check((Board.PvSourceSquare = 34) and (Board.HintSourceSquare = 20) and
+      (Board.PvTargetSquare = 30) and (Board.HintTargetSquare = 25), 'annotator PV supplies its source/target hints');
+    CheckPaintedPairs(34, 30, 20, 25);
+    Key := Ord('F'); Form.OnKeyDown(Form, Key, []);
+    CheckPaintedPairs(34, 30, 20, 25); // Both endpoints follow flipped square mapping.
+    Key := Ord('F'); Form.OnKeyDown(Form, Key, []);
     for I := 1 to 2 do
     begin
       None.Click;
       Check(None.Checked and not Main.Checked and not Annotator.Checked, 'none remains selected when clicked again');
-      Check((Board.PvSourceSquare = 0) and (Board.HintSourceSquare = 0), 'none clears both PV hints immediately');
+      Check((Board.PvSourceSquare = 0) and (Board.HintSourceSquare = 0) and
+        (Board.PvTargetSquare = 0) and (Board.HintTargetSquare = 0), 'none clears all PV hint squares immediately');
     end;
+    Image.SetSize(Board.ClientWidth, Board.ClientHeight); TBoardPaintAccess(Board).Render(Image);
+    Check(not SquareHasColor(34, Board.PvSourceSquareColor) and
+      not SquareHasColor(30, Board.PvSourceSquareColor) and
+      not SquareHasColor(20, Board.HintSourceSquareColor) and
+      not SquareHasColor(25, Board.HintSourceSquareColor), 'none removes painted source and target outlines');
     Key := Ord('F'); Form.OnKeyDown(Form, Key, []);
     Check(None.Checked and (Board.PvSourceSquare = 0) and (Board.HintSourceSquare = 0), 'refresh cannot re-enable disabled hints');
     Key := Ord('F'); Form.OnKeyDown(Form, Key, []);
@@ -421,10 +461,14 @@ begin
     Check((GameTreeToPdnText(Form.ActiveGameTree) = Before) and (Board.Board.CurrentFEN = Fen),
       'hint choices do not modify game data or displayed position');
     ClickSquare(Board, 32); ClickSquare(Board, 28);
+    Check((Board.PvSourceSquare = 0) and (Board.PvTargetSquare = 0) and
+      (Board.HintSourceSquare = 0) and (Board.HintTargetSquare = 0),
+      'moving away from the PV base clears all source and target hints');
     None.Click;
     Check((Board.LastMoveTargetSquare = 28) and (Board.PvSourceSquare = 0) and
       (Board.HintSourceSquare = 0), 'none preserves the last-move marker');
-  finally Actor.Free; Display.Free; Form.Free; end;
+    Check((Board.PvTargetSquare = 0) and (Board.HintTargetSquare = 0), 'refresh clears both target hints too');
+  finally Image.Free; Actor.Free; Display.Free; Form.Free; end;
 end;
 
 procedure CheckInvalidEngineParameters;

@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-27 — Outline both ends of PV hint moves
+
+- Highlight the source and destination of the first PV move and its reply, for
+  both main and annotator PVs, using the existing PV/hint colors for each pair.
+- Clear target hints along with source hints when disabled, empty or unrelated
+  to the displayed position; keep the last-move marker independent.
+- Cover quiet moves, captures, single/empty/mismatched PVs, all menu modes and
+  actual painted outlines (including flipped boards) through headless and GTK
+  regression tests. Full headless/source-audit/archive and GTK suites pass.
+
 ### 2026-10-27 — Allow disabling PV hints
 
 - Add Do not show hints as a third board-menu radio option alongside main and

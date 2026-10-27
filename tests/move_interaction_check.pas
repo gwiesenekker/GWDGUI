@@ -77,20 +77,28 @@ begin
     Moves.Add('32-28'); Moves.Add('18-23');
     H := CalculateMoveHighlights('18-23', '37-32 12-18', True);
     Check((H.LastMoveTargetSquare = 23) and (H.PvSourceSquare = 37) and
-      (H.HintSourceSquare = 12), 'following tip uses mainline target and matching PV sources');
+      (H.HintSourceSquare = 12) and (H.PvTargetSquare = 32) and
+      (H.HintTargetSquare = 18), 'following tip uses mainline target and matching PV sources');
     H := CalculateMoveHighlights('32-28', '20-24 38-32', False);
     Check((H.LastMoveTargetSquare = 28) and (H.PvSourceSquare = 0) and
-      (H.HintSourceSquare = 0), 'historical position suppresses unrelated PV hints');
+      (H.HintSourceSquare = 0) and (H.PvTargetSquare = 0) and
+      (H.HintTargetSquare = 0), 'historical position suppresses unrelated PV hints');
     H := CalculateMoveHighlights('', '32-28', True);
     Check((H.LastMoveTargetSquare = 0) and (H.PvSourceSquare = 32) and
-      (H.HintSourceSquare = 0), 'root has no last move, one-move PV has no second hint');
+      (H.HintSourceSquare = 0) and (H.PvTargetSquare = 28) and
+      (H.HintTargetSquare = 0), 'root has no last move, one-move PV has no second hint');
     H := CalculateMoveHighlights('', '', True);
     Check((H.LastMoveTargetSquare = 0) and (H.PvSourceSquare = 0) and
-      (H.HintSourceSquare = 0), 'empty PV and out-of-range ply clear highlights');
+      (H.HintSourceSquare = 0) and (H.PvTargetSquare = 0) and
+      (H.HintTargetSquare = 0), 'empty PV and out-of-range ply clear highlights');
     H := CalculateMoveHighlights('19-24', '', False);
     Check(H.LastMoveTargetSquare = 24, 'variation uses its own target, not replaced mainline move');
     H := CalculateMoveHighlights('38x27x32', '', False);
     Check(H.LastMoveTargetSquare = 27, 'capture marker uses destination, not captured square');
+    H := CalculateMoveHighlights('', '38x27x32 17x28x22', True);
+    Check((H.PvSourceSquare = 38) and (H.PvTargetSquare = 27) and
+      (H.HintSourceSquare = 17) and (H.HintTargetSquare = 28),
+      'PV capture pairs use destinations rather than captured squares');
     Moves.Clear;
     H := CalculateMoveHighlights('', '', False);
     Check(H.LastMoveTargetSquare = 0, 'empty game has no last target');

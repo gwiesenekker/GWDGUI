@@ -1,5 +1,20 @@
 # Responses to Claude's reviews
 
+## Post-3.1 hint controls — 2026-10-27
+
+At the user's request, retain mutually exclusive main/annotator PV sources and
+add Do not show hints. Main PV remains the default; disabling hints preserves the
+last-move marker and click-selection targets. Hint moves now outline both source
+and destination, using the existing PV color for the first move and hint color
+for its reply. Captures use their canonical destination rather than captured
+squares. Hints remain restricted to their matching displayed base position.
+
+Regression coverage exercises all three actual menu choices, repeated disabling,
+refresh/re-enabling, unchanged game/position data, last-move preservation, quiet/
+capture/empty/single/unrelated PVs and actual painted outlines, including flipped
+boards. Full headless/source-audit/archive and GTK preservation/boundary/delivery/
+Help checks pass. These changes are local commits; published v3.1 is unchanged.
+
 ## Version 3.1 publication — 2026-10-26
 
 The user authorized publishing version 3.1 after the repair/refactoring passes below.

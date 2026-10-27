@@ -3886,7 +3886,9 @@ begin
       LPvHighlightsActive);
     FBoardControl.LastMoveTargetSquare := Highlights.LastMoveTargetSquare;
     FBoardControl.PvSourceSquare := Highlights.PvSourceSquare;
+    FBoardControl.PvTargetSquare := Highlights.PvTargetSquare;
     FBoardControl.HintSourceSquare := Highlights.HintSourceSquare;
+    FBoardControl.HintTargetSquare := Highlights.HintTargetSquare;
   finally
     LDisplayedBoard.Free;
   end;

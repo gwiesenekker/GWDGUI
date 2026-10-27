@@ -323,6 +323,11 @@ exclusive; main PV is the default. Hints appear only when the selected PV belong
 to the displayed position. **Do not show hints** clears the PV hints while keeping
 the last-move marker and normal move-selection highlights.
 
+Each hinted move outlines both its source and destination squares. The first PV
+move uses the configured **PV move** color; the opponent's reply uses the configured
+**Hint move** color. The two squares of a move share its color, for both main and
+annotator PVs.
+
 Click a move in a PV or use Left/Right to inspect its position. The line stays
 frozen while you browse; press Escape in the PV to resume updates. If a PV
 contains an illegal move, the memo identifies that move and the board and

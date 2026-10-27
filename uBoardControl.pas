@@ -19,10 +19,12 @@ type
     FBoardLightColor: TColor;
     FGridColor: TColor;
     FHintSourceSquare: Integer;
+    FHintTargetSquare: Integer;
     FHintSourceSquareColor: TColor;
     FLastMoveTargetSquare: Integer;
     FLastMoveTargetSquareColor: TColor;
     FPvSourceSquare: Integer;
+    FPvTargetSquare: Integer;
     FPvSourceSquareColor: TColor;
     FShowCoordinates: Boolean;
     FShowSideToMoveMarker: Boolean;
@@ -34,10 +36,12 @@ type
     procedure SetBoardLightColor(AValue: TColor);
     procedure SetGridColor(AValue: TColor);
     procedure SetHintSourceSquare(AValue: Integer);
+    procedure SetHintTargetSquare(AValue: Integer);
     procedure SetHintSourceSquareColor(AValue: TColor);
     procedure SetLastMoveTargetSquare(AValue: Integer);
     procedure SetLastMoveTargetSquareColor(AValue: TColor);
     procedure SetPvSourceSquare(AValue: Integer);
+    procedure SetPvTargetSquare(AValue: Integer);
     procedure SetPvSourceSquareColor(AValue: TColor);
     procedure SetShowCoordinates(AValue: Boolean);
     procedure SetShowSideToMoveMarker(AValue: Boolean);
@@ -60,6 +64,7 @@ type
     property BoardFlipped: Boolean read FBoardFlipped write SetBoardFlipped;
     property HintSourceSquare: Integer read FHintSourceSquare
       write SetHintSourceSquare;
+    property HintTargetSquare: Integer read FHintTargetSquare write SetHintTargetSquare;
     property HintSourceSquareColor: TColor read FHintSourceSquareColor
       write SetHintSourceSquareColor;
     property LastMoveTargetSquare: Integer read FLastMoveTargetSquare
@@ -67,6 +72,7 @@ type
     property LastMoveTargetSquareColor: TColor read FLastMoveTargetSquareColor
       write SetLastMoveTargetSquareColor;
     property PvSourceSquare: Integer read FPvSourceSquare write SetPvSourceSquare;
+    property PvTargetSquare: Integer read FPvTargetSquare write SetPvTargetSquare;
     property PvSourceSquareColor: TColor read FPvSourceSquareColor
       write SetPvSourceSquareColor;
     property TargetSquareColor: TColor read FTargetSquareColor
@@ -184,6 +190,20 @@ begin
   if FHintSourceSquare = AValue then
     Exit;
   FHintSourceSquare := AValue;
+  Invalidate;
+end;
+
+procedure TDraughtsBoardControl.SetHintTargetSquare(AValue: Integer);
+begin
+  if FHintTargetSquare = AValue then Exit;
+  FHintTargetSquare := AValue;
+  Invalidate;
+end;
+
+procedure TDraughtsBoardControl.SetPvTargetSquare(AValue: Integer);
+begin
+  if FPvTargetSquare = AValue then Exit;
+  FPvTargetSquare := AValue;
   Invalidate;
 end;
 
@@ -443,10 +463,10 @@ begin
 
       if LSquare > 0 then
       begin
-        if LSquare = FPvSourceSquare then
+        if (LSquare = FPvSourceSquare) or (LSquare = FPvTargetSquare) then
           DrawSquareOutline(Canvas, LCellRect, FPvSourceSquareColor,
             Max(3, LCell div 12), LCell div 10);
-        if LSquare = FHintSourceSquare then
+        if (LSquare = FHintSourceSquare) or (LSquare = FHintTargetSquare) then
           DrawSquareOutline(Canvas, LCellRect, FHintSourceSquareColor,
             Max(3, LCell div 12), LCell div 7);
         if LSquare = FLastMoveTargetSquare then

@@ -4,7 +4,8 @@ interface
 uses Classes, SysUtils, uDraughtsBoard, uGameTree;
 type
   TMoveHighlights = record
-    LastMoveTargetSquare, PvSourceSquare, HintSourceSquare: Integer;
+    LastMoveTargetSquare, PvSourceSquare, PvTargetSquare,
+      HintSourceSquare, HintTargetSquare: Integer;
   end;
   TMoveTargetSquares = array of Integer;
   TMoveRoute = (mrInvalid, mrNone, mrMainline, mrVariation, mrRunner);
@@ -66,13 +67,23 @@ begin
   Result.LastMoveTargetSquare := 0;
   Result.PvSourceSquare := 0;
   Result.HintSourceSquare := 0;
+  Result.PvTargetSquare := 0;
+  Result.HintTargetSquare := 0;
   Result.LastMoveTargetSquare := MoveSquareAt(ADisplayedMove, 2);
   if not APvMatchesPosition then Exit;
   PvMoves := TStringList.Create;
   try
     TextToMoveList(APvText, PvMoves);
-    if PvMoves.Count > 0 then Result.PvSourceSquare := MoveSquareAt(PvMoves[0], 1);
-    if PvMoves.Count > 1 then Result.HintSourceSquare := MoveSquareAt(PvMoves[1], 1);
+    if PvMoves.Count > 0 then
+    begin
+      Result.PvSourceSquare := MoveSquareAt(PvMoves[0], 1);
+      Result.PvTargetSquare := MoveSquareAt(PvMoves[0], 2);
+    end;
+    if PvMoves.Count > 1 then
+    begin
+      Result.HintSourceSquare := MoveSquareAt(PvMoves[1], 1);
+      Result.HintTargetSquare := MoveSquareAt(PvMoves[1], 2);
+    end;
   finally PvMoves.Free; end;
 end;
 
