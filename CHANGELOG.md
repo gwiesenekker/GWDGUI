@@ -3,7 +3,22 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
-## Unreleased
+## Version 3.2 — 2026-10-27
+
+This release improves hint controls and analysis presentation since v3.1.
+
+- Add **Do not show hints** alongside the main/annotator PV radio options.
+- Outline both source and destination for the first PV move and its reply,
+  retaining the existing colors and independent last-move marker.
+- Show engine/annotator analysis (full PV or first move) after the actual move
+  played from its source position. Keep analysis without a played continuation
+  at the tip, or at the root of an empty game.
+- Keep the game tree, analysis ownership, preview bases and saved PDN content
+  unchanged; expand headless and actual GTK navigation/painting regressions.
+- Update the manual and publish a freshly built Linux x86_64 executable, portable
+  bundle and SHA256SUMS. No Windows executable is included.
+
+The dated entries below describe development work before publication.
 
 ### 2026-10-27 — Show analysis after the played move
 

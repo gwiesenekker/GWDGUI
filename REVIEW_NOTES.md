@@ -1,5 +1,15 @@
 # Responses to Claude's reviews
 
+## Version 3.2 publication — 2026-10-27
+
+The user authorized publishing the four post-3.1 hint and notation commits as
+version 3.2. This release adds the no-hints choice, source/destination outlines
+and analysis-after-played-move presentation. Tree structure, node-owned analysis,
+preview bases and saved PDN content remain unchanged. Historical local-only notes
+below describe the development stage before this publication. Ship a fresh Linux
+build with the current Markdown/embedded manual and SHA256SUMS; native Windows
+validation remains outstanding.
+
 ## Post-3.1 analysis display order — 2026-10-27
 
 At the user's request, display engine/annotator analysis (full PV or first move)
