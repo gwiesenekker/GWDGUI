@@ -1,5 +1,15 @@
 # Responses to Claude's reviews
 
+## Explicit notation PV sources — 2026-10-27
+
+Prepare separate engine/annotator colours by carrying the source through renderer
+hit metadata and the presenter. Do not infer the source from visible text, scores
+or PV content: all may be identical or hidden. Real branch hits have no analysis
+source; Auto Play remains distinct. Regressions cover 64 option combinations for
+empty/short White/Black-start games, identical PVs/scores, retained preview targets
+and unchanged exports. The existing notation presentation fingerprint still passes.
+This step adds metadata only; preferences and styling follow separately. No push.
+
 ## Highlighter contract check — 2026-10-27
 
 Final compiler-warning review caught an unimplemented standard-attribute getter

@@ -70,6 +70,7 @@ begin
     Hit := Presenter.VariationHits[I];
     Check((Hit.NodeId = Rendered.VariationNodeIds[I]) and
       (Hit.BeforeMove = Rendered.VariationBeforeMoves[I]) and
+      (Hit.AnalysisSource = Rendered.VariationAnalysisSources[I]) and
       (Hit.Start = Rendered.VariationStarts[I]) and
       (Hit.Length = Rendered.VariationLengths[I]) and
       (Hit.VariationPly = Rendered.VariationPlies[I]) and

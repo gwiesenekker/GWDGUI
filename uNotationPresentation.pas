@@ -13,6 +13,7 @@ type
   TMoveVariationHit = record
     NodeId: Int64;
     BeforeMove: Boolean;
+    AnalysisSource: TNotationAnalysisSource;
     Start: Integer;
     Length: Integer;
     VariationPly: Integer;
@@ -144,6 +145,7 @@ begin
   FRendered.VariationLengths := nil;
   FRendered.VariationNodeIds := nil;
   FRendered.VariationBeforeMoves := nil;
+  FRendered.VariationAnalysisSources := nil;
   FRendered.VariationPlies := nil;
   FRendered.VariationBasePlies := nil;
   FRendered.VariationMovesTexts := nil;
@@ -174,6 +176,7 @@ function TNotationPresentation.GetVariationHit(AIndex: Integer): TMoveVariationH
 begin
   Result.NodeId := FRendered.VariationNodeIds[AIndex];
   Result.BeforeMove := FRendered.VariationBeforeMoves[AIndex];
+  Result.AnalysisSource := FRendered.VariationAnalysisSources[AIndex];
   Result.Start := FRendered.VariationStarts[AIndex];
   Result.Length := FRendered.VariationLengths[AIndex];
   Result.VariationPly := FRendered.VariationPlies[AIndex];

@@ -3,6 +3,13 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-27 — Preserve PV sources in notation ranges
+
+- Carry explicit engine, annotator and Auto Play source metadata on displayed
+  PV prefixes/moves, without changing notation text, navigation or PDN output.
+- Test identical PVs/scores, hidden scores/annotations, all PV filter combinations,
+  empty/short games and both starting sides. Existing presentation fingerprints pass.
+
 ### 2026-10-27 — Complete the SynEdit highlighter contract
 
 - Supply standard fallback attributes as well as token styles, eliminating an

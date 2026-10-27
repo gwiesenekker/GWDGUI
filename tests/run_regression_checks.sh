@@ -26,6 +26,7 @@ CHECKS=(
   notation_prototype_document_check.pas
   notation_presentation_check.pas
   notation_analysis_order_check.pas
+  notation_analysis_source_check.pas
   displayed_position_check.pas
   move_interaction_check.pas
   game_tree_index_check.pas
