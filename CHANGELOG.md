@@ -5,6 +5,24 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-27 — Add the game-position boundary (position interface, step 1)
+
+- New `uGamePosition`: the game-neutral `TGamePosition`/`TGameVariant` classes
+  that generic units will use instead of `TDraughtsBoard`. Moves are canonical
+  strings chosen by the game; only the game parses or compares move text
+  (`TryParseMove`, `SameMove`). `MoveNotation` is evaluated before the move.
+- New `uDraughtsPosition`: `TDraughtsPosition`, a thin adapter over
+  `TDraughtsBoard`, and `TDraughtsVariant`. Trusted replays defer legal-move
+  generation until the next query. Draughts rules and notation are unchanged.
+- New `tests/position_contract_check.pas` (in the regression sweep): perft from
+  the initial position to depth 6 (9, 81, 658, 4,265, 27,117, 167,140, matching
+  the published values), FEN round trips, invalid FENs leaving the position
+  unchanged, notation round trips and uniqueness, `SameMove`, `MovesBetween`,
+  illegal moves, and trusted versus validated replay along random lines;
+  243,659 checks for draughts. A future chess position must pass the same checks.
+- No existing unit uses the new classes yet; behaviour is unchanged. Design:
+  `claude/position-interface-proposal.md`. No push.
+
 ### 2026-10-27 — Build with Lazarus 3.0 again (review C10)
 
 - The notation highlighter keeps its own copy of the current line instead of

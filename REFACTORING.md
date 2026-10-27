@@ -191,3 +191,24 @@ or move the published v3.0 tag as part of this work.
   and preview positions. The manual and source-archive checks match current behavior.
 - Node-index removal work is bounded by one invalidation and one subsequent rebuild;
   the regression checks 20,000 removed IDs and preserves surviving identities.
+
+## Game-position boundary (in progress)
+
+Design and rationale: `claude/position-interface-proposal.md`. Generic units reach
+the game only through `uGamePosition` (`TGamePosition`, `TGameVariant`); moves are
+canonical strings that only the game parses or compares. Draughts is the only
+implementation (`uDraughtsPosition`, an adapter over `TDraughtsBoard`) until every
+generic unit is converted; behaviour, formats and performance stay unchanged.
+
+| Step | Scope | Status |
+|---|---|---|
+| 1 | `uGamePosition`, `uDraughtsPosition`, `position_contract_check` (perft, FEN, notation, `SameMove`, choosers, trusted replay) | Done |
+| 2 | Source audit: listed generic units must not use the draughts board or parse move text | |
+| 3 | Variant into tree/actor/builder/cursor; `SameMove` replaces text comparison | |
+| 4 | Displayed position and move interaction (`MoveSquares`, `MovesBetween`) | |
+| 5 | Notation walker and presentation (`MoveNotation`) | |
+| 6 | Analysis coordination and PV state | |
+| 7 | `TGameRules`; orchestrator, runner and running game | |
+| 8 | Remaining main-form uses; list the chess replacement points | |
+
+Each step is one local commit with all suites and the performance baseline passing.
