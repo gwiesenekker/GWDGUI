@@ -1,0 +1,52 @@
+# import_warnings=19
+# LCL=4.8.0.0 platform=gtk2 font=DejaVu Sans Mono 11; fixed client=760x600; synchronous repaint/event drain
+# bytes=25597 plies=151 hits=285 style_spans=813
+control,operation,sample,iterations,total_ms,ms_per_op
+TMemo,reload_styled,1,5,4,0.800
+TMemo,browse,1,30,187,6.233
+TMemo,resize_wrap,1,10,170,17.000
+TMemo,live_update,1,5,103,20.600
+TMemo,cached_refresh,1,10,7,0.700
+TMemo,reload_styled,2,5,4,0.800
+TMemo,browse,2,30,185,6.167
+TMemo,resize_wrap,2,10,165,16.500
+TMemo,live_update,2,5,88,17.600
+TMemo,cached_refresh,2,10,6,0.600
+TMemo,reload_styled,3,5,3,0.600
+TMemo,browse,3,30,172,5.733
+TMemo,resize_wrap,3,10,158,15.800
+TMemo,live_update,3,5,89,17.800
+TMemo,cached_refresh,3,10,8,0.800
+# TMemo: text/ranges/styles/Unicode/empty/Black-start/filters passed
+TSynEdit,reload_styled,1,5,45,9.000
+TSynEdit,browse,1,30,411,13.700
+TSynEdit,resize_wrap,1,10,87,8.700
+TSynEdit,live_update,1,5,87,17.400
+TSynEdit,cached_refresh,1,10,50,5.000
+TSynEdit,reload_styled,2,5,38,7.600
+TSynEdit,browse,2,30,435,14.500
+TSynEdit,resize_wrap,2,10,88,8.800
+TSynEdit,live_update,2,5,86,17.200
+TSynEdit,cached_refresh,2,10,35,3.500
+TSynEdit,reload_styled,3,5,38,7.600
+TSynEdit,browse,3,30,429,14.300
+TSynEdit,resize_wrap,3,10,88,8.800
+TSynEdit,live_update,3,5,83,16.600
+TSynEdit,cached_refresh,3,10,36,3.600
+# TSynEdit: text/ranges/styles/Unicode/empty/Black-start/filters passed
+RichMemo,reload_styled,1,5,3922,784.400
+RichMemo,browse,1,30,8491,283.033
+RichMemo,resize_wrap,1,10,874,87.400
+RichMemo,live_update,1,5,2766,553.200
+RichMemo,cached_refresh,1,10,12,1.200
+RichMemo,reload_styled,2,5,6949,1389.800
+RichMemo,browse,2,30,13651,455.033
+RichMemo,resize_wrap,2,10,1225,122.500
+RichMemo,live_update,2,5,5215,1043.000
+RichMemo,cached_refresh,2,10,12,1.200
+RichMemo,reload_styled,3,5,9508,1901.600
+RichMemo,browse,3,30,14176,472.533
+RichMemo,resize_wrap,3,10,1255,125.500
+RichMemo,live_update,3,5,7444,1488.800
+RichMemo,cached_refresh,3,10,12,1.200
+# RichMemo: text/ranges/styles/Unicode/empty/Black-start/filters passed

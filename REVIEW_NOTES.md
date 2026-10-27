@@ -1,5 +1,20 @@
 # Responses to Claude's reviews
 
+## Notation-control comparison results — 2026-10-27
+
+Three GTK2 samples at prototype commit a101da3 support proceeding with SynEdit.
+Median live updates: plain memo 17.8 ms, SynEdit 17.2 ms, RichMemo 1,043 ms.
+SynEdit browsing is slower than the plain memo (14.3 vs 6.2 ms), while wrapping
+is faster (8.8 vs 16.5 ms). RichMemo direct span formatting and selection are
+costly here, with repeated refreshes becoming slower. A debugger sample is in
+GTK text layout/selection; its backend creates a new tag for every styled span.
+
+See tests/results/notation-controls-gtk2-2026-10-27.md and its raw CSV for the
+full measurements, correctness checks and limitations. All three controls pass
+including Unicode/non-BMP text and content above 64K. There is no native Windows
+measurement yet. Keep one font family/size and expose colour/bold/italic settings
+on a separate preferences tab, as the user requested. No push.
+
 ## Notation-control comparison prototype — 2026-10-27
 
 The standalone GUI compares identical notation, one font family/size and the same

@@ -3,6 +3,14 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-27 — Notation-control comparison results
+
+- Record three GTK2 samples and raw timings: SynEdit styled live updates median
+  17.2 ms, RichMemo 1,043 ms; plain TMemo browsing remains faster than SynEdit.
+- All controls pass text/style/selection/navigation and >64K checks. Choose
+  SynEdit for integration, retaining one font family/size as requested.
+- Preserve the reproducible method and platform limitations; Windows is untested.
+
 ### 2026-10-27 — Notation-control comparison prototype
 
 - Add an isolated TMemo/SynEdit/RichMemo GUI with one font and shared styles,
