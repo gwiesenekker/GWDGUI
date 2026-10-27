@@ -8,6 +8,8 @@ type
     FDoc: TNotationDocument;
     FPos, FNext, FOffset: Integer;
     FAttributes: array[TNotationStyle] of TSynHighlighterAttributes;
+  protected
+    function GetDefaultAttribute(Index: Integer): TSynHighlighterAttributes; override;
   public
     constructor Create(AOwner: TComponent); override;
     procedure ApplyStyles(const Styles: TNotationStyles);
@@ -32,6 +34,11 @@ begin
     AddAttribute(FAttributes[S]);
   end;
   ApplyStyles(DefaultNotationStyles);
+end;
+function TNotationRangeHighlighter.GetDefaultAttribute(Index: Integer): TSynHighlighterAttributes;
+begin
+  // Default attributes are queried independently of token rendering by SynEdit.
+  Result := FAttributes[nsComment];
 end;
 procedure TNotationRangeHighlighter.ApplyStyles(const Styles: TNotationStyles);
 var S: TNotationStyle; FontStyle: TFontStyles;

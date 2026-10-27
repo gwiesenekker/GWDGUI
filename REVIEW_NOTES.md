@@ -1,5 +1,12 @@
 # Responses to Claude's reviews
 
+## Highlighter contract check — 2026-10-27
+
+Final compiler-warning review caught an unimplemented standard-attribute getter
+in the custom highlighter. Implement the fallback and explicitly exercise all six
+standard attribute properties in the GUI regression, preventing an abstract-method
+exception if SynEdit requests them. Token styling and navigation are unchanged.
+
 ## SynEdit moves and Notation preferences — 2026-10-27
 
 Proceed with SynEdit at the user’s request, retaining one font family/size and

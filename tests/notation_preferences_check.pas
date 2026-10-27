@@ -103,6 +103,10 @@ begin
       View.ApplyStyles(Prefs.NotationStyles); Application.ProcessMessages;
       Check((View.SelStart = R.Start) and (View.SelText = Expected), 'style application preserves selection');
       Highlighter := TNotationRangeHighlighter(View.Highlighter);
+      Check((Highlighter.IdentifierAttribute <> nil) and (Highlighter.CommentAttribute <> nil) and
+        (Highlighter.KeywordAttribute <> nil) and (Highlighter.StringAttribute <> nil) and
+        (Highlighter.SymbolAttribute <> nil) and (Highlighter.WhitespaceAttribute <> nil),
+        'SynEdit standard attribute queries must not call an abstract method');
       P := View.Document.LinePoint(R.Start); I := View.Document.PointOffset(Point(1,P.Y));
       Highlighter.SetLine(View.Lines[P.Y-1], P.Y-1);
       while (not Highlighter.GetEol) and (I+Highlighter.GetTokenPos < R.Start) do Highlighter.Next;

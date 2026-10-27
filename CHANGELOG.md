@@ -3,6 +3,12 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-27 — Complete the SynEdit highlighter contract
+
+- Supply standard fallback attributes as well as token styles, eliminating an
+  abstract-method warning and preventing failures if SynEdit queries them.
+- Add a regression for all six standard attribute getters.
+
 ### 2026-10-27 — Styled SynEdit moves and Notation preferences
 
 - Replace the game moves memo with a read-only, wrapped SynEdit view using one
