@@ -4,7 +4,7 @@ uses {$IFDEF UNIX}cthreads, cwstring,{$ENDIF} Interfaces, Forms, Controls,
   StdCtrls, ExtCtrls, Classes, SysUtils, Math, Types, Graphics, LCLType, LCLIntf,
   LazUTF8, LCLVersion, SynEdit, uDraughtsBoard, uGameTreeBuilder, RichMemo, uPdn, uGameTree, uGameTreeActor,
   uGameTreePdn, uGameTreeCursor, uGameTreeNodeData, uGameOrchestrator, uNotationPresentation,
-  uNotationPrototypeDocument, uNotationControlPrototype, uTreeTestUtils;
+  uNotationDocument, uNotationStyles, uNotationControlPrototype, uTreeTestUtils;
 type
   TComparisonForm = class(TForm)
   public
@@ -12,7 +12,7 @@ type
     Status: TLabel;
     Host: TPanel;
     View: TNotationControlPrototype;
-    Doc: TNotationPrototypeDocument;
+    Doc: TNotationDocument;
     Tree: TGameTree;
     Selection: TNotationSelection;
     GameCursor: TGameTreeCursor;
@@ -218,10 +218,10 @@ begin
   Form.Selection := Default(TNotationSelection); Form.Selection.BasePly := -1;
 end;
 procedure EdgeCases(Form: TComparisonForm);
-var Tree: TGameTree; Doc: TNotationPrototypeDocument; OldTree: TGameTree;
-    OldDoc: TNotationPrototypeDocument; Options: TGameTreePdnRenderOptions; I: Integer;
+var Tree: TGameTree; Doc: TNotationDocument; OldTree: TGameTree;
+    OldDoc: TNotationDocument; Options: TGameTreePdnRenderOptions; I: Integer;
 begin
-  Tree := TGameTree.Create; Doc := TNotationPrototypeDocument.Create;
+  Tree := TGameTree.Create; Doc := TNotationDocument.Create;
   OldTree := Form.Tree; OldDoc := Form.Doc;
   try
     Form.Tree := Tree; Form.Doc := Doc;
@@ -315,13 +315,13 @@ begin
     WriteLn('# ', PrototypeNames[Kind], ': text/ranges/styles/Unicode/empty/Black-start/filters passed');
   end;
 end;
-var Form: TComparisonForm; Actor: TGameTreeActor; Doc: TNotationPrototypeDocument;
+var Form: TComparisonForm; Actor: TGameTreeActor; Doc: TNotationDocument;
     Kind: TPrototypeControlKind; Samples: Integer;
 begin
   try
   DefaultFormatSettings.DecimalSeparator := '.';
   Application.Initialize; Application.CaptureExceptions := False;
-  Form := TComparisonForm.CreateNew(nil); Actor := nil; Doc := TNotationPrototypeDocument.Create;
+  Form := TComparisonForm.CreateNew(nil); Actor := nil; Doc := TNotationDocument.Create;
   try
     Check(ParamCount >= 1, 'Usage: notation_controls_compare fixture.pdn [samples] [--interactive]');
     Samples := 3; if ParamCount >= 2 then Samples := StrToInt(ParamStr(2));

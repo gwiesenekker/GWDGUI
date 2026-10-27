@@ -3,31 +3,14 @@ unit uNotationControlPrototype;
 interface
 uses Classes, SysUtils, Types, Controls, StdCtrls, Graphics, SynEdit,
   SynEditHighlighter, SynEditWrappedView, RichMemo, RichMemoFactory,
-  uNotationPrototypeDocument, uNotationPresentation;
+  uNotationDocument, uNotationStyles, uNotationPresentation, uNotationHighlighter;
 type
   TPrototypeControlKind = (pcMemo, pcSynEdit, pcRichMemo);
-  TNotationRangeHighlighter = class(TSynCustomHighlighter)
-  private
-    FDoc: TNotationPrototypeDocument;
-    FPos, FNext, FOffset: Integer;
-    FAttributes: array[TNotationStyle] of TSynHighlighterAttributes;
-  public
-    constructor Create(AOwner: TComponent); override;
-    procedure SetLine(const NewValue: string; LineNumber: Integer); override;
-    procedure Next; override;
-    function GetEol: Boolean; override;
-    function GetToken: string; override;
-    procedure GetTokenEx(out TokenStart: PChar; out TokenLength: Integer); override;
-    function GetTokenAttribute: TSynHighlighterAttributes; override;
-    function GetTokenKind: Integer; override;
-    function GetTokenPos: Integer; override;
-    property Document: TNotationPrototypeDocument read FDoc write FDoc;
-  end;
   TNotationControlPrototype = class
   private
     FKind: TPrototypeControlKind;
     FControl: TWinControl;
-    FDoc: TNotationPrototypeDocument;
+    FDoc: TNotationDocument;
     FLoadedText, FLoadedSignature: string;
     FHighlighter: TNotationRangeHighlighter;
     function FontParams(Style: TNotationStyle): TFontParams;
@@ -36,8 +19,8 @@ type
   public
     constructor Create(Owner: TComponent; Parent: TWinControl; Kind: TPrototypeControlKind);
     destructor Destroy; override;
-    procedure Load(Doc: TNotationPrototypeDocument);
-    procedure Refresh(Doc: TNotationPrototypeDocument);
+    procedure Load(Doc: TNotationDocument);
+    procedure Refresh(Doc: TNotationDocument);
     procedure SelectRange(Start, Len: Integer);
     function SelectionStart: Integer;
     function SelectedText: string;
@@ -51,47 +34,6 @@ implementation
 {$IFDEF MSWINDOWS}uses Windows;{$ENDIF}
 const StyleColors: array[TNotationStyle] of TColor = (clGray, clBlack, clGreen, clBlue);
       StyleFonts: array[TNotationStyle] of TFontStyles = ([fsItalic], [fsBold], [fsItalic], []);
-constructor TNotationRangeHighlighter.Create(AOwner: TComponent);
-var S: TNotationStyle;
-begin
-  inherited;
-  for S := Low(S) to High(S) do
-  begin
-    FAttributes[S] := TSynHighlighterAttributes.Create('Notation '+IntToStr(Ord(S)), 'notation'+IntToStr(Ord(S)));
-    FAttributes[S].Foreground := StyleColors[S];
-    FAttributes[S].Style := StyleFonts[S]; AddAttribute(FAttributes[S]);
-  end;
-end;
-procedure TNotationRangeHighlighter.SetLine(const NewValue: string; LineNumber: Integer);
-begin
-  inherited;
-  FOffset := 0;
-  if Assigned(FDoc) then FOffset := FDoc.PointOffset(Point(1, LineNumber+1));
-  FNext := 0; Next;
-end;
-procedure TNotationRangeHighlighter.Next;
-var S: TNotationStyle;
-begin
-  FPos := FNext;
-  if GetEol then Exit;
-  // SynEdit wrapping expects a terminal NUL token before GetEol becomes true.
-  if FPos = Length(CurrentLineText) then begin Inc(FNext); Exit; end;
-  S := FDoc.StyleAt(FOffset+FPos); Inc(FNext);
-  while (FNext < Length(CurrentLineText)) and
-    (FDoc.StyleAt(FOffset+FNext) = S) do Inc(FNext);
-end;
-function TNotationRangeHighlighter.GetEol: Boolean;
-begin Result := FPos > Length(CurrentLineText); end;
-function TNotationRangeHighlighter.GetToken: string;
-begin Result := Copy(CurrentLineText, FPos+1, FNext-FPos); end;
-procedure TNotationRangeHighlighter.GetTokenEx(out TokenStart: PChar; out TokenLength: Integer);
-begin TokenStart := PChar(CurrentLineText)+FPos; TokenLength := FNext-FPos; end;
-function TNotationRangeHighlighter.GetTokenKind: Integer;
-begin Result := Ord(FDoc.StyleAt(FOffset+FPos)); end;
-function TNotationRangeHighlighter.GetTokenAttribute: TSynHighlighterAttributes;
-begin Result := FAttributes[TNotationStyle(GetTokenKind)]; end;
-function TNotationRangeHighlighter.GetTokenPos: Integer;
-begin Result := FPos; end;
 constructor TNotationControlPrototype.Create(Owner: TComponent; Parent: TWinControl;
   Kind: TPrototypeControlKind);
 var Syn: TSynEdit; Memo: TMemo; Rich: TRichMemo;
@@ -137,7 +79,7 @@ function TNotationControlPrototype.FontParams(Style: TNotationStyle): TFontParam
 begin
   Result := GetFontParams(FControl.Font.Name, 11, StyleColors[Style], StyleFonts[Style]);
 end;
-procedure TNotationControlPrototype.Load(Doc: TNotationPrototypeDocument);
+procedure TNotationControlPrototype.Load(Doc: TNotationDocument);
 var S: TNotationSpan; Params: TFontParams; Syn: TSynEdit; Rich: TRichMemo;
 begin
   FDoc := Doc;
@@ -164,7 +106,7 @@ begin
   end;
   FLoadedText := Doc.Text; FLoadedSignature := Doc.Presenter.Signature;
 end;
-procedure TNotationControlPrototype.Refresh(Doc: TNotationPrototypeDocument);
+procedure TNotationControlPrototype.Refresh(Doc: TNotationDocument);
 begin
   if (FLoadedText <> Doc.Text) or (FLoadedSignature <> Doc.Presenter.Signature) then Load(Doc)
   else begin FDoc := Doc; if FHighlighter <> nil then FHighlighter.Document := Doc; end;

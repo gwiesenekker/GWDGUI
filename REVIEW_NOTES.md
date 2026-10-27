@@ -1,5 +1,14 @@
 # Responses to Claude's reviews
 
+## Shared notation styling layer — 2026-10-27
+
+Extract the exercised document/coordinate map, semantic style settings and
+range highlighter into shared units for the chosen SynEdit integration. The
+document can borrow the existing presenter; there is no additional tree renderer
+or persisted node state. The optional three-control prototype reuses these units
+and remains the only consumer of the external RichMemo package. Headless Unicode
+index checks and an isolated SynEdit comparison pass after the extraction.
+
 ## Notation-control comparison results — 2026-10-27
 
 Three GTK2 samples at prototype commit a101da3 support proceeding with SynEdit.

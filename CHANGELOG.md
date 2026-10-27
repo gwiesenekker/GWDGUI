@@ -3,6 +3,14 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-27 — Share the tested notation styling layer
+
+- Move the prototype document/index and highlighter into reusable production
+  units without introducing RichMemo as an application dependency.
+- Keep the existing presenter authoritative; styling uses disposable UTF-8
+  ranges and indexed native-coordinate conversion. Share one default palette.
+- Headless document and isolated SynEdit prototype checks pass after extraction.
+
 ### 2026-10-27 — Notation-control comparison results
 
 - Record three GTK2 samples and raw timings: SynEdit styled live updates median

@@ -1,24 +1,26 @@
-unit uNotationPrototypeDocument;
+unit uNotationDocument;
 {$mode objfpc}{$H+}
 interface
-uses SysUtils, Types, uGameTree, uGameTreePdn, uNotationPresentation;
+uses SysUtils, Types, uNotationStyles, uGameTree, uGameTreePdn, uNotationPresentation;
 type
-  TNotationStyle = (nsComment, nsPlayed, nsVariation, nsAnalysis);
   TNotationSpan = record Start, Len: Integer; Style: TNotationStyle; end;
   TNotationSpans = array of TNotationSpan;
   TIntMap = array of Integer;
-  // Test/prototype projection only. The production presenter remains authoritative.
-  TNotationPrototypeDocument = class
+  // Disposable styling and coordinate index over the authoritative presenter.
+  TNotationDocument = class
   private
     FText: string;
     FStyles: array of TNotationStyle;
     FChars, FUtf16, FLines: TIntMap;
     FSpans: TNotationSpans;
     FPresenter: TNotationPresentation;
+    FOwnsPresenter: Boolean;
+    procedure Build;
     procedure Mark(Start, Len: Integer; Style: TNotationStyle);
   public
     constructor Create;
     destructor Destroy; override;
+    procedure UsePresentation(Presenter: TNotationPresentation);
     procedure Render(Tree: TGameTree; const Options: TGameTreePdnRenderOptions);
     function NativeOffset(ByteOffset: Integer; Utf16, CRLF: Boolean): Integer;
     function NativeToByte(Native: Integer; Utf16, CRLF: Boolean): Integer;
@@ -30,21 +32,28 @@ type
     property Presenter: TNotationPresentation read FPresenter;
   end;
 implementation
-constructor TNotationPrototypeDocument.Create;
-begin inherited; FPresenter := TNotationPresentation.Create; end;
-destructor TNotationPrototypeDocument.Destroy;
-begin FPresenter.Free; inherited; end;
-procedure TNotationPrototypeDocument.Mark(Start, Len: Integer; Style: TNotationStyle);
+constructor TNotationDocument.Create;
+begin inherited; FPresenter := TNotationPresentation.Create; FOwnsPresenter := True; Build; end;
+destructor TNotationDocument.Destroy;
+begin if FOwnsPresenter then FPresenter.Free; inherited; end;
+procedure TNotationDocument.Mark(Start, Len: Integer; Style: TNotationStyle);
 var I: Integer;
 begin
   for I := Start to Start + Len - 1 do
     if (I >= 0) and (I < Length(FStyles)) then FStyles[I] := Style;
 end;
-procedure TNotationPrototypeDocument.Render(Tree: TGameTree;
+procedure TNotationDocument.Render(Tree: TGameTree;
   const Options: TGameTreePdnRenderOptions);
+begin FPresenter.Render(Tree, Options); Build; end;
+procedure TNotationDocument.UsePresentation(Presenter: TNotationPresentation);
+begin
+  if Presenter = FPresenter then begin Build; Exit; end;
+  if FOwnsPresenter then FPresenter.Free;
+  FOwnsPresenter := False; FPresenter := Presenter; Build;
+end;
+procedure TNotationDocument.Build;
 var I, J, Chars, Units, Line, N: Integer; R: TNotationRange; H: TMoveVariationHit;
 begin
-  FPresenter.Render(Tree, Options);
   FText := FPresenter.Text;
   SetLength(FStyles, Length(FText));
   for I := 0 to High(FStyles) do FStyles[I] := nsComment;
@@ -82,7 +91,7 @@ begin
     begin Inc(Line); SetLength(FLines, Line+1); FLines[Line] := I+1; end;
   end;
 end;
-function TNotationPrototypeDocument.LinePoint(ByteOffset: Integer): TPoint;
+function TNotationDocument.LinePoint(ByteOffset: Integer): TPoint;
 var L, H, M: Integer;
 begin
   if (ByteOffset < 0) or (ByteOffset > Length(FText)) then raise ERangeError.Create('Byte offset');
@@ -91,19 +100,19 @@ begin
   begin M := (L+H+1) div 2; if FLines[M] <= ByteOffset then L := M else H := M-1; end;
   Result := Point(ByteOffset-FLines[L]+1, L+1);
 end;
-function TNotationPrototypeDocument.PointOffset(const Point: TPoint): Integer;
+function TNotationDocument.PointOffset(const Point: TPoint): Integer;
 begin
   if (Point.Y < 1) or (Point.Y > Length(FLines)) then raise ERangeError.Create('Line');
   Result := FLines[Point.Y-1]+Point.X-1;
   if (Result < FLines[Point.Y-1]) or (Result > Length(FText)) then raise ERangeError.Create('Column');
 end;
-function TNotationPrototypeDocument.NativeOffset(ByteOffset: Integer; Utf16, CRLF: Boolean): Integer;
+function TNotationDocument.NativeOffset(ByteOffset: Integer; Utf16, CRLF: Boolean): Integer;
 begin
   if (ByteOffset < 0) or (ByteOffset > Length(FText)) then raise ERangeError.Create('Byte offset');
   if Utf16 then Result := FUtf16[ByteOffset] else Result := FChars[ByteOffset];
   if CRLF then Inc(Result, LinePoint(ByteOffset).Y-1);
 end;
-function TNotationPrototypeDocument.NativeToByte(Native: Integer; Utf16, CRLF: Boolean): Integer;
+function TNotationDocument.NativeToByte(Native: Integer; Utf16, CRLF: Boolean): Integer;
 var L, H, M: Integer;
 begin
   L := 0; H := Length(FText);
@@ -113,7 +122,7 @@ begin
   while (L < Length(FText)) and ((Byte(FText[L+1]) and $C0) = $80) do Inc(L);
   Result := L;
 end;
-function TNotationPrototypeDocument.StyleAt(ByteOffset: Integer): TNotationStyle;
+function TNotationDocument.StyleAt(ByteOffset: Integer): TNotationStyle;
 begin
   if (ByteOffset < 0) or (ByteOffset >= Length(FStyles)) then Exit(nsComment);
   Result := FStyles[ByteOffset];

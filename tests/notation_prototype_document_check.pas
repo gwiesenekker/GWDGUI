@@ -1,14 +1,14 @@
 program notation_prototype_document_check;
 {$mode objfpc}{$H+}{$codepage utf8}
-uses SysUtils, uGameTree, uGameTreePdn, uNotationPresentation, uNotationPrototypeDocument,
+uses SysUtils, uGameTree, uGameTreePdn, uNotationPresentation, uNotationDocument, uNotationStyles,
   uTreeTestUtils;
 procedure Check(B: Boolean; const S: string);
 begin if not B then raise Exception.Create(S); end;
-var Tree: TGameTree; Doc: TNotationPrototypeDocument; Opt: TGameTreePdnRenderOptions;
+var Tree: TGameTree; Doc: TNotationDocument; Opt: TGameTreePdnRenderOptions;
     Before: string; I, Flags, U, C: Integer; R: TNotationRange;
     H: TMoveVariationHit; Sel: TNotationSelection; Target: TNotationBrowseTarget;
 begin
-  Tree := TGameTree.Create; Doc := TNotationPrototypeDocument.Create;
+  Tree := TGameTree.Create; Doc := TNotationDocument.Create;
   try
     Tree.RecordNodeAnnotation(Tree.Root, 'Gérard 棋 😀 before moves');
     Tree.RecordMainlineMove(1, '32-28'); Tree.RecordMainlineMove(2, '18-23');
