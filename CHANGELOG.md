@@ -5,6 +5,16 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-27 — Audit game-neutral units (position interface, step 2)
+
+- `tests/source_audit_check.sh` keeps a list of game-neutral units. A listed
+  unit fails the audit if it uses `uDraughtsBoard`/`uDraughtsPosition`, draughts
+  types, or move-text helpers (`NormalizeMoveNotation`, `MoveSquareAt`, ...).
+  The list starts with `uGamePosition`; each migration step adds the units it
+  converts. `REFACTORING.md` tracks the steps.
+- Regression sweep and source audit pass; a deliberately added `uDraughtsBoard`
+  dependency is rejected. No push.
+
 ### 2026-10-27 — Add the game-position boundary (position interface, step 1)
 
 - New `uGamePosition`: the game-neutral `TGamePosition`/`TGameVariant` classes

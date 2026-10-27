@@ -41,3 +41,17 @@ if rg -n 'DecodeVariationAnnotations|EncodeVariationAnnotations|DecodePdnVariati
   echo "Game-tree commands must accept typed moves and literal node annotations."
   exit 1
 fi
+
+# Game-neutral units reach the game only through uGamePosition (see
+# claude/position-interface-proposal.md). Each migration step adds the units it
+# converts. A generic unit must not use the draughts board or parse move text.
+GENERIC_UNITS=(
+  uGamePosition
+)
+for unit_name in "${GENERIC_UNITS[@]}"; do
+  unit_file="$ROOT_DIR/$unit_name.pas"
+  if rg -n '\buDraughtsBoard\b|\buDraughtsPosition\b|\bTDraughtsBoard\b|\bTDraughtsSide\b|\bNormalizeMoveNotation\b|\bSameMoveIgnoringCaptureOrder\b|\bMoveSquareAt\b|\bExtractMoveSquares\b' "$unit_file"; then
+    echo "$unit_name is game-neutral and must use uGamePosition only."
+    exit 1
+  fi
+done

@@ -203,7 +203,7 @@ generic unit is converted; behaviour, formats and performance stay unchanged.
 | Step | Scope | Status |
 |---|---|---|
 | 1 | `uGamePosition`, `uDraughtsPosition`, `position_contract_check` (perft, FEN, notation, `SameMove`, choosers, trusted replay) | Done |
-| 2 | Source audit: listed generic units must not use the draughts board or parse move text | |
+| 2 | Source audit: listed generic units must not use the draughts board or parse move text | Done |
 | 3 | Variant into tree/actor/builder/cursor; `SameMove` replaces text comparison | |
 | 4 | Displayed position and move interaction (`MoveSquares`, `MovesBetween`) | |
 | 5 | Notation walker and presentation (`MoveNotation`) | |
