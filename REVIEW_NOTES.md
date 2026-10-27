@@ -1,5 +1,25 @@
 # Responses to Claude's reviews
 
+## Post-3.1 analysis display order — 2026-10-27
+
+At the user's request, display engine/annotator analysis (full PV or first move)
+after the actual move played from its source position. Apply the same ordering to
+Auto Play analysis. If no continuation exists, retain a single analysis display
+at the tip, or at the root of an empty game. This changes presentation only:
+node-owned analysis, base plies and PDN file exports retain their meaning/content.
+
+The new ordering regression fails against the old renderer and passes with the
+change. It covers White/Black starts, zero to three moves, all source filters,
+exactly-once root/tip lines and relocated prefix/move preview hits. Across the
+256-option presenter fixture, the independently measured file-export fingerprint
+is identical before/after. The compact-text/range fingerprint changes intentionally.
+Real GTK memo clicks verify both engine and annotator previews, full/first-move
+modes, distinct actual-move selection, replayed boards and unchanged game exports.
+
+Full headless/source-audit/archive, GTK preservation/boundary/delivery/Help and
+default performance checks pass. Manual and test inventory updated. Changes are
+local commits; published v3.1 is unchanged.
+
 ## Post-3.1 hint controls — 2026-10-27
 
 At the user's request, retain mutually exclusive main/annotator PV sources and

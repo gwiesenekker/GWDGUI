@@ -15,6 +15,10 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 - Add white/Black-start, empty/short games, all source filter combinations and
   relocated prefix/move hit tests. The ordering test fails against the old layout;
   the file-export fingerprint is identical before and after the change.
+- Add actual GTK memo clicks for engine/annotator full PVs and first moves,
+  verifying source-board replay, separate played-move selection and unchanged export.
+- Full headless/source-audit/archive, GTK and default performance checks pass;
+  update the manual and test inventory. Nothing pushed or released.
 
 ### 2026-10-27 — Outline both ends of PV hint moves
 

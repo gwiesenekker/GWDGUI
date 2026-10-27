@@ -471,6 +471,69 @@ begin
   finally Image.Free; Actor.Free; Display.Free; Form.Free; end;
 end;
 
+procedure CheckAnalysisAfterPlayedMoves;
+var Form: TMainForm; Game: TPdnGame; Actor: TGameTreeActor;
+  Command: TGameTreeCommand; Memo: TMemo; Board: TDraughtsBoardControl;
+  Expected: TDraughtsBoard; Before: string; Key: Word; Mode: Integer;
+  EngineFull, AnnotatorFull: TMenuItem;
+  procedure RecordPV(Base: Integer; const Pv: string; Annotator: Boolean);
+  var Node: TGameTreePlyNode;
+  begin
+    if Base = 0 then Node := Form.ActiveGameTree.Root else Node := Form.ActiveGameTree.MainlineNode[Base];
+    if Annotator then Command := Actor.CreateRecordAnnotatorPVCommand(Node.NodeId, '0.2', Pv)
+    else Command := Actor.CreateRecordEnginePVCommand(Node.NodeId, '0.1', Pv);
+    try Actor.ExecuteCommand(Command); Check(Command.Accepted, Command.ErrorText); finally Command.Free; end;
+  end;
+  procedure SelectMove(const Text: string);
+  begin
+    Memo.SelStart := Pos(Text, Memo.Text) - 1;
+    Check(Memo.SelStart >= 0, 'notation contains ' + Text);
+    Memo.SelLength := Length(Text); Memo.OnClick(Memo);
+  end;
+begin
+  Form := TMainForm.Create(nil); Game := TPdnGame.Create; Expected := TDraughtsBoard.Create;
+  Actor := nil;
+  try
+    Game.MovesText := '32-28 18-23 37-32'; Form.LoadPdnGameToDisplay(Game);
+    Actor := TGameTreeActor.Create(Form.ActiveGameTree, False);
+    RecordPV(0, '34-30 20-25', False);
+    RecordPV(1, '20-24 34-29', False);
+    RecordPV(1, '19-23 28x19', True);
+    RecordPV(3, '12-18 41-37', False);
+    Before := GameTreeToPdnText(Form.ActiveGameTree);
+    Memo := TMemo(Form.FindComponent('GameMoveMemo')); Memo.Enabled := False;
+    Board := TDraughtsBoardControl(Form.FindComponent('MainBoard'));
+    EngineFull := Menu(Form, 'Show engine full PV');
+    AnnotatorFull := Menu(Form, 'Show annotator full PV');
+    if not Menu(Form, 'Show engine PV move').Checked then Menu(Form, 'Show engine PV move').Click;
+    if not Menu(Form, 'Show annotator PV move').Checked then Menu(Form, 'Show annotator PV move').Click;
+    for Mode := 0 to 1 do
+    begin
+      Key := VK_ESCAPE; Memo.OnKeyDown(Memo, Key, []);
+      if EngineFull.Checked <> (Mode = 0) then EngineFull.Click;
+      if AnnotatorFull.Checked <> (Mode = 0) then AnnotatorFull.Click;
+      Key := VK_LEFT; Memo.OnKeyDown(Memo, Key, []); // Refresh the real memo.
+      Check((Pos('32-28', Memo.Text) < Pos('34-30', Memo.Text)) and
+        (Pos('18-23', Memo.Text) < Pos('20-24', Memo.Text)) and
+        (Pos('18-23', Memo.Text) < Pos('19-23', Memo.Text)) and
+        (Pos('20-24', Memo.Text) < Pos('37-32', Memo.Text)),
+        'engine/annotator full lines and first moves follow their played move');
+      SelectMove('20-24');
+      Expected.SetBeginPosition; Expected.PlayMove('32-28'); Expected.PlayMove('20-24');
+      Check(Board.Board.CurrentFEN = Expected.CurrentFEN, 'relocated engine PV replays from its original base');
+      Key := VK_ESCAPE; Memo.OnKeyDown(Memo, Key, []);
+      SelectMove('19-23');
+      Expected.SetBeginPosition; Expected.PlayMove('32-28'); Expected.PlayMove('19-23');
+      Check(Board.Board.CurrentFEN = Expected.CurrentFEN, 'relocated annotator PV replays from its original base');
+      Key := VK_ESCAPE; Memo.OnKeyDown(Memo, Key, []);
+      SelectMove('18-23');
+      Expected.SetBeginPosition; Expected.PlayMove('32-28'); Expected.PlayMove('18-23');
+      Check(Board.Board.CurrentFEN = Expected.CurrentFEN, 'played move selection remains distinct from analysis');
+      Check(GameTreeToPdnText(Form.ActiveGameTree) = Before, 'relocated analysis browsing preserves game and export');
+    end;
+  finally Actor.Free; Expected.Free; Game.Free; Form.Free; end;
+end;
+
 procedure CheckInvalidEngineParameters;
 var Form: TEngineEditForm; Definition: TExternalEngineDefinition;
   Lines: TStringList; Params: TEngineParamArray; ExeName, ParamName, Before: string;
@@ -512,6 +575,7 @@ begin
     CheckAnalysisControls;
     CheckInvalidEngineParameters;
     CheckHintModes;
+    CheckAnalysisAfterPlayedMoves;
     Application.OnException := nil; Reporter.Free;
     WriteLn('OK');
   except on E: Exception do begin WriteLn('FAIL: ', E.ClassName, ': ', E.Message); DumpExceptionBackTrace(Output); Halt(1); end; end;

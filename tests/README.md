@@ -102,7 +102,13 @@ revision-scoped replay caching through nested display refreshes.
 `notation_presentation_check.pas` checks presenter text/ranges against the PDN
 renderer for every filter combination, capture captions and label invalidation.
 It also covers nested branch/PV hit targets, selection endpoints, preview click
-restrictions and automatic/focused highlight ranges.
+restrictions and automatic/focused highlight ranges. Its export fingerprint
+remains pinned independently of display-layout changes.
+
+`notation_analysis_order_check.pas` covers analysis after the played continuation,
+empty/tip fallbacks, White/Black starts, all PV source filter combinations and exact
+preview base/ranges. The GTK boundary check clicks relocated engine/annotator PVs
+in both full-line and first-move-only modes and compares their boards with replay.
 
 The GTK standalone preservation check also exercises memo caret/selection edges
 and confirms that hiding/restoring annotations rebuilds ranges, preserves the

@@ -271,6 +271,12 @@ Right-click the move notation to show or hide:
 If both full PV options are enabled, the two variations can appear next to each
 other. They remain separate analysis lines.
 
+Analysis lines, including first-move-only displays, appear **after the actual move
+played** from their source position. If no continuation has been played yet, the
+analysis remains at the end of the notation (or at the initial position for an
+empty game). Clicking a displayed PV still replays from its original source
+position; moving its text does not change the game or saved PDN data.
+
 ### 4.2 The Game Tree window
 
 The Game Tree window shows each line as a column of moves. Variations are marked
