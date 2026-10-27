@@ -155,6 +155,13 @@ The headless sweep runs it automatically. Isolated Lazarus builds regenerate
 embedded data and rebuild project units so commit/manual changes cannot reuse
 stale unit files.
 
+`windows_build_info_check.py` compiles and executes the native Pascal generator
+used by the Windows Lazarus pre-build hook. Real clean/dirty repositories,
+Unicode source paths/manuals, CRLF conversion, missing Git, nested archives,
+stale includes and missing-input failures are checked against the Linux
+generator and compiled About/manual output. The headless sweep runs it on the
+host; the batch wrapper and Windows IDE still need native Windows validation.
+
 `runner_early_stop_check` repeatedly stops runners before their first execution
 and immediately after Start. It verifies actual termination, worker-thread
 completion exactly once, and no duplicate on disposal for games and analyzers.

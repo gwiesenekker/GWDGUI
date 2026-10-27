@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-27 — Windows Lazarus build identity
+
+- Add a Windows build mode that embeds the current Git commit, revision, tracked
+  changes marker and searchable manual, using Lazarus’s compiler without Python.
+- Regenerate build data before compilation; stop on generator failures. Report
+  missing Git/source-archive identity explicitly, without borrowing a parent repo.
+- Compare the native generator against the existing Linux generator using real
+  clean/dirty repositories, Unicode paths/text, archives, absent Git, empty manuals
+  and compiled About/manual output. Document Windows build instructions.
+- Full headless/source-audit/archive checks and an isolated Linux GTK2 build pass.
+  Native Windows IDE execution remains to be checked in the Windows VM.
+
 ### 2026-10-27 — Windows compiler compatibility
 
 - Use the documented Win32 write-through flag value: FPC 3.2.2 omits its

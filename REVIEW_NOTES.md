@@ -1,5 +1,26 @@
 # Responses to Claude's reviews
 
+## Windows source builds — 2026-10-27
+
+Fix the Windows compile error caused by FPC 3.2.2 omitting the documented
+MOVEFILE_WRITE_THROUGH constant. Atomic publication still uses Win32 flag $8.
+Existing atomic-file tests pass on Linux; Windows runtime behavior needs VM
+validation.
+
+Add a Windows Lazarus build mode with a pre-build native Pascal generator,
+using the IDE’s configured compiler. Embed the manual, commit/revision and
+tracked-change marker without requiring Python. Git must be on PATH and the
+source folder must be the repository root; archives without metadata explicitly
+report unavailable identity. Failed generation stops the build.
+
+A new regression executes the generator against real repositories, Unicode
+paths/text, clean/dirty files, missing Git and nested archives, compares it with
+the Linux generator, and compiles About/manual output. It also checks stale
+output replacement and failure on missing input. The Windows batch wrapper and
+native IDE integration still require validation in the user’s Windows VM.
+The full headless/source-audit/archive suite and isolated Linux GTK2 build pass.
+Changes are local; no push or release.
+
 ## Version 3.2 publication — 2026-10-27
 
 The user authorized publishing the four post-3.1 hint and notation commits as

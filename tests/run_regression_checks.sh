@@ -72,5 +72,6 @@ bash "$ROOT_DIR/tests/run_database_import_performance_checks.sh" 3
 bash "$ROOT_DIR/tests/source_audit_check.sh"
 
 python3 "$ROOT_DIR/tests/build_info_check.py"
+python3 "$ROOT_DIR/tests/windows_build_info_check.py"
 
 python3 "$ROOT_DIR/tests/performance_archive_check.py"

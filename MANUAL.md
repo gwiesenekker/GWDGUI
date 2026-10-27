@@ -707,7 +707,16 @@ A typical source build is:
 bash build.sh
 ```
 
-`build.sh` embeds the current manual and Git build identity. Direct IDE or
+`build.sh` embeds the current manual and Git build identity. On Windows, open
+`gwdgui.lpi` in Lazarus, select the **Windows** build mode under Project →
+Project Options → Build modes, then choose **Build**. Its pre-build step uses
+Lazarus’s configured compiler to embed the manual and Git identity; Python is
+not required. Install Git for Windows and make `git` available on PATH before
+starting Lazarus. Use a Git checkout or copy including `.git` to identify the
+commit. Changes to tracked files are marked in About. Keep `draughts.ttf` beside
+`gwdgui.exe`.
+
+Direct IDE builds in the **Default** mode or
 `lazbuild gwdgui.lpi` builds remain supported, but report that the commit is
 unavailable and load `MANUAL.md` from beside the executable. Builds from source
 archives without Git metadata explicitly report that the commit is unavailable.
@@ -763,7 +772,8 @@ window. Choose Cancel in a save prompt to keep working.
 ## 14. Help and version
 
 Choose **Help → Manual** (F1) to open this manual inside GWDGUI. The manual is
-read-only and available offline in builds made with `build.sh`.
+read-only and available offline in builds made with `build.sh` or the Windows
+Lazarus build mode.
 
 Type in **Find** to search without regard to letter case. The first match is
 highlighted and the result count is shown. **Next** / **Previous** move between

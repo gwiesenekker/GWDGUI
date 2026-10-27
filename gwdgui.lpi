@@ -9,8 +9,44 @@
       <UseAppBundle Value="False"/>
       <ResourceType Value="res"/>
     </General>
-    <BuildModes Count="1">
+    <BuildModes Count="2">
       <Item1 Name="Default" Default="True"/>
+      <Item2 Name="Windows">
+        <CompilerOptions>
+          <Version Value="11"/>
+          <Target>
+            <Filename Value="gwdgui"/>
+          </Target>
+          <SearchPaths>
+            <IncludeFiles Value="lib/build-info;$(ProjOutDir)"/>
+            <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
+          </SearchPaths>
+          <Parsing>
+            <SyntaxOptions>
+              <UseAnsiStrings Value="False"/>
+            </SyntaxOptions>
+          </Parsing>
+          <CodeGeneration>
+            <SmartLinkUnit Value="True"/>
+          </CodeGeneration>
+          <Linking>
+            <Debugging>
+              <DebugInfoType Value="dsDwarf2Set"/>
+            </Debugging>
+            <Options>
+              <Win32>
+                <GraphicApplication Value="True"/>
+              </Win32>
+            </Options>
+          </Linking>
+          <Other>
+            <CustomOptions Value="-dGWDGUI_EMBEDDED_HELP"/>
+          </Other>
+          <ExecuteBefore>
+            <Command Value="cmd.exe /C &quot;&quot;$(ProjPath)tools\build_windows.cmd&quot; &quot;$(CompPath)&quot;&quot;"/>
+          </ExecuteBefore>
+        </CompilerOptions>
+      </Item2>
     </BuildModes>
     <PublishOptions>
       <Version Value="2"/>

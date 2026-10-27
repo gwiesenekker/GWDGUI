@@ -10,7 +10,7 @@ uses Classes, SysUtils;
 {$I gwdgui-build.inc}
 {$ELSE}
 const
-  BuildCommit = 'unavailable (build with build.sh to embed the commit)';
+  BuildCommit = 'unavailable (build with build.sh or the Windows build mode to embed the commit)';
   BuildRevision = 'development build';
   BuildHasChanges = False;
   EmbeddedManual: UTF8String = '';
@@ -35,7 +35,7 @@ begin
     if FileExists(Path) then
     begin Lines.LoadFromFile(Path); Result := Lines.Text; end
     else Result := 'The manual is not included in this build.' + LineEnding +
-      'Build with build.sh, or place MANUAL.md beside the application.';
+      'Build with build.sh or the Windows build mode, or place MANUAL.md beside the application.';
   finally Lines.Free; end;
 end;
 end.
