@@ -4,7 +4,7 @@ program gui_delivery_check;
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces, Forms, Classes, SysUtils, SyncObjs,
   uMainForm, uGameGuiMessages, uGameRunnerThread, uRunningGame, uDraughtsBoard,
   uGameSetupTypes, uGameOrchestrator, uGameTree, uThreadMessageQueue,
-  uPvSnapshot, uAnalysisCoordinator, uGameTreeSearchRef, uDraughtsPosition;
+  uPvSnapshot, uAnalysisCoordinator, uGameTreeSearchRef, uDraughtsPosition, uHubEngine, uDxpEngine;
 type
   TCollector = class
     Lock: TCriticalSection;
@@ -94,14 +94,10 @@ begin
 end;
 procedure Post(Form: TMainForm; Id: Integer; Sample: TGameRunnerSnapshot;
   Live: Boolean; const Score: string);
-var Data: TCountedSnapshot; I: Integer; Base: TDraughtsPosition;
+var Data: TCountedSnapshot; I: Integer;
 begin
   Data := TCountedSnapshot.Create; Data.AssignFrom(Sample); Data.TestLiveUpdate := Live;
-  Base := TDraughtsPosition.Create;
-  try
-    Base.AssignBoard(Data.Board);
-    Data.PvSnapshot.SetData(Base, Data.PlyCount, '37-32', Score, '10');
-  finally Base.Free; end;
+  Data.PvSnapshot.SetData(Data.Position, Data.PlyCount, '37-32', Score, '10');
   for I := 1 to Length(Score) do Data.LogLines.Add('delivery ' + Score);
   Form.TestGuiEventQueue.Post(TRunnerSnapshotGuiMessage.Create(Id, Data));
 end;

@@ -5,6 +5,21 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-27 — Game rules, orchestrator and runner on the position boundary (position interface, step 7)
+
+- New `TGameRules` in `uGamePosition`; `TDraughtsRules` holds the draughts
+  end-of-game rules (no legal move, 16/5-move endgame limits, repetition, 25-move
+  rule) with unchanged results and log texts. Variants supply their result texts.
+- The orchestrator, game runner, running game, move history and engine base are
+  game-neutral and in the source audit. Runner snapshots carry a game position.
+- The engine base class is now `TGameEngine`; Hub and DXP derive from the new
+  draughts engine base (`uDraughtsEngine`) and register themselves per engine
+  kind. `gwdgui.lpr` and the tests that run games link them explicitly.
+- `game_tree_variant_check` plays a second game through the orchestrator (moves,
+  rules, time loss, result texts) and through a human-vs-human game runner.
+- Regression, lifecycle, DXP, GUI and tournament suites pass. GUI harness engine
+  game: GUI-thread load unchanged. No push.
+
 ### 2026-10-27 — No PV refresh per snapshot when no PV is shown
 
 - With no visible main PV, the displayed-PV cache compared an empty position key

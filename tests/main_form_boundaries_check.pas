@@ -8,7 +8,7 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF}
   LCLType, Types, Graphics, uMainForm, uRunningGame, uBoardControl, uDraughtsBoard, uPdn,
   uGameTree, uGameTreePdn, uGameTreeBuilder, uGameSetupTypes, uGameOrchestrator, uGuiDialogs,
   uPositionSetupForm, uEngineRegistry, uEngineParamsJson, uAnalyzerRunnerThread,
-  uGameGuiMessages, uGameTreeSearchRef, uEngineEditForm, uGameTreeActor, uDisplayedPosition, uDraughtsPosition;
+  uGameGuiMessages, uGameTreeSearchRef, uEngineEditForm, uGameTreeActor, uDisplayedPosition, uDraughtsPosition, uHubEngine, uDxpEngine;
 
 type
   TBoardPaintAccess = class(TDraughtsBoardControl)

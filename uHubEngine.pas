@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SyncObjs, SysUtils,
-  uDraughtsBoard, uEngineBase, uEngineParamsJson, uEngineRegistry,
+  uDraughtsBoard, uDraughtsEngine, uDraughtsPosition, uGamePosition, uEngineBase, uEngineParamsJson, uEngineRegistry,
   uPlatformProcess, uThreadMessageQueue;
 
 type
@@ -65,10 +65,11 @@ type
   public
     constructor Create(AEngine: TExternalEngineDefinition); reintroduce;
     destructor Destroy; override;
-    procedure BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
+    procedure BeginGame(const AStartingFEN: string; ASide: TGameSide;
       AGameMinutes: Double; AGameMoves: Integer;
       AIncrementSeconds: Double = 0.0); override;
-    function LaunchAndInit: Boolean;
+    function LaunchAndInit: Boolean; override;
+    function ProtocolName: string; override;
     function ReceiveMessage(const AMessage: string): string; override;
     procedure RequestStop; override;
     procedure SetClockInfo(AMovesRemaining: Integer; ARemainingSeconds,
@@ -555,7 +556,7 @@ begin
     hwcLaunchAndInit:
       HubCommand.BoolResult := DoLaunchAndInit;
     hwcBeginGame:
-      inherited BeginGame(HubCommand.StartingFEN, HubCommand.Side,
+      inherited BeginGame(HubCommand.StartingFEN, DraughtsSideToGameSide(HubCommand.Side),
         HubCommand.GameMinutes, HubCommand.GameMoves);
     hwcSetGamePosition:
       begin
@@ -1050,17 +1051,22 @@ begin
   Log('level stored; message=' + FLevelCommand);
 end;
 
-procedure THubEngine.BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
+procedure THubEngine.BeginGame(const AStartingFEN: string; ASide: TGameSide;
   AGameMinutes: Double; AGameMoves: Integer; AIncrementSeconds: Double);
 var
   Command: THubWorkerCommand;
 begin
   Command := THubWorkerCommand.Create(hwcBeginGame);
   Command.StartingFEN := AStartingFEN;
-  Command.Side := ASide;
+  Command.Side := GameSideToDraughtsSide(ASide);
   Command.GameMinutes := AGameMinutes;
   Command.GameMoves := AGameMoves;
   QueueProcedureCommand(Command);
+end;
+
+function THubEngine.ProtocolName: string;
+begin
+  Result := 'Hub';
 end;
 
 function THubEngine.LaunchAndInit: Boolean;
@@ -1198,4 +1204,11 @@ begin
     QueueProcedureCommand(THubWorkerCommand.Create(hwcStop));
 end;
 
+function CreateHubEngine(ADefinition: TExternalEngineDefinition): TGameEngine;
+begin
+  Result := THubEngine.Create(ADefinition);
+end;
+
+initialization
+  RegisterGameEngineFactory(eekHub, @CreateHubEngine);
 end.

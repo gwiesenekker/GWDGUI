@@ -5,12 +5,12 @@ unit uGameMoveHistory;
 interface
 
 uses
-  Classes, SysUtils, uDraughtsBoard;
+  Classes, SysUtils, uGamePosition;
 
 type
   TGameMoveData = record
     MoveText: string;
-    Side: TDraughtsSide;
+    Side: TGameSide;
     SecondsUsed: Double;
     Annotation: string;
     PrincipalVariation: string;
@@ -24,7 +24,7 @@ type
   TGameMove = class
   public
     MoveText: string;
-    Side: TDraughtsSide;
+    Side: TGameSide;
     SecondsUsed: Double;
     Annotation: string;
     PrincipalVariation: string;
@@ -42,7 +42,7 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    function AddMove(const AMoveText: string; ASide: TDraughtsSide;
+    function AddMove(const AMoveText: string; ASide: TGameSide;
       ASecondsUsed: Double; const AAnnotation: string = '';
       const APrincipalVariation: string = ''): TGameMove;
     function ExportData: TGameMoveDataArray;
@@ -112,12 +112,13 @@ begin
   Result := TGameMove(FItems[AIndex]);
 end;
 
-function TGameMoveHistory.AddMove(const AMoveText: string; ASide: TDraughtsSide;
+function TGameMoveHistory.AddMove(const AMoveText: string; ASide: TGameSide;
   ASecondsUsed: Double; const AAnnotation: string;
   const APrincipalVariation: string): TGameMove;
 begin
   Result := TGameMove.Create;
-  Result.MoveText := NormalizeMoveNotation(AMoveText);
+  // Callers pass canonical moves (the orchestrator validates them first).
+  Result.MoveText := Trim(AMoveText);
   Result.Side := ASide;
   Result.SecondsUsed := ASecondsUsed;
   Result.Annotation := Trim(AAnnotation);

@@ -12,7 +12,8 @@ unit uDraughtsPosition;
 interface
 
 uses
-  Classes, SysUtils, uGamePosition, uDraughtsBoard, uGameTree, uDisplayedPosition;
+  Classes, SysUtils, uGamePosition, uDraughtsBoard, uDraughtsDrawRules, uGameTree,
+  uDisplayedPosition;
 
 type
   TDraughtsPosition = class(TGamePosition)
@@ -64,6 +65,26 @@ type
     function SameMove(const A, B: string): Boolean; override;
     procedure MoveSquares(const AMove: string; out AFrom, ATo: Integer); override;
     function NormalizeMove(const AMove: string): string; override;
+    function CreateRules: TGameRules; override;
+    function ResultText(AOutcome: TGameOutcome): string; override;
+  end;
+
+  { FMJD end-of-game rules: no legal move loses; draws by the 16/5-move endgame
+    limits, threefold repetition and 25 moves of kings only (reversible moves).
+    Positions must be TDraughtsPosition. }
+  TDraughtsRules = class(TGameRules)
+  private
+    FPositionHistory: TStringList;
+    FConsecutiveReversiblePlyCount: Integer;
+    FEndgameDrawCounter: TEndgameDrawCounter;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure Reset(AStart: TGamePosition); override;
+    procedure MovePlayed(ABefore: TGamePosition; const AMove: string;
+      AAfter: TGamePosition); override;
+    function Outcome(APosition: TGamePosition; out AReason: string): TGameOutcome;
+      override;
   end;
 
 // Shared variant instance; owned by this unit.
@@ -436,6 +457,108 @@ end;
 function TDraughtsVariant.NormalizeMove(const AMove: string): string;
 begin
   Result := NormalizeMoveNotation(AMove);
+end;
+
+function TDraughtsVariant.CreateRules: TGameRules;
+begin
+  Result := TDraughtsRules.Create;
+end;
+
+function TDraughtsVariant.ResultText(AOutcome: TGameOutcome): string;
+begin
+  case AOutcome of
+    goWhiteWins: Result := '2-0';
+    goBlackWins: Result := '0-2';
+    goDraw: Result := '1-1';
+  else
+    Result := '*';
+  end;
+end;
+
+{ TDraughtsRules }
+
+function RulesBoard(APosition: TGamePosition): TDraughtsBoard;
+begin
+  if not (APosition is TDraughtsPosition) then
+    raise EGamePositionError.Create('Draughts rules need a draughts position');
+  Result := TDraughtsPosition(APosition).Board;
+end;
+
+constructor TDraughtsRules.Create;
+begin
+  inherited Create;
+  FPositionHistory := TStringList.Create;
+end;
+
+destructor TDraughtsRules.Destroy;
+begin
+  FPositionHistory.Free;
+  inherited Destroy;
+end;
+
+procedure TDraughtsRules.Reset(AStart: TGamePosition);
+begin
+  FPositionHistory.Clear;
+  FPositionHistory.Add(AStart.PositionKey);
+  FConsecutiveReversiblePlyCount := 0;
+  FEndgameDrawCounter.Start(RulesBoard(AStart));
+end;
+
+procedure TDraughtsRules.MovePlayed(ABefore: TGamePosition; const AMove: string;
+  AAfter: TGamePosition);
+begin
+  if RulesBoard(ABefore).MoveIsReversible(AMove) then
+    Inc(FConsecutiveReversiblePlyCount)
+  else
+    FConsecutiveReversiblePlyCount := 0;
+  FEndgameDrawCounter.AfterMove(RulesBoard(AAfter));
+  FPositionHistory.Add(AAfter.PositionKey);
+end;
+
+function TDraughtsRules.Outcome(APosition: TGamePosition;
+  out AReason: string): TGameOutcome;
+const
+  RepetitionDrawCount = 3;
+  TwentyFiveMovesInPlies = 50;
+var
+  I, LRepetitionCount, LMoveLimit: Integer;
+  LKey: string;
+begin
+  AReason := '';
+  // A terminal win takes precedence on the last move allowed by a draw limit.
+  if APosition.LegalMoveCount = 0 then
+  begin
+    if APosition.SideToMove = gsWhite then
+    begin
+      AReason := 'White has no legal move';
+      Exit(goBlackWins);
+    end;
+    AReason := 'Black has no legal move';
+    Exit(goWhiteWins);
+  end;
+  LMoveLimit := FEndgameDrawCounter.DrawMoveLimit;
+  if LMoveLimit <> 0 then
+  begin
+    AReason := 'draw by ' + IntToStr(LMoveLimit) + '-move endgame rule';
+    Exit(goDraw);
+  end;
+  LRepetitionCount := 0;
+  LKey := APosition.PositionKey;
+  for I := 0 to FPositionHistory.Count - 1 do
+    if FPositionHistory[I] = LKey then
+      Inc(LRepetitionCount);
+  if LRepetitionCount >= RepetitionDrawCount then
+  begin
+    AReason := 'draw by repetition; repetitions=' + IntToStr(LRepetitionCount);
+    Exit(goDraw);
+  end;
+  if FConsecutiveReversiblePlyCount >= TwentyFiveMovesInPlies then
+  begin
+    AReason := 'draw by 25-move rule; reversible_plies=' +
+      IntToStr(FConsecutiveReversiblePlyCount);
+    Exit(goDraw);
+  end;
+  Result := goOngoing;
 end;
 
 function TDraughtsVariant.CreatePosition: TGamePosition;

@@ -13,7 +13,7 @@ uses
   {$IFDEF UNIX}
   BaseUnix,
   {$ENDIF}
-  uDraughtsBoard, uDxpProtocol, uEngineBase, uEngineParamsJson,
+  uDraughtsBoard, uDraughtsEngine, uDraughtsPosition, uGamePosition, uDxpProtocol, uEngineBase, uEngineParamsJson,
   uEngineRegistry, uPlatformProcess, uThreadMessageQueue;
 
 type
@@ -109,10 +109,11 @@ type
   public
     constructor Create(AEngine: TExternalEngineDefinition); reintroduce;
     destructor Destroy; override;
-    procedure BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
+    procedure BeginGame(const AStartingFEN: string; ASide: TGameSide;
       AGameMinutes: Double; AGameMoves: Integer;
       AIncrementSeconds: Double = 0.0); override;
-    function LaunchAndInit: Boolean;
+    function LaunchAndInit: Boolean; override;
+    function ProtocolName: string; override;
     procedure RequestStop; override;
     procedure SetClockInfo(AMovesRemaining: Integer; ARemainingSeconds,
       ATotalUsedSeconds: Double); override;
@@ -1286,8 +1287,8 @@ var
   GameReq: string;
   PacketName: string;
 begin
-  inherited BeginGame(AStartingFEN, ASide, AGameMinutes, AGameMoves,
-    AIncrementSeconds);
+  inherited BeginGame(AStartingFEN, DraughtsSideToGameSide(ASide), AGameMinutes,
+    AGameMoves, AIncrementSeconds);
   FEngineSide := ASide;
   FBoard.LoadFromFEN(StartingFEN);
   FGameMinutes := AGameMinutes;
@@ -1391,18 +1392,23 @@ begin
   FProcess.Close;
 end;
 
-procedure TDxpEngine.BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
+procedure TDxpEngine.BeginGame(const AStartingFEN: string; ASide: TGameSide;
   AGameMinutes: Double; AGameMoves: Integer; AIncrementSeconds: Double);
 var
   Command: TDxpWorkerCommand;
 begin
   Command := TDxpWorkerCommand.Create(dwcBeginGame);
   Command.StartingFEN := AStartingFEN;
-  Command.Side := ASide;
+  Command.Side := GameSideToDraughtsSide(ASide);
   Command.GameMinutes := AGameMinutes;
   Command.GameMoves := AGameMoves;
   Command.GameIncrementSeconds := AIncrementSeconds;
   QueueProcedureCommand(Command);
+end;
+
+function TDxpEngine.ProtocolName: string;
+begin
+  Result := 'DXP';
 end;
 
 function TDxpEngine.LaunchAndInit: Boolean;
@@ -1447,4 +1453,11 @@ begin
     QueueProcedureCommand(TDxpWorkerCommand.Create(dwcStop));
 end;
 
+function CreateDXPEngine(ADefinition: TExternalEngineDefinition): TGameEngine;
+begin
+  Result := TDxpEngine.Create(ADefinition);
+end;
+
+initialization
+  RegisterGameEngineFactory(eekDxp, @CreateDXPEngine);
 end.

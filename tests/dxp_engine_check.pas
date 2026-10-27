@@ -3,7 +3,7 @@ program dxp_engine_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, sockets, ssockets, uSocketSafety,
-  uDraughtsBoard, uDxpEngine, uDxpTestConnection, uEngineRegistry, uGameOrchestrator, uDraughtsPosition;
+  uDraughtsBoard, uDxpEngine, uDxpTestConnection, uEngineRegistry, uGameOrchestrator, uDraughtsPosition, uGamePosition;
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
@@ -188,7 +188,7 @@ begin
   end;
 end;
 
-procedure CheckGameEndClaim(Reason: Char; Side: TDraughtsSide;
+procedure CheckGameEndClaim(Reason: Char; Side: TGameSide;
   const ExpectedResult: string);
 var
   Definition: TExternalEngineDefinition;
@@ -212,14 +212,14 @@ begin
     Game.Engine[Side] := Engine;
     Check(Engine.LaunchAndInit, 'fake DXP peer should initialize');
     Fen := DefaultStartingFEN;
-    if Side = dsBlack then
+    if Side = gsBlack then
       Fen[1] := 'B';
     Game.NewGame(Fen);
-    Check(Game.Board.LegalMoveCount > 0, 'claim fixture must be nonterminal');
+    Check(Game.Position.LegalMoveCount > 0, 'claim fixture must be nonterminal');
     Check(Game.PlayNextMove = '', 'GAMEEND should not manufacture a move');
     Check(Game.GameResult = ExpectedResult,
       'unverified peer claim must not decide the result: reason=' + Reason);
-    Check((Game.MoveHistory.Count = 0) and (Game.Board.LegalMoveCount > 0),
+    Check((Game.MoveHistory.Count = 0) and (Game.Position.LegalMoveCount > 0),
       'GAMEEND must leave the nonterminal board and move history unchanged');
     Check(Pos('reason=' + Reason, Engine.StateLog.Text) > 0,
       'peer claim must remain available in the engine log');
@@ -250,7 +250,7 @@ begin
     Definition.ExePath := ExpandFileName(ParamStr(0));
     Definition.Arguments := '--peer ' + IntToStr(Port) + ' C';
     Engine := TDxpEngine.Create(Definition);
-    Game.Engine[dsWhite] := Engine;
+    Game.Engine[gsWhite] := Engine;
     Check(Engine.LaunchAndInit, 'disconnecting peer should initialize');
     Game.NewGame(DefaultStartingFEN);
     Tick := GetTickCount64;
@@ -282,12 +282,12 @@ begin
     Definition.DxpRole := derListen; Definition.DxpHost := '127.0.0.1'; Definition.DxpPort := Port;
     Definition.ExePath := ExpandFileName(ParamStr(0));
     Definition.Arguments := '--peer ' + IntToStr(Port) + ' O';
-    Engine := TDxpEngine.Create(Definition); Game.Engine[dsBlack] := Engine;
+    Engine := TDxpEngine.Create(Definition); Game.Engine[gsBlack] := Engine;
     Check(Engine.LaunchAndInit, 'capture-order peer initializes');
     Game.NewGame('B:W19,29,45,46:B13,5');
     Check(Game.PlayNextMove <> '', 'reordered capture is accepted');
     Check(Game.MovesPlayedText = '13x33x19x29', 'orchestrator stores the canonical capture');
-    Game.PlayMove('46-41', dsWhite, 0, 'human');
+    Game.PlayMove('46-41', gsWhite, 0, 'human');
     Check(Game.PlayNextMove = '5-10', 'next DXP turn survives a reordered capture set');
     Check(Game.State = gosRunning, 'reordered capture history must not end the game');
   finally Game.Free; Definition.Free; end;
@@ -314,7 +314,7 @@ begin
     Definition.ExePath := ExpandFileName(ParamStr(0));
     Definition.Arguments := '--peer ' + IntToStr(Port) + ' S';
     Engine := TDxpEngine.Create(Definition);
-    Game.Engine[dsWhite] := Engine;
+    Game.Engine[gsWhite] := Engine;
     Check(Engine.LaunchAndInit, 'silent peer should initialize');
     Clock := DefaultTimeControl;
     Clock.MinutesPerPeriod := 0.002;
@@ -340,16 +340,16 @@ begin
     FakePeer(StrToInt(ParamStr(2)), ParamStr(3)[1]);
     Halt(0);
   end;
-  CheckGameEndClaim('3', dsWhite, '*');
-  CheckGameEndClaim('3', dsBlack, '*');
-  CheckGameEndClaim('2', dsWhite, '*');
-  CheckGameEndClaim('0', dsBlack, '*');
+  CheckGameEndClaim('3', gsWhite, '*');
+  CheckGameEndClaim('3', gsBlack, '*');
+  CheckGameEndClaim('2', gsWhite, '*');
+  CheckGameEndClaim('0', gsBlack, '*');
   CheckLoopbackBinding;
   CheckNamedListenerAndPeerRestriction;
   CheckListenerShutdownRaces;
   CheckRegistrationPeerRestriction;
-  CheckGameEndClaim('1', dsWhite, '0-2');
-  CheckGameEndClaim('1', dsBlack, '2-0');
+  CheckGameEndClaim('1', gsWhite, '0-2');
+  CheckGameEndClaim('1', gsBlack, '2-0');
   CheckDisconnectedPeerFailsPromptly;
   CheckUnorderedCaptureHistory;
   CheckSilentPeerLosesOnTime;

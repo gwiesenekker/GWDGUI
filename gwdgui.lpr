@@ -8,7 +8,9 @@ uses
   {$ENDIF}
   Interfaces,
   Forms,
-  uMainForm, uDraughtsPosition;
+  uMainForm,
+  // The game and its engine protocols register themselves when linked.
+  uDraughtsPosition, uHubEngine, uDxpEngine;
 
 begin
   RequireDerivedFormResource := False;

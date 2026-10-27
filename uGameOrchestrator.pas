@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils,
-  uDraughtsDrawRules, uDraughtsBoard, uEngineBase, uGameMoveHistory, uPdn, uPdnText;
+  uEngineBase, uGameMoveHistory, uGamePosition, uPdnText;
 
 type
   TClockIncrementMode = (
@@ -31,61 +31,67 @@ type
 
   TOrchestratorLogEvent = procedure(Sender: TObject; const AMessage: string) of object;
 
+  { Runs one game: clocks, engines, move flow. The game itself is reached only
+    through its variant: the position, the end-of-game rules (TGameRules) and
+    the result texts. }
   TGameOrchestrator = class
   private
-    FBoard: TDraughtsBoard;
-    FEngines: array[TDraughtsSide] of TDraughtsEngine;
+    FVariant: TGameVariant;
+    FPosition: TGamePosition;
+    FPreviousPosition: TGamePosition; // reused for TGameRules.MovePlayed
+    FRules: TGameRules;
+    FEngines: array[TGameSide] of TGameEngine;
     FGameResult: string;
     FLastError: string;
     FLog: TStringList;
     FLogTarget: TStrings;
-    FConsecutiveReversiblePlyCount: Integer;
-    FEndgameDrawCounter: TEndgameDrawCounter;
-    FMovesInPeriod: array[TDraughtsSide] of Integer;
+    FMovesInPeriod: array[TGameSide] of Integer;
     FMoveHistory: TGameMoveHistory;
     FMovesPlayed: TStringList;
     FOnLog: TOrchestratorLogEvent;
-    FPositionHistory: TStringList;
-    FRemainingSeconds: array[TDraughtsSide] of Double;
+    FRemainingSeconds: array[TGameSide] of Double;
     FStartingFEN: string;
     FState: TGameOrchestratorState;
     FTimeControl: TTimeControl;
-    FTotalMovesBySide: array[TDraughtsSide] of Integer;
-    FUsedSeconds: array[TDraughtsSide] of Double;
-    procedure ApplyTimeUsed(ASide: TDraughtsSide; ASecondsUsed: Double);
+    FTotalMovesBySide: array[TGameSide] of Integer;
+    FUsedSeconds: array[TGameSide] of Double;
+    procedure ApplyTimeUsed(ASide: TGameSide; ASecondsUsed: Double);
     function BuildPositionMessage: string;
-    procedure CheckDrawsAfterMove;
+    procedure CheckOutcomeAfterMove;
     procedure ChangeState(ANewState: TGameOrchestratorState; const AReason: string);
-    function CountCurrentPositionRepetitions: Integer;
-    function GetCurrentSide: TDraughtsSide;
+    function GetCurrentSide: TGameSide;
     function ExtractDoneMove(const AResponse: string): string;
     procedure FinishGame(const AResult, AReason: string);
-    function GetEngine(ASide: TDraughtsSide): TDraughtsEngine;
-    function GetMovesRemaining(ASide: TDraughtsSide): Integer;
+    procedure FinishWithOutcome(AOutcome: TGameOutcome; const AReason: string);
+    function GetEngine(ASide: TGameSide): TGameEngine;
+    function GetMovesRemaining(ASide: TGameSide): Integer;
     function GetMoveAnnotationsText: string;
     function GetMovesPlayedText: string;
-    function GetRemainingSeconds(ASide: TDraughtsSide): Double;
-    function GetUsedSeconds(ASide: TDraughtsSide): Double;
+    function GetRemainingSeconds(ASide: TGameSide): Double;
+    function GetUsedSeconds(ASide: TGameSide): Double;
     procedure LogMessage(const AMessage: string);
     procedure ReleaseEngines;
     procedure ResetClocks;
     procedure RefreshMovesPlayedCache;
-    procedure SetEngine(ASide: TDraughtsSide; AEngine: TDraughtsEngine);
+    procedure SetEngine(ASide: TGameSide; AEngine: TGameEngine);
     procedure StartEngineSessions;
   public
-    constructor Create;
+    // AVariant: the game; nil uses the registered default game.
+    constructor Create(AVariant: TGameVariant = nil);
     destructor Destroy; override;
 
     procedure NewGame(const AStartingFEN: string);
-    procedure PlayMove(const AMove: string; ASide: TDraughtsSide;
+    procedure PlayMove(const AMove: string; ASide: TGameSide;
       ASecondsUsed: Double; const ASource: string = 'move');
     function PlayNextMove: string;
     procedure RequestStopEngines;
     procedure StopEngines;
 
-    property Board: TDraughtsBoard read FBoard;
-    property CurrentSide: TDraughtsSide read GetCurrentSide;
-    property Engine[ASide: TDraughtsSide]: TDraughtsEngine read GetEngine write SetEngine;
+    // The current position; owned by the orchestrator, read only for callers.
+    property Position: TGamePosition read FPosition;
+    property Variant: TGameVariant read FVariant;
+    property CurrentSide: TGameSide read GetCurrentSide;
+    property Engine[ASide: TGameSide]: TGameEngine read GetEngine write SetEngine;
     property GameResult: string read FGameResult;
     property LastError: string read FLastError;
     property Log: TStringList read FLog;
@@ -95,16 +101,16 @@ type
     property MoveAnnotationsText: string read GetMoveAnnotationsText;
     property MovesPlayedText: string read GetMovesPlayedText;
     property OnLog: TOrchestratorLogEvent read FOnLog write FOnLog;
-    property RemainingSeconds[ASide: TDraughtsSide]: Double read GetRemainingSeconds;
+    property RemainingSeconds[ASide: TGameSide]: Double read GetRemainingSeconds;
     property StartingFEN: string read FStartingFEN;
     property State: TGameOrchestratorState read FState;
     property TimeControl: TTimeControl read FTimeControl write FTimeControl;
-    property UsedSeconds[ASide: TDraughtsSide]: Double read GetUsedSeconds;
+    property UsedSeconds[ASide: TGameSide]: Double read GetUsedSeconds;
   end;
 
 function DefaultTimeControl: TTimeControl;
 function OrchestratorStateToString(AState: TGameOrchestratorState): string;
-function SideToString(ASide: TDraughtsSide): string;
+function SideToString(ASide: TGameSide): string;
 
 implementation
 
@@ -134,26 +140,26 @@ begin
   end;
 end;
 
-function SideToString(ASide: TDraughtsSide): string;
+function SideToString(ASide: TGameSide): string;
 begin
-  if ASide = dsWhite then
-    Result := 'white'
-  else
-    Result := 'black';
+  Result := GameSideName(ASide);
 end;
 
-constructor TGameOrchestrator.Create;
+constructor TGameOrchestrator.Create(AVariant: TGameVariant);
 begin
   inherited Create;
-  FBoard := TDraughtsBoard.Create;
+  if AVariant = nil then
+    AVariant := DefaultGameVariant;
+  FVariant := AVariant;
+  FPosition := FVariant.CreatePosition;
+  FRules := FVariant.CreateRules;
   FLog := TStringList.Create;
   FMovesPlayed := TStringList.Create;
   FMoveHistory := TGameMoveHistory.Create;
-  FPositionHistory := TStringList.Create;
   FTimeControl := DefaultTimeControl;
   FState := gosWaiting;
   FGameResult := '*';
-  FStartingFEN := FBoard.StartingFEN;
+  FStartingFEN := FVariant.DefaultStartingFEN;
   ResetClocks;
   LogMessage('created; state=' + OrchestratorStateToString(FState));
 end;
@@ -161,37 +167,38 @@ end;
 destructor TGameOrchestrator.Destroy;
 begin
   ReleaseEngines;
-  FPositionHistory.Free;
   FMovesPlayed.Free;
   FMoveHistory.Free;
   FLog.Free;
-  FBoard.Free;
+  FRules.Free;
+  FPreviousPosition.Free;
+  FPosition.Free;
   inherited Destroy;
 end;
 
 procedure TGameOrchestrator.ReleaseEngines;
 var
-  LSide: TDraughtsSide;
+  LSide: TGameSide;
 begin
-  for LSide := Low(TDraughtsSide) to High(TDraughtsSide) do
+  for LSide := Low(TGameSide) to High(TGameSide) do
     FreeAndNil(FEngines[LSide]);
 end;
 
 procedure TGameOrchestrator.StopEngines;
 var
-  LSide: TDraughtsSide;
+  LSide: TGameSide;
 begin
   LogMessage('stop engines requested');
-  for LSide := Low(TDraughtsSide) to High(TDraughtsSide) do
+  for LSide := Low(TGameSide) to High(TGameSide) do
     if FEngines[LSide] <> nil then
       FEngines[LSide].Stop;
 end;
 
 procedure TGameOrchestrator.RequestStopEngines;
 var
-  LSide: TDraughtsSide;
+  LSide: TGameSide;
 begin
-  for LSide := Low(TDraughtsSide) to High(TDraughtsSide) do
+  for LSide := Low(TGameSide) to High(TGameSide) do
     if FEngines[LSide] <> nil then
       FEngines[LSide].RequestStop;
 end;
@@ -232,17 +239,17 @@ begin
     FOnLog(Self, LMessage);
 end;
 
-function TGameOrchestrator.GetEngine(ASide: TDraughtsSide): TDraughtsEngine;
+function TGameOrchestrator.GetEngine(ASide: TGameSide): TGameEngine;
 begin
   Result := FEngines[ASide];
 end;
 
-function TGameOrchestrator.GetCurrentSide: TDraughtsSide;
+function TGameOrchestrator.GetCurrentSide: TGameSide;
 begin
-  Result := FBoard.SideToMove;
+  Result := FPosition.SideToMove;
 end;
 
-procedure TGameOrchestrator.SetEngine(ASide: TDraughtsSide; AEngine: TDraughtsEngine);
+procedure TGameOrchestrator.SetEngine(ASide: TGameSide; AEngine: TGameEngine);
 begin
   if FEngines[ASide] = AEngine then
     Exit;
@@ -262,9 +269,9 @@ end;
 
 procedure TGameOrchestrator.ResetClocks;
 var
-  LSide: TDraughtsSide;
+  LSide: TGameSide;
 begin
-  for LSide := Low(TDraughtsSide) to High(TDraughtsSide) do
+  for LSide := Low(TGameSide) to High(TGameSide) do
   begin
     FRemainingSeconds[LSide] := FTimeControl.MinutesPerPeriod * 60;
     FUsedSeconds[LSide] := 0;
@@ -276,13 +283,10 @@ end;
 procedure TGameOrchestrator.NewGame(const AStartingFEN: string);
 begin
   FStartingFEN := Trim(AStartingFEN);
-  FBoard.LoadFromFEN(FStartingFEN);
+  FPosition.LoadFromFEN(FStartingFEN);
   FMoveHistory.Clear;
   RefreshMovesPlayedCache;
-  FPositionHistory.Clear;
-  FPositionHistory.Add(FBoard.PositionKey);
-  FConsecutiveReversiblePlyCount := 0;
-  FEndgameDrawCounter.Start(FBoard);
+  FRules.Reset(FPosition);
   FLastError := '';
   FGameResult := '*';
   ResetClocks;
@@ -297,7 +301,7 @@ end;
 procedure TGameOrchestrator.StartEngineSessions;
 var
   LBeginGameIncrement: Double;
-  LSide: TDraughtsSide;
+  LSide: TGameSide;
 begin
   if FTimeControl.IncrementMode = cimFromStart then
     LBeginGameIncrement := FTimeControl.IncrementSeconds
@@ -308,7 +312,7 @@ begin
       LogMessage('begin engine game; increment after move limit is not sent to engine session start');
   end;
 
-  for LSide := Low(TDraughtsSide) to High(TDraughtsSide) do
+  for LSide := Low(TGameSide) to High(TGameSide) do
     if FEngines[LSide] <> nil then
     begin
       LogMessage('begin engine game; side=' + SideToString(LSide) +
@@ -342,53 +346,16 @@ begin
   Result := 'pos=' + FStartingFEN + ' moves="' + MovesPlayedText + '"';
 end;
 
-function TGameOrchestrator.CountCurrentPositionRepetitions: Integer;
+procedure TGameOrchestrator.CheckOutcomeAfterMove;
 var
-  I: Integer;
-  LCurrentKey: string;
-begin
-  Result := 0;
-  LCurrentKey := FBoard.PositionKey;
-  for I := 0 to FPositionHistory.Count - 1 do
-    if FPositionHistory[I] = LCurrentKey then
-      Inc(Result);
-end;
-
-procedure TGameOrchestrator.CheckDrawsAfterMove;
-const
-  RepetitionDrawCount = 3;
-  TwentyFiveMovesInPlies = 50;
-var
-  LRepetitionCount, MoveLimit: Integer;
+  LOutcome: TGameOutcome;
+  LReason: string;
 begin
   if FState <> gosRunning then
     Exit;
-
-  // A terminal win takes precedence on the last move allowed by a draw limit.
-  if FBoard.LegalMoveCount = 0 then
-  begin
-    if FBoard.SideToMove = dsWhite then FinishGame('0-2', 'White has no legal move')
-    else FinishGame('2-0', 'Black has no legal move');
-    Exit;
-  end;
-  MoveLimit := FEndgameDrawCounter.DrawMoveLimit;
-  if MoveLimit <> 0 then
-  begin
-    FinishGame('1-1', 'draw by ' + IntToStr(MoveLimit) + '-move endgame rule');
-    Exit;
-  end;
-
-  LRepetitionCount := CountCurrentPositionRepetitions;
-  if LRepetitionCount >= RepetitionDrawCount then
-  begin
-    FinishGame('1-1', 'draw by repetition; repetitions=' +
-      IntToStr(LRepetitionCount));
-    Exit;
-  end;
-
-  if FConsecutiveReversiblePlyCount >= TwentyFiveMovesInPlies then
-    FinishGame('1-1', 'draw by 25-move rule; reversible_plies=' +
-      IntToStr(FConsecutiveReversiblePlyCount));
+  LOutcome := FRules.Outcome(FPosition, LReason);
+  if LOutcome <> goOngoing then
+    FinishWithOutcome(LOutcome, LReason);
 end;
 
 function FormatHubSeconds(ASeconds: Double): string;
@@ -400,7 +367,7 @@ begin
   Result := Format('%.3f', [ASeconds], FormatSettings);
 end;
 
-function TGameOrchestrator.GetMovesRemaining(ASide: TDraughtsSide): Integer;
+function TGameOrchestrator.GetMovesRemaining(ASide: TGameSide): Integer;
 begin
   if FTimeControl.MovesPerPeriod > 0 then
   begin
@@ -440,7 +407,13 @@ begin
   LogMessage('game finished; result=' + FGameResult + '; reason=' + Trim(AReason));
 end;
 
-procedure TGameOrchestrator.ApplyTimeUsed(ASide: TDraughtsSide; ASecondsUsed: Double);
+procedure TGameOrchestrator.FinishWithOutcome(AOutcome: TGameOutcome;
+  const AReason: string);
+begin
+  FinishGame(FVariant.ResultText(AOutcome), AReason);
+end;
+
+procedure TGameOrchestrator.ApplyTimeUsed(ASide: TGameSide; ASecondsUsed: Double);
 var
   LApplyIncrement: Boolean;
 begin
@@ -466,10 +439,8 @@ begin
   // applicable increment policy aligned with the engine's search deadline.
   if FRemainingSeconds[ASide] <= 0 then
   begin
-    if ASide = dsWhite then
-      FinishGame('0-2', 'flag fell for white')
-    else
-      FinishGame('2-0', 'flag fell for black');
+    FinishWithOutcome(WinFor(OppositeGameSide(ASide)),
+      'flag fell for ' + SideToString(ASide));
     Exit;
   end;
 
@@ -494,22 +465,22 @@ end;
 function TGameOrchestrator.PlayNextMove: string;
 var
   LElapsedSeconds: Double;
-  LEngine: TDraughtsEngine;
-  LSide: TDraughtsSide;
+  LEngine: TGameEngine;
+  LSide: TGameSide;
   LStartTick: QWord;
   LAvailableSeconds, LActiveIncrement: Double;
   LTimeoutMs: Integer;
   LSearchStarted: Boolean;
+  LOutcome: TGameOutcome;
+  LReason: string;
 
   procedure FinishOnEngineTimeout;
   begin
     FUsedSeconds[LSide] := FUsedSeconds[LSide] +
       (GetTickCount64 - LStartTick) / 1000;
     FRemainingSeconds[LSide] := 0;
-    if LSide = dsWhite then
-      FinishGame('0-2', 'flag fell for white; engine move deadline expired')
-    else
-      FinishGame('2-0', 'flag fell for black; engine move deadline expired');
+    FinishWithOutcome(WinFor(OppositeGameSide(LSide)),
+      'flag fell for ' + SideToString(LSide) + '; engine move deadline expired');
     Result := '';
   end;
 begin
@@ -519,13 +490,12 @@ begin
   if FState <> gosRunning then
     raise EInvalidOperation.Create('Cannot play a move unless the orchestrator is running');
 
-  LSide := FBoard.SideToMove;
-  if FBoard.LegalMoveCount = 0 then
+  LSide := FPosition.SideToMove;
+  if FPosition.LegalMoveCount = 0 then
   begin
-    if LSide = dsWhite then
-      FinishGame('0-2', 'terminal position; no legal moves for white')
-    else
-      FinishGame('2-0', 'terminal position; no legal moves for black');
+    LOutcome := FRules.Outcome(FPosition, LReason);
+    FinishWithOutcome(LOutcome, 'terminal position; no legal moves for ' +
+      SideToString(LSide));
     LogMessage('not sending terminal position');
     Exit;
   end;
@@ -605,25 +575,24 @@ begin
   end;
 end;
 
-procedure TGameOrchestrator.PlayMove(const AMove: string; ASide: TDraughtsSide;
+procedure TGameOrchestrator.PlayMove(const AMove: string; ASide: TGameSide;
   ASecondsUsed: Double; const ASource: string);
 var
   LLegalMove: string;
-  LEngineSide: TDraughtsSide;
+  LEngineSide: TGameSide;
   LMoveAnnotation: string;
   LMove: string;
-  LReversibleMove: Boolean;
   RecordedMove: TGameMove;
 begin
-  LMove := NormalizeMoveNotation(AMove);
+  LMove := FVariant.NormalizeMove(AMove);
   if FState <> gosRunning then
     raise EInvalidOperation.Create('Cannot play a move unless the orchestrator is running');
   if LMove = '' then
     raise EInvalidOperation.Create('Cannot play an empty move');
-  if FBoard.SideToMove <> ASide then
+  if FPosition.SideToMove <> ASide then
     raise EInvalidOperation.Create('Cannot play a move for ' + SideToString(ASide) +
-      ' while ' + SideToString(FBoard.SideToMove) + ' is to move');
-  if not FBoard.TryGetLegalMove(LMove, LLegalMove) then
+      ' while ' + SideToString(FPosition.SideToMove) + ' is to move');
+  if not FPosition.TryParseMove(LMove, LLegalMove) then
     raise EInvalidOperation.Create('Illegal move: ' + LMove);
   LMove := LLegalMove;
 
@@ -631,14 +600,9 @@ begin
   if FState = gosGameOver then
     Exit;
 
-  LReversibleMove := FBoard.MoveIsReversible(LMove);
-  FBoard.PlayMove(LMove, False);
-  if LReversibleMove then
-    Inc(FConsecutiveReversiblePlyCount)
-  else
-    FConsecutiveReversiblePlyCount := 0;
-  FEndgameDrawCounter.AfterMove(FBoard);
-  FPositionHistory.Add(FBoard.PositionKey);
+  AssignGamePosition(FPreviousPosition, FPosition);
+  FPosition.PlayTrustedMove(LMove);
+  FRules.MovePlayed(FPreviousPosition, LMove, FPosition);
   LMoveAnnotation := '';
   if (Trim(ASource) = 'engine') and (FEngines[ASide] <> nil) and
     (FEngines[ASide].LastScore <> '') then
@@ -650,17 +614,17 @@ begin
   else
     RecordedMove := FMoveHistory.AddMove(LMove, ASide, ASecondsUsed, LMoveAnnotation);
   RecordedMove.HasClockInfo := True;
-  RecordedMove.WhiteRemainingSeconds := FRemainingSeconds[dsWhite];
-  RecordedMove.BlackRemainingSeconds := FRemainingSeconds[dsBlack];
-  RecordedMove.WhiteUsedSeconds := FUsedSeconds[dsWhite];
-  RecordedMove.BlackUsedSeconds := FUsedSeconds[dsBlack];
+  RecordedMove.WhiteRemainingSeconds := FRemainingSeconds[gsWhite];
+  RecordedMove.BlackRemainingSeconds := FRemainingSeconds[gsBlack];
+  RecordedMove.WhiteUsedSeconds := FUsedSeconds[gsWhite];
+  RecordedMove.BlackUsedSeconds := FUsedSeconds[gsBlack];
   if FEngines[ASide] <> nil then
   begin
     RecordedMove.PvScore := FEngines[ASide].LastScore;
     RecordedMove.PvDepth := FEngines[ASide].LastDepth;
     RecordedMove.PvTimeText := FEngines[ASide].LastTimeText;
   end;
-  for LEngineSide := Low(TDraughtsSide) to High(TDraughtsSide) do
+  for LEngineSide := Low(TGameSide) to High(TGameSide) do
     if FEngines[LEngineSide] <> nil then
     begin
       FEngines[LEngineSide].PrincipalVariation := '';
@@ -672,15 +636,15 @@ begin
   LogMessage('move accepted; source=' + Trim(ASource) + '; side=' +
     SideToString(ASide) + '; move=' + LMove + '; annotation=' +
     LMoveAnnotation + '; move_number=' + IntToStr(FMoveHistory.Count));
-  CheckDrawsAfterMove;
+  CheckOutcomeAfterMove;
 end;
 
-function TGameOrchestrator.GetRemainingSeconds(ASide: TDraughtsSide): Double;
+function TGameOrchestrator.GetRemainingSeconds(ASide: TGameSide): Double;
 begin
   Result := FRemainingSeconds[ASide];
 end;
 
-function TGameOrchestrator.GetUsedSeconds(ASide: TDraughtsSide): Double;
+function TGameOrchestrator.GetUsedSeconds(ASide: TGameSide): Double;
 begin
   Result := FUsedSeconds[ASide];
 end;

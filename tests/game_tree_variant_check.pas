@@ -15,10 +15,59 @@ uses
   {$ENDIF}
   Classes, SysUtils, uGamePosition, uDraughtsPosition, uCounterGamePosition,
   uGameTree, uGameTreeActor, uGameTreeBuilder, uGameMoveHistory, uGameTreePdn,
-  uAnalysisCoordinator, uDisplayedPosition, uPvSnapshot, uGameTreeSearchRef;
+  uAnalysisCoordinator, uDisplayedPosition, uPvSnapshot, uGameTreeSearchRef,
+  SyncObjs, uGameOrchestrator, uGameRunnerThread, uGameSetupTypes;
 
 var
   Failures: Integer = 0;
+
+type
+  // Collects runner snapshots (runner thread) for the counter-game runner check.
+  TRunnerObserver = class
+  public
+    Lock: TCriticalSection;
+    Finished: TEvent;
+    PlyCount: Integer;
+    State: TGameOrchestratorState;
+    ResultText, MovesText, PositionFEN: string;
+    PositionIsCounter: Boolean;
+    constructor Create;
+    destructor Destroy; override;
+    procedure Snapshot(Sender: TObject; AData: TGameRunnerSnapshot);
+  end;
+
+constructor TRunnerObserver.Create;
+begin
+  inherited Create;
+  Lock := TCriticalSection.Create;
+  Finished := TEvent.Create(nil, True, False, '');
+end;
+
+destructor TRunnerObserver.Destroy;
+begin
+  Finished.Free;
+  Lock.Free;
+  inherited Destroy;
+end;
+
+procedure TRunnerObserver.Snapshot(Sender: TObject; AData: TGameRunnerSnapshot);
+begin
+  Lock.Acquire;
+  try
+    PlyCount := AData.PlyCount;
+    State := AData.State;
+    ResultText := AData.GameResult;
+    MovesText := AData.MovesPlayedText;
+    PositionIsCounter := AData.Position is TCounterPosition;
+    if AData.Position <> nil then
+      PositionFEN := AData.Position.ToFEN;
+    if AData.State in [gosGameOver, gosError] then
+      Finished.SetEvent;
+  finally
+    AData.Free;
+    Lock.Release;
+  end;
+end;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -414,12 +463,102 @@ begin
   end;
 end;
 
+{ The orchestrator and the game runner on another game: legal moves, the
+  end of the game and the result texts all come from the variant. }
+procedure CheckOrchestratorOnInjectedVariant;
+var
+  LVariant: TCounterVariant;
+  LGame: TGameOrchestrator;
+  LError: string;
+  LControl: TTimeControl;
+begin
+  LVariant := TCounterVariant.Create;
+  LGame := TGameOrchestrator.Create(LVariant);
+  try
+    LGame.NewGame('W:0');
+    Check(LGame.Position is TCounterPosition, 'orchestrator position is a counter position');
+    LGame.PlayMove('p1', gsWhite, 1, 'human');
+    LGame.PlayMove('+2', gsBlack, 1, 'human');
+    Check((LGame.MovesPlayedText = '+1 +2') and (LGame.CurrentSide = gsWhite),
+      'orchestrator stores canonical moves, got ' + LGame.MovesPlayedText);
+    LError := '';
+    try
+      LGame.PlayMove('32-28', gsWhite, 1, 'human');
+    except
+      on E: Exception do LError := E.Message;
+    end;
+    Check(LError = 'Illegal move: 32-28', 'draughts move rejected: ' + LError);
+    LGame.PlayMove('two', gsWhite, 1, 'human');
+    Check((LGame.State = gosGameOver) and (LGame.GameResult = '1-0') and
+      (Pos('counter limit reached', LGame.Log.Text) > 0),
+      'the counter rules end the game with the counter result text, got ' + LGame.GameResult);
+
+    LControl := LGame.TimeControl;
+    LControl.MinutesPerPeriod := 0.001;
+    LGame.TimeControl := LControl;
+    LGame.NewGame('B:0');
+    LGame.PlayMove('p1', gsBlack, 1, 'human');
+    Check((LGame.State = gosGameOver) and (LGame.GameResult = '1-0') and
+      (Pos('flag fell for black', LGame.Log.Text) > 0),
+      'loss on time uses the variant result text, got ' + LGame.GameResult);
+  finally
+    LGame.Free;
+    LVariant.Free;
+  end;
+end;
+
+procedure CheckRunnerOnInjectedVariant;
+var
+  LVariant: TCounterVariant;
+  LSetup: TGameSetup;
+  LRunner: TGameRunnerThread;
+  LObserver: TRunnerObserver;
+  LDone: Boolean;
+begin
+  LVariant := TCounterVariant.Create;
+  LObserver := TRunnerObserver.Create;
+  LSetup := Default(TGameSetup);
+  LSetup.StartingFEN := 'W:0';
+  LSetup.WhitePlayer := pkHuman;
+  LSetup.BlackPlayer := pkHuman;
+  LSetup.TimeControl := DefaultTimeControl;
+  LRunner := TGameRunnerThread.Create(LSetup, 1, @LObserver.Snapshot, nil, LVariant);
+  try
+    LRunner.Start;
+    LRunner.PostHumanMove('p1');
+    LRunner.PostHumanMove('32-28'); // not a counter move: rejected
+    LRunner.PostHumanMove('two');
+    LRunner.PostHumanMove('+2');
+    LDone := LObserver.Finished.WaitFor(5000) = wrSignaled;
+    if not LDone then
+      LRunner.PostStop;
+    LRunner.WaitFor;
+    LObserver.Lock.Acquire;
+    try
+      Check(LDone and (LObserver.State = gosGameOver), 'counter game finishes in the runner');
+      Check((LObserver.MovesText = '+1 +2 +2') and (LObserver.ResultText = '1-0'),
+        'runner plays canonical counter moves to the counter result, got ' +
+        LObserver.MovesText + ' ' + LObserver.ResultText);
+      Check(LObserver.PositionIsCounter and (LObserver.PositionFEN = 'B:5'),
+        'runner snapshots carry the counter position, got ' + LObserver.PositionFEN);
+    finally
+      LObserver.Lock.Release;
+    end;
+  finally
+    LRunner.Free;
+    LObserver.Free;
+    LVariant.Free;
+  end;
+end;
+
 begin
   CheckRootSideFollowsVariant;
   CheckActorOnInjectedVariant;
   CheckCompletedMovesWithEquivalentSpellings;
   CheckNotationOnInjectedVariant;
   CheckAnalysisOnInjectedVariant;
+  CheckOrchestratorOnInjectedVariant;
+  CheckRunnerOnInjectedVariant;
   if Failures > 0 then
   begin
     WriteLn(Failures, ' game tree variant checks failed');

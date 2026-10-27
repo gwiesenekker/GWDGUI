@@ -11,7 +11,9 @@ unit uCounterGamePosition;
   - Position: a counter 0..CounterLimit and a side to move. FEN: 'W:3', 'B:0'.
   - Moves: '+1' and '+2' (canonical); the counter may not exceed CounterLimit,
     so the game ends there. Aliases: 'p1', 'p2', and the notation 'one', 'two'.
-  - Squares: from = counter + 1, to = counter + step + 1. }
+  - Squares: from = counter + 1, to = counter + step + 1.
+  - Rules: the side without a legal move loses; results are written 1-0, 0-1
+    (not the draughts 2-0, 0-2). The rules count the moves they were told of. }
 
 interface
 
@@ -58,6 +60,20 @@ type
     // Counter squares depend on the position, not on the move text.
     procedure MoveSquares(const AMove: string; out AFrom, ATo: Integer); override;
     function NormalizeMove(const AMove: string): string; override;
+    function CreateRules: TGameRules; override;
+    function ResultText(AOutcome: TGameOutcome): string; override;
+  end;
+
+  TCounterRules = class(TGameRules)
+  private
+    FMovesSeen: Integer;
+  public
+    procedure Reset(AStart: TGamePosition); override;
+    procedure MovePlayed(ABefore: TGamePosition; const AMove: string;
+      AAfter: TGamePosition); override;
+    function Outcome(APosition: TGamePosition; out AReason: string): TGameOutcome;
+      override;
+    property MovesSeen: Integer read FMovesSeen;
   end;
 
   // Same game, but Black moves first by default (review G9).
@@ -273,6 +289,49 @@ begin
   Result := CounterCanonicalMove(AMove);
   if Result = '' then
     Result := Trim(AMove);
+end;
+
+function TCounterVariant.CreateRules: TGameRules;
+begin
+  Result := TCounterRules.Create;
+end;
+
+function TCounterVariant.ResultText(AOutcome: TGameOutcome): string;
+begin
+  case AOutcome of
+    goWhiteWins: Result := '1-0';
+    goBlackWins: Result := '0-1';
+    goDraw: Result := '1/2-1/2';
+  else
+    Result := '*';
+  end;
+end;
+
+{ TCounterRules }
+
+procedure TCounterRules.Reset(AStart: TGamePosition);
+begin
+  FMovesSeen := 0;
+end;
+
+procedure TCounterRules.MovePlayed(ABefore: TGamePosition; const AMove: string;
+  AAfter: TGamePosition);
+begin
+  if not ABefore.IsLegal(AMove) then
+    raise EGamePositionError.Create('rules told of an illegal move: ' + AMove);
+  Inc(FMovesSeen);
+end;
+
+function TCounterRules.Outcome(APosition: TGamePosition;
+  out AReason: string): TGameOutcome;
+begin
+  AReason := '';
+  Result := goOngoing;
+  if APosition.LegalMoveCount = 0 then
+  begin
+    AReason := 'counter limit reached';
+    Result := WinFor(OppositeGameSide(APosition.SideToMove));
+  end;
 end;
 
 { TBlackStartCounterVariant }

@@ -5,7 +5,7 @@ unit uRunningGame;
 interface
 
 uses
-  Classes, SysUtils, uDraughtsBoard, uEngineRegistry, uGameSetupTypes,
+  Classes, SysUtils, uEngineRegistry, uGamePosition, uGameSetupTypes,
   uGameOrchestrator, uGameRunnerThread, uGameMoveHistory, uGameTree, uGameTreeActor;
 
 type
@@ -149,20 +149,11 @@ begin
   end;
 end;
 
-function SideToMoveAfterPly(const AStartingFEN: string;
-  APlyCount: Integer): TDraughtsSide;
-var
-  LStartingSide: TDraughtsSide;
+function SideToMoveAfterPly(AGameTree: TGameTree; APlyCount: Integer): TGameSide;
 begin
-  if (Trim(AStartingFEN) <> '') and (UpCase(Trim(AStartingFEN)[1]) = 'B') then
-    LStartingSide := dsBlack
-  else
-    LStartingSide := dsWhite;
-
+  Result := AGameTree.Variant.SideFromFEN(AGameTree.StartingFEN);
   if Odd(APlyCount) then
-    Result := OppositeSide(LStartingSide)
-  else
-    Result := LStartingSide;
+    Result := OppositeGameSide(Result);
 end;
 
 constructor TRunningGame.Create(AId: Integer; const ATitle: string;
@@ -317,12 +308,12 @@ end;
 
 function TRunningGame.IsHumanToMove: Boolean;
 var
-  LCurrentSide: TDraughtsSide;
+  LCurrentSide: TGameSide;
 begin
-  LCurrentSide := SideToMoveAfterPly(FGameTree.StartingFEN,
+  LCurrentSide := SideToMoveAfterPly(FGameTree,
     FGameTree.MainlineCount);
 
-  if LCurrentSide = dsBlack then
+  if LCurrentSide = gsBlack then
     Result := FBlackPlayerKind = pkHuman
   else
     Result := FWhitePlayerKind = pkHuman;

@@ -3,10 +3,10 @@ program engine_clock_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uEngineBase, uEngineParamsJson, uHubEngine, uEngineRegistry,
-  uPlatformProcess, uDraughtsBoard, uGameMoveHistory, uGameOrchestrator, uDraughtsPosition;
+  uPlatformProcess, uDraughtsBoard, uGameMoveHistory, uGameOrchestrator, uDraughtsPosition, uGamePosition;
 
 type
-  TClockProbe = class(TDraughtsEngine)
+  TClockProbe = class(TGameEngine)
     Used: Double;
     Calls: Integer;
     procedure EmitLog;
@@ -175,7 +175,7 @@ begin
   Game := TGameOrchestrator.Create;
   try
     Engine := CreateEngine('--fast-hub');
-    Game.Engine[dsWhite] := Engine;
+    Game.Engine[gsWhite] := Engine;
     Check(Engine.LaunchAndInit, 'level fixture launch');
     Clock := DefaultTimeControl;
     Clock.MovesPerPeriod := 0;
@@ -206,7 +206,7 @@ begin
   finally Engine.Free; end;
 end;
 
-procedure CheckClockedThink(const Mode: string; Side: TDraughtsSide;
+procedure CheckClockedThink(const Mode: string; Side: TGameSide;
   Minutes, Increment: Double; ExpectedTimeout: Boolean);
 var
   Game: TGameOrchestrator;
@@ -226,7 +226,7 @@ begin
     Clock.IncrementMode := cimFromStart;
     Game.TimeControl := Clock;
     Fen := DefaultStartingFEN;
-    if Side = dsBlack then
+    if Side = gsBlack then
       Fen[1] := 'B';
     Game.NewGame(Fen);
     Tick := GetTickCount64;
@@ -237,7 +237,7 @@ begin
       Check(Engine.MoveTimedOut, 'expired adapter deadline must be reported');
       Check((Game.State = gosGameOver) and (Game.MoveHistory.Count = 0),
         'a timed-out search must finish without accepting a move');
-      if Side = dsWhite then
+      if Side = gsWhite then
         Check(Game.GameResult = '0-2', 'White timeout must be a loss')
       else
         Check(Game.GameResult = '2-0', 'Black timeout must be a loss');
@@ -273,7 +273,7 @@ begin
   Game := TGameOrchestrator.Create;
   try
     Engine := CreateEngine('--fast-hub');
-    Game.Engine[dsWhite] := Engine;
+    Game.Engine[gsWhite] := Engine;
     Check(Engine.LaunchAndInit, 'increment fake Hub should initialize');
     Clock := DefaultTimeControl;
     Clock.MinutesPerPeriod := 0.01;
@@ -285,7 +285,7 @@ begin
     Check(Game.PlayNextMove <> '', 'first White move');
     Check(Engine.MoveTimeLimitMs < 1000,
       'increment must not enter deadline before the configured move limit');
-    Game.PlayMove('18-23', dsBlack, 0, 'human');
+    Game.PlayMove('18-23', gsBlack, 0, 'human');
     Check(Game.PlayNextMove <> '', 'second White move');
     Check(Engine.MoveTimeLimitMs > 10000,
       'increment must enter deadline when it becomes applicable');
@@ -303,11 +303,11 @@ begin
   Game := TGameOrchestrator.Create;
   try
     Engine := CreateEngine('--history-hub');
-    Game.Engine[dsWhite] := Engine;
+    Game.Engine[gsWhite] := Engine;
     Check(Engine.LaunchAndInit, 'history engine must initialize');
     Game.NewGame(DefaultStartingFEN);
     Check(Game.PlayNextMove = '32-28', 'first engine history move');
-    Game.PlayMove('18-23', dsBlack, 0.25, 'human');
+    Game.PlayMove('18-23', gsBlack, 0.25, 'human');
     Check(Game.PlayNextMove = '37-32', 'second engine history move');
     Moves := Game.MoveHistory.ExportData;
     Check((Length(Moves) = 3) and (Moves[0].PrincipalVariation = '32-28') and
@@ -332,11 +332,11 @@ procedure CheckPeriodBoundary;
 var
   Game: TGameOrchestrator;
   Clock: TTimeControl;
-  Side: TDraughtsSide;
+  Side: TGameSide;
   Used, SourceIndex: Integer;
   Fen, FirstMove, Reply, LastMove, Source, BeforeMove: string;
 begin
-  for Side := Low(TDraughtsSide) to High(TDraughtsSide) do
+  for Side := Low(TGameSide) to High(TGameSide) do
     for SourceIndex := 0 to 1 do
       for Used := 49 to 51 do
       begin
@@ -348,7 +348,7 @@ begin
           Clock.IncrementSeconds := 0;
           Game.TimeControl := Clock;
           Fen := DefaultStartingFEN;
-          if Side = dsWhite then
+          if Side = gsWhite then
           begin
             FirstMove := '32-28'; Reply := '18-23'; LastMove := '37-32';
           end
@@ -360,17 +360,17 @@ begin
           if SourceIndex = 0 then Source := 'human' else Source := 'engine';
           Game.NewGame(Fen);
           Game.PlayMove(FirstMove, Side, 10, Source);
-          Game.PlayMove(Reply, Game.Board.SideToMove, 0, 'human');
-          BeforeMove := Game.Board.CurrentFEN;
+          Game.PlayMove(Reply, Game.Position.SideToMove, 0, 'human');
+          BeforeMove := Game.Position.ToFEN;
           Game.PlayMove(LastMove, Side, Used, Source);
           if Used >= 50 then
           begin
             Check(Game.State = gosGameOver, 'period time must not rescue an exhausted clock');
-            if Side = dsWhite then
+            if Side = gsWhite then
               Check(Game.GameResult = '0-2', 'White loses on period-boundary flag')
             else
               Check(Game.GameResult = '2-0', 'Black loses on period-boundary flag');
-            Check((Game.Board.CurrentFEN = BeforeMove) and (Game.MovesPlayed.Count = 2),
+            Check((Game.Position.ToFEN = BeforeMove) and (Game.MovesPlayed.Count = 2),
               'flagged boundary move must not enter the board or history');
             Check(Game.RemainingSeconds[Side] <= 0, 'flagged side must not receive next period');
           end
@@ -396,7 +396,7 @@ begin
   Game := TGameOrchestrator.Create;
   try
     Engine := CreateEngine('--recovering-hub');
-    Game.Engine[dsWhite] := Engine;
+    Game.Engine[gsWhite] := Engine;
     Check(Engine.LaunchAndInit, 'recovering fake Hub should initialize');
     Clock := DefaultTimeControl;
     Clock.MinutesPerPeriod := 0.002;
@@ -423,20 +423,20 @@ begin
     Halt(0);
   end;
   if ParamStr(1) = '--long-check' then
-    CheckClockedThink('--long-hub', dsWhite, 2, 0, False)
+    CheckClockedThink('--long-hub', gsWhite, 2, 0, False)
   else
   begin
     CheckHubArguments;
   CheckHubSaveValidation;
     CheckBoundedEngineLog;
-    CheckClockedThink('--flood-hub', dsWhite, 2, 0, False);
+    CheckClockedThink('--flood-hub', gsWhite, 2, 0, False);
     CheckStartupTimeout;
     CheckTypedClockCompatibility;
     CheckHubLevel;
-    CheckClockedThink('--silent-hub', dsWhite, 0.002, 0, True);
-    CheckClockedThink('--silent-hub', dsBlack, 0.002, 0, True);
-    CheckClockedThink('--fast-hub', dsWhite, 2, 0, False);
-    CheckClockedThink('--delayed-hub', dsWhite, 0.002, 0.2, False);
+    CheckClockedThink('--silent-hub', gsWhite, 0.002, 0, True);
+    CheckClockedThink('--silent-hub', gsBlack, 0.002, 0, True);
+    CheckClockedThink('--fast-hub', gsWhite, 2, 0, False);
+    CheckClockedThink('--delayed-hub', gsWhite, 0.002, 0.2, False);
     CheckIncrementAfterMoveLimit;
     CheckPeriodBoundary;
     CheckCompleteEngineHistory;

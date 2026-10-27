@@ -59,10 +59,15 @@ GENERIC_UNITS=(
   uGameTreeView
   uAnalysisCoordinator
   uPvSnapshot
+  uEngineBase
+  uGameMoveHistory
+  uGameOrchestrator
+  uGameRunnerThread
+  uRunningGame
 )
 for unit_name in "${GENERIC_UNITS[@]}"; do
   unit_file="$ROOT_DIR/$unit_name.pas"
-  if rg -n '\buDraughtsBoard\b|\buDraughtsPosition\b|\bTDraughtsBoard\b|\bTDraughtsSide\b|\bNormalizeMoveNotation\b|\bSameMoveIgnoringCaptureOrder\b|\bMoveSquareAt\b|\bExtractMoveSquares\b' "$unit_file"; then
+  if rg -n '\buDraughtsBoard\b|\buDraughtsPosition\b|\bTDraughtsBoard\b|\bTDraughtsSide\b|\bNormalizeMoveNotation\b|\bSameMoveIgnoringCaptureOrder\b|\bMoveSquareAt\b|\bExtractMoveSquares\b|\buDraughtsDrawRules\b|\bTEndgameDrawCounter\b|\buDraughtsEngine\b|\buHubEngine\b|\buDxpEngine\b|\bTHubEngine\b|\bTDxpEngine\b' "$unit_file"; then
     echo "$unit_name is game-neutral and must use uGamePosition only."
     exit 1
   fi

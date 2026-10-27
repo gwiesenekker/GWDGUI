@@ -7,7 +7,7 @@ uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, Grids, ExtCtrls, CheckLst, Controls, FPJSON, JSONParser, uGuiDialogs,
   uEngineRegistry, uTournamentStorage, uTournamentDialog, uTournamentGridModel, uMainForm, uRunningGame, uGameSetupTypes,
-  uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uPdn, uDraughtsPosition;
+  uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uPdn, uDraughtsPosition, uHubEngine, uDxpEngine;
 
 type
   TFailingCaptureTournament = class(TTournamentDialog)

@@ -81,6 +81,24 @@ type
 
   TGamePositionClass = class of TGamePosition;
 
+  TGameOutcome = (goOngoing, goWhiteWins, goBlackWins, goDraw);
+
+  { End-of-game rules that depend on the game history (repetition, progress
+    counters, endgame limits) as well as the position. One instance follows one
+    game: Reset at its start, MovePlayed after every move. Loss on time is not a
+    rule of the game here; the orchestrator decides it. }
+  TGameRules = class
+  public
+    procedure Reset(AStart: TGamePosition); virtual; abstract;
+    // ABefore: the position before AMove (canonical); AAfter: after it.
+    procedure MovePlayed(ABefore: TGamePosition; const AMove: string;
+      AAfter: TGamePosition); virtual; abstract;
+    // The outcome in APosition, the current position of the followed game.
+    // AReason is a short log text when the game is over.
+    function Outcome(APosition: TGamePosition; out AReason: string): TGameOutcome;
+      virtual; abstract;
+  end;
+
   TGameVariant = class
   public
     function Name: string; virtual; abstract;
@@ -105,9 +123,18 @@ type
     // text that is not move-like is returned trimmed. Used for analysis text
     // (engine PVs) that is stored or compared without replaying it.
     function NormalizeMove(const AMove: string): string; virtual; abstract;
+    // A new rules object for one game; the caller owns it.
+    function CreateRules: TGameRules; virtual; abstract;
+    // The game's result text for an outcome ('*' for goOngoing), as written in
+    // records and logs (draughts: 2-0, 0-2, 1-1).
+    function ResultText(AOutcome: TGameOutcome): string; virtual; abstract;
   end;
 
 function OppositeGameSide(ASide: TGameSide): TGameSide;
+// 'white' or 'black' (log texts).
+function GameSideName(ASide: TGameSide): string;
+// The outcome in which ASide wins.
+function WinFor(ASide: TGameSide): TGameOutcome;
 
 { Copies ASource into ATarget. ATarget is created (Clone) when it is nil or of
   another class, so holders of a position need not know the game in advance.
@@ -144,6 +171,22 @@ begin
     Result := gsBlack
   else
     Result := gsWhite;
+end;
+
+function GameSideName(ASide: TGameSide): string;
+begin
+  if ASide = gsWhite then
+    Result := 'white'
+  else
+    Result := 'black';
+end;
+
+function WinFor(ASide: TGameSide): TGameOutcome;
+begin
+  if ASide = gsWhite then
+    Result := goWhiteWins
+  else
+    Result := goBlackWins;
 end;
 
 procedure AssignGamePosition(var ATarget: TGamePosition; ASource: TGamePosition);

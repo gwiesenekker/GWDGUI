@@ -2,7 +2,7 @@ program endgame_draw_check;
 {$mode objfpc}{$H+}
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Classes, SysUtils, uDraughtsBoard, uDraughtsDrawRules, uGameOrchestrator, uDraughtsPosition;
+  Classes, SysUtils, uDraughtsBoard, uDraughtsDrawRules, uGameOrchestrator, uDraughtsPosition, uGamePosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 procedure CheckLimits;
@@ -39,29 +39,29 @@ begin
   finally Board.Free; end;
 end;
 procedure CheckPlayedFiveMoveDraw;
-var Game: TGameOrchestrator; Candidate: TDraughtsBoard; Seen: TStringList;
+var Game: TGameOrchestrator; Candidate: TGamePosition; Seen: TStringList;
   Ply, I: Integer; Move: string; Found: Boolean;
 begin
-  Game := TGameOrchestrator.Create; Candidate := TDraughtsBoard.Create; Seen := TStringList.Create;
+  Game := TGameOrchestrator.Create; Candidate := nil; Seen := TStringList.Create;
   try
-    Game.NewGame('W:WK46:BK1'); Seen.Add(Game.Board.PositionKey);
+    Game.NewGame('W:WK46:BK1'); Seen.Add(Game.Position.PositionKey);
     for Ply := 1 to 10 do
     begin
       Found := False;
-      for I := 0 to Game.Board.LegalMoveCount - 1 do
+      for I := 0 to Game.Position.LegalMoveCount - 1 do
       begin
-        Move := Game.Board.LegalMoves[I]; Candidate.AssignFrom(Game.Board);
+        Move := Game.Position.LegalMove(I); AssignGamePosition(Candidate, Game.Position);
         Candidate.PlayMove(Move);
         if (Candidate.LegalMoveCount > 0) and (Seen.IndexOf(Candidate.PositionKey) < 0) and
           (Pos('x', Move) = 0) then begin Found := True; Break; end;
       end;
       Check(Found, 'draw fixture has a fresh nonterminal continuation');
-      Game.PlayMove(Move, Game.CurrentSide, 0, 'test'); Seen.Add(Game.Board.PositionKey);
+      Game.PlayMove(Move, Game.CurrentSide, 0, 'test'); Seen.Add(Game.Position.PositionKey);
       if Ply < 10 then Check(Game.State = gosRunning, 'no premature five-move draw');
     end;
     Check((Game.GameResult = '1-1') and (Pos('5-move', Game.Log.Text) > 0), 'orchestrator applies five-move rule');
     Game.NewGame('W:WK32:B27');
-    Game.PlayMove(Game.Board.LegalMoves[0], dsWhite, 0, 'test');
+    Game.PlayMove(Game.Position.LegalMove(0), gsWhite, 0, 'test');
     Check(Game.GameResult = '2-0', 'terminal capture is a win rather than a draw');
   finally Seen.Free; Candidate.Free; Game.Free; end;
 end;

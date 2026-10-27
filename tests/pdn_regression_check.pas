@@ -3,7 +3,7 @@ program pdn_regression_check;
 {$mode objfpc}{$H+}
 
 uses
-  Classes, SysUtils, SQLDB, SQLite3Conn, uDraughtsBoard, uGameDatabase, uGameMoveHistory, uPdn, uPdnText, uDraughtsPosition;
+  Classes, SysUtils, SQLDB, SQLite3Conn, uDraughtsBoard, uGameDatabase, uGameMoveHistory, uPdn, uPdnText, uDraughtsPosition, uGamePosition;
 
 type
   TReadCollector = class
@@ -291,8 +291,9 @@ begin
   History := TGameMoveHistory.Create;
   Moves := TStringList.Create;
   try
-    History.AddMove('034-030', dsWhite, 1.25, 'score=0.10', '30-25');
-    History.AddMove('20-25', dsBlack, 0.75, 'score=-0.10', '');
+    // The history stores the canonical moves it is given (orchestrator).
+    History.AddMove(' 34-30 ', gsWhite, 1.25, 'score=0.10', '30-25');
+    History.AddMove('20-25', gsBlack, 0.75, 'score=-0.10', '');
     CheckEqual(History.MovesText, '34-30 20-25',
       'move history should expose pure canonical moves');
     CheckEqual(History.AnnotationsText, 'score=0.10' + LineEnding +

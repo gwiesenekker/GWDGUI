@@ -208,7 +208,7 @@ generic unit is converted; behaviour, formats and performance stay unchanged.
 | 4 | Displayed position and move interaction (`MoveSquares`, `MovesBetween`) | Done |
 | 5 | Notation walker and presentation (`MoveNotation`) | Done |
 | 6 | Analysis coordination and PV state | Done |
-| 7 | `TGameRules`; orchestrator, runner and running game | |
+| 7 | `TGameRules`; orchestrator, runner and running game | Done |
 | 8 | Remaining main-form uses; list the chess replacement points | |
 
 Each step is one local commit with all suites and the performance baseline passing.
@@ -285,6 +285,32 @@ Step 6 notes:
   but stored the base position's key, so with no PV every running-game snapshot
   reported a PV change. Fixed in the commit after step 6:
   `TAnalysisPvState.UpdateCache` compares and stores the same key.
+
+Step 7 notes:
+- `TGameRules` (`uGamePosition`): `Reset`, `MovePlayed(ABefore, AMove, AAfter)`,
+  `Outcome`. `TDraughtsRules` (`uDraughtsPosition`) holds what the orchestrator did
+  before: no legal move loses, the FMJD 16/5-move endgame limits
+  (`uDraughtsDrawRules`), threefold repetition and the 25-move rule, in the same
+  order and with the same log texts. `TGameVariant` gained `CreateRules` and
+  `ResultText` (draughts `2-0`/`0-2`/`1-1`); loss on time stays in the orchestrator.
+- `uGameOrchestrator`, `uGameRunnerThread`, `uRunningGame`, `uGameMoveHistory` and
+  `uEngineBase` are game-neutral and in the source audit. The orchestrator and the
+  runner take an optional variant (default: the registered game). The runner
+  snapshot carries a `Position` instead of a draughts board.
+- Engines: `TDraughtsEngine` in `uEngineBase` became `TGameEngine` (shared
+  infrastructure; virtual `LaunchAndInit`, `ProtocolName`, `NormalizeMoveText`).
+  The new `uDraughtsEngine.TDraughtsEngine` is the base of the Hub and DXP engines
+  and normalizes draughts move text as before. Engine units register a factory per
+  engine kind (`RegisterGameEngineFactory`); the runner creates engines with
+  `CreateGameEngine`. Programs that run engine games link `uHubEngine` and
+  `uDxpEngine` (`gwdgui.lpr` names them next to `uDraughtsPosition`).
+- `TGameMoveHistory` stores the canonical moves it is given; the orchestrator
+  validates them with `TryParseMove` first.
+- The orchestrator's position now records its move history (as tree replays do);
+  it plays validated moves with `PlayTrustedMove`. An orchestrator replay benchmark
+  (300 random games, 81,870 moves, identical results) costs about 8% more per move
+  (about 33 µs instead of 30 µs), which is negligible next to engine searches.
+- With step 7, `uGameTree`'s dependency on `uGameOrchestrator` is game-neutral too.
 - `uAnalysisCoordinator` still uses `uGameOrchestrator` for `TGameOrchestratorState`
   (step 7).
 

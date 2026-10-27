@@ -7,7 +7,7 @@ uses
   cthreads,
   {$ENDIF}
   Classes, SysUtils, SyncObjs, uThreadMessageQueue, uPvSnapshot, uAnalyzerRunnerThread, uGameTreeSearchRef, uRunningGame, uGameGuiMessages, uGameRunnerThread,
-  uEngineRegistry, uDraughtsBoard, uGameSetupTypes, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uDraughtsPosition;
+  uEngineRegistry, uDraughtsBoard, uGameSetupTypes, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uDraughtsPosition, uHubEngine, uDxpEngine;
 
 type
   TLogRunner = class(TGameRunnerThread)
@@ -71,9 +71,11 @@ begin
     Last.AssignFrom(AData);
     if AData.LiveUpdate and (AData.PrincipalVariation <> '') then
     begin
-      Check((AData.PlyCount = 0) and (AData.Board.MovesPlayedCount = 0) and
-        (AData.Board[32] = pkWhiteMan) and (AData.Board[28] = pkEmpty) and
-        (AData.PvBasePosition <> nil) and (AData.PvBasePosition.PositionKey = AData.Board.PositionKey) and (AData.PvBasePly = 0), 'live update must retain the last immutable position/history');
+      Check((AData.PlyCount = 0) and (AData.Position is TDraughtsPosition) and
+        (TDraughtsPosition(AData.Position).Board.MovesPlayedCount = 0) and
+        (TDraughtsPosition(AData.Position).Board[32] = pkWhiteMan) and
+        (TDraughtsPosition(AData.Position).Board[28] = pkEmpty) and
+        (AData.PvBasePosition <> nil) and (AData.PvBasePosition.PositionKey = AData.Position.PositionKey) and (AData.PvBasePly = 0), 'live update must retain the last immutable position/history');
       Check((AData.PvScore = '0.4') and (AData.PvSnapshot.Depth = '15'),
         'live snapshot includes locked engine score and depth');
       Live.SetEvent;

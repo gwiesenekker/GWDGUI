@@ -7,8 +7,8 @@ interface
 uses
   Classes, SyncObjs, SysUtils,
   uCancellationToken,
-  uDraughtsBoard, uDraughtsPosition, uDxpEngine, uEngineBase, uEngineRegistry,
-  uGameOrchestrator, uGameMoveHistory, uGamePosition, uGameSetupTypes, uHubEngine, uPvSnapshot,
+  uEngineBase, uEngineRegistry,
+  uGameOrchestrator, uGameMoveHistory, uGamePosition, uGameSetupTypes, uPvSnapshot,
   uThreadMessageQueue;
 
 type
@@ -17,8 +17,8 @@ type
     FBlackRemainingSeconds: Double;
     FBlackPlayerName: string;
     FBlackUsedSeconds: Double;
-    FBoard: TDraughtsBoard;
-    FCurrentSide: TDraughtsSide;
+    FPosition: TGamePosition; // owned copy; nil before the game started
+    FCurrentSide: TGameSide;
     FGameResult: string;
     FLastError: string;
     FLogLines: TStringList;
@@ -53,8 +53,8 @@ type
     property BlackRemainingSeconds: Double read FBlackRemainingSeconds;
     property BlackPlayerName: string read FBlackPlayerName;
     property BlackUsedSeconds: Double read FBlackUsedSeconds;
-    property Board: TDraughtsBoard read FBoard;
-    property CurrentSide: TDraughtsSide read FCurrentSide;
+    property Position: TGamePosition read FPosition;
+    property CurrentSide: TGameSide read FCurrentSide;
     property GameResult: string read FGameResult;
     property LastError: string read FLastError;
     property LogLines: TStringList read FLogLines;
@@ -90,9 +90,8 @@ type
     FLastLogSnapshotTick: QWord;
     FLogRevision: QWord;
     FLastPrincipalVariation: string;
-    FPvBasePosition: TDraughtsPosition;
-    // Live-update base; used under FSnapshotLock only.
-    FLiveBasePosition: TDraughtsPosition;
+    FPvBasePosition: TGamePosition; // nil until the first PV
+    FVariant: TGameVariant;
     FPvBasePly: Integer;
     FRunnerError: string;
     FRunnerFailed: Boolean;
@@ -101,7 +100,7 @@ type
     FSnapshotLock: TCriticalSection;
     FLastFullSnapshot: TGameRunnerSnapshot;
     FHasFullSnapshot: Boolean;
-    FActiveSearchEngine: TDraughtsEngine;
+    FActiveSearchEngine: TGameEngine;
     FStopLogged: Boolean;
     FWhiteEngine: TExternalEngineDefinition;
     FBlackEngine: TExternalEngineDefinition;
@@ -121,7 +120,7 @@ type
     function CreateSnapshot: TGameRunnerSnapshot;
     procedure PublishSnapshot;
     procedure PublishSnapshotIfDue;
-    procedure PublishLiveUpdate(AEngine: TDraughtsEngine);
+    procedure PublishLiveUpdate(AEngine: TGameEngine);
     procedure PublishFinished;
     procedure RequestStopFromRunner(const AReason: string);
   protected
@@ -129,9 +128,11 @@ type
     procedure Execute; override;
     procedure DoTerminate; override;
   public
+    // AVariant: the game; nil uses the registered default game. Engines are
+    // created through the factories their units register (uEngineBase).
     constructor Create(const ASetup: TGameSetup; AGameId: Integer;
       ASnapshotEvent: TGameRunnerSnapshotEvent;
-      AFinishedEvent: TGameRunnerFinishedEvent);
+      AFinishedEvent: TGameRunnerFinishedEvent; AVariant: TGameVariant = nil);
     destructor Destroy; override;
     procedure PostGuiLog(const AMessage: string);
     procedure PostHumanMove(const AMove: string);
@@ -194,7 +195,6 @@ end;
 constructor TGameRunnerSnapshot.Create;
 begin
   inherited Create;
-  FBoard := TDraughtsBoard.Create;
   FPvSnapshot := TPvSnapshot.Create;
   FLogLines := TStringList.Create;
   FGameResult := '*';
@@ -204,7 +204,7 @@ destructor TGameRunnerSnapshot.Destroy;
 begin
   FLogLines.Free;
   FPvSnapshot.Free;
-  FBoard.Free;
+  FPosition.Free;
   inherited Destroy;
 end;
 
@@ -241,7 +241,10 @@ begin
   FBlackPlayerName := ASource.FBlackPlayerName;
   FBlackRemainingSeconds := ASource.FBlackRemainingSeconds;
   FBlackUsedSeconds := ASource.FBlackUsedSeconds;
-  FBoard.AssignFrom(ASource.FBoard);
+  if ASource.FPosition = nil then
+    FreeAndNil(FPosition)
+  else
+    AssignGamePosition(FPosition, ASource.FPosition);
   FCurrentSide := ASource.FCurrentSide;
   FGameResult := ASource.FGameResult;
   FLastError := ASource.FLastError;
@@ -280,10 +283,11 @@ end;
 
 constructor TGameRunnerThread.Create(const ASetup: TGameSetup; AGameId: Integer;
   ASnapshotEvent: TGameRunnerSnapshotEvent;
-  AFinishedEvent: TGameRunnerFinishedEvent);
+  AFinishedEvent: TGameRunnerFinishedEvent; AVariant: TGameVariant);
 begin
   inherited Create(True);
   FreeOnTerminate := False;
+  FVariant := AVariant;
   FGameId := AGameId;
   FOnSnapshot := ASnapshotEvent;
   FOnFinished := AFinishedEvent;
@@ -306,15 +310,12 @@ begin
   FLastFullSnapshot := TGameRunnerSnapshot.Create;
   FCommandQueue := TThreadMessageQueue.Create(True);
   FStopToken := TCancellationToken.Create;
-  FPvBasePosition := TDraughtsPosition.Create;
-  FLiveBasePosition := TDraughtsPosition.Create;
 end;
 
 destructor TGameRunnerThread.Destroy;
 begin
   DetachRuntimeLogHandlers;
   FreeAndNil(FOrchestrator);
-  FLiveBasePosition.Free;
   FPvBasePosition.Free;
   FCommandQueue.Free;
   FBlackEngine.Free;
@@ -329,13 +330,13 @@ end;
 
 procedure TGameRunnerThread.DetachRuntimeLogHandlers;
 var
-  LSide: TDraughtsSide;
+  LSide: TGameSide;
 begin
   if FOrchestrator = nil then
     Exit;
 
   FOrchestrator.OnLog := nil;
-  for LSide := Low(TDraughtsSide) to High(TDraughtsSide) do
+  for LSide := Low(TGameSide) to High(TGameSide) do
     if FOrchestrator.Engine[LSide] <> nil then
       FOrchestrator.Engine[LSide].OnLog := nil;
 end;
@@ -381,7 +382,7 @@ begin
             RunnerCommand.TextValue);
           Exit;
         end;
-        if not FOrchestrator.Board.TryGetLegalMove(RunnerCommand.TextValue,
+        if not FOrchestrator.Position.TryParseMove(RunnerCommand.TextValue,
           LegalMove) then
         begin
           AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
@@ -546,7 +547,7 @@ end;
 
 function TGameRunnerThread.CurrentPlayerKind: TPlayerKind;
 begin
-  if FOrchestrator.CurrentSide = dsBlack then
+  if FOrchestrator.CurrentSide = gsBlack then
     Result := FSetup.BlackPlayer
   else
     Result := FSetup.WhitePlayer;
@@ -554,29 +555,23 @@ end;
 
 procedure TGameRunnerThread.CreateEngines;
 var
-  LEngine: TDraughtsEngine;
+  LEngine: TGameEngine;
 
-  procedure CreateRegisteredEngine(ASide: TDraughtsSide;
+  procedure CreateRegisteredEngine(ASide: TGameSide;
     ADefinition: TExternalEngineDefinition);
   begin
     if ADefinition = nil then
       raise EInvalidOperation.Create('No registered engine definition for ' +
         SideToString(ASide));
 
-    if ADefinition.Kind = eekHub then
-      LEngine := THubEngine.Create(ADefinition)
-    else
-      LEngine := TDxpEngine.Create(ADefinition);
+    LEngine := CreateGameEngine(ADefinition);
     try
       LEngine.StopToken := FStopToken;
       AddGameLogLines(LEngine.StateLog);
       LEngine.OnLog := @RuntimeLog;
-      if (LEngine is THubEngine) and (not THubEngine(LEngine).LaunchAndInit) then
-        raise EInvalidOperation.Create(SideToString(ASide) +
-          ' Hub engine did not launch correctly');
-      if (LEngine is TDxpEngine) and (not TDxpEngine(LEngine).LaunchAndInit) then
-        raise EInvalidOperation.Create(SideToString(ASide) +
-          ' DXP engine did not launch correctly');
+      if not LEngine.LaunchAndInit then
+        raise EInvalidOperation.Create(SideToString(ASide) + ' ' +
+          LEngine.ProtocolName + ' engine did not launch correctly');
       FOrchestrator.Engine[ASide] := LEngine;
       LEngine := nil;
     finally
@@ -585,10 +580,10 @@ var
   end;
 begin
   if FSetup.WhitePlayer = pkRegistered then
-    CreateRegisteredEngine(dsWhite, FWhiteEngine);
+    CreateRegisteredEngine(gsWhite, FWhiteEngine);
 
   if FSetup.BlackPlayer = pkRegistered then
-    CreateRegisteredEngine(dsBlack, FBlackEngine);
+    CreateRegisteredEngine(gsBlack, FBlackEngine);
 end;
 
 function TGameRunnerThread.CreateSnapshot: TGameRunnerSnapshot;
@@ -599,7 +594,7 @@ var
   LPvScore: string;
   LPvTimeText: string;
   LPvText: string;
-  LPvEngine: TDraughtsEngine;
+  LPvEngine: TGameEngine;
 begin
   Result := TGameRunnerSnapshot.Create;
   if FOrchestrator = nil then
@@ -622,7 +617,7 @@ begin
     Exit;
   end;
 
-  Result.FBoard.AssignFrom(FOrchestrator.Board);
+  AssignGamePosition(Result.FPosition, FOrchestrator.Position);
   Result.FCurrentSide := FOrchestrator.CurrentSide;
   Result.FGameResult := FOrchestrator.GameResult;
   Result.FLastError := FOrchestrator.LastError;
@@ -639,16 +634,16 @@ begin
   Result.FMoveData := FOrchestrator.MoveHistory.ExportData;
   Result.FState := FOrchestrator.State;
   Result.FStartingFEN := FOrchestrator.StartingFEN;
-  Result.FWhiteRemainingSeconds := FOrchestrator.RemainingSeconds[dsWhite];
-  Result.FBlackRemainingSeconds := FOrchestrator.RemainingSeconds[dsBlack];
-  Result.FWhiteUsedSeconds := FOrchestrator.UsedSeconds[dsWhite];
-  Result.FBlackUsedSeconds := FOrchestrator.UsedSeconds[dsBlack];
+  Result.FWhiteRemainingSeconds := FOrchestrator.RemainingSeconds[gsWhite];
+  Result.FBlackRemainingSeconds := FOrchestrator.RemainingSeconds[gsBlack];
+  Result.FWhiteUsedSeconds := FOrchestrator.UsedSeconds[gsWhite];
+  Result.FBlackUsedSeconds := FOrchestrator.UsedSeconds[gsBlack];
   if (Result.FState = gosRunning) and
     (FHumanTurnStartTick > 0) and (CurrentPlayerKind = pkHuman) then
   begin
     LNowTick := GetTickCount64;
     LElapsedSeconds := (LNowTick - FHumanTurnStartTick) / 1000;
-    if Result.FCurrentSide = dsWhite then
+    if Result.FCurrentSide = gsWhite then
     begin
       Result.FWhiteUsedSeconds := Result.FWhiteUsedSeconds + LElapsedSeconds;
       Result.FWhiteRemainingSeconds := Result.FWhiteRemainingSeconds -
@@ -679,10 +674,11 @@ begin
   if LPvText <> '' then
   begin
     if (LPvText <> FLastPrincipalVariation) or
-      (FOrchestrator.Board.PositionKey <> FPvBasePosition.PositionKey) then
+      (FPvBasePosition = nil) or
+      (FOrchestrator.Position.PositionKey <> FPvBasePosition.PositionKey) then
     begin
       FLastPrincipalVariation := LPvText;
-      FPvBasePosition.AssignBoard(FOrchestrator.Board);
+      AssignGamePosition(FPvBasePosition, FOrchestrator.Position);
       FPvBasePly := FOrchestrator.MoveHistory.Count;
     end;
     Result.FPvSnapshot.SetData(FPvBasePosition, FPvBasePly, LPvText, LPvScore,
@@ -727,7 +723,7 @@ begin
   finally FSnapshotLock.Release; end;
 end;
 
-procedure TGameRunnerThread.PublishLiveUpdate(AEngine: TDraughtsEngine);
+procedure TGameRunnerThread.PublishLiveUpdate(AEngine: TGameEngine);
 var Snapshot: TGameRunnerSnapshot; NowTick: QWord; Pv, Score, Depth, TimeText: string;
 begin
   FSnapshotLock.Acquire;
@@ -748,8 +744,7 @@ begin
         Snapshot.FLogLines.Assign(FGameLog); Snapshot.FLogRevision := FLogRevision;
       finally FLogLock.Release; end;
       AEngine.ReadSearchInfo(Pv, Score, Depth, TimeText);
-      FLiveBasePosition.AssignBoard(Snapshot.FBoard);
-      Snapshot.FPvSnapshot.SetData(FLiveBasePosition, Snapshot.FPlyCount, Pv, Score, Depth, TimeText);
+      Snapshot.FPvSnapshot.SetData(Snapshot.FPosition, Snapshot.FPlyCount, Pv, Score, Depth, TimeText);
       if Assigned(FOnSnapshot) then
       begin FOnSnapshot(Self, Snapshot); Snapshot := nil; end;
     finally Snapshot.Free; end;
@@ -770,14 +765,14 @@ begin
   // Engine stdout may arrive on a worker thread while PlayMove mutates board
   // and history. Logs are locked; snapshots belong exclusively to the runner.
   if GetCurrentThreadID = ThreadID then PublishSnapshotIfDue
-  else if Sender is TDraughtsEngine then PublishLiveUpdate(TDraughtsEngine(Sender));
+  else if Sender is TGameEngine then PublishLiveUpdate(TGameEngine(Sender));
 end;
 
 procedure TGameRunnerThread.Execute;
 begin
     try
       try
-      FOrchestrator := TGameOrchestrator.Create;
+      FOrchestrator := TGameOrchestrator.Create(FVariant);
       FOrchestrator.OnLog := @RuntimeLog;
       AddGameLogLines(FOrchestrator.Log);
       FOrchestrator.TimeControl := FSetup.TimeControl;

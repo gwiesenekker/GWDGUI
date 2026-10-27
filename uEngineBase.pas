@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SyncObjs, SysUtils,
-  uCancellationToken, uDraughtsBoard;
+  uCancellationToken, uEngineRegistry, uGamePosition;
 
 type
   TEngineState = (
@@ -24,7 +24,9 @@ type
 
   TEngineLogEvent = procedure(Sender: TObject; const AMessage: string) of object;
 
-  TDraughtsEngine = class
+  { Shared engine infrastructure: state, logs, clocks, PV, stop fences. The
+    protocol (Hub, DXP, UCI) lives in a subclass of the game's engine units. }
+  TGameEngine = class
   private
     FEngineName: string;
     FMoveTimeLimitMs: Integer;
@@ -63,6 +65,9 @@ type
     procedure SetLastTimeText(const AValue: string);
     procedure SetPrincipalVariation(const AValue: string);
   protected
+    // The game's standard spelling of move text from or for the engine. The
+    // base trims; a game's engine class normalizes (draughts: no leading zeros).
+    function NormalizeMoveText(const AMove: string): string; virtual;
     procedure ChangeState(ANewState: TEngineState; const AReason: string);
     function DoStartThinking: string; virtual; abstract;
     procedure Log(const AMessage: string);
@@ -74,7 +79,11 @@ type
     constructor Create(const AEngineName: string = 'Engine'); virtual;
     destructor Destroy; override;
 
-    procedure BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
+    // Starts the engine process or connection. True when it is ready.
+    function LaunchAndInit: Boolean; virtual;
+    // Protocol name for messages ('Hub', 'DXP').
+    function ProtocolName: string; virtual;
+    procedure BeginGame(const AStartingFEN: string; ASide: TGameSide;
       AGameMinutes: Double; AGameMoves: Integer;
       AIncrementSeconds: Double = 0.0); virtual;
     procedure NewGame(const AStartingFEN: string); virtual;
@@ -110,9 +119,54 @@ type
     property OnLog: TEngineLogEvent read FOnLog write FOnLog;
   end;
 
+  TGameEngineFactory = function(ADefinition: TExternalEngineDefinition): TGameEngine;
+
 function EngineStateToString(AState: TEngineState): string;
 
+{ Engine implementations register a factory for their engine kind in their
+  initialization section; programs that run engine games link those units. }
+procedure RegisterGameEngineFactory(AKind: TExternalEngineKind;
+  AFactory: TGameEngineFactory);
+// A new, not yet launched engine for ADefinition. Raises EInvalidOperation
+// when no implementation for its kind is linked.
+function CreateGameEngine(ADefinition: TExternalEngineDefinition): TGameEngine;
+
 implementation
+
+var
+  GEngineFactories: array[TExternalEngineKind] of TGameEngineFactory;
+
+procedure RegisterGameEngineFactory(AKind: TExternalEngineKind;
+  AFactory: TGameEngineFactory);
+begin
+  GEngineFactories[AKind] := AFactory;
+end;
+
+function CreateGameEngine(ADefinition: TExternalEngineDefinition): TGameEngine;
+begin
+  if ADefinition = nil then
+    raise EInvalidOperation.Create('No engine definition');
+  if not Assigned(GEngineFactories[ADefinition.Kind]) then
+    raise EInvalidOperation.Create('No engine implementation is linked for ' +
+      ADefinition.KindText + ' engines');
+  Result := GEngineFactories[ADefinition.Kind](ADefinition);
+end;
+
+function TGameEngine.NormalizeMoveText(const AMove: string): string;
+begin
+  Result := Trim(AMove);
+end;
+
+function TGameEngine.LaunchAndInit: Boolean;
+begin
+  Result := True;
+end;
+
+function TGameEngine.ProtocolName: string;
+begin
+  Result := 'Engine';
+end;
+
 
 function MessageTokenValue(const AMessage, AKey: string): string;
 var
@@ -164,7 +218,7 @@ begin
   end;
 end;
 
-constructor TDraughtsEngine.Create(const AEngineName: string);
+constructor TGameEngine.Create(const AEngineName: string);
 begin
   inherited Create;
   FEngineName := AEngineName;
@@ -181,7 +235,7 @@ begin
   Log('created; state=' + EngineStateToString(GetCurrentState));
 end;
 
-destructor TDraughtsEngine.Destroy;
+destructor TGameEngine.Destroy;
 begin
   FLogLock.Free;
   FGameResultLock.Free;
@@ -193,7 +247,7 @@ begin
   inherited Destroy;
 end;
 
-function TDraughtsEngine.GetCurrentState: TEngineState;
+function TGameEngine.GetCurrentState: TEngineState;
 begin
   FStateLock.Acquire;
   try
@@ -203,7 +257,7 @@ begin
   end;
 end;
 
-procedure TDraughtsEngine.Log(const AMessage: string);
+procedure TGameEngine.Log(const AMessage: string);
 var
   LMessage: string;
   LState: TEngineState;
@@ -225,7 +279,7 @@ begin
     FOnLog(Self, LMessage);
 end;
 
-procedure TDraughtsEngine.ChangeState(ANewState: TEngineState; const AReason: string);
+procedure TGameEngine.ChangeState(ANewState: TEngineState; const AReason: string);
 var
   LOldState: TEngineState;
   LMessage: string;
@@ -259,7 +313,7 @@ begin
     FOnLog(Self, LMessage);
 end;
 
-function TDraughtsEngine.GetGameResult: string;
+function TGameEngine.GetGameResult: string;
 begin
   FGameResultLock.Acquire;
   try
@@ -269,7 +323,7 @@ begin
   end;
 end;
 
-procedure TDraughtsEngine.SetGameResult(const AResult: string);
+procedure TGameEngine.SetGameResult(const AResult: string);
 var
   LResult: string;
 begin
@@ -285,7 +339,7 @@ begin
   end;
 end;
 
-function TDraughtsEngine.GetLastError: string;
+function TGameEngine.GetLastError: string;
 begin
   FLastErrorLock.Acquire;
   try
@@ -295,7 +349,7 @@ begin
   end;
 end;
 
-procedure TDraughtsEngine.SetLastError(const AValue: string);
+procedure TGameEngine.SetLastError(const AValue: string);
 begin
   FLastErrorLock.Acquire;
   try
@@ -305,7 +359,7 @@ begin
   end;
 end;
 
-procedure TDraughtsEngine.ReadSearchInfo(out APv, AScore, ADepth, ATime: string);
+procedure TGameEngine.ReadSearchInfo(out APv, AScore, ADepth, ATime: string);
 begin
   FPvLock.Acquire;
   try
@@ -314,7 +368,7 @@ begin
   finally FPvLock.Release; end;
 end;
 
-function TDraughtsEngine.GetLastScore: string;
+function TGameEngine.GetLastScore: string;
 begin
   FPvLock.Acquire;
   try
@@ -324,7 +378,7 @@ begin
   end;
 end;
 
-procedure TDraughtsEngine.SetLastScore(const AValue: string);
+procedure TGameEngine.SetLastScore(const AValue: string);
 begin
   FPvLock.Acquire;
   try
@@ -334,7 +388,7 @@ begin
   end;
 end;
 
-function TDraughtsEngine.GetLastDepth: string;
+function TGameEngine.GetLastDepth: string;
 begin
   FPvLock.Acquire;
   try
@@ -344,7 +398,7 @@ begin
   end;
 end;
 
-procedure TDraughtsEngine.SetLastDepth(const AValue: string);
+procedure TGameEngine.SetLastDepth(const AValue: string);
 begin
   FPvLock.Acquire;
   try
@@ -354,7 +408,7 @@ begin
   end;
 end;
 
-function TDraughtsEngine.GetLastTimeText: string;
+function TGameEngine.GetLastTimeText: string;
 begin
   FPvLock.Acquire;
   try
@@ -364,7 +418,7 @@ begin
   end;
 end;
 
-procedure TDraughtsEngine.SetLastTimeText(const AValue: string);
+procedure TGameEngine.SetLastTimeText(const AValue: string);
 begin
   FPvLock.Acquire;
   try
@@ -374,12 +428,12 @@ begin
   end;
 end;
 
-function TDraughtsEngine.StopRequested: Boolean;
+function TGameEngine.StopRequested: Boolean;
 begin
   Result := (FStopToken <> nil) and FStopToken.IsCancelled;
 end;
 
-function TDraughtsEngine.GetPrincipalVariation: string;
+function TGameEngine.GetPrincipalVariation: string;
 begin
   FPvLock.Acquire;
   try
@@ -389,7 +443,7 @@ begin
   end;
 end;
 
-procedure TDraughtsEngine.SetPrincipalVariation(const AValue: string);
+procedure TGameEngine.SetPrincipalVariation(const AValue: string);
 begin
   FPvLock.Acquire;
   try
@@ -399,11 +453,11 @@ begin
   end;
 end;
 
-procedure TDraughtsEngine.RequestStop;
+procedure TGameEngine.RequestStop;
 begin
 end;
 
-procedure TDraughtsEngine.NewGame(const AStartingFEN: string);
+procedure TGameEngine.NewGame(const AStartingFEN: string);
 begin
   FStartingFEN := Trim(AStartingFEN);
   FMovesPlayed.Clear;
@@ -417,7 +471,7 @@ begin
   ChangeState(esReady, 'new game');
 end;
 
-procedure TDraughtsEngine.BeginGame(const AStartingFEN: string; ASide: TDraughtsSide;
+procedure TGameEngine.BeginGame(const AStartingFEN: string; ASide: TGameSide;
   AGameMinutes: Double; AGameMoves: Integer; AIncrementSeconds: Double);
 begin
   NewGame(AStartingFEN);
@@ -427,11 +481,11 @@ begin
     '; increment_seconds=' + FloatToStr(AIncrementSeconds));
 end;
 
-procedure TDraughtsEngine.DoMove(const AMove: string);
+procedure TGameEngine.DoMove(const AMove: string);
 var
   LMove: string;
 begin
-  LMove := NormalizeMoveNotation(AMove);
+  LMove := NormalizeMoveText(AMove);
   if LMove = '' then
     Exit;
 
@@ -439,7 +493,7 @@ begin
   Log('move played; move=' + LMove);
 end;
 
-procedure TDraughtsEngine.SetGamePosition(const AStartingFEN: string; AMoves: TStrings);
+procedure TGameEngine.SetGamePosition(const AStartingFEN: string; AMoves: TStrings);
 var
   I: Integer;
   LMove: string;
@@ -449,7 +503,7 @@ begin
   if AMoves <> nil then
     for I := 0 to AMoves.Count - 1 do
     begin
-      LMove := NormalizeMoveNotation(AMoves[I]);
+      LMove := NormalizeMoveText(AMoves[I]);
       if LMove <> '' then
         FMovesPlayed.Add(LMove);
     end;
@@ -464,7 +518,7 @@ begin
   ChangeState(esReady, 'position received');
 end;
 
-procedure TDraughtsEngine.SetClockInfo(AMovesRemaining: Integer;
+procedure TGameEngine.SetClockInfo(AMovesRemaining: Integer;
   ARemainingSeconds, ATotalUsedSeconds: Double);
 begin
   Log('clock received; moves_remaining=' + IntToStr(AMovesRemaining) +
@@ -472,13 +526,13 @@ begin
     '; total_used_seconds=' + FloatToStr(ATotalUsedSeconds));
 end;
 
-procedure TDraughtsEngine.SetClockInfoWithIncrement(AMovesRemaining: Integer;
+procedure TGameEngine.SetClockInfoWithIncrement(AMovesRemaining: Integer;
   ARemainingSeconds, ATotalUsedSeconds, AIncrementSeconds: Double);
 begin
   SetClockInfo(AMovesRemaining, ARemainingSeconds, ATotalUsedSeconds);
 end;
 
-procedure TDraughtsEngine.LogCurrentState(const AReason: string);
+procedure TGameEngine.LogCurrentState(const AReason: string);
 var
   LMessage: string;
 begin
@@ -488,7 +542,7 @@ begin
   Log(LMessage);
 end;
 
-function TDraughtsEngine.ExtractMessageValue(const AMessage, AName: string;
+function TGameEngine.ExtractMessageValue(const AMessage, AName: string;
   out AValue: string): Boolean;
 var
   LMessage, LPrefix: string;
@@ -502,7 +556,7 @@ begin
     AValue := '';
 end;
 
-procedure TDraughtsEngine.ParsePositionMessage(const AMessage: string; out AFEN,
+procedure TGameEngine.ParsePositionMessage(const AMessage: string; out AFEN,
   AMovesText: string);
 var
   LLowerMessage, LMessage: string;
@@ -529,7 +583,7 @@ begin
   end;
 end;
 
-function TDraughtsEngine.ReceiveMessage(const AMessage: string): string;
+function TGameEngine.ReceiveMessage(const AMessage: string): string;
 var
   FormatSettings: TFormatSettings;
   LMessage: string;
@@ -593,7 +647,7 @@ begin
   Log('ignored compatibility message; message=' + LMessage);
 end;
 
-function TDraughtsEngine.StartThinking: string;
+function TGameEngine.StartThinking: string;
 begin
   FMoveTimedOut := False;
   Result := '';
@@ -618,7 +672,7 @@ begin
   end;
 end;
 
-procedure TDraughtsEngine.SetMoveTimeLimit(ATimeoutMs: Integer);
+procedure TGameEngine.SetMoveTimeLimit(ATimeoutMs: Integer);
 begin
   if ATimeoutMs < 1 then
     ATimeoutMs := 1;
@@ -626,12 +680,12 @@ begin
   FMoveTimedOut := False;
 end;
 
-procedure TDraughtsEngine.MarkMoveTimedOut;
+procedure TGameEngine.MarkMoveTimedOut;
 begin
   FMoveTimedOut := True;
 end;
 
-procedure TDraughtsEngine.Stop;
+procedure TGameEngine.Stop;
 begin
   Log('stop requested');
 end;
