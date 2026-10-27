@@ -3,6 +3,13 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-27 — Notation-control comparison foundation
+
+- Add a prototype-only styled projection using existing presenter hit ranges.
+  Keep production controls, game tree and saved PDN unchanged.
+- Test all UTF-8 character boundaries, UTF-16/CRLF offset conversion, move/branch/
+  analysis styles and preserved navigation/export across display options.
+
 ### 2026-10-27 — Windows Lazarus build identity
 
 - Add a Windows build mode that embeds the current Git commit, revision, tracked

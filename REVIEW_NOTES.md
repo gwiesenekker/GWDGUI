@@ -1,5 +1,15 @@
 # Responses to Claude's reviews
 
+## Notation-control comparison foundation — 2026-10-27
+
+Start the requested TMemo/SynEdit/RichMemo experiment outside production code.
+The shared document delegates rendering and hit testing to the existing notation
+presenter and adds disposable styles and indexed position conversion. A headless
+regression covers Unicode including non-BMP characters, UTF-16 and CRLF offsets,
+mainline/variation/PV ranges and unchanged tree exports across display filters.
+RichMemo Windows offsets require UTF-16; GTK offsets use Unicode characters.
+The graphical comparison and timings follow as a separate step. No push.
+
 ## Windows source builds — 2026-10-27
 
 Fix the Windows compile error caused by FPC 3.2.2 omitting the documented

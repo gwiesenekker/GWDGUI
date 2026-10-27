@@ -23,6 +23,7 @@ CHECKS=(
   game_runner_history_check.pas
   running_game_lifecycle_check.pas
   analysis_coordinator_check.pas
+  notation_prototype_document_check.pas
   notation_presentation_check.pas
   notation_analysis_order_check.pas
   displayed_position_check.pas
