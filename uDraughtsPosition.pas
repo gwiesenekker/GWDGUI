@@ -57,6 +57,7 @@ type
     function DefaultStartingFEN: string; override;
     function SideFromFEN(const AFEN: string): TGameSide; override;
     function CreatePosition: TGamePosition; override;
+    function CreatePositionFromFEN(const AFEN: string): TGamePosition; override;
     function SameMove(const A, B: string): Boolean; override;
   end;
 
@@ -324,8 +325,34 @@ end;
 
 function TDraughtsVariant.CreatePosition: TGamePosition;
 begin
+  // The board constructor already sets up the standard starting position;
+  // load only when a descendant variant defines another default.
   Result := TDraughtsPosition.Create;
-  Result.LoadFromFEN(DefaultStartingFEN);
+  if DefaultStartingFEN <> uDraughtsBoard.DefaultStartingFEN then
+    try
+      Result.LoadFromFEN(DefaultStartingFEN);
+    except
+      Result.Free;
+      raise;
+    end;
+end;
+
+function TDraughtsVariant.CreatePositionFromFEN(const AFEN: string): TGamePosition;
+var
+  LFEN: string;
+begin
+  // One FEN load per replay, as before the position boundary.
+  LFEN := Trim(AFEN);
+  if LFEN = '' then
+    LFEN := DefaultStartingFEN;
+  Result := TDraughtsPosition.Create;
+  try
+    if LFEN <> uDraughtsBoard.DefaultStartingFEN then
+      Result.LoadFromFEN(LFEN);
+  except
+    Result.Free;
+    raise;
+  end;
 end;
 
 initialization

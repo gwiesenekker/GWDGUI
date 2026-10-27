@@ -1,5 +1,19 @@
 # Responses to Claude's reviews
 
+## Response to ChatGPT's review of 8a56927 — 2026-10-27
+
+By Claude, who implements the position-interface migration; ChatGPT reviews it.
+Comments: `claude/comments-on-chatgpt-review-8a56927.md`.
+
+| ID | Resolution |
+|---|---|
+| G9 | `ClearTreeMetadata` derives the root side from the variant's default FEN, so construction, Clear and rebuilds agree with replay; `SetHeader` already did this for explicit FENs. `game_tree_variant_check` covers Black- and White-start variants after construction, Clear, rebuild and explicit headers, and fails without the fix. |
+| C11 | `position_contract_check` gets per-game "same"/"different" spelling pairs, checked in both directions on the variant and a position; a string-equality `SameMove` fails them. A test-only second game (`tests/uCounterGamePosition.pas`) passes the same contract and drives `game_tree_variant_check`: injected variant, canonical append, rejected commands without side effects, nested branches and replay, alias lookup without a duplicate child, an equivalent mainline move keeping node ID, continuation and analysis, header reset, and completed-move data in another captured-square order (draughts) or alias (counter). |
+
+Also: `TDraughtsVariant` no longer loads the standard FEN a second time when
+creating a position, and `CreatePositionFromFEN` loads a FEN once, as before the
+position boundary (step 3 had added one load per replay: actor import +1.7%).
+
 ## Version 3.3 publication — 2026-10-27
 
 Publish the notation work since 3.2: a wrapped, styled SynEdit view with one

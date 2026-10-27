@@ -90,7 +90,7 @@ type
     function CreatePosition: TGamePosition; virtual; abstract;
     // A position loaded from AFEN, or from DefaultStartingFEN when AFEN is
     // empty. Raises EConvertError for invalid text.
-    function CreatePositionFromFEN(const AFEN: string): TGamePosition;
+    function CreatePositionFromFEN(const AFEN: string): TGamePosition; virtual;
     // Equality of move texts, independent of a position (canonical moves and
     // the game's equivalent spellings). Generic code never compares move text
     // itself.

@@ -5,6 +5,25 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-27 — Position boundary: root side, second test game (review G9, C11)
+
+- G9: a tree's root now takes its side from the variant's default starting
+  FEN after construction, Clear and rebuilds, as `SetHeader` already did for
+  explicit FENs. Draughts starts with White, so GWDGUI's behaviour is unchanged.
+- C11: `position_contract_check` checks equivalent and different move spellings
+  per game, in both directions (379,016 checks). A test-only counter game
+  (`tests/uCounterGamePosition.pas`) passes the same contract.
+- New `game_tree_variant_check` (in the regression sweep) runs the tree, actor
+  and builder on injected counter variants and checks completed-move data in
+  another captured-square order on draughts.
+- Creating a draughts position no longer loads the standard FEN twice, and a
+  replay loads its FEN once, as before step 3.
+- Regression, lifecycle, DXP, GUI and tournament suites pass; performance
+  outputs are identical. Against the code before step 3 (`performance_check
+  ... 300 30 90 5`, three interleaved runs, 15 samples per operation), actor
+  import is about 3% slower; replay, notation and storage are within the
+  measurement noise (about ±10% for the short default run). No push.
+
 ### 2026-10-27 — Clicking after the moves no longer raises "Column"
 
 - QA: clicking in the moves window to the right of a short game's notation

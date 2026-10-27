@@ -401,6 +401,10 @@ begin
   FBlackName := 'Black';
   FResultText := '*';
   FStartingFEN := FVariant.DefaultStartingFEN;
+  // The root's side always follows the starting FEN (review G9); SetHeader
+  // does the same when a header supplies another FEN.
+  if FRoot <> nil then
+    FRoot.FSideToMove := FVariant.SideFromFEN(FStartingFEN);
   FStatusText := '';
   FGameState := gosWaiting;
   FHasTimeControl := False;

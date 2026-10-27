@@ -12,7 +12,7 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  Classes, SysUtils, uGamePosition, uDraughtsPosition;
+  Classes, SysUtils, uGamePosition, uDraughtsPosition, uCounterGamePosition;
 
 type
   TPerftFixture = record
@@ -258,47 +258,112 @@ begin
   end;
 end;
 
+{ Move-text equivalence (D16/P26): every pair is checked in both directions
+  on the variant and on a position. A plain string comparison fails the "same"
+  pairs; a too-loose one fails the "different" pairs. }
+procedure CheckSpellings(const AFEN: string; const ASame, ADifferent: array of string);
+var
+  I: Integer;
+  LPosition: TGamePosition;
+begin
+  Check(not Odd(Length(ASame)) and not Odd(Length(ADifferent)), 'spelling fixtures come in pairs');
+  LPosition := Variant.CreatePositionFromFEN(AFEN);
+  try
+    I := 0;
+    while I < High(ASame) do
+    begin
+      Check(Variant.SameMove(ASame[I], ASame[I + 1]) and Variant.SameMove(ASame[I + 1], ASame[I]),
+        'variant: ' + ASame[I] + ' and ' + ASame[I + 1] + ' are the same move');
+      Check(LPosition.SameMove(ASame[I], ASame[I + 1]) and LPosition.SameMove(ASame[I + 1], ASame[I]),
+        'position: ' + ASame[I] + ' and ' + ASame[I + 1] + ' are the same move');
+      Inc(I, 2);
+    end;
+    I := 0;
+    while I < High(ADifferent) do
+    begin
+      Check(not Variant.SameMove(ADifferent[I], ADifferent[I + 1]) and
+        not Variant.SameMove(ADifferent[I + 1], ADifferent[I]),
+        'variant: ' + ADifferent[I] + ' and ' + ADifferent[I + 1] + ' are different moves');
+      Check(not LPosition.SameMove(ADifferent[I], ADifferent[I + 1]) and
+        not LPosition.SameMove(ADifferent[I + 1], ADifferent[I]),
+        'position: ' + ADifferent[I] + ' and ' + ADifferent[I + 1] + ' are different moves');
+      Inc(I, 2);
+    end;
+  finally
+    LPosition.Free;
+  end;
+end;
+
+procedure AddFixture(var AFixtures: TPerftFixtures; const AFEN: string;
+  const ACounts: array of QWord);
+var
+  I, N: Integer;
+begin
+  N := Length(AFixtures);
+  SetLength(AFixtures, N + 1);
+  AFixtures[N].FEN := AFEN;
+  SetLength(AFixtures[N].Counts, Length(ACounts));
+  for I := 0 to High(ACounts) do
+    AFixtures[N].Counts[I] := ACounts[I];
+end;
+
 procedure RunDraughts;
 var
   LFixtures: TPerftFixtures;
-  LVariant: TGameVariant;
   LPosition: TGamePosition;
-
-  procedure AddFixture(const AFEN: string; const ACounts: array of QWord);
-  var
-    I, N: Integer;
-  begin
-    N := Length(LFixtures);
-    SetLength(LFixtures, N + 1);
-    LFixtures[N].FEN := AFEN;
-    SetLength(LFixtures[N].Counts, Length(ACounts));
-    for I := 0 to High(ACounts) do
-      LFixtures[N].Counts[I] := ACounts[I];
-  end;
-
 begin
-  LVariant := DraughtsVariant;
-  Variant := LVariant;
-  Check(DefaultGameVariant = LVariant, 'linking the draughts unit registers it as the default variant');
-  Check(LVariant.Name <> '', 'variant has a name');
+  Variant := DraughtsVariant;
+  WriteLn('-- ', Variant.Name);
+  Check(DefaultGameVariant = Variant, 'linking the draughts unit registers it as the default variant');
+  Check(Variant.Name <> '', 'variant has a name');
   // International draughts perft from the initial position (published values).
-  AddFixture(LVariant.DefaultStartingFEN, [9, 81, 658, 4265, 27117, 167140]);
-  CheckPerft(LVariant, LFixtures);
-  CheckFen(LVariant,
-    [LVariant.DefaultStartingFEN, 'B:W31-50:B1-20', 'W:WK21:B31,39,14,17,19',
+  LFixtures := nil;
+  AddFixture(LFixtures, Variant.DefaultStartingFEN, [9, 81, 658, 4265, 27117, 167140]);
+  CheckPerft(Variant, LFixtures);
+  CheckFen(Variant,
+    [Variant.DefaultStartingFEN, 'B:W31-50:B1-20', 'W:WK21:B31,39,14,17,19',
      'B:WK26:B14', 'W:W38,45:B33,24,K6', 'W:WK32:B27,28'],
     ['', 'X:W31:B1', 'W:W51:B1', 'W:W31,31:B1', 'W:Wx:B1']);
+  CheckSpellings('W:WK21:B31,39,14,17,19',
+    ['30x10x24x14', '30x10x14x24', '32-28', ' 32-28 ', '21x26x17x19x39x31', '21x26x31x39x19x17'],
+    ['30x10x24x14', '30x10x24x15', '32-28', '32-27', '21x26x17x19x39x31', '21x26x17x14x39x31']);
   // Same-target captures (U8), king captures, black to move, promotions.
-  LPosition := LVariant.CreatePositionFromFEN('W:WK21:B31,39,14,17,19');
+  LPosition := Variant.CreatePositionFromFEN('W:WK21:B31,39,14,17,19');
   try CheckMovesOf(LPosition, 'same-target captures'); finally LPosition.Free; end;
-  CheckRandomLines(LVariant,
-    [LVariant.DefaultStartingFEN, 'B:W31-50:B1-20', 'W:WK32:B27,28,18,19,8,9',
+  CheckRandomLines(Variant,
+    [Variant.DefaultStartingFEN, 'B:W31-50:B1-20', 'W:WK32:B27,28,18,19,8,9',
      'W:W6,7,8,K45:B44,43,42,K1'], 8, 60);
+end;
+
+{ The counter test game proves that the contract checks are not tied to draughts. }
+procedure RunCounter;
+var
+  LFixtures: TPerftFixtures;
+  LVariant: TCounterVariant;
+begin
+  LVariant := TCounterVariant.Create;
+  try
+    Variant := LVariant;
+    WriteLn('-- ', Variant.Name);
+    Check(DefaultGameVariant <> Variant, 'a test game does not replace the registered default');
+    LFixtures := nil;
+    // Sequences of +1/+2 steps from 0 that stay within the limit 5.
+    AddFixture(LFixtures, 'W:0', [2, 4, 7, 5, 1, 0]);
+    AddFixture(LFixtures, 'B:3', [2, 1, 0]);
+    CheckPerft(Variant, LFixtures);
+    CheckFen(Variant, ['W:0', 'B:0', 'W:5', 'B:4'], ['', 'W', 'X:1', 'W:6', 'W:-1', 'W:x']);
+    CheckSpellings('W:0', ['+1', 'p1', '+2', 'TWO', 'one', ' +1 '], ['+1', '+2', 'p1', 'p2', '+1', '+3']);
+    CheckRandomLines(Variant, ['W:0', 'B:1'], 4, 10);
+  finally
+    Variant := nil;
+    LVariant.Free;
+  end;
 end;
 
 begin
   PrintPerft := ParamStr(1) = '--print-perft';
   RunDraughts;
+  RunCounter;
   if Failures > 0 then
   begin
     WriteLn(Failures, ' of ', Checks, ' position contract checks failed');
