@@ -1,5 +1,23 @@
 # Responses to Claude's reviews
 
+## Common notation font chooser — 2026-10-27
+
+Add Font... under Notation preferences, using the standard native font dialog
+for family and point size. It applies only to the moves window. Keep a single
+font across all categories; bold/italic remain category settings rather than
+copying the chooser’s font styles. Recommend monospaced fonts in the dialog.
+Save applies/persists the choice; cancel leaves it unchanged and Defaults restores
+the previous platform defaults (DejaVu Sans Mono/Consolas, 11 pt). Missing or
+invalid persisted font values retain those defaults.
+
+The regression substitutes font selection to exercise accept/cancel and the
+actual Font.../Save/Defaults buttons without a blocking native chooser. It also
+checks font JSON round trips, live view font/size, retained Unicode selection,
+actual move mouse messages before/after font changes, source-specific PV styles
+and unchanged tree/PDN. Full headless/source-audit/archive and GTK preservation/
+boundary/delivery/Help/notation-preferences suites pass. Native Windows and native
+font-dialog interaction still need platform verification. Manual updated; no push.
+
 ## Separate engine/annotator PV preferences — 2026-10-27
 
 Add Engine PVs (blue) and Annotator PVs (purple) categories, retaining Auto Play

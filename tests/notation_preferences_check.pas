@@ -5,6 +5,13 @@ uses {$IFDEF UNIX}cthreads, cwstring,{$ENDIF} Interfaces, Forms, Classes, SysUti
   uNotationStyles, uNotationPresentation, uGameTree, uGameTreePdn, uGameNotationView,
   uNotationHighlighter;
 type
+  TFontChoicePreferences = class(TPreferencesForm)
+  public
+    AcceptFont: Boolean;
+    ChosenName: string; ChosenSize: Integer;
+  protected
+    function SelectNotationFont(AFont: TFont): Boolean; override;
+  end;
   TReceiver = class
     Called: Boolean;
     Preferences: TGuiPreferences;
@@ -13,6 +20,11 @@ type
     procedure Clicked(Sender: TObject);
     procedure Accepted(Sender: TObject; const P: TGuiPreferences);
   end;
+function TFontChoicePreferences.SelectNotationFont(AFont: TFont): Boolean;
+begin
+  AFont.Name := ChosenName; AFont.Size := ChosenSize;
+  Result := AcceptFont;
+end;
 procedure TReceiver.Accepted(Sender: TObject; const P: TGuiPreferences);
 begin Called := True; Preferences := P; end;
 procedure TReceiver.Clicked(Sender: TObject);
@@ -22,7 +34,7 @@ end;
 procedure Check(B: Boolean; const S: string);
 begin if not B then raise Exception.Create(S); end;
 var Prefs, Loaded: TGuiPreferences; S: TNotationStyle; Existing: TMemoryStream;
-    HadFile: Boolean; Lines: TStringList; Dialog: TPreferencesForm; Receiver: TReceiver;
+    HadFile: Boolean; Lines: TStringList; Dialog: TFontChoicePreferences; Receiver: TReceiver;
     Host: TForm; View: TGameNotationView; Tree: TGameTree; Presenter: TNotationPresentation;
     Before, Expected: string; R: TNotationRange; Highlighter: TNotationRangeHighlighter;
     I, J, Offset: Integer; Hit: TMoveVariationHit; P, Pixel: TPoint; B: TCheckBox;
@@ -35,6 +47,7 @@ begin
     Dialog := nil; Receiver := nil; Host := nil; Tree := nil; Presenter := nil;
     try
       Prefs := DefaultGuiPreferences;
+      Prefs.NotationFontName := 'Courier New'; Prefs.NotationFontSize := 15;
       for S := Low(S) to High(S) do
       begin
         Prefs.NotationStyles[S].Color := RGBToColor(30+Ord(S)*20, 60, 90);
@@ -46,11 +59,15 @@ begin
         Check((Loaded.NotationStyles[S].Color = Prefs.NotationStyles[S].Color) and
           (Loaded.NotationStyles[S].Bold = Prefs.NotationStyles[S].Bold) and
           (Loaded.NotationStyles[S].Italic = Prefs.NotationStyles[S].Italic), 'style persistence');
+      Check((Loaded.NotationFontName = Prefs.NotationFontName) and
+        (Loaded.NotationFontSize = Prefs.NotationFontSize), 'notation font persistence');
       Check(Loaded.MainBoardLightColor = Prefs.MainBoardLightColor, 'existing board preferences preserved');
       Lines := TStringList.Create;
       try
-        Lines.Text := '{"main_board_light":"#123456","notation_1_color":"invalid","notation_1_bold":"invalid"}';
+        Lines.Text := '{"main_board_light":"#123456","notation_1_color":"invalid","notation_1_bold":"invalid","notation_font_name":"  ","notation_font_size":-5}';
         Lines.SaveToFile(PreferencesJsonFileName); LoadGuiPreferences(Loaded);
+        Check((Loaded.NotationFontName = DefaultNotationFontName) and
+          (Loaded.NotationFontSize = DefaultNotationFontSize), 'invalid font settings retain defaults');
         Check(Loaded.NotationStyles[nsPlayed].Bold, 'old/malformed style values retain defaults');
         Check(Loaded.NotationStyles[nsVariation].Italic, 'missing styles retain defaults');
         Check(Loaded.MainBoardLightColor = RGBToColor($12,$34,$56), 'legacy preferences still load');
@@ -63,7 +80,7 @@ begin
         Check((Loaded.NotationStyles[nsAnnotatorPV].Color = RGBToColor($aa,0,$bb)) and
           not Loaded.NotationStyles[nsAnnotatorPV].Bold, 'explicit annotator settings override legacy shared settings');
       finally Lines.Free; end;
-      Receiver := TReceiver.Create; Dialog := TPreferencesForm.Create(nil);
+      Receiver := TReceiver.Create; Dialog := TFontChoicePreferences.Create(nil);
       Dialog.OnAccepted := @Receiver.Accepted; Dialog.StartEdit(Prefs);
       Check((Dialog.FindComponent('NotationTab') is TTabSheet) and
         (TTabSheet(Dialog.FindComponent('NotationTab')).Caption = 'Notation'), 'separate Notation tab');
@@ -73,9 +90,21 @@ begin
         Check(B.Checked = Prefs.NotationStyles[S].Bold, 'edit opens with saved bold'); B.Checked := not B.Checked;
         B := TCheckBox(Dialog.FindComponent('NotationItalic'+IntToStr(Ord(S)))); B.Checked := not B.Checked;
       end;
-      Check(not Receiver.Called, 'editing styles does not apply early');
+      Dialog.ChosenName := DefaultNotationFontName; Dialog.ChosenSize := 17;
+      Dialog.AcceptFont := False;
+      TButton(Dialog.FindComponent('NotationFontChoose')).Click;
+      Check(Pos('Courier New, 15 pt', TLabel(Dialog.FindComponent('NotationFontSummary')).Caption) > 0,
+        'cancelled font chooser preserves font');
+      Check(not Receiver.Called, 'editing styles/font does not apply early');
       TButton(Dialog.FindComponent('PreferencesApply')).Click;
       Check(Receiver.Called, 'Apply callback');
+      Check((Receiver.Preferences.NotationFontName = 'Courier New') and
+        (Receiver.Preferences.NotationFontSize = 15), 'cancelled font choice cannot be saved');
+      Dialog.AcceptFont := True;
+      TButton(Dialog.FindComponent('NotationFontChoose')).Click;
+      TButton(Dialog.FindComponent('PreferencesApply')).Click;
+      Check((Receiver.Preferences.NotationFontName = DefaultNotationFontName) and
+        (Receiver.Preferences.NotationFontSize = 17), 'accepted font chooser saves family and size');
       for S := Low(S) to High(S) do
         Check((Receiver.Preferences.NotationStyles[S].Bold <> Prefs.NotationStyles[S].Bold) and
           (Receiver.Preferences.NotationStyles[S].Italic <> Prefs.NotationStyles[S].Italic), 'Apply collects independent style choices');
@@ -84,6 +113,8 @@ begin
       Check(Receiver.Preferences.NotationStyles[nsPlayed].Bold and
         Receiver.Preferences.NotationStyles[nsVariation].Italic and
         (Receiver.Preferences.NotationStyles[nsVariation].Color = $008000), 'Defaults restores styles');
+      Check((Receiver.Preferences.NotationFontName = DefaultNotationFontName) and
+        (Receiver.Preferences.NotationFontSize = DefaultNotationFontSize), 'Defaults restores notation font');
       TTabSheet(Dialog.FindComponent('NotationTab')).PageControl.ActivePage := TTabSheet(Dialog.FindComponent('NotationTab'));
       Dialog.Hide;
       Host := TForm.CreateNew(nil); Host.SetBounds(30,30,600,400);
@@ -108,8 +139,19 @@ begin
       Check((Receiver.ClickCount > 0) and (Receiver.ClickTarget.Kind = nbMainline) and
         (Receiver.ClickTarget.Ply = 2), 'native mouse click resolves the played move');
       View.SelStart := R.Start; View.SelLength := R.Length;
-      View.ApplyStyles(Prefs.NotationStyles); Application.ProcessMessages;
-      Check((View.SelStart = R.Start) and (View.SelText = Expected), 'style application preserves selection');
+      View.ApplyAppearance(Prefs.NotationFontName, Prefs.NotationFontSize, Prefs.NotationStyles);
+      Application.ProcessMessages;
+      Check((View.Font.Name = Prefs.NotationFontName) and (View.Font.Size = Prefs.NotationFontSize),
+        'chosen font applies to notation');
+      Check((View.SelStart = R.Start) and (View.SelText = Expected), 'font/style application preserves selection');
+      Receiver.ClickCount := 0;
+      Pixel := View.RowColumnToPixels(View.LogicalToPhysicalPos(View.Document.LinePoint(R.Start)));
+      Inc(Pixel.X, 2); Inc(Pixel.Y, 2);
+      View.Perform(LM_LBUTTONDOWN, 0, LPARAM((Pixel.Y shl 16) or (Pixel.X and $FFFF)));
+      View.Perform(LM_LBUTTONUP, 0, LPARAM((Pixel.Y shl 16) or (Pixel.X and $FFFF)));
+      Check((Receiver.ClickCount > 0) and (Receiver.ClickTarget.Kind = nbMainline) and
+        (Receiver.ClickTarget.Ply = 2), 'native move click remains correct after changing font');
+      View.SelStart := R.Start; View.SelLength := R.Length;
       Highlighter := TNotationRangeHighlighter(View.Highlighter);
       Check((Highlighter.IdentifierAttribute <> nil) and (Highlighter.CommentAttribute <> nil) and
         (Highlighter.KeywordAttribute <> nil) and (Highlighter.StringAttribute <> nil) and

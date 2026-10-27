@@ -189,3 +189,9 @@ does not add RichMemo to the production application or the normal GUI suite.
 italic controls, Save/Defaults, JSON round trips, legacy/malformed style defaults,
 actual highlighter attributes and unchanged UTF-8 selection/tree exports. The GTK
 suite runs it. Native Windows remains untested.
+
+`notation_analysis_source_check` verifies explicit source metadata and styles for
+identical engine/annotator/Auto Play PVs, empty/White/Black-start games, score and
+annotation hiding, and every PV filter combination. The preferences GUI check
+also covers separate source colours, legacy migration, font accept/cancel/Save/
+Defaults, font JSON validation and native clicks before/after font changes.

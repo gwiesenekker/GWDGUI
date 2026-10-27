@@ -3,6 +3,17 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-27 — Choose the common notation font
+
+- Add Font... on the Notation preferences tab for one font family/point size
+  across the moves window. Keep per-category colour/bold/italic independent.
+- Save persists and applies the font; cancellation leaves it unchanged, and
+  Defaults restores DejaVu Sans Mono 11 pt on Linux or Consolas 11 pt on Windows.
+- Test persistence, malformed settings, chooser accept/cancel/Save/Defaults and
+  unchanged Unicode selection, native move clicks and PDN after font changes.
+- Full headless/source-audit/archive and GTK suites pass. Update the manual;
+  native Windows validation remains outstanding. No push.
+
 ### 2026-10-27 — Separate engine and annotator PV styles
 
 - Add independent Engine PVs and Annotator PVs colour/bold/italic preferences;

@@ -9,10 +9,16 @@ type
   end;
   TNotationStyles = array[TNotationStyle] of TNotationStyleSetting;
 const
+  DefaultNotationFontSize = 11;
   NotationStyleNames: array[TNotationStyle] of string =
     ('Comments / other text', 'Played moves', 'Variations', 'Auto Play PVs', 'Engine PVs', 'Annotator PVs');
+function DefaultNotationFontName: string;
 function DefaultNotationStyles: TNotationStyles;
 implementation
+function DefaultNotationFontName: string;
+begin
+  {$IFDEF MSWINDOWS}Result := 'Consolas';{$ELSE}Result := 'DejaVu Sans Mono';{$ENDIF}
+end;
 function DefaultNotationStyles: TNotationStyles;
 var S: TNotationStyle;
 begin

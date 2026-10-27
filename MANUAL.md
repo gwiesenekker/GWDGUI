@@ -663,9 +663,15 @@ The **Notation** tab controls the game moves window. Choose a colour and set
 Customised older shared PV styles are retained for the new source categories
 until you change them; otherwise engine and annotator PVs get distinct defaults.
 
-The moves window uses SynEdit with wrapping and one font family/size (DejaVu
-Sans Mono on Linux, Consolas on Windows). Changing these styles affects only
-presentation: move/variation/PV clicks, Left/Right navigation, selection/copy and
+Use **Font...** on the Notation tab to choose the font family and point size for
+the whole moves window. Monospaced fonts work best. Bold and italic remain
+independent per-category settings. Cancelling the chooser keeps the current
+choice; **Save** applies and remembers it, and **Defaults** restores DejaVu Sans
+Mono 11 pt on Linux or Consolas 11 pt on Windows. This is separate from the
+application's general UI font.
+
+The moves window uses SynEdit with wrapping and one font family/size. Changing
+these settings affects only presentation: move/variation/PV clicks, Left/Right navigation, selection/copy and
 saved PDN keep their existing meaning. Colours and styles apply when you choose
 **Save**; editing the dialog or choosing **Defaults** alone does not apply them.
 

@@ -1309,7 +1309,8 @@ end;
 
 procedure TMainForm.ApplyPreferences;
 begin
-  if FGameMoveMemo <> nil then FGameMoveMemo.ApplyStyles(FPreferences.NotationStyles);
+  if FGameMoveMemo <> nil then FGameMoveMemo.ApplyAppearance(
+    FPreferences.NotationFontName, FPreferences.NotationFontSize, FPreferences.NotationStyles);
   ApplyBoardTheme(FBoardControl, False);
   ApplyBoardTheme(FMiniBoardControl, False);
   ApplyBoardTheme(FPopoutBoardControl, False);

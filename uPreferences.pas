@@ -12,6 +12,8 @@ type
 
   TGuiPreferences = record
     NotationStyles: TNotationStyles;
+    NotationFontName: string;
+    NotationFontSize: Integer;
     MainBoardLightColor: TColor;
     MainBoardDarkColor: TColor;
     AnalysisBoardLightColor: TColor;
@@ -43,6 +45,8 @@ end;
 function DefaultGuiPreferences: TGuiPreferences;
 begin
   Result.NotationStyles := DefaultNotationStyles;
+  Result.NotationFontName := DefaultNotationFontName;
+  Result.NotationFontSize := DefaultNotationFontSize;
   Result.MainBoardLightColor := RGBToColor(228, 207, 176);
   Result.MainBoardDarkColor := RGBToColor(98, 73, 53);
   Result.AnalysisBoardLightColor := RGBToColor(206, 228, 246);
@@ -111,6 +115,7 @@ var
   FileName: string;
   Lines: TStringList;
   S: TNotationStyle; Key: string; Defaults: TNotationStyles;
+  Value: TJSONData; FontSize: Integer;
 begin
   APrefs := DefaultGuiPreferences;
   Defaults := DefaultNotationStyles;
@@ -129,6 +134,12 @@ begin
   try
     if Data.JSONType = jtObject then
     begin
+      Value := TJSONObject(Data).Find('notation_font_name');
+      if (Value <> nil) and (Value.JSONType = jtString) and (Trim(Value.AsString) <> '') then
+        APrefs.NotationFontName := Trim(Value.AsString);
+      Value := TJSONObject(Data).Find('notation_font_size');
+      if (Value <> nil) and (Value.JSONType = jtNumber) and
+        TryStrToInt(Value.AsJSON, FontSize) and (FontSize > 0) then APrefs.NotationFontSize := FontSize;
       for S := Low(S) to High(S) do
       begin
         // Keep customised legacy shared-PV styles; otherwise use distinct defaults.
@@ -181,6 +192,8 @@ begin
       Data.Add(Key+'_bold', APrefs.NotationStyles[S].Bold);
       Data.Add(Key+'_italic', APrefs.NotationStyles[S].Italic);
     end;
+    Data.Add('notation_font_name', APrefs.NotationFontName);
+    Data.Add('notation_font_size', APrefs.NotationFontSize);
     Data.Add('main_board_light', ColorToJsonText(APrefs.MainBoardLightColor));
     Data.Add('main_board_dark', ColorToJsonText(APrefs.MainBoardDarkColor));
     Data.Add('analysis_board_light',

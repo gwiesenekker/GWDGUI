@@ -15,6 +15,8 @@ type
   TPreferencesForm = class(TForm)
   private
     FColorDialog: TColorDialog;
+    FFontDialog: TFontDialog;
+    FNotationFontLabel: TLabel;
     FEvaluationMaxEdit: TEdit;
     FEvaluationScaleGroup: TRadioGroup;
     FOnAccepted: TPreferencesAcceptedEvent;
@@ -22,6 +24,8 @@ type
     FSwatches: array[0..8+Ord(High(TNotationStyle))] of TPanel;
     FNotationBold, FNotationItalic: array[TNotationStyle] of TCheckBox;
     FNotationSamples: array[TNotationStyle] of TLabel;
+    procedure ChooseNotationFontClick(Sender: TObject);
+    procedure UpdateNotationFontLabel;
     procedure AddNotationRow(AParent: TWinControl; AStyle: TNotationStyle; ATop: Integer);
     procedure NotationChanged(Sender: TObject);
     procedure UpdateNotationSamples;
@@ -34,6 +38,8 @@ type
     procedure DefaultsClick(Sender: TObject);
     procedure SetColorByIndex(AIndex: Integer; AColor: TColor);
     procedure UpdateSwatches;
+  protected
+    function SelectNotationFont(AFont: TFont): Boolean; virtual;
   public
     constructor Create(AOwner: TComponent); override;
     procedure StartEdit(const APreferences: TGuiPreferences);
@@ -55,6 +61,7 @@ var
   LGroup: TGroupBox;
   LPageControl: TPageControl;
   LTab: TTabSheet;
+  LFontButton: TButton;
   S: TNotationStyle;
 begin
   inherited Create(AOwner);
@@ -67,6 +74,8 @@ begin
   Constraints.MinHeight := 587;
 
   FColorDialog := TColorDialog.Create(Self);
+  FFontDialog := TFontDialog.Create(Self);
+  FFontDialog.Options := [fdNoStyleSel];
 
   LButtonPanel := TPanel.Create(Self);
   LButtonPanel.Parent := Self;
@@ -143,10 +152,16 @@ begin
   with TLabel.Create(Self) do
   begin
     Parent := LTab; SetBounds(12, 12, 440, 48); WordWrap := True;
-    Caption := 'Game moves use one font. Choose colours and bold/italic styles below.';
+    Caption := 'One font applies to all notation. Monospaced fonts work best. Set colours and bold/italic styles below.';
   end;
   LGroup := TGroupBox.Create(Self); LGroup.Parent := LTab;
-  LGroup.SetBounds(8, 66, 464, 40+46*(Ord(High(TNotationStyle))+1)); LGroup.Caption := 'Moves window';
+  LGroup.SetBounds(8, 110, 464, 40+46*(Ord(High(TNotationStyle))+1)); LGroup.Caption := 'Moves window';
+  FNotationFontLabel := TLabel.Create(Self); FNotationFontLabel.Parent := LTab;
+  FNotationFontLabel.SetBounds(12, 62, 320, 30); FNotationFontLabel.Name := 'NotationFontSummary';
+  FNotationFontLabel.AutoSize := False; FNotationFontLabel.WordWrap := True;
+  LFontButton := TButton.Create(Self); LFontButton.Parent := LTab;
+  LFontButton.SetBounds(352, 58, 110, 30); LFontButton.Caption := 'Font...';
+  LFontButton.Name := 'NotationFontChoose'; LFontButton.OnClick := @ChooseNotationFontClick;
   for S := Low(S) to High(S) do AddNotationRow(LGroup, S, 30+Ord(S)*46);
 
   LDefaultsButton := TButton.Create(Self);
@@ -170,6 +185,31 @@ begin
   LApplyButton.BorderSpacing.Right := 8;
   LApplyButton.Caption := 'Save'; LApplyButton.Name := 'PreferencesApply';
   LApplyButton.OnClick := @ApplyClick;
+end;
+
+function TPreferencesForm.SelectNotationFont(AFont: TFont): Boolean;
+begin
+  FFontDialog.Font.Assign(AFont);
+  Result := FFontDialog.Execute;
+  if Result then AFont.Assign(FFontDialog.Font);
+end;
+procedure TPreferencesForm.ChooseNotationFontClick(Sender: TObject);
+var Selected: TFont;
+begin
+  Selected := TFont.Create;
+  try
+    Selected.Name := FPreferences.NotationFontName; Selected.Size := FPreferences.NotationFontSize;
+    if SelectNotationFont(Selected) and (Trim(Selected.Name) <> '') and (Selected.Size > 0) then
+    begin
+      FPreferences.NotationFontName := Selected.Name; FPreferences.NotationFontSize := Selected.Size;
+      UpdateNotationFontLabel;
+    end;
+  finally Selected.Free; end;
+end;
+procedure TPreferencesForm.UpdateNotationFontLabel;
+begin
+  FNotationFontLabel.Caption := Format('Font: %s, %d pt',
+    [FPreferences.NotationFontName, FPreferences.NotationFontSize]);
 end;
 
 procedure TPreferencesForm.AddNotationRow(AParent: TWinControl; AStyle: TNotationStyle; ATop: Integer);
@@ -284,6 +324,7 @@ procedure TPreferencesForm.StartEdit(const APreferences: TGuiPreferences);
 var S: TNotationStyle;
 begin
   FPreferences := APreferences;
+  UpdateNotationFontLabel;
   for S := Low(S) to High(S) do
   begin
     FNotationBold[S].Checked := FPreferences.NotationStyles[S].Bold;

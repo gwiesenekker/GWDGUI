@@ -18,6 +18,7 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure SetPresentation(Presenter: TNotationPresentation);
+    procedure ApplyAppearance(const AFontName: string; AFontSize: Integer; const Styles: TNotationStyles);
     procedure ApplyStyles(const Styles: TNotationStyles);
     property SelStart: Integer read GetByteStart write SetByteStart;
     property SelLength: Integer read GetByteLength write SetByteLength;
@@ -33,8 +34,8 @@ begin
   ReadOnly := True; Gutter.Visible := False; RightGutter.Visible := False;
   RightEdge := 0; HideSelection := False; WantTabs := False; Color := clWhite;
   ParentFont := False;
-  {$IFDEF MSWINDOWS}Font.Name := 'Consolas';{$ELSE}Font.Name := 'DejaVu Sans Mono';{$ENDIF}
-  Font.Size := 11;
+  Font.Name := DefaultNotationFontName;
+  Font.Size := DefaultNotationFontSize;
   TLazSynEditLineWrapPlugin.Create(Self);
 end;
 destructor TGameNotationView.Destroy;
@@ -54,6 +55,16 @@ begin
     FNotationHighlighter.Document := FDocument;
     if LNeedsTextAssignment then Lines.Text := FDocument.Text;
     Highlighter := FNotationHighlighter;
+  finally EndUpdate; end;
+end;
+procedure TGameNotationView.ApplyAppearance(const AFontName: string; AFontSize: Integer;
+  const Styles: TNotationStyles);
+begin
+  BeginUpdate;
+  try
+    if Trim(AFontName) <> '' then Font.Name := AFontName;
+    if AFontSize > 0 then Font.Size := AFontSize;
+    ApplyStyles(Styles);
   finally EndUpdate; end;
 end;
 procedure TGameNotationView.ApplyStyles(const Styles: TNotationStyles);
