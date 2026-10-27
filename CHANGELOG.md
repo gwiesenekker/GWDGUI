@@ -3,6 +3,13 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-27 — Windows compiler compatibility
+
+- Use the documented Win32 write-through flag value: FPC 3.2.2 omits its
+  symbolic name. Keep atomic publication and replacement behavior unchanged.
+- Existing atomic-file regressions pass on Linux; native Windows validation
+  remains necessary.
+
 ## Version 3.2 — 2026-10-27
 
 This release improves hint controls and analysis presentation since v3.1.

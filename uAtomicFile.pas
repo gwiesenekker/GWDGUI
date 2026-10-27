@@ -95,7 +95,8 @@ begin
       {$IFDEF MSWINDOWS}CloseHandle(TempHandle);{$ENDIF}
     end;
     {$IFDEF MSWINDOWS}
-    MoveFlags := MOVEFILE_WRITE_THROUGH;
+    // FPC 3.2.2 Windows headers omit MOVEFILE_WRITE_THROUGH (Win32 value $8).
+    MoveFlags := $00000008;
     if AReplaceExisting then MoveFlags := MoveFlags or MOVEFILE_REPLACE_EXISTING;
     WideTemp := UTF8Decode(TempName);
     WideTarget := UTF8Decode(ExpandFileName(AFileName));
