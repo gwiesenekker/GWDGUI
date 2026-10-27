@@ -2,7 +2,7 @@ program performance_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads, cwstring,{$ENDIF} Classes, SysUtils, md5,
   uDraughtsBoard, uPdn, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameOrchestrator;
+  uGameTreePdn, uGameOrchestrator, uDraughtsPosition;
 var
   Games: TList; Game: TPdnGame; Root: TPdnMoveNode; Moves: TStringList;
   TreeActor, Actor: TGameTreeActor; Board: TDraughtsBoard;

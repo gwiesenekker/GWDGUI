@@ -1,7 +1,7 @@
 program notation_analysis_order_check;
 {$mode objfpc}{$H+}
 uses Classes, SysUtils, uDraughtsBoard, uGameTree, uGameTreePdn,
-  uNotationPresentation, uTreeTestUtils;
+  uNotationPresentation, uTreeTestUtils, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 function PvFrom(Board: TDraughtsBoard; Choice: Integer): string;

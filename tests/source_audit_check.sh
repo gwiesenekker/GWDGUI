@@ -47,6 +47,10 @@ fi
 # converts. A generic unit must not use the draughts board or parse move text.
 GENERIC_UNITS=(
   uGamePosition
+  uGameTree
+  uGameTreeActor
+  uGameTreeBuilder
+  uGameTreeCursor
 )
 for unit_name in "${GENERIC_UNITS[@]}"; do
   unit_file="$ROOT_DIR/$unit_name.pas"

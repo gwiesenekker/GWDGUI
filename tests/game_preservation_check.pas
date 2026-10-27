@@ -5,7 +5,7 @@ program game_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, StrUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameOrchestrator, uPdn, uDraughtsBoard, uTreeTestUtils;
+  uGameTreePdn, uGameOrchestrator, uPdn, uDraughtsBoard, uTreeTestUtils, uDraughtsPosition;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -266,7 +266,7 @@ begin
         for I := 0 to Actor.GameTree.BranchCount - 1 do
         begin
           TextToMoveList(Actor.GameTree.BranchPath[I].MovesText, Lines);
-          Check(Actor.GameTree.TryBuildBoardAtNode(
+          Check(TryBuildDraughtsBoardAtNode(Actor.GameTree, 
             Actor.GameTree.FindBranchNode(I, Lines.Count), Board),
             'every imported Black-start variation must replay legally');
         end;

@@ -1,7 +1,7 @@
 program game_runner_history_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uDraughtsBoard, uGameOrchestrator, uGameMoveHistory,
-  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn;
+  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uDraughtsPosition;
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin

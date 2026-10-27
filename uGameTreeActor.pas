@@ -224,7 +224,7 @@ type
 implementation
 
 uses
-  uDraughtsBoard, Math;
+  uGamePosition, Math;
 
 function TGameTreeSearchRecord.SearchRef: TGameTreeSearchRef;
 begin
@@ -891,7 +891,7 @@ end;
 
 function TGameTreeActor.ValidateMoveCommand(ACommand: TGameTreeCommand): Boolean;
 var
-  Board: TDraughtsBoard;
+  Board: TGamePosition;
   Mainline: TStringList;
   Parent: TGameTreePlyNode;
   Ply, ImportIndex: Integer;
@@ -902,31 +902,27 @@ var
     J: Integer;
   begin
     for J := 0 to ACount - 1 do
-    begin
-      Board.PlayMove(AList[J], True, True);
-      AList[J] := Board.MovesPlayed[Board.MovesPlayedCount - 1];
-    end;
+      AList[J] := Board.PlayMoveText(AList[J]);
   end;
 
   procedure LoadStart(const AValue: string);
   begin
     if Trim(AValue) = '' then
-      Board.SetBeginPosition
+      Board.LoadFromFEN(FGameTree.Variant.DefaultStartingFEN)
     else
       Board.LoadFromFEN(AValue);
   end;
 
-  procedure ValidateChildren(Node: TGameTreePlyNode; Position: TDraughtsBoard);
+  procedure ValidateChildren(Node: TGameTreePlyNode; Position: TGamePosition);
   var
     J: Integer;
-    Next: TDraughtsBoard;
+    Next: TGamePosition;
   begin
     for J := 0 to Node.ChildCount - 1 do
     begin
-      Next := TDraughtsBoard.Create;
+      Next := Position.Clone;
       try
-        Next.AssignFrom(Position);
-        Next.PlayMove(Node.Children[J].MoveText, True, True);
+        Next.PlayMoveText(Node.Children[J].MoveText);
         ValidateChildren(Node.Children[J], Next);
       finally
         Next.Free;
@@ -940,7 +936,7 @@ begin
     gtcAppendMainlineSnapshotMove, gtcImportBranch, gtcImportNode, gtcStoreMoveVariation,
     gtcRebuildFromInputs, gtcSetHeader]) then
     Exit;
-  Board := TDraughtsBoard.Create;
+  Board := FGameTree.Variant.CreatePosition;
   Mainline := TStringList.Create;
   try
     try
@@ -967,34 +963,30 @@ begin
                 Parent := FGameTree.Root
               else
                 Parent := FGameTree.MainlineNode[Ply - 1];
-              if not FGameTree.TryBuildBoardAtNode(Parent, Board) then
+              if not FGameTree.TryBuildPositionAtNode(Parent, Board) then
                 raise EConvertError.Create('Cannot replay move parent');
             end;
-            Board.PlayMove(ACommand.MoveText, True, True);
-            ACommand.MoveText := Board.MovesPlayed[Board.MovesPlayedCount - 1];
+            ACommand.MoveText := Board.PlayMoveText(ACommand.MoveText);
           end;
         gtcStoreMoveVariation:
           begin
             Parent := FGameTree.FindNodeById(ACommand.NodeId);
-            if (Parent = nil) or not FGameTree.TryBuildBoardAtNode(Parent, Board) then
+            if (Parent = nil) or not FGameTree.TryBuildPositionAtNode(Parent, Board) then
               raise EConvertError.Create('Cannot replay variation parent');
-            Board.PlayMove(ACommand.MoveText, True, True);
-            ACommand.MoveText := Board.MovesPlayed[Board.MovesPlayedCount - 1];
+            ACommand.MoveText := Board.PlayMoveText(ACommand.MoveText);
           end;
         gtcImportBranch, gtcImportNode:
           begin
             Parent := FGameTree.FindNodeById(ACommand.NodeId);
-            if (Parent = nil) or not FGameTree.TryBuildBoardAtNode(Parent, Board) then
+            if (Parent = nil) or not FGameTree.TryBuildPositionAtNode(Parent, Board) then
               raise EConvertError.Create('Cannot replay import parent');
             if Length(ACommand.ImportMoves) = 0 then
               raise EConvertError.Create('Branch has no moves');
             if (ACommand.CommandKind = gtcImportNode) and (Length(ACommand.ImportMoves) <> 1) then
               raise EConvertError.Create('Node import requires exactly one move');
             for ImportIndex := 0 to High(ACommand.ImportMoves) do
-            begin
-              Board.PlayMove(ACommand.ImportMoves[ImportIndex].MoveText, True, True);
-              ACommand.ImportMoves[ImportIndex].MoveText := Board.MovesPlayed[Board.MovesPlayedCount - 1];
-            end;
+              ACommand.ImportMoves[ImportIndex].MoveText :=
+                Board.PlayMoveText(ACommand.ImportMoves[ImportIndex].MoveText);
           end;
         gtcRebuildFromInputs, gtcSetHeader:
           begin
@@ -1038,10 +1030,10 @@ end;
 
 procedure TGameTreeActor.ExecuteImportPdnTree(ACommand: TGameTreeCommand;
   var AInvalidateRebuildSignature: Boolean);
-var Board: TDraughtsBoard; Changed: Boolean;
+var Board: TGamePosition; Changed: Boolean;
   procedure Walk(Source: TPdnMoveNode; Target: TGameTreePlyNode;
-    Position: TDraughtsBoard);
-  var I: Integer; ParentCopy, Next: TDraughtsBoard;
+    Position: TGamePosition);
+  var I: Integer; ParentCopy, Next: TGamePosition;
     Child: TGameTreePlyNode; Move: string;
   begin
     if Source.HasNodeData then
@@ -1054,17 +1046,17 @@ var Board: TDraughtsBoard; Changed: Boolean;
       end;
     ParentCopy := nil;
     if Source.ChildCount > 1 then
-    begin ParentCopy := TDraughtsBoard.Create; ParentCopy.AssignFrom(Position); end;
+      ParentCopy := Position.Clone;
     try
       for I := 0 to Source.ChildCount - 1 do
       begin
         Next := Position;
         if I > 0 then
-        begin Next := TDraughtsBoard.Create; Next.AssignFrom(ParentCopy); end;
+          Next := ParentCopy.Clone;
         try
           Inc(ACommand.ValidatedMoveCount);
           try
-            Next.PlayMove(Source.Children[I].MoveText, True, True);
+            Move := Next.PlayMoveText(Source.Children[I].MoveText);
           except
             on E: Exception do
             begin
@@ -1072,7 +1064,6 @@ var Board: TDraughtsBoard; Changed: Boolean;
               Continue; // Reject only this subtree, preserving later valid siblings.
             end;
           end;
-          Move := Next.MovesPlayed[Next.MovesPlayedCount - 1];
           Child := FGameTree.FindChildByMove(Target, Move);
           if Child = nil then
           begin
@@ -1090,7 +1081,7 @@ var Board: TDraughtsBoard; Changed: Boolean;
 begin
   if ACommand.ImportRoot = nil then
   begin Reject(ACommand, 'PDN import has no root'); Exit; end;
-  Board := TDraughtsBoard.Create;
+  Board := FGameTree.Variant.CreatePosition;
   try
     try Board.LoadFromFEN(FGameTree.StartingFEN);
     except on E: Exception do begin Reject(ACommand, E.Message); Exit; end; end;

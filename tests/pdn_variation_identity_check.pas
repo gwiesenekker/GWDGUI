@@ -1,6 +1,6 @@
 program pdn_variation_identity_check;
 {$mode objfpc}{$H+}
-uses Classes, SysUtils, uDraughtsBoard, uPdn, uGameTreeNodeData, uGameDatabase;
+uses Classes, SysUtils, uDraughtsBoard, uPdn, uGameTreeNodeData, uGameDatabase, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 function ReadGame(const Text: string): TPdnGame;

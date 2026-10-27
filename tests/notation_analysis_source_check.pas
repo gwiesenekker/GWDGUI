@@ -1,6 +1,6 @@
 program notation_analysis_source_check;
 {$mode objfpc}{$H+}{$codepage utf8}
-uses SysUtils, uGameTree, uGameTreePdn, uNotationPresentation, uTreeTestUtils, uNotationDocument, uNotationStyles;
+uses SysUtils, uGameTree, uGameTreePdn, uNotationPresentation, uTreeTestUtils, uNotationDocument, uNotationStyles, uDraughtsPosition;
 procedure Check(B: Boolean; const Text: string);
 begin if not B then raise Exception.Create(Text); end;
 procedure Fixture(BlackStart: Boolean; MoveCount: Integer);

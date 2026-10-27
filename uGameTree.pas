@@ -5,7 +5,7 @@ unit uGameTree;
 interface
 
 uses
-  Classes, Contnrs, SysUtils, uDraughtsBoard, uGameOrchestrator, uGameMoveHistory, uGameTreeNodeData;
+  Classes, Contnrs, SysUtils, uGamePosition, uGameOrchestrator, uGameMoveHistory, uGameTreeNodeData;
 
 type
   TGameTreePlyNode = class
@@ -32,7 +32,7 @@ type
     FNodeId: Int64;
     FParent: TGameTreePlyNode;
     FPlyNumber: Integer;
-    FSideToMove: TDraughtsSide;
+    FSideToMove: TGameSide;
     FWhiteRemainingSeconds: Double;
     FWhiteUsedSeconds: Double;
     {$WARN 3018 OFF}
@@ -68,7 +68,7 @@ type
     property NodeId: Int64 read FNodeId;
     property Parent: TGameTreePlyNode read FParent;
     property PlyNumber: Integer read FPlyNumber;
-    property SideToMove: TDraughtsSide read FSideToMove;
+    property SideToMove: TGameSide read FSideToMove;
     property WhiteRemainingSeconds: Double read FWhiteRemainingSeconds;
     property WhiteUsedSeconds: Double read FWhiteUsedSeconds;
   end;
@@ -110,6 +110,7 @@ type
     FNodeIndexDirty: Boolean;
     FNodeIndexRebuildCount: QWord;
     FNodeIndex: TFPHashList; // Non-owning; child nodes remain owned by the tree.
+    FVariant: TGameVariant; // Borrowed; outlives the tree.
     FRoot: TGameTreePlyNode;
     FSignature: string;
     FWhiteName: string;
@@ -122,7 +123,7 @@ type
       const AScore, APV, ADepth, ATimeText: string);
     procedure ClearTreeMetadata;
     function IncrementModeCaption(AMode: TClockIncrementMode): string;
-    function SideForPly(APlyNumber: Integer): TDraughtsSide;
+    function SideForPly(APlyNumber: Integer): TGameSide;
     function MoveNumberForPly(APlyNumber: Integer): Integer;
     function AddMove(AParent: TGameTreePlyNode; APlyNumber: Integer;
       const AMoveText: string): TGameTreePlyNode;
@@ -158,7 +159,8 @@ type
     function FindBranchNode(AIndex, APly: Integer): TGameTreePlyNode;
     function RestoreNodeData(ANodeId: Int64; const Data: TGameTreeNodeData): Boolean;
     function RecordCompletedMoveData(APly: Integer; const AData: TGameMoveData): Boolean;
-    constructor Create;
+    // AVariant = nil uses DefaultGameVariant (registered by the linked game).
+    constructor Create(AVariant: TGameVariant = nil);
     destructor Destroy; override;
     procedure Clear;
     procedure BeginRebuild(const ASignature, AEventName, AWhiteName,
@@ -205,10 +207,14 @@ type
       out AChanged: Boolean): Boolean;
     procedure CopyMainlineMovesTo(AMoves: TStrings);
     function CopyNodeMovesTo(ANode: TGameTreePlyNode; AMoves: TStrings): Boolean;
-    function TryBuildBoardAtNode(ANode: TGameTreePlyNode;
-      ABoard: TDraughtsBoard): Boolean;
+    // Replays the validated moves from the starting position into APosition
+    // (a position of this tree's variant). False when the node is not in
+    // this tree or a move does not replay; APosition is unchanged then.
+    function TryBuildPositionAtNode(ANode: TGameTreePlyNode;
+      APosition: TGamePosition): Boolean;
     procedure TrimMainlineToCount(ACount: Integer);
     function FindNodeById(ANodeId: Int64): TGameTreePlyNode;
+    property Variant: TGameVariant read FVariant;
     property BlackName: string read FBlackName;
     property BlackRemainingSeconds: Double read FBlackRemainingSeconds;
     property BlackUsedSeconds: Double read FBlackUsedSeconds;
@@ -236,7 +242,7 @@ type
     property WhiteUsedSeconds: Double read FWhiteUsedSeconds;
   end;
 
-function SideToMoveText(ASide: TDraughtsSide): string;
+function SideToMoveText(ASide: TGameSide): string;
 
 implementation
 
@@ -252,27 +258,16 @@ begin
   Result := NextGameTreeId;
 end;
 
-function SideToMoveText(ASide: TDraughtsSide): string;
+function SideToMoveText(ASide: TGameSide): string;
 begin
   case ASide of
-    dsWhite:
+    gsWhite:
       Result := 'White';
-    dsBlack:
+    gsBlack:
       Result := 'Black';
   else
     Result := '?';
   end;
-end;
-
-function FenStartingSide(const AFEN: string): TDraughtsSide;
-var
-  LText: string;
-begin
-  LText := UpperCase(Trim(AFEN));
-  if (LText <> '') and (LText[1] = 'B') then
-    Result := dsBlack
-  else
-    Result := dsWhite;
 end;
 
 function TGameTreePlyNode.GetNodeData: TGameTreeNodeData;
@@ -329,7 +324,7 @@ begin
   FChildren := TObjectList.Create(True);
   FPlyNumber := 0;
   FMoveNumber := 0;
-  FSideToMove := dsWhite;
+  FSideToMove := gsWhite;
   FHasClockInfo := False;
   FWhiteRemainingSeconds := 0;
   FBlackRemainingSeconds := 0;
@@ -360,9 +355,12 @@ begin
   FChildren.Add(Result);
 end;
 
-constructor TGameTree.Create;
+constructor TGameTree.Create(AVariant: TGameVariant);
 begin
   inherited Create;
+  FVariant := AVariant;
+  if FVariant = nil then
+    FVariant := DefaultGameVariant;
   FGameTreeId := AllocateGameTreeId;
   FNextNodeId := 0;
   FMainline := TFPList.Create;
@@ -402,7 +400,7 @@ begin
   FWhiteName := 'White';
   FBlackName := 'Black';
   FResultText := '*';
-  FStartingFEN := DefaultStartingFEN;
+  FStartingFEN := FVariant.DefaultStartingFEN;
   FStatusText := '';
   FGameState := gosWaiting;
   FHasTimeControl := False;
@@ -505,7 +503,7 @@ var
   EffectiveFen: string;
 begin
   EffectiveFen := Trim(AStartingFEN);
-  if EffectiveFen = '' then EffectiveFen := DefaultStartingFEN;
+  if EffectiveFen = '' then EffectiveFen := FVariant.DefaultStartingFEN;
   if (FSignature <> ASignature) or (FStartingFEN <> EffectiveFen) then
   begin
       FSignature := ASignature;
@@ -531,7 +529,7 @@ var
 begin
   EffectiveStartingFEN := Trim(AStartingFEN);
   if EffectiveStartingFEN = '' then
-    EffectiveStartingFEN := DefaultStartingFEN;
+    EffectiveStartingFEN := FVariant.DefaultStartingFEN;
   AChanged := (FEventName <> AEventName) or (FWhiteName <> AWhiteName) or
     (FBlackName <> ABlackName) or (FResultText <> AResultText) or
     (FStartingFEN <> EffectiveStartingFEN);
@@ -541,7 +539,7 @@ begin
   FResultText := AResultText;
   FStartingFEN := EffectiveStartingFEN;
   if FRoot <> nil then
-    FRoot.FSideToMove := FenStartingSide(FStartingFEN);
+    FRoot.FSideToMove := FVariant.SideFromFEN(FStartingFEN);
 end;
 
 procedure TGameTree.SetGameState(AState: TGameOrchestratorState;
@@ -625,7 +623,7 @@ begin
   Result := False;
   Node := GetMainlineNode(APly);
   if (Node = nil) or
-    (NormalizeMoveNotation(Node.MoveText) <> NormalizeMoveNotation(AData.MoveText)) then Exit;
+    not FVariant.SameMove(Node.MoveText, AData.MoveText) then Exit;
   Result := not Node.FHasMoveTime or (Node.FSecondsUsed <> AData.SecondsUsed);
   Node.FHasMoveTime := True;
   Node.FSecondsUsed := AData.SecondsUsed;
@@ -689,8 +687,7 @@ function TGameTree.RecordMainlineMove(APlyNumber: Integer;
 begin
   Result := GetMainlineNode(APlyNumber);
   if (Result <> nil) and
-    (not SameText(NormalizeMoveNotation(Result.FMoveText),
-      NormalizeMoveNotation(AMoveText))) then
+    not FVariant.SameMove(Result.FMoveText, AMoveText) then
   begin
     RemoveMainlineFrom(APlyNumber);
     Result := nil;
@@ -909,29 +906,28 @@ begin
   end;
 end;
 
-function TGameTree.TryBuildBoardAtNode(ANode: TGameTreePlyNode;
-  ABoard: TDraughtsBoard): Boolean;
+function TGameTree.TryBuildPositionAtNode(ANode: TGameTreePlyNode;
+  APosition: TGamePosition): Boolean;
 var
   Moves: TStringList;
-  Candidate: TDraughtsBoard;
+  Candidate: TGamePosition;
   I: Integer;
 begin
   Result := False;
-  if ABoard = nil then
+  if APosition = nil then
     Exit;
   Moves := TStringList.Create;
-  Candidate := TDraughtsBoard.Create;
+  Candidate := nil;
   try
     if not CopyNodeMovesTo(ANode, Moves) then
       Exit;
     try
-      if Trim(FStartingFEN) = '' then
-        Candidate.LoadFromFEN(DefaultStartingFEN)
-      else
-        Candidate.LoadFromFEN(FStartingFEN);
+      Candidate := FVariant.CreatePositionFromFEN(FStartingFEN);
+      // Validated replay: a tree restored from older files may hold a move
+      // that does not replay, and callers report that (review U5).
       for I := 0 to Moves.Count - 1 do
-        Candidate.PlayMove(Moves[I], True, True);
-      ABoard.AssignFrom(Candidate);
+        Candidate.PlayMoveText(Moves[I]);
+      APosition.AssignFrom(Candidate);
       Result := True;
     except
       Result := False;
@@ -950,21 +946,21 @@ begin
   Result := TGameTreePlyNode(FNodeIndex.Find(IntToStr(ANodeId)));
 end;
 
-function TGameTree.SideForPly(APlyNumber: Integer): TDraughtsSide;
+function TGameTree.SideForPly(APlyNumber: Integer): TGameSide;
 var
-  LStartingSide: TDraughtsSide;
+  LStartingSide: TGameSide;
 begin
-  LStartingSide := FenStartingSide(FStartingFEN);
-  if ((LStartingSide = dsWhite) and Odd(APlyNumber)) or
-    ((LStartingSide = dsBlack) and (not Odd(APlyNumber))) then
-    Result := dsWhite
+  LStartingSide := FVariant.SideFromFEN(FStartingFEN);
+  if ((LStartingSide = gsWhite) and Odd(APlyNumber)) or
+    ((LStartingSide = gsBlack) and (not Odd(APlyNumber))) then
+    Result := gsWhite
   else
-    Result := dsBlack;
+    Result := gsBlack;
 end;
 
 function TGameTree.MoveNumberForPly(APlyNumber: Integer): Integer;
 begin
-  if FenStartingSide(FStartingFEN) = dsBlack then
+  if FVariant.SideFromFEN(FStartingFEN) = gsBlack then
     Result := (APlyNumber div 2) + 1
   else
     Result := ((APlyNumber - 1) div 2) + 1;
@@ -1120,7 +1116,7 @@ begin
   Result := nil;
   if AParent = nil then Exit;
   for I := 0 to AParent.ChildCount - 1 do
-    if NormalizeMoveNotation(AParent.Children[I].MoveText) = NormalizeMoveNotation(AMove) then
+    if FVariant.SameMove(AParent.Children[I].MoveText, AMove) then
       Exit(AParent.Children[I]);
 end;
 

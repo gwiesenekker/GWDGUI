@@ -12,7 +12,7 @@ unit uDraughtsPosition;
 interface
 
 uses
-  Classes, SysUtils, uGamePosition, uDraughtsBoard;
+  Classes, SysUtils, uGamePosition, uDraughtsBoard, uGameTree;
 
 type
   TDraughtsPosition = class(TGamePosition)
@@ -40,6 +40,7 @@ type
     function SameMove(const A, B: string): Boolean; override;
     procedure PlayMove(const ACanonical: string); override;
     procedure PlayTrustedMove(const ACanonical: string); override;
+    function PlayMoveText(const AText: string): string; override;
 
     function MoveNotation(const ACanonical: string): string; override;
     procedure MoveSquares(const ACanonical: string; out AFrom, ATo: Integer);
@@ -56,6 +57,7 @@ type
     function DefaultStartingFEN: string; override;
     function SideFromFEN(const AFEN: string): TGameSide; override;
     function CreatePosition: TGamePosition; override;
+    function SameMove(const A, B: string): Boolean; override;
   end;
 
 // Shared variant instance; owned by this unit.
@@ -63,6 +65,12 @@ function DraughtsVariant: TDraughtsVariant;
 
 function DraughtsSideToGameSide(ASide: TDraughtsSide): TGameSide;
 function GameSideToDraughtsSide(ASide: TGameSide): TDraughtsSide;
+
+{ Migration helper for units that still work on TDraughtsBoard: replays the
+  tree's validated moves (TGameTree.TryBuildPositionAtNode) into ABoard,
+  including the played-move history. ABoard is unchanged on failure. }
+function TryBuildDraughtsBoardAtNode(ATree: TGameTree; ANode: TGameTreePlyNode;
+  ABoard: TDraughtsBoard): Boolean;
 
 implementation
 
@@ -90,6 +98,24 @@ begin
     Result := dsWhite
   else
     Result := dsBlack;
+end;
+
+function TryBuildDraughtsBoardAtNode(ATree: TGameTree; ANode: TGameTreePlyNode;
+  ABoard: TDraughtsBoard): Boolean;
+var
+  LPosition: TDraughtsPosition;
+begin
+  Result := False;
+  if (ATree = nil) or (ABoard = nil) then
+    Exit;
+  LPosition := TDraughtsPosition.Create;
+  try
+    Result := ATree.TryBuildPositionAtNode(ANode, LPosition);
+    if Result then
+      ABoard.AssignFrom(LPosition.Board);
+  finally
+    LPosition.Free;
+  end;
 end;
 
 { Square numbers of a canonical draughts move: from, to, then captured squares. }
@@ -219,7 +245,7 @@ begin
   Result := FBoard.TryGetLegalMove(AText, ACanonical);
 end;
 
-function TDraughtsPosition.SameMove(const A, B: string): Boolean;
+function SameDraughtsMove(const A, B: string): Boolean;
 var
   LA, LB: string;
 begin
@@ -228,14 +254,24 @@ begin
   Result := SameText(LA, LB) or SameMoveIgnoringCaptureOrder(LA, LB);
 end;
 
+function TDraughtsPosition.SameMove(const A, B: string): Boolean;
+begin
+  Result := SameDraughtsMove(A, B);
+end;
+
 procedure TDraughtsPosition.PlayMove(const ACanonical: string);
-var
-  LMove: string;
+begin
+  PlayMoveText(ACanonical);
+end;
+
+function TDraughtsPosition.PlayMoveText(const AText: string): string;
 begin
   EnsureLegalMoves;
-  if not FBoard.TryGetLegalMove(ACanonical, LMove) then
-    raise EGamePositionError.Create('Illegal move: ' + ACanonical);
-  FBoard.PlayMove(LMove, True, False, True);
+  // Same validation and messages as TDraughtsBoard.PlayMove; existing import
+  // warnings and logs keep their text.
+  if not FBoard.TryGetLegalMove(AText, Result) then
+    raise EGamePositionError.Create('Illegal move: ' + NormalizeMoveNotation(AText));
+  FBoard.PlayMove(Result, True, False, True);
 end;
 
 procedure TDraughtsPosition.PlayTrustedMove(const ACanonical: string);
@@ -281,13 +317,22 @@ begin
     Result := gsWhite;
 end;
 
+function TDraughtsVariant.SameMove(const A, B: string): Boolean;
+begin
+  Result := SameDraughtsMove(A, B);
+end;
+
 function TDraughtsVariant.CreatePosition: TGamePosition;
 begin
   Result := TDraughtsPosition.Create;
   Result.LoadFromFEN(DefaultStartingFEN);
 end;
 
+initialization
+  RegisterDefaultGameVariant(DraughtsVariant);
+
 finalization
+  RegisterDefaultGameVariant(nil);
   FreeAndNil(GDraughtsVariant);
 
 end.

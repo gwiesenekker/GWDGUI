@@ -3,7 +3,7 @@ program game_tree_validation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameOrchestrator, uDraughtsBoard, uTreeTestUtils;
+  uGameTreePdn, uGameOrchestrator, uDraughtsBoard, uTreeTestUtils, uDraughtsPosition;
 procedure Check(Value: Boolean; const MessageText: string);
 begin
   if not Value then raise Exception.Create(MessageText);
@@ -209,7 +209,7 @@ begin
       GameTreeMainlineInput(Moves, nil, False, 0, 0, 0, 0),
       GameTreePvInput(False, 0, '', ''), GameTreePvInput(False, 0, '', '')));
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('37x17', gmsHuman));
-    Check(Actor.GameTree.TryBuildBoardAtNode(Actor.GameTree.MainlineNode[1], Board),
+    Check(TryBuildDraughtsBoardAtNode(Actor.GameTree, Actor.GameTree.MainlineNode[1], Board),
       'legal short-form multiple captures must remain accepted and replayable');
   finally
     Board.Free;

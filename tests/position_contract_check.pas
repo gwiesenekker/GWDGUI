@@ -25,6 +25,7 @@ var
   Failures: Integer = 0;
   Checks: Integer = 0;
   PrintPerft: Boolean = False;
+  Variant: TGameVariant = nil; // the implementation under test
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -106,6 +107,7 @@ begin
         AContext + ': canonical move without whitespace: "' + LMove + '"');
       Check(APosition.IsLegal(LMove), AContext + ': legal move is IsLegal: ' + LMove);
       Check(APosition.SameMove(LMove, LMove), AContext + ': SameMove is reflexive: ' + LMove);
+      Check(Variant.SameMove(LMove, LMove), AContext + ': variant SameMove is reflexive: ' + LMove);
       Check(APosition.TryParseMove(LMove, LParsed) and APosition.SameMove(LParsed, LMove),
         AContext + ': canonical move parses to itself: ' + LMove);
 
@@ -114,12 +116,19 @@ begin
       Check(APosition.TryParseMove(LNotation, LParsed) and APosition.SameMove(LParsed, LMove),
         AContext + ': notation "' + LNotation + '" parses back to ' + LMove);
       LNotations.Add(LNotation);
+      LTrusted.AssignFrom(APosition);
+      Check(LTrusted.PlayMoveText(LNotation) = LMove,
+        AContext + ': PlayMoveText of "' + LNotation + '" returns the canonical move ' + LMove);
 
       for J := 0 to APosition.LegalMoveCount - 1 do
         if J <> I then
+        begin
           Check(not APosition.SameMove(LMove, APosition.LegalMove(J)),
             AContext + ': distinct legal moves are not SameMove: ' + LMove + ' / ' +
             APosition.LegalMove(J));
+          Check(not Variant.SameMove(LMove, APosition.LegalMove(J)),
+            AContext + ': variant SameMove separates distinct legal moves');
+        end;
 
       APosition.MoveSquares(LMove, LFrom, LTo);
       Check((LFrom > 0) and (LTo > 0), AContext + ': squares for ' + LMove);
@@ -153,6 +162,14 @@ begin
       on E: EGamePositionError do ;
     end;
     Check(LChild.PositionKey = LKeyBefore, AContext + ': illegal move leaves position unchanged');
+    try
+      LChild.PlayMoveText('0-0-illegal');
+      Check(False, AContext + ': illegal move text must raise');
+    except
+      on E: EGamePositionError do
+        Check(Pos('Illegal move', E.Message) > 0, AContext + ': illegal move message');
+    end;
+    Check(LChild.PositionKey = LKeyBefore, AContext + ': illegal move text leaves position unchanged');
   finally
     LTrusted.Free;
     LChild.Free;
@@ -261,6 +278,8 @@ var
 
 begin
   LVariant := DraughtsVariant;
+  Variant := LVariant;
+  Check(DefaultGameVariant = LVariant, 'linking the draughts unit registers it as the default variant');
   Check(LVariant.Name <> '', 'variant has a name');
   // International draughts perft from the initial position (published values).
   AddFixture(LVariant.DefaultStartingFEN, [9, 81, 658, 4265, 27117, 167140]);

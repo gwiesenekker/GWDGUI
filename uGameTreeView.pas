@@ -20,7 +20,7 @@ function SelectedGameTreeNodeId(ATreeView: TTreeView): Int64;
 implementation
 
 uses
-  SysUtils, fgl, uDraughtsBoard, uGameTreePdn;
+  SysUtils, fgl, uGamePosition, uGameTreePdn;
 
 type TExpansionMap = specialize TFPGMap<Int64, Boolean>;
 
@@ -58,7 +58,7 @@ begin
   if ANode = nil then
     Exit('');
   Result := IntToStr(ANode.MoveNumber);
-  if ANode.SideToMove = dsWhite then
+  if ANode.SideToMove = gsWhite then
     Result += '.'
   else
     Result += '... ';

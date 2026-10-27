@@ -1,7 +1,7 @@
 program notation_prototype_document_check;
 {$mode objfpc}{$H+}{$codepage utf8}
 uses SysUtils, uGameTree, uGameTreePdn, uNotationPresentation, uNotationDocument, uNotationStyles,
-  uTreeTestUtils;
+  uTreeTestUtils, uDraughtsPosition;
 procedure Check(B: Boolean; const S: string);
 begin if not B then raise Exception.Create(S); end;
 var Tree: TGameTree; Doc: TNotationDocument; Opt: TGameTreePdnRenderOptions;

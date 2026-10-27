@@ -3,7 +3,7 @@ program displayed_position_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uDraughtsBoard, uGameTree, uGameTreeActor,
-  uDisplayedPosition, uTreeTestUtils;
+  uDisplayedPosition, uTreeTestUtils, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin
   if not Value then raise Exception.Create(Text);

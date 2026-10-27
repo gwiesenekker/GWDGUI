@@ -204,7 +204,7 @@ generic unit is converted; behaviour, formats and performance stay unchanged.
 |---|---|---|
 | 1 | `uGamePosition`, `uDraughtsPosition`, `position_contract_check` (perft, FEN, notation, `SameMove`, choosers, trusted replay) | Done |
 | 2 | Source audit: listed generic units must not use the draughts board or parse move text | Done |
-| 3 | Variant into tree/actor/builder/cursor; `SameMove` replaces text comparison | |
+| 3 | Variant into tree/actor/builder/cursor; `SameMove` replaces text comparison | Done |
 | 4 | Displayed position and move interaction (`MoveSquares`, `MovesBetween`) | |
 | 5 | Notation walker and presentation (`MoveNotation`) | |
 | 6 | Analysis coordination and PV state | |
@@ -212,3 +212,22 @@ generic unit is converted; behaviour, formats and performance stay unchanged.
 | 8 | Remaining main-form uses; list the chess replacement points | |
 
 Each step is one local commit with all suites and the performance baseline passing.
+
+Additions to the proposal, made in step 3:
+- `TGamePosition.PlayMoveText`: validated play of any accepted spelling that
+  returns the canonical move. The actor and tree replay use it, so import warnings
+  keep the game's exact messages (`Illegal move: 50-1`).
+- `TGameVariant.SameMove`: move equality without a position, for the tree's
+  child lookup and mainline comparisons.
+- `RegisterDefaultGameVariant`/`DefaultGameVariant`: a game unit registers itself
+  when linked, and `TGameTree.Create` without a variant uses it. Every program
+  (`gwdgui.lpr`, each test) names `uDraughtsPosition` explicitly; a program
+  without a game fails with a clear error instead of picking one implicitly.
+
+Known transitive dependencies after step 3 (the audit checks unit text, not the
+dependency graph): `uGameTree` still uses `uGameOrchestrator` (game-state and
+time-control types) and, in its implementation, `uPdn` (PDN comment helpers).
+Both use the draughts board. Step 5 (notation) and step 7 (rules/orchestrator)
+remove these; until then `TryBuildDraughtsBoardAtNode` in `uDraughtsPosition`
+serves the units not yet converted.
+

@@ -3,7 +3,7 @@ program game_tree_cursor_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreeCursor, uTreeTestUtils;
+  uGameTreeCursor, uTreeTestUtils, uDraughtsPosition;
 procedure Check(Value: Boolean; const MessageText: string);
 begin
   if not Value then raise Exception.Create(MessageText);

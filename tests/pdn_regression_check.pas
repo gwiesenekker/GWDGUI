@@ -3,7 +3,7 @@ program pdn_regression_check;
 {$mode objfpc}{$H+}
 
 uses
-  Classes, SysUtils, SQLDB, SQLite3Conn, uDraughtsBoard, uGameDatabase, uGameMoveHistory, uPdn;
+  Classes, SysUtils, SQLDB, SQLite3Conn, uDraughtsBoard, uGameDatabase, uGameMoveHistory, uPdn, uDraughtsPosition;
 
 type
   TReadCollector = class

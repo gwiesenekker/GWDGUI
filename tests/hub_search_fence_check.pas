@@ -6,7 +6,7 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  Classes, SysUtils, uHubEngine, uEngineBase, uEngineRegistry, uDraughtsBoard;
+  Classes, SysUtils, uHubEngine, uEngineBase, uEngineRegistry, uDraughtsBoard, uDraughtsPosition;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin

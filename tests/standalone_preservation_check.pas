@@ -9,7 +9,7 @@ uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, uGameNotationView, Classes, SysUtils, StdCtrls, ExtCtrls, Grids, LCLType, Controls, ComCtrls, Menus,
   uDatabaseForm, uGameDatabase, uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uMoveInteraction, uRunningGame, uPdn, uPdnOpenDialog, uPvBrowser, uScoreHistoryControl, uGuiDialogs,
-  uGameTreeNodeData, uGameTreeView, uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uTreeTestUtils;
+  uGameTreeNodeData, uGameTreeView, uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uTreeTestUtils, uDraughtsPosition;
 
 type
   TDatabaseModalProbe = class

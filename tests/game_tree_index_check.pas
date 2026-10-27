@@ -1,6 +1,6 @@
 program game_tree_index_check;
 {$mode objfpc}{$H+}
-uses Classes, SysUtils, uGameTree;
+uses Classes, SysUtils, uGameTree, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 var Tree: TGameTree; Seen, Live: TStringList;

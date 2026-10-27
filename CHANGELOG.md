@@ -5,6 +5,26 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-27 — Game tree on the position boundary (position interface, step 3)
+
+- `uGameTree`, `uGameTreeActor` and `uGameTreeBuilder` no longer use the
+  draughts board (`uGameTreeCursor` never did). The tree holds a `TGameVariant`,
+  nodes report a `TGameSide`, move comparisons use the variant's `SameMove`, and
+  `TryBuildBoardAtNode` became `TryBuildPositionAtNode`. The actor validates and
+  canonicalizes moves with `PlayMoveText`; import warnings are unchanged.
+- The source audit now covers these four units.
+- Units not converted yet use `TryBuildDraughtsBoardAtNode` from
+  `uDraughtsPosition`; `uGameTreePdn` and `uGameTreeView` follow the node side type.
+- A game unit registers itself as the default variant; `gwdgui.lpr` and every
+  test program link `uDraughtsPosition` explicitly.
+- `position_contract_check` also covers `PlayMoveText`, the variant's `SameMove`
+  and the default registration (378,050 checks).
+- Move comparison in the tree now treats the same capture written with its
+  captured squares in another order as the same move (the D16/P26 rule). Tree
+  moves are canonical, so stored games are unaffected.
+- Regression, lifecycle, DXP, GUI and tournament suites and the source audit pass;
+  the performance baseline is unchanged. No push.
+
 ### 2026-10-27 — Audit game-neutral units (position interface, step 2)
 
 - `tests/source_audit_check.sh` keeps a list of game-neutral units. A listed

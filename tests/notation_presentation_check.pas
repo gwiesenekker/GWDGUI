@@ -1,7 +1,7 @@
 program notation_presentation_check;
 {$mode objfpc}{$H+}
 uses Classes, SysUtils, uGameTree, uGameTreePdn, uNotationPresentation,
-  uTreeTestUtils;
+  uTreeTestUtils, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin
   if not Value then raise Exception.Create(Text);

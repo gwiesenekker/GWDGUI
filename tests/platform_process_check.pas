@@ -2,7 +2,7 @@ program platform_process_check;
 {$mode objfpc}{$H+}
 uses
   {$IFDEF UNIX}cthreads, BaseUnix,{$ENDIF}
-  Classes, SysUtils, Process, uPlatformProcess;
+  Classes, SysUtils, Process, uPlatformProcess, uDraughtsPosition;
 type
   TOutputProbe = class
     Text: string;

@@ -1,6 +1,6 @@
 program move_interaction_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uDraughtsBoard, uMoveInteraction, uGameTree, uGameTreeActor;
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uDraughtsBoard, uMoveInteraction, uGameTree, uGameTreeActor, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin
   if not Value then raise Exception.Create(Text);
@@ -118,7 +118,7 @@ begin
   Actor := TGameTreeActor.Create;
   Board := TDraughtsBoard.Create;
   try
-    Check(Actor.GameTree.TryBuildBoardAtNode(Actor.GameTree.Root, Board), 'initial replay');
+    Check(TryBuildDraughtsBoardAtNode(Actor.GameTree, Actor.GameTree.Root, Board), 'initial replay');
     Check(RouteMove(Board, Actor.GameTree, Actor.GameTree.Root, '32-28',
       True, False, True, False, Move) = mrMainline, 'unfinished tip appends');
     Check(RouteMove(Board, Actor.GameTree, Actor.GameTree.Root, '32-28',

@@ -1,6 +1,6 @@
 program database_import_worker_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uGameDatabase, uDatabaseImportWorker;
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uGameDatabase, uDatabaseImportWorker, uDraughtsPosition;
 procedure Check(Condition: Boolean; const Text: string);
 begin if not Condition then raise Exception.Create(Text); end;
 var Database: TGameDatabase; Worker: TDatabaseImportWorker;

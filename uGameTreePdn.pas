@@ -5,7 +5,7 @@ unit uGameTreePdn;
 interface
 
 uses
-  Classes, StrUtils, SysUtils, fgl, uDraughtsBoard, uGameTree;
+  Classes, StrUtils, SysUtils, fgl, uDraughtsBoard, uGamePosition, uGameTree;
 
 type
   TGameTreeMoveCaptionMap = specialize TFPGMap<Int64, string>;
@@ -111,10 +111,10 @@ begin
   if ANode = nil then
     Exit;
 
-  if (ANode.SideToMove = dsWhite) or AForceMoveNumber then
+  if (ANode.SideToMove = gsWhite) or AForceMoveNumber then
   begin
     Result := IntToStr(ANode.MoveNumber);
-    if ANode.SideToMove = dsWhite then
+    if ANode.SideToMove = gsWhite then
       Result += '.'
     else
       Result += '...';
@@ -241,12 +241,9 @@ begin
     (not SameText(LPvMove, NormalizeMoveNotation(ANode.MoveText)));
 end;
 
-function SideForNextPly(ASide: TDraughtsSide): TDraughtsSide;
+function SideForNextPly(ASide: TGameSide): TGameSide;
 begin
-  if ASide = dsWhite then
-    Result := dsBlack
-  else
-    Result := dsWhite;
+  Result := OppositeGameSide(ASide);
 end;
 
 function PreviousPositionAnnotation(APrevious, APlayedMove: TGameTreePlyNode;
@@ -266,17 +263,17 @@ begin
   Result := ' {A: ' + Trim(APrevious.AnnotatorScore) + '}';
 end;
 
-function PlyMoveCaption(APlyNumber: Integer; ASideToMove: TDraughtsSide;
+function PlyMoveCaption(APlyNumber: Integer; ASideToMove: TGameSide;
   const AMoveText: string; AForceMoveNumber, ACompact: Boolean): string;
 var
   LMoveNumber: Integer;
 begin
   Result := '';
   LMoveNumber := ((APlyNumber - 1) div 2) + 1;
-  if (ASideToMove = dsWhite) or AForceMoveNumber then
+  if (ASideToMove = gsWhite) or AForceMoveNumber then
   begin
     Result := IntToStr(LMoveNumber);
-    if ASideToMove = dsWhite then
+    if ASideToMove = gsWhite then
       Result += '.'
     else
       Result += '...';
@@ -304,7 +301,7 @@ var
   LPlyNumber: Integer;
   LSegment: string;
   LSegmentOffset: Integer;
-  LSide: TDraughtsSide;
+  LSide: TGameSide;
 begin
   Result := '';
   if (ABaseNode = nil) or (Trim(APv) = '') then

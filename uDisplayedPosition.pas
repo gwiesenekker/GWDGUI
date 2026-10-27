@@ -40,7 +40,7 @@ type
     property ReplayBuildCount: Integer read FReplayBuildCount;
   end;
 implementation
-uses uGameTreeBuilder;
+uses uGameTreeBuilder, uDraughtsPosition;
 constructor TDisplayedPosition.Create;
 begin
   inherited Create;
@@ -186,7 +186,7 @@ begin
         (FReplayCache[I].Revision = Revision) then
       begin ABoard.AssignFrom(FReplayCache[I].Board); Exit(True); end;
   if FRefreshDepth > 0 then Inc(FReplayBuildCount);
-  Result := AGameTree.TryBuildBoardAtNode(ANode, ABoard);
+  Result := TryBuildDraughtsBoardAtNode(AGameTree, ANode, ABoard);
   if Result and (FRefreshDepth > 0) then
   begin
     I := Length(FReplayCache);

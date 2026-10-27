@@ -8,7 +8,7 @@ uses
   {$ENDIF}
   Classes, SysUtils, Math, uGameTreeNodeData,
   uDraughtsBoard, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreeSearchRef, uPdn, uGameOrchestrator, uTreeTestUtils;
+  uGameTreeSearchRef, uPdn, uGameOrchestrator, uTreeTestUtils, uDraughtsPosition;
 
 type
   TQueuedCommandObserver = class

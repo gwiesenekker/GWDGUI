@@ -5,7 +5,7 @@ program board_regression_check;
 uses
   Classes, SysUtils,
   uDraughtsBoard,
-  uDxpProtocol;
+  uDxpProtocol, uDraughtsPosition;
 
 const
   ReplayMoves: array[0..13] of string = (

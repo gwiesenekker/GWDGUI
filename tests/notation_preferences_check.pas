@@ -3,7 +3,7 @@ program notation_preferences_check;
 uses {$IFDEF UNIX}cthreads, cwstring,{$ENDIF} Interfaces, Forms, Classes, SysUtils,
   StdCtrls, Controls, ComCtrls, Graphics, Types, LCLType, LMessages, uTreeTestUtils, uPreferences, uPreferencesForm,
   uNotationStyles, uNotationPresentation, uGameTree, uGameTreePdn, uGameNotationView,
-  uNotationHighlighter;
+  uNotationHighlighter, uDraughtsPosition;
 type
   TFontChoicePreferences = class(TPreferencesForm)
   public

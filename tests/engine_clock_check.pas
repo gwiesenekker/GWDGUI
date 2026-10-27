@@ -3,7 +3,7 @@ program engine_clock_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uEngineBase, uEngineParamsJson, uHubEngine, uEngineRegistry,
-  uPlatformProcess, uDraughtsBoard, uGameMoveHistory, uGameOrchestrator;
+  uPlatformProcess, uDraughtsBoard, uGameMoveHistory, uGameOrchestrator, uDraughtsPosition;
 
 type
   TClockProbe = class(TDraughtsEngine)

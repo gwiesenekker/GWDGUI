@@ -1,6 +1,6 @@
 program database_import_performance_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uGameDatabase;
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uGameDatabase, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 var Db: TGameDatabase; Fixture, Input, Loaded: TStringList; Games: TList;

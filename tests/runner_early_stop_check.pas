@@ -1,7 +1,7 @@
 program runner_early_stop_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, SyncObjs, uGameRunnerThread,
-  uAnalyzerRunnerThread, uGameSetupTypes, uGameOrchestrator, uEngineRegistry, uDraughtsBoard;
+  uAnalyzerRunnerThread, uGameSetupTypes, uGameOrchestrator, uEngineRegistry, uDraughtsBoard, uDraughtsPosition;
 type TObserver = class
   Count: Integer;
   procedure Finished(Sender: TObject);

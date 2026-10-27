@@ -3,7 +3,7 @@ program database_import_recovery_check;
 {$mode objfpc}{$H+}
 
 uses
-  Classes, SysUtils, Process, SQLite3Conn, SQLDB, uDraughtsBoard, uGameDatabase, uPdn, uGameTreeNodeData;
+  Classes, SysUtils, Process, SQLite3Conn, SQLDB, uDraughtsBoard, uGameDatabase, uPdn, uGameTreeNodeData, uDraughtsPosition;
 
 type
   TImportObserver = class

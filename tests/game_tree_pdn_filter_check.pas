@@ -5,7 +5,7 @@ program game_tree_pdn_filter_check;
 uses
   Classes, SysUtils, Base64, uDraughtsBoard, uGameOrchestrator, uGameTree, uGameTreeBuilder,
   uGameTreePdn, uGameTreeSearchRef, uPvSnapshot, uTreeTestUtils, uPdn,
-  uGameTreeNodeData;
+  uGameTreeNodeData, uDraughtsPosition;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin

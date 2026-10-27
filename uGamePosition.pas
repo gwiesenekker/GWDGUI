@@ -56,6 +56,10 @@ type
     // For replaying moves that were validated before (tree moves). May skip
     // validation and defer legal-move generation.
     procedure PlayTrustedMove(const ACanonical: string); virtual; abstract;
+    // Validated play of any accepted spelling (TryParseMove). Returns the
+    // canonical move; raises EGamePositionError with the game's message when
+    // the text is not a legal move here, leaving the position unchanged.
+    function PlayMoveText(const AText: string): string; virtual;
 
     { Presentation }
     // Short record notation of a legal move in this position (PDN short form,
@@ -87,11 +91,37 @@ type
     // A position loaded from AFEN, or from DefaultStartingFEN when AFEN is
     // empty. Raises EConvertError for invalid text.
     function CreatePositionFromFEN(const AFEN: string): TGamePosition;
+    // Equality of move texts, independent of a position (canonical moves and
+    // the game's equivalent spellings). Generic code never compares move text
+    // itself.
+    function SameMove(const A, B: string): Boolean; virtual; abstract;
   end;
 
 function OppositeGameSide(ASide: TGameSide): TGameSide;
 
+{ The variant used when a generic object is created without one. A game unit
+  registers itself in its initialization section, so a program selects its
+  game by linking that unit (for draughts, the draughts position unit). }
+procedure RegisterDefaultGameVariant(AVariant: TGameVariant);
+function DefaultGameVariant: TGameVariant;
+
 implementation
+
+var
+  GDefaultVariant: TGameVariant = nil;
+
+procedure RegisterDefaultGameVariant(AVariant: TGameVariant);
+begin
+  GDefaultVariant := AVariant;
+end;
+
+function DefaultGameVariant: TGameVariant;
+begin
+  if GDefaultVariant = nil then
+    raise EGamePositionError.Create('No game variant is registered; link a game ' +
+      'position unit into the program');
+  Result := GDefaultVariant;
+end;
 
 function OppositeGameSide(ASide: TGameSide): TGameSide;
 begin
@@ -138,6 +168,13 @@ begin
   AMoves.Clear;
   for I := 0 to LegalMoveCount - 1 do
     AMoves.Add(LegalMove(I));
+end;
+
+function TGamePosition.PlayMoveText(const AText: string): string;
+begin
+  if not TryParseMove(AText, Result) then
+    raise EGamePositionError.Create('Illegal move: ' + Trim(AText));
+  PlayMove(Result);
 end;
 
 function TGamePosition.TryPlayMoveText(const AText: string): Boolean;

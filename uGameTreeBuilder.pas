@@ -63,7 +63,6 @@ procedure RecordGameTreeAnalysis(AGameTree: TGameTree;
   const AEnginePV, AAnnotatorPV: TGameTreePvInput);
 implementation
 
-uses uDraughtsBoard;
 
 procedure TextToMoveList(const AMovesText: string; AMoves: TStrings);
 begin
@@ -181,8 +180,8 @@ begin
   for I := 0 to Length(AMoves) - 1 do
   begin
     if I >= AGameTree.MainlineCount then Break;
-    if NormalizeMoveNotation(AGameTree.MainlineNode[I + 1].MoveText) <>
-      NormalizeMoveNotation(AMoves[I].MoveText) then Break;
+    if not AGameTree.Variant.SameMove(AGameTree.MainlineNode[I + 1].MoveText,
+      AMoves[I].MoveText) then Break;
     if AGameTree.RecordCompletedMoveData(I + 1, AMoves[I]) then Result := True;
   end;
 end;

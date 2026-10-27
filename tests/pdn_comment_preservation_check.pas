@@ -1,7 +1,7 @@
 program pdn_comment_preservation_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uPdn, uGameTreeNodeData,
-  uGameTreeActor, uGameTree, uGameTreePdn;
+  uGameTreeActor, uGameTree, uGameTreePdn, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 function ReadGame(const Text: string): TPdnGame;

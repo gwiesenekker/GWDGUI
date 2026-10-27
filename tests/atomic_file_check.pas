@@ -1,6 +1,6 @@
 program atomic_file_check;
 {$mode objfpc}{$H+}
-uses Classes, SysUtils, uAtomicFile;
+uses Classes, SysUtils, uAtomicFile, uDraughtsPosition;
 procedure Check(Condition: Boolean; const Text: string);
 begin
   if not Condition then

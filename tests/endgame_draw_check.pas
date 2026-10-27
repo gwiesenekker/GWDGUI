@@ -2,7 +2,7 @@ program endgame_draw_check;
 {$mode objfpc}{$H+}
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Classes, SysUtils, uDraughtsBoard, uDraughtsDrawRules, uGameOrchestrator;
+  Classes, SysUtils, uDraughtsBoard, uDraughtsDrawRules, uGameOrchestrator, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 procedure CheckLimits;

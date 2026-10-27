@@ -8,7 +8,7 @@ uses
   {$ENDIF}
   Interfaces,
   Forms,
-  uMainForm;
+  uMainForm, uDraughtsPosition;
 
 begin
   RequireDerivedFormResource := False;

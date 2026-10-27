@@ -7,7 +7,7 @@ uses
   cthreads,
   {$ENDIF}
   Classes, SysUtils, SyncObjs, uAnalyzerRunnerThread, uEngineRegistry,
-  uDraughtsBoard, uPvSnapshot, uGameTreeSearchRef;
+  uDraughtsBoard, uPvSnapshot, uGameTreeSearchRef, uDraughtsPosition;
 
 type
   TObserver = class

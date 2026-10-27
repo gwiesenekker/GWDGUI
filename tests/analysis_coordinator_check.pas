@@ -2,7 +2,7 @@ program analysis_coordinator_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uAnalysisCoordinator,
   uGameTree, uGameTreeActor, uGameTreeSearchRef, uGameOrchestrator,
-  uDraughtsBoard, uPvSnapshot, uTreeTestUtils, uDisplayedPosition;
+  uDraughtsBoard, uPvSnapshot, uTreeTestUtils, uDisplayedPosition, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 procedure Execute(Actor: TGameTreeActor; Command: TGameTreeCommand);
@@ -22,7 +22,7 @@ begin
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('18-23', gmsHuman));
     Execute(Actor, ImportBranch(Actor, 1, '20-24 38-32 18-22', '', gmsHuman));
     Node := Actor.GameTree.FindBranchNode(0, 3);
-    Check(Actor.GameTree.TryBuildBoardAtNode(Node, Board), 'PV nested board');
+    Check(TryBuildDraughtsBoardAtNode(Actor.GameTree, Node, Board), 'PV nested board');
     Key := Board.PositionKey;
     Pv.SetAnalyzerBaseFromTree(Actor.GameTree, Node.NodeId, 1, nil, Display, Actor.Revision);
     Check((Pv.AnalyzerBaseNodeId = Node.NodeId) and (Pv.AnalyzerBasePly = Node.PlyNumber) and
@@ -34,7 +34,7 @@ begin
     Pv.SetAnalyzerBase(nil, 98);
     Check(Pv.AnalyzerBaseBoard.PositionKey = Key, 'nil base preserves last board');
     Pv.SetAnalyzerBaseFromTree(Actor.GameTree, High(Int64), 1, nil, Display, Actor.Revision);
-    Check(Actor.GameTree.TryBuildBoardAtNode(Actor.GameTree.MainlineNode[1], Board), 'fallback board');
+    Check(TryBuildDraughtsBoardAtNode(Actor.GameTree, Actor.GameTree.MainlineNode[1], Board), 'fallback board');
     Check((Pv.AnalyzerBaseNodeId = 0) and (Pv.AnalyzerBasePly = 1) and
       (Pv.AnalyzerBaseBoard.PositionKey = Board.PositionKey), 'missing node falls back to mainline base');
     Pv.SetAnalyzerBaseFromTree(nil, 0, -1, Board, Display, -1);
@@ -45,7 +45,7 @@ begin
       Actor.Revision, Visible, BasePly, Text, Score, Depth, TimeText), 'visible latest engine PV');
     Check((BasePly = 2) and (Text = '37-32 12-18') and (Score = '0.25') and
       (Depth = '8') and (TimeText = '0.4'), 'historical display retains latest-engine-PV policy');
-    Check(Actor.GameTree.TryBuildBoardAtNode(Actor.GameTree.MainlineNode[2], Board), 'latest PV base board');
+    Check(TryBuildDraughtsBoardAtNode(Actor.GameTree, Actor.GameTree.MainlineNode[2], Board), 'latest PV base board');
     Check(Visible.PositionKey = Board.PositionKey, 'visible PV replays its actual mainline base');
     Check(not Pv.VisibleMainPv(Actor.GameTree, Node, False, Display, Actor.Revision,
       Visible, BasePly, Text, Score, Depth, TimeText) and (Text = '') and
@@ -72,7 +72,7 @@ begin
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('32-28', gmsHuman));
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('18-23', gmsHuman));
     Node := Actor.GameTree.MainlineNode[1];
-    Check(Actor.GameTree.TryBuildBoardAtNode(Node, Board), 'historical Auto Play board');
+    Check(TryBuildDraughtsBoardAtNode(Actor.GameTree, Node, Board), 'historical Auto Play board');
     AutoPlay.BeginLine(Actor.GameTree, Node);
     Check(AutoPlay.Active and (AutoPlay.BasePly = 1) and (AutoPlay.NodeId = Node.NodeId) and
       (AutoPlay.MoveCount = 0) and (AutoPlay.MovesText = ''), 'start resets temporary line at selected node');
@@ -221,7 +221,7 @@ begin
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('18-23', gmsHuman));
     Execute(Actor, ImportBranch(Actor, 1, '20-24 38-32 18-22', '', gmsHuman));
     Node := Tree.FindBranchNode(0, 3);
-    Check(Tree.TryBuildBoardAtNode(Node, Board), 'nested analysis position');
+    Check(TryBuildDraughtsBoardAtNode(Tree, Node, Board), 'nested analysis position');
     Check(not StartAnalysisSearch(nil, Node, Search, ErrorText) and
       not IsValidGameTreeSearchRef(Search), 'missing actor cannot start a search');
     Check(StartAnalysisSearch(Actor, Node, Search, ErrorText), ErrorText);

@@ -3,7 +3,7 @@ program help_menu_check;
 {$IFNDEF GWDGUI_NONINTERACTIVE_TEST}{$FATAL Build with its LPI project}{$ENDIF}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces, Forms, Classes, SysUtils,
   Controls, Menus, LCLType, StdCtrls, LazUTF8, uMainForm, uGuiDialogs, uPdn,
-  uManualForm, uAppInfo;
+  uManualForm, uAppInfo, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then begin WriteLn('FAIL: ', Text); Halt(1); end; end;
 function FindMenu(Form: TMainForm; const Caption: string): TMenuItem;

@@ -7,7 +7,7 @@ uses
   cthreads,
   {$ENDIF}
   Classes, SysUtils, SyncObjs, uDraughtsBoard, uGameTreeSearchRef,
-  uAnalyzerRunnerThread, uEngineRegistry;
+  uAnalyzerRunnerThread, uEngineRegistry, uDraughtsPosition;
 
 type
   TRunnerObserver = class

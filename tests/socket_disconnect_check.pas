@@ -2,7 +2,7 @@ program socket_disconnect_check;
 {$mode objfpc}{$H+}
 uses
   {$IFDEF UNIX}cthreads, BaseUnix, sockets,{$ENDIF}
-  Classes, SysUtils, ssockets, uSocketSafety;
+  Classes, SysUtils, ssockets, uSocketSafety, uDraughtsPosition;
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin

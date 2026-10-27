@@ -4,7 +4,7 @@ uses {$IFDEF UNIX}cthreads, cwstring,{$ENDIF} Interfaces, Forms, Controls,
   StdCtrls, ExtCtrls, Classes, SysUtils, Math, Types, Graphics, LCLType, LCLIntf,
   LazUTF8, LCLVersion, SynEdit, uDraughtsBoard, uGameTreeBuilder, RichMemo, uPdn, uGameTree, uGameTreeActor,
   uGameTreePdn, uGameTreeCursor, uGameTreeNodeData, uGameOrchestrator, uNotationPresentation,
-  uNotationDocument, uNotationStyles, uNotationControlPrototype, uTreeTestUtils;
+  uNotationDocument, uNotationStyles, uNotationControlPrototype, uTreeTestUtils, uDraughtsPosition;
 type
   TComparisonForm = class(TForm)
   public

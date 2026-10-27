@@ -1,6 +1,6 @@
 program tournament_pairing_check;
 {$mode objfpc}{$H+}
-uses Classes, SysUtils, uTournamentPairing;
+uses Classes, SysUtils, uTournamentPairing, uDraughtsPosition;
 procedure Check(Condition: Boolean; const Text: string);
 begin if not Condition then raise Exception.Create(Text); end;
 procedure CheckRoundRobin(N: Integer; DoubleRound: Boolean);

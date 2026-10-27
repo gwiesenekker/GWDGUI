@@ -3,7 +3,7 @@ program game_tree_topology_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uDraughtsBoard, uGameTree, uGameTreeActor,
-  uGameTreeBuilder, uGameTreePdn, uGameOrchestrator, uTreeTestUtils;
+  uGameTreeBuilder, uGameTreePdn, uGameOrchestrator, uTreeTestUtils, uDraughtsPosition;
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
@@ -131,7 +131,7 @@ begin
     Expected.SetBeginPosition;
     for I := 0 to Moves.Count - 1 do
       Expected.PlayMove(Moves[I]);
-    Check(Tree.TryBuildBoardAtNode(Tree.FindBranchNode(0, 2), Actual),
+    Check(TryBuildDraughtsBoardAtNode(Tree, Tree.FindBranchNode(0, 2), Actual),
       'variation replay must succeed');
     Check(Actual.CurrentFEN = Expected.CurrentFEN, 'replay must match legal path');
     SavedFen := Actual.CurrentFEN;
@@ -142,10 +142,10 @@ begin
     finally
       Command.Free;
     end;
-    Check(not Tree.TryBuildBoardAtNode(Tree.FindBranchNode(1, 1), Actual),
+    Check(not TryBuildDraughtsBoardAtNode(Tree, Tree.FindBranchNode(1, 1), Actual),
       'illegal imported continuation must fail validation');
     Check(Actual.CurrentFEN = SavedFen, 'failed replay must leave board intact');
-    Check(Tree.TryBuildBoardAtNode(Tree.Root, Actual), 'root replay');
+    Check(TryBuildDraughtsBoardAtNode(Tree, Tree.Root, Actual), 'root replay');
     Expected.SetBeginPosition;
     Check(Actual.CurrentFEN = Expected.CurrentFEN, 'root replay resets position');
     Rebuild(Actor, 'chain', '', '32-28');
@@ -282,7 +282,7 @@ begin
       'materializing another path must preserve shared analysis');
     Check(Tree.FindBranchNode(0, 1).ChildCount = 2, 'branch count');
     NestedId := Tree.FindBranchNode(2, 2).NodeId;
-    Check(Tree.TryBuildBoardAtNode(Tree.FindBranchNode(2, 3), Actual),
+    Check(TryBuildDraughtsBoardAtNode(Tree, Tree.FindBranchNode(2, 3), Actual),
       'nested replay must succeed');
     Check(Tree.CopyNodeMovesTo(Tree.FindBranchNode(2, 3), Moves),
       'nested path extraction');
