@@ -610,7 +610,6 @@ var
   LPreviousPosition: TGameTreePlyNode;
   LResultText: string;
   LSegment, LRenderedMove: string;
-  LRootVariationRendered: Boolean;
   Board: TDraughtsBoard;
 
   procedure AppendAnalysisVariation(ABaseNode: TGameTreePlyNode;
@@ -636,9 +635,17 @@ var
       Result += ' ';
     Result += LVariationText;
   end;
+  procedure AppendPositionAnalysis(ANode: TGameTreePlyNode);
+  begin
+    if ANode = nil then Exit;
+    AppendAnalysisVariation(ANode, ANode.EnginePV, ANode.EngineScore, 'E',
+      AOptions.ShowEnginePVMove, AOptions.ShowEngineFullPV, AOptions.ShowEngineScore);
+    AppendAnalysisVariation(ANode, ANode.AnnotatorPV, ANode.AnnotatorScore, 'A',
+      AOptions.ShowAnnotatorPVMove, AOptions.ShowAnnotatorFullPV, AOptions.ShowAnnotatorScore);
+    AppendAnalysisVariation(ANode, ANode.AutoPlayPV, '', '', True, True, False);
+  end;
 begin
   Result := '';
-  LRootVariationRendered := False;
   if (AGameTree = nil) or (AGameTree.Root = nil) then
     Exit;
 
@@ -672,26 +679,9 @@ begin
       ARenderResult, Length(Result) + 1, Board);
     if LNested <> '' then
       Result += ' ' + LNested;
-    if (not LRootVariationRendered) and (LPreviousPosition = AGameTree.Root) then
-    begin
-      AppendAnalysisVariation(AGameTree.Root, AGameTree.Root.EnginePV,
-        AGameTree.Root.EngineScore, 'E', AOptions.ShowEnginePVMove,
-        AOptions.ShowEngineFullPV, AOptions.ShowEngineScore);
-      AppendAnalysisVariation(AGameTree.Root, AGameTree.Root.AnnotatorPV,
-        AGameTree.Root.AnnotatorScore, 'A', AOptions.ShowAnnotatorPVMove,
-        AOptions.ShowAnnotatorFullPV, AOptions.ShowAnnotatorScore);
-      AppendAnalysisVariation(AGameTree.Root, AGameTree.Root.AutoPlayPV,
-        '', '', True, True, False);
-      LRootVariationRendered := True;
-    end;
-    AppendAnalysisVariation(LChild, LChild.EnginePV, LChild.EngineScore, 'E',
-      AOptions.ShowEnginePVMove, AOptions.ShowEngineFullPV,
-      AOptions.ShowEngineScore);
-    AppendAnalysisVariation(LChild, LChild.AnnotatorPV, LChild.AnnotatorScore,
-      'A', AOptions.ShowAnnotatorPVMove, AOptions.ShowAnnotatorFullPV,
-      AOptions.ShowAnnotatorScore);
-    AppendAnalysisVariation(LChild, LChild.AutoPlayPV, '', '', True, True,
-      False);
+    // Analysis belongs to the position before this played move. Present it
+    // after that move, while retaining its original base for preview navigation.
+    AppendPositionAnalysis(LPreviousPosition);
     AdvanceRenderBoard(Board, LChild.MoveText, ARenderResult);
   end;
 
@@ -708,17 +698,8 @@ begin
     Result += LNested;
   end;
 
-  if not LRootVariationRendered then
-  begin
-    AppendAnalysisVariation(AGameTree.Root, AGameTree.Root.EnginePV,
-      AGameTree.Root.EngineScore, 'E', AOptions.ShowEnginePVMove,
-      AOptions.ShowEngineFullPV, AOptions.ShowEngineScore);
-    AppendAnalysisVariation(AGameTree.Root, AGameTree.Root.AnnotatorPV,
-      AGameTree.Root.AnnotatorScore, 'A', AOptions.ShowAnnotatorPVMove,
-      AOptions.ShowAnnotatorFullPV, AOptions.ShowAnnotatorScore);
-    AppendAnalysisVariation(AGameTree.Root, AGameTree.Root.AutoPlayPV,
-      '', '', True, True, False);
-  end;
+  // At the tip (or in an empty game), no played continuation exists yet.
+  AppendPositionAnalysis(LChild);
 
   LResultText := PdnExportResult(AResultText);
   if LResultText <> '*' then

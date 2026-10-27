@@ -7,12 +7,20 @@ begin
   if not Value then raise Exception.Create(Text);
 end;
 var RenderDigest: QWord = QWord($CBF29CE484222325);
+    ExportDigest: QWord = QWord($CBF29CE484222325);
 procedure DigestText(const Text: string);
 var I: Integer;
 begin
   for I := 1 to Length(Text) do
     RenderDigest := (RenderDigest xor Ord(Text[I])) * QWord(1099511628211);
   RenderDigest := (RenderDigest xor 0) * QWord(1099511628211);
+end;
+procedure DigestExport(const Text: string);
+var I: Integer;
+begin
+  for I := 1 to Length(Text) do
+    ExportDigest := (ExportDigest xor Ord(Text[I])) * QWord(1099511628211);
+  ExportDigest := (ExportDigest xor 0) * QWord(1099511628211);
 end;
 function CountMoveNodes(Node: TGameTreePlyNode): Integer;
 var I: Integer;
@@ -24,7 +32,7 @@ end;
 procedure CheckRender(Presenter: TNotationPresentation; Tree: TGameTree;
   const Options: TGameTreePdnRenderOptions);
 var Rendered: TGameTreePdnRenderResult; Hit: TMoveVariationHit;
-  Range: TNotationRange; I, Work: Integer; Captions: TGameTreeMoveCaptionMap;
+  Exported: string; Range: TNotationRange; I, Work: Integer; Captions: TGameTreeMoveCaptionMap;
 begin
   Captions := TGameTreeMoveCaptionMap.Create;
   try
@@ -34,7 +42,8 @@ begin
   finally Captions.Free; end;
   RenderGameTreeMovesToPdn(Tree, Options, Rendered);
   DigestText(Rendered.Text);
-  DigestText(GameTreeToPdnTextEx(Tree, Options));
+  Exported := GameTreeToPdnTextEx(Tree, Options);
+  DigestText(Exported); DigestExport(Exported);
   for I := 0 to High(Rendered.MoveStarts) do
     DigestText(IntToStr(Rendered.MoveStarts[I]) + ':' + IntToStr(Rendered.MoveLengths[I]));
   for I := 0 to High(Rendered.VariationStarts) do
@@ -239,8 +248,9 @@ begin
     Tree := nil;
     Check(Presenter.Text = Before, 'presenter owns projection without retaining tree');
   finally Presenter.Free; CaptureTree.Free; Tree.Free; end;
-  // Captured from a8795c9 before incremental rendering: compact/export text
-  // and every navigation field for all 256 filter combinations.
-  Check(RenderDigest = QWord($4C6CCFC3132F4DBA), 'text and navigation ranges match pre-optimization renderer');
+  // File export remains unchanged; compact text/navigation intentionally moves
+  // analysis after the played move (covered independently by analysis-order checks).
+  Check(ExportDigest = QWord($874083F2AE786E19), 'file export matches pre-layout-change fingerprint: ' + IntToHex(ExportDigest, 16));
+  Check(RenderDigest = QWord($436FE42BE715E249), 'text and navigation ranges match expected analysis-after-move layout: ' + IntToHex(RenderDigest, 16));
   Writeln('Notation presentation checks passed');
 end.

@@ -5,6 +5,17 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-27 — Show analysis after the played move
+
+- Present engine, annotator and Auto Play PVs (or first-move-only projections)
+  after the actual move played from their position. Show tip/root analysis without
+  a played continuation at the end, once per source position.
+- Keep analysis node ownership and preview base plies unchanged; PDN file exports
+  retain their previous content and metadata.
+- Add white/Black-start, empty/short games, all source filter combinations and
+  relocated prefix/move hit tests. The ordering test fails against the old layout;
+  the file-export fingerprint is identical before and after the change.
+
 ### 2026-10-27 — Outline both ends of PV hint moves
 
 - Highlight the source and destination of the first PV move and its reply, for
