@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12"/>
+    <General>
+      <Flags><MainUnitHasCreateFormStatements Value="False"/></Flags>
+      <MainUnit Value="0"/>
+      <Title Value="notation_preferences_check"/>
+    </General>
+    <RequiredPackages Count="2">
+      <Item1><PackageName Value="LCL"/></Item1>
+      <Item2><PackageName Value="SynEdit"/></Item2>
+    </RequiredPackages>
+    <Units Count="1">
+      <Unit0>
+        <Filename Value="notation_preferences_check.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit0>
+    </Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <Target><Filename Value="notation_preferences_check"/></Target>
+    <SearchPaths><OtherUnitFiles Value=".."/></SearchPaths>
+    <Other><CustomOptions Value="-gl -dGWDGUI_NONINTERACTIVE_TEST"/></Other>
+  </CompilerOptions>
+</CONFIG>

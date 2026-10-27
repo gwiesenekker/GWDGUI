@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics, StdCtrls,
-  uPreferences;
+  uPreferences, uNotationStyles;
 
 type
   TPreferencesAcceptedEvent = procedure(Sender: TObject;
@@ -19,7 +19,12 @@ type
     FEvaluationScaleGroup: TRadioGroup;
     FOnAccepted: TPreferencesAcceptedEvent;
     FPreferences: TGuiPreferences;
-    FSwatches: array[0..7] of TPanel;
+    FSwatches: array[0..11] of TPanel;
+    FNotationBold, FNotationItalic: array[TNotationStyle] of TCheckBox;
+    FNotationSamples: array[TNotationStyle] of TLabel;
+    procedure AddNotationRow(AParent: TWinControl; AStyle: TNotationStyle; ATop: Integer);
+    procedure NotationChanged(Sender: TObject);
+    procedure UpdateNotationSamples;
     procedure AddColorRow(AParent: TWinControl; const ACaption: string;
       AIndex: Integer; ATop: Integer);
     procedure ApplyClick(Sender: TObject);
@@ -50,6 +55,7 @@ var
   LGroup: TGroupBox;
   LPageControl: TPageControl;
   LTab: TTabSheet;
+  S: TNotationStyle;
 begin
   inherited Create(AOwner);
   Caption := 'Preferences';
@@ -57,7 +63,7 @@ begin
   BorderStyle := bsSizeable;
   Width := 520;
   Height := 647;
-  Constraints.MinWidth := 460;
+  Constraints.MinWidth := 520;
   Constraints.MinHeight := 587;
 
   FColorDialog := TColorDialog.Create(Self);
@@ -132,11 +138,22 @@ begin
   FEvaluationScaleGroup.Items.Add('Linear');
   FEvaluationScaleGroup.Items.Add('Logarithmic');
 
+  LTab := TTabSheet.Create(Self);
+  LTab.PageControl := LPageControl; LTab.Caption := 'Notation'; LTab.Name := 'NotationTab';
+  with TLabel.Create(Self) do
+  begin
+    Parent := LTab; SetBounds(12, 12, 440, 48); WordWrap := True;
+    Caption := 'Game moves use one font. Choose colours and bold/italic styles below.';
+  end;
+  LGroup := TGroupBox.Create(Self); LGroup.Parent := LTab;
+  LGroup.SetBounds(8, 66, 464, 240); LGroup.Caption := 'Moves window';
+  for S := Low(S) to High(S) do AddNotationRow(LGroup, S, 30+Ord(S)*46);
+
   LDefaultsButton := TButton.Create(Self);
   LDefaultsButton.Parent := LButtonPanel;
   LDefaultsButton.Align := alLeft;
   LDefaultsButton.Width := 96;
-  LDefaultsButton.Caption := 'Defaults';
+  LDefaultsButton.Caption := 'Defaults'; LDefaultsButton.Name := 'PreferencesDefaults';
   LDefaultsButton.OnClick := @DefaultsClick;
 
   LCancelButton := TButton.Create(Self);
@@ -151,8 +168,50 @@ begin
   LApplyButton.Align := alRight;
   LApplyButton.Width := 96;
   LApplyButton.BorderSpacing.Right := 8;
-  LApplyButton.Caption := 'Save';
+  LApplyButton.Caption := 'Save'; LApplyButton.Name := 'PreferencesApply';
   LApplyButton.OnClick := @ApplyClick;
+end;
+
+procedure TPreferencesForm.AddNotationRow(AParent: TWinControl; AStyle: TNotationStyle; ATop: Integer);
+var Button: TButton; Index: Integer;
+begin
+  Index := 8+Ord(AStyle);
+  FNotationSamples[AStyle] := TLabel.Create(Self);
+  with FNotationSamples[AStyle] do
+  begin Parent := AParent; SetBounds(12, ATop+4, 150, 24); Caption := NotationStyleNames[AStyle]; Name := 'NotationSample'+IntToStr(Ord(AStyle)); end;
+  FSwatches[Index] := TPanel.Create(Self);
+  with FSwatches[Index] do
+  begin Parent := AParent; SetBounds(168, ATop, 30, 24); BevelOuter := bvLowered; end;
+  Button := TButton.Create(Self);
+  Button.Parent := AParent; Button.SetBounds(206, ATop, 76, 26);
+  Button.Caption := 'Colour...'; Button.Tag := Index; Button.OnClick := @ChooseColorClick;
+  FNotationBold[AStyle] := TCheckBox.Create(Self);
+  with FNotationBold[AStyle] do
+  begin
+    Parent := AParent; SetBounds(296, ATop, 68, 26); Caption := 'Bold';
+    Name := 'NotationBold'+IntToStr(Ord(AStyle)); OnChange := @NotationChanged;
+  end;
+  FNotationItalic[AStyle] := TCheckBox.Create(Self);
+  with FNotationItalic[AStyle] do
+  begin
+    Parent := AParent; SetBounds(372, ATop, 72, 26); Caption := 'Italic';
+    Name := 'NotationItalic'+IntToStr(Ord(AStyle)); OnChange := @NotationChanged;
+  end;
+end;
+procedure TPreferencesForm.NotationChanged(Sender: TObject);
+begin UpdateNotationSamples; end;
+procedure TPreferencesForm.UpdateNotationSamples;
+var S: TNotationStyle; Style: TFontStyles;
+begin
+  for S := Low(S) to High(S) do
+    if (FNotationSamples[S] <> nil) and (FNotationBold[S] <> nil) and (FNotationItalic[S] <> nil) then
+    begin
+      Style := [];
+      if FNotationBold[S].Checked then Include(Style, fsBold);
+      if FNotationItalic[S].Checked then Include(Style, fsItalic);
+      FNotationSamples[S].Font.Style := Style;
+      FNotationSamples[S].Font.Color := FPreferences.NotationStyles[S].Color;
+    end;
 end;
 
 procedure TPreferencesForm.AddColorRow(AParent: TWinControl;
@@ -190,6 +249,7 @@ begin
     5: Result := FPreferences.LastMoveColor;
     6: Result := FPreferences.PvMoveColor;
     7: Result := FPreferences.HintMoveColor;
+    8..11: Result := FPreferences.NotationStyles[TNotationStyle(AIndex-8)].Color;
   else
     Result := clBlack;
   end;
@@ -206,6 +266,7 @@ begin
     5: FPreferences.LastMoveColor := AColor;
     6: FPreferences.PvMoveColor := AColor;
     7: FPreferences.HintMoveColor := AColor;
+    8..11: FPreferences.NotationStyles[TNotationStyle(AIndex-8)].Color := AColor;
   end;
 end;
 
@@ -216,11 +277,18 @@ begin
   for I := Low(FSwatches) to High(FSwatches) do
     if FSwatches[I] <> nil then
       FSwatches[I].Color := ColorByIndex(I);
+  UpdateNotationSamples;
 end;
 
 procedure TPreferencesForm.StartEdit(const APreferences: TGuiPreferences);
+var S: TNotationStyle;
 begin
   FPreferences := APreferences;
+  for S := Low(S) to High(S) do
+  begin
+    FNotationBold[S].Checked := FPreferences.NotationStyles[S].Bold;
+    FNotationItalic[S].Checked := FPreferences.NotationStyles[S].Italic;
+  end;
   if FEvaluationMaxEdit <> nil then
     FEvaluationMaxEdit.Text := FormatFloat('0.###',
       FPreferences.EvaluationMaxScore);
@@ -250,20 +318,18 @@ begin
 end;
 
 procedure TPreferencesForm.DefaultsClick(Sender: TObject);
-begin
-  FPreferences := DefaultGuiPreferences;
-  if FEvaluationMaxEdit <> nil then
-    FEvaluationMaxEdit.Text := FormatFloat('0.###',
-      FPreferences.EvaluationMaxScore);
-  if FEvaluationScaleGroup <> nil then
-    FEvaluationScaleGroup.ItemIndex := 1;
-  UpdateSwatches;
-end;
+begin StartEdit(DefaultGuiPreferences); end;
 
 procedure TPreferencesForm.ApplyClick(Sender: TObject);
 var
   MaxScore: Double;
+  S: TNotationStyle;
 begin
+  for S := Low(S) to High(S) do
+  begin
+    FPreferences.NotationStyles[S].Bold := FNotationBold[S].Checked;
+    FPreferences.NotationStyles[S].Italic := FNotationItalic[S].Checked;
+  end;
   if (FEvaluationMaxEdit <> nil) and
     TryStrToFloat(Trim(FEvaluationMaxEdit.Text), MaxScore) and
     (MaxScore > 0.0) then

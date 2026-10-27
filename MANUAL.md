@@ -649,6 +649,21 @@ The evaluation settings control:
 - maximum displayed score;
 - linear or logarithmic score scaling.
 
+The **Notation** tab controls the game moves window. Choose a colour and set
+**Bold** and **Italic** independently for each category:
+
+- **Played moves**: bold by default;
+- **Variations**: green and italic by default;
+- **Analysis / PVs**: blue by default, for both engine and annotator analysis;
+- **Comments / other text**: gray and italic by default, including move numbers,
+  punctuation, scores and clocks outside move ranges.
+
+The moves window uses SynEdit with wrapping and one font family/size (DejaVu
+Sans Mono on Linux, Consolas on Windows). Changing these styles affects only
+presentation: move/variation/PV clicks, Left/Right navigation, selection/copy and
+saved PDN keep their existing meaning. Colours and styles apply when you choose
+**Save**; editing the dialog or choosing **Defaults** alone does not apply them.
+
 Use **Defaults** to restore default values, **Save** to apply and persist the
 settings, or **Close** to leave without saving changes. Preferences are stored
 in `prefs.json` beside the GWDGUI executable.

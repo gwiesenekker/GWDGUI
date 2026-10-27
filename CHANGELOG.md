@@ -3,6 +3,21 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-27 — Styled SynEdit moves and Notation preferences
+
+- Replace the game moves memo with a read-only, wrapped SynEdit view using one
+  font family/size. Retain presenter byte ranges, existing selection, move/branch/
+  PV navigation, context menus, copy and Tab focus behavior.
+- Add a separate Notation preferences tab with independent colour, bold and italic
+  settings for played moves, variations, analysis/PVs and comments/other text.
+  Save applies/persists them; Defaults and legacy preference files remain supported.
+- Test preference round trips, malformed/missing style defaults, dialog Save/Defaults,
+  actual highlighter attributes, native mouse clicks after Unicode comments and
+  unchanged selections/tree exports. Adapt existing GUI checks to the new control.
+- Full headless/source-audit/archive, GTK preservation/boundary/delivery/Help/notation
+  preferences, tournament preservation and default performance checks pass.
+- Update the manual/build instructions. No push; native Windows remains untested.
+
 ### 2026-10-27 — Share the tested notation styling layer
 
 - Move the prototype document/index and highlighter into reusable production

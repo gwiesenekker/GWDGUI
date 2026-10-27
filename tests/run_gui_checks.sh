@@ -39,3 +39,12 @@ if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
   exit 1
 fi
 "$OUT_DIR/help_menu_check"
+
+
+echo "==> notation_preferences_check (GTK2, styles and SynEdit ranges)"
+if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
+  "$ROOT_DIR/tests/notation_preferences_check.lpi" > "$OUT_DIR/notation-preferences-build.log" 2>&1; then
+  cat "$OUT_DIR/notation-preferences-build.log"
+  exit 1
+fi
+"$OUT_DIR/notation_preferences_check"

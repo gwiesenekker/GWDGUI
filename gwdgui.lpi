@@ -212,10 +212,11 @@
         <IsPartOfProject Value="True"/>
       </Unit39>
     </Units>
-    <RequiredPackages Count="1">
+    <RequiredPackages Count="2">
       <Item1>
         <PackageName Value="LCL"/>
       </Item1>
+      <Item2><PackageName Value="SynEdit"/></Item2>
     </RequiredPackages>
   </ProjectOptions>
   <CompilerOptions>

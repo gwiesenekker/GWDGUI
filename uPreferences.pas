@@ -5,12 +5,13 @@ unit uPreferences;
 interface
 
 uses
-  Graphics;
+  Graphics, uNotationStyles;
 
 type
   TScoreScale = (ssLinear, ssLogarithmic);
 
   TGuiPreferences = record
+    NotationStyles: TNotationStyles;
     MainBoardLightColor: TColor;
     MainBoardDarkColor: TColor;
     AnalysisBoardLightColor: TColor;
@@ -41,6 +42,7 @@ end;
 
 function DefaultGuiPreferences: TGuiPreferences;
 begin
+  Result.NotationStyles := DefaultNotationStyles;
   Result.MainBoardLightColor := RGBToColor(228, 207, 176);
   Result.MainBoardDarkColor := RGBToColor(98, 73, 53);
   Result.AnalysisBoardLightColor := RGBToColor(206, 228, 246);
@@ -96,11 +98,19 @@ begin
     AColor := NewColor;
 end;
 
+procedure LoadBoolean(AObject: TJSONObject; const AName: string; var AValue: Boolean);
+var Data: TJSONData;
+begin
+  Data := AObject.Find(AName);
+  if (Data <> nil) and (Data.JSONType = jtBoolean) then AValue := Data.AsBoolean;
+end;
+
 procedure LoadGuiPreferences(var APrefs: TGuiPreferences);
 var
   Data: TJSONData;
   FileName: string;
   Lines: TStringList;
+  S: TNotationStyle; Key: string;
 begin
   APrefs := DefaultGuiPreferences;
   FileName := PreferencesJsonFileName;
@@ -118,6 +128,13 @@ begin
   try
     if Data.JSONType = jtObject then
     begin
+      for S := Low(S) to High(S) do
+      begin
+        Key := 'notation_' + IntToStr(Ord(S));
+        LoadColor(TJSONObject(Data), Key + '_color', APrefs.NotationStyles[S].Color);
+        LoadBoolean(TJSONObject(Data), Key+'_bold', APrefs.NotationStyles[S].Bold);
+        LoadBoolean(TJSONObject(Data), Key+'_italic', APrefs.NotationStyles[S].Italic);
+      end;
       LoadColor(TJSONObject(Data), 'main_board_light', APrefs.MainBoardLightColor);
       LoadColor(TJSONObject(Data), 'main_board_dark', APrefs.MainBoardDarkColor);
       LoadColor(TJSONObject(Data), 'analysis_board_light',
@@ -145,10 +162,18 @@ procedure SaveGuiPreferences(const APrefs: TGuiPreferences);
 var
   Data: TJSONObject;
   Lines: TStringList;
+  S: TNotationStyle; Key: string;
 begin
   Data := TJSONObject.Create;
   Lines := TStringList.Create;
   try
+    for S := Low(S) to High(S) do
+    begin
+      Key := 'notation_' + IntToStr(Ord(S));
+      Data.Add(Key+'_color', ColorToJsonText(APrefs.NotationStyles[S].Color));
+      Data.Add(Key+'_bold', APrefs.NotationStyles[S].Bold);
+      Data.Add(Key+'_italic', APrefs.NotationStyles[S].Italic);
+    end;
     Data.Add('main_board_light', ColorToJsonText(APrefs.MainBoardLightColor));
     Data.Add('main_board_dark', ColorToJsonText(APrefs.MainBoardDarkColor));
     Data.Add('analysis_board_light',

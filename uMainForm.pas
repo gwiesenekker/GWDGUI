@@ -12,7 +12,7 @@ uses
   uEngineParamsJson, uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue, uGameGuiMessages, uAnalysisCoordinator,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
   uGuiDialogs, uManualForm, uAppInfo, uDatabaseForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uNotationPresentation, uDisplayedPosition, uGameTreeSearchRef, uGameTreeView, uPositionSetupForm,
+  uGameTreePdn, uNotationPresentation, uGameNotationView, uDisplayedPosition, uGameTreeSearchRef, uGameTreeView, uPositionSetupForm,
   uPreferences, uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm, uGameMoveHistory;
 
 type
@@ -69,7 +69,7 @@ type
     FGuiEventTimer: TTimer;
     FBlackPlayerEdit: TEdit;
     FFenEdit: TEdit;
-    FGameMoveMemo: TMemo;
+    FGameMoveMemo: TGameNotationView;
     FGameTree: TGameTree;
     FGameTreeActor: TGameTreeActor;
     FGameTreeBrowseMode: Boolean;
@@ -988,14 +988,12 @@ begin
   LPvPanel.Constraints.MinHeight := 70;
   LPvPanel.BevelOuter := bvNone;
 
-  FGameMoveMemo := TMemo.Create(Self);
+  FGameMoveMemo := TGameNotationView.Create(Self);
   FGameMoveMemo.Name := 'GameMoveMemo';
   FGameMoveMemo.Parent := LSidePanel;
   FGameMoveMemo.Align := alClient;
-  FGameMoveMemo.ParentFont := True;
   FGameMoveMemo.ReadOnly := True;
   FGameMoveMemo.ScrollBars := ssVertical;
-  FGameMoveMemo.WordWrap := True;
   FGameMoveMemo.HideSelection := False;
   FGameMoveMemo.OnClick := @GameMoveBrowseClick;
   FGameMoveMemo.OnKeyDown := @GameMoveBrowseKeyDown;
@@ -1311,6 +1309,7 @@ end;
 
 procedure TMainForm.ApplyPreferences;
 begin
+  if FGameMoveMemo <> nil then FGameMoveMemo.ApplyStyles(FPreferences.NotationStyles);
   ApplyBoardTheme(FBoardControl, False);
   ApplyBoardTheme(FMiniBoardControl, False);
   ApplyBoardTheme(FPopoutBoardControl, False);
@@ -3435,12 +3434,13 @@ begin
   begin
     FGameMoveMemo.Lines.BeginUpdate;
     try
-      FGameMoveMemo.Text := FNotation.Text;
+      FGameMoveMemo.SetPresentation(FNotation);
       FHighlightedGameMovePly := -2;
     finally
       FGameMoveMemo.Lines.EndUpdate;
     end;
-  end;
+  end
+  else FGameMoveMemo.SetPresentation(FNotation);
   UpdateGameMoveHighlight;
 end;
 

@@ -1,5 +1,30 @@
 # Responses to Claude's reviews
 
+## SynEdit moves and Notation preferences — 2026-10-27
+
+Proceed with SynEdit at the user’s request, retaining one font family/size and
+configurable colour/bold/italic styles. Add a separate Notation tab under File →
+Preferences for played moves, variations, analysis/PVs and comments/other text.
+Save applies and persists the settings; editing/Defaults alone stays local to
+the dialog. Old preference files get sensible defaults; malformed new style
+values do not replace them. The existing board/evaluation settings are retained.
+
+The view wraps using the bundled SynEdit plugin and exposes zero-based UTF-8 byte
+ranges to the existing presenter and navigation handlers. The game tree, cursor,
+PDN output and analysis ownership remain unchanged. Keep copy/selection, popup
+menus, Left/Right/Escape and normal Tab focus traversal. Preferences update
+highlighter attributes without replacing text or the selected range. RichMemo
+remains an optional prototype-only dependency.
+
+A dedicated regression checks saved/loaded styles, legacy/malformed defaults,
+independent dialog checkboxes, Save/Defaults, live attributes and preserved
+selection/export. Native mouse messages resolve the intended move after Unicode
+combining/non-BMP comments. Existing GTK tests run against the actual SynEdit
+control. Full headless/source-audit/archive, GTK preservation/boundary/delivery/
+Help/notation-preferences, tournament preservation and default performance checks
+pass. The standalone comparison also runs after sharing the styling units.
+Lazarus 4.8 GTK2 is tested; native Windows validation remains outstanding. No push.
+
 ## Shared notation styling layer — 2026-10-27
 
 Extract the exercised document/coordinate map, semantic style settings and

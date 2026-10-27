@@ -7,8 +7,9 @@
       <MainUnit Value="0"/>
       <Title Value="standalone_preservation_check"/>
     </General>
-    <RequiredPackages Count="1">
+    <RequiredPackages Count="2">
       <Item1><PackageName Value="LCL"/></Item1>
+      <Item2><PackageName Value="SynEdit"/></Item2>
     </RequiredPackages>
     <Units Count="1">
       <Unit0>

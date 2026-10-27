@@ -184,3 +184,8 @@ rebuilding, and bulk takebacks. It uses work counts, not timing thresholds.
 The standalone [notation-control comparison](NOTATION_CONTROLS.md) measures TMemo,
 SynEdit and pinned RichMemo with the real presenter/cursor. It is optional and
 does not add RichMemo to the production application or the normal GUI suite.
+
+`notation_preferences_check` checks the separate Notation tab, independent bold/
+italic controls, Save/Defaults, JSON round trips, legacy/malformed style defaults,
+actual highlighter attributes and unchanged UTF-8 selection/tree exports. The GTK
+suite runs it. Native Windows remains untested.

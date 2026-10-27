@@ -4,7 +4,7 @@ program main_form_boundaries_check;
   {$FATAL Build this test with its .lpi project}
 {$ENDIF}
 uses {$IFDEF UNIX}cthreads,{$ENDIF}
-  Interfaces, Forms, Classes, SysUtils, Controls, StdCtrls, Menus, ExtCtrls, Grids,
+  Interfaces, Forms, uGameNotationView, Classes, SysUtils, Controls, StdCtrls, Menus, ExtCtrls, Grids,
   LCLType, Types, Graphics, uMainForm, uRunningGame, uBoardControl, uDraughtsBoard, uPdn,
   uGameTree, uGameTreePdn, uGameTreeBuilder, uGameSetupTypes, uGameOrchestrator, uGuiDialogs,
   uPositionSetupForm, uEngineRegistry, uEngineParamsJson, uAnalyzerRunnerThread,
@@ -282,7 +282,7 @@ end;
 procedure CheckAnalysisControls;
 var Form: TMainForm; Engines: TExternalEngineList; Definition: TExternalEngineDefinition;
   Params: TEngineParamArray; Item: TMenuItem; Popup: TPopupMenu;
-  Tick: QWord; Keys: TStringList; Game: TRunningGame; Setup: TGameSetup; Memo: TMemo;
+  Tick: QWord; Keys: TStringList; Game: TRunningGame; Setup: TGameSetup; Memo: TGameNotationView;
   NodeId: Int64; AutoText, Config, ParamFile: string; HadConfig, HadParams: Boolean;
   SavedConfig, SavedParams: TStringList; Key: Word; Button: TButton;
   OldRunner, CurrentRunner: TAnalyzerRunnerThread; Search: TGameTreeSearchRef;
@@ -317,7 +317,7 @@ begin
     Tick := GetTickCount64;
     repeat Pump(Form); Sleep(5); until (Game.Lifecycle = rglFinished) or (GetTickCount64 - Tick > 5000);
     Check(Game.Lifecycle = rglFinished, 'analysis fixture is a fully stopped game');
-    Memo := TMemo(Form.FindComponent('GameMoveMemo'));
+    Memo := TGameNotationView(Form.FindComponent('GameMoveMemo'));
     Key := VK_LEFT; Memo.OnKeyDown(Memo, Key, []); // following -> tip
     Key := VK_LEFT; Memo.OnKeyDown(Memo, Key, []); // tip -> ply 1
     Check(TDraughtsBoardControl(Form.FindComponent('MainBoard')).Board.SideToMove = dsBlack,
@@ -473,7 +473,7 @@ end;
 
 procedure CheckAnalysisAfterPlayedMoves;
 var Form: TMainForm; Game: TPdnGame; Actor: TGameTreeActor;
-  Command: TGameTreeCommand; Memo: TMemo; Board: TDraughtsBoardControl;
+  Command: TGameTreeCommand; Memo: TGameNotationView; Board: TDraughtsBoardControl;
   Expected: TDraughtsBoard; Before: string; Key: Word; Mode: Integer;
   EngineFull, AnnotatorFull: TMenuItem;
   procedure RecordPV(Base: Integer; const Pv: string; Annotator: Boolean);
@@ -501,7 +501,7 @@ begin
     RecordPV(1, '19-23 28x19', True);
     RecordPV(3, '12-18 41-37', False);
     Before := GameTreeToPdnText(Form.ActiveGameTree);
-    Memo := TMemo(Form.FindComponent('GameMoveMemo')); Memo.Enabled := False;
+    Memo := TGameNotationView(Form.FindComponent('GameMoveMemo')); Memo.Enabled := False;
     Board := TDraughtsBoardControl(Form.FindComponent('MainBoard'));
     EngineFull := Menu(Form, 'Show engine full PV');
     AnnotatorFull := Menu(Form, 'Show annotator full PV');

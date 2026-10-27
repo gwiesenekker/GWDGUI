@@ -7,7 +7,7 @@ program standalone_preservation_check;
 
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Interfaces, Forms, Classes, SysUtils, StdCtrls, ExtCtrls, Grids, LCLType, Controls, ComCtrls, Menus,
+  Interfaces, Forms, uGameNotationView, Classes, SysUtils, StdCtrls, ExtCtrls, Grids, LCLType, Controls, ComCtrls, Menus,
   uDatabaseForm, uGameDatabase, uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uMoveInteraction, uRunningGame, uPdn, uPdnOpenDialog, uPvBrowser, uScoreHistoryControl, uGuiDialogs,
   uGameTreeNodeData, uGameTreeView, uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uTreeTestUtils;
 
@@ -50,12 +50,12 @@ begin
 end;
 
 procedure CheckInvalidDisplayIsVisible(AForm: TMainForm);
-var Memo: TMemo; Key: Word; Board: TDraughtsBoardControl;
+var Memo: TGameNotationView; Key: Word; Board: TDraughtsBoardControl;
 begin
   AForm.LoadStandaloneFen(DefaultStartingFEN);
   // Deliberately bypass the actor to simulate corrupt persisted/legacy state.
   AForm.ActiveGameTree.RecordMainlineMove(1, '1-50');
-  Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+  Memo := TGameNotationView(AForm.FindComponent('GameMoveMemo'));
   Key := VK_RIGHT; Memo.OnKeyDown(Memo, Key, []); // following -> root
   Key := VK_RIGHT; Memo.OnKeyDown(Memo, Key, []); // root -> corrupt node
   Check(Pos('Cannot display the selected position', AForm.Caption) > 0,
@@ -196,7 +196,7 @@ begin
 end;
 
 procedure CheckLandingCaptureImport(AForm: TMainForm);
-var Game: TPdnGame; Text: string; Memo: TMemo; Board: TDraughtsBoardControl;
+var Game: TPdnGame; Text: string; Memo: TGameNotationView; Board: TDraughtsBoardControl;
 begin
   Game := TPdnGame.Create;
   try
@@ -206,7 +206,7 @@ begin
     Check((AForm.ActiveGameTree.MainlineCount = 1) and
       (AForm.ActiveGameTree.MainlineNode[1].MoveText = '32x12x27x17'),
       'landing path must import as a validated canonical tree move');
-    Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Memo := TGameNotationView(AForm.FindComponent('GameMoveMemo'));
     Check((Pos('32x12', Memo.Text) > 0) and (Pos('x27x17', Memo.Text) = 0),
       'move list uses standard capture notation');
     Memo.SelStart := Pos('32x12', Memo.Text) - 1; Memo.OnClick(Memo);
@@ -223,7 +223,7 @@ end;
 procedure CheckNotationSelectionAndFilters(AForm: TMainForm);
 var
   Game: TPdnGame;
-  Memo: TMemo;
+  Memo: TGameNotationView;
   Board: TDraughtsBoardControl;
   Expected: TDraughtsBoard;
   HideAnnotations: TMenuItem;
@@ -263,7 +263,7 @@ begin
     Game.InitialCommentText := 'Opening note';
     Game.MoveAnnotationsText := 'First move note' + LineEnding;
     AForm.LoadPdnGameToDisplay(Game);
-    Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Memo := TGameNotationView(AForm.FindComponent('GameMoveMemo'));
     Board := TDraughtsBoardControl(AForm.FindComponent('MainBoard'));
     Check((Memo <> nil) and (Board <> nil) and (Memo.PopupMenu <> nil),
       'notation selection controls exist');
@@ -534,7 +534,7 @@ var
   Games: TList;
   Source, Moves: TStringList;
   FileName: string;
-  Memo: TMemo;
+  Memo: TGameNotationView;
   BoardControl: TDraughtsBoardControl;
   Expected: TDraughtsBoard;
   I: Integer;
@@ -581,7 +581,7 @@ begin
     LoadPdnGamesFromFile(FileName, Games);
     Check(Games.Count = 1, 'GUI nested fixture should parse');
     AForm.LoadPdnGameToDisplay(TPdnGame(Games[0]));
-    Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Memo := TGameNotationView(AForm.FindComponent('GameMoveMemo'));
     BoardControl := TDraughtsBoardControl(AForm.FindComponent('MainBoard'));
     Check((Memo <> nil) and (BoardControl <> nil), 'named navigation controls');
     BeforeText := GameTreeToPdnText(AForm.ActiveGameTree);
@@ -636,7 +636,7 @@ var
   Games: TList;
   Source, Moves: TStringList;
   FileName, BeforeText: string;
-  Memo: TMemo;
+  Memo: TGameNotationView;
   Board: TDraughtsBoardControl;
   Expected: TDraughtsBoard;
   I: Integer;
@@ -674,7 +674,7 @@ begin
     LoadPdnGamesFromFile(FileName, Games);
     Check(Games.Count = 1, 'Black-start GUI fixture must parse');
     AForm.LoadPdnGameToDisplay(TPdnGame(Games[0]));
-    Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Memo := TGameNotationView(AForm.FindComponent('GameMoveMemo'));
     Board := TDraughtsBoardControl(AForm.FindComponent('MainBoard'));
     BeforeText := GameTreeToPdnText(AForm.ActiveGameTree);
     SelectVariation('33-28', '18-23 33-28');
@@ -780,7 +780,7 @@ procedure CheckStandaloneMainlineCanBeExtended(AForm: TMainForm);
 var
   Tree: TGameTree;
   Game: TPdnGame;
-  Memo: TMemo;
+  Memo: TGameNotationView;
   Key: Word;
 begin
   AForm.LoadStandaloneFen(DefaultStartingFEN);
@@ -796,7 +796,7 @@ begin
     Game.MovesText := '32-28 18-23';
     Game.ResultText := '*';
     AForm.LoadPdnGameToDisplay(Game);
-    Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Memo := TGameNotationView(AForm.FindComponent('GameMoveMemo'));
     Key := VK_LEFT;
     Memo.OnKeyDown(Memo, Key, []);
     ClickBoardMove(AForm, 37, 32);
@@ -824,7 +824,7 @@ var
   Game: TRunningGame;
   Command: TGameTreeCommand;
   History: TListBox;
-  Memo: TMemo;
+  Memo: TGameNotationView;
   Tick: QWord;
   Key: Word;
   Text: string;
@@ -877,7 +877,7 @@ begin
     Text := GameTreeToPdnText(Game.GameTree);
     Check((Pos('37-32', Text) > 0) and (Pos('12-18', Text) > 0),
       'post-result exploration must be visible in saved PDN');
-    Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Memo := TGameNotationView(AForm.FindComponent('GameMoveMemo'));
     Key := VK_ESCAPE;
     Memo.OnKeyDown(Memo, Key, []);
     ClickBoardMove(AForm, 38, 32);
@@ -916,7 +916,7 @@ var
   Game: TPdnGame;
   Window: TForm;
   View: TTreeView;
-  Memo: TMemo;
+  Memo: TGameNotationView;
   Board: TDraughtsBoardControl;
   Expected: TDraughtsBoard;
   Target: Int64;
@@ -946,7 +946,7 @@ begin
     Check(Window <> nil, 'tree window must open');
     Window.Hide;
     View := TTreeView(Window.FindComponent('GameTreeNodes'));
-    Memo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    Memo := TGameNotationView(AForm.FindComponent('GameMoveMemo'));
     Board := TDraughtsBoardControl(AForm.FindComponent('MainBoard'));
     for I := 0 to View.Items.Count - 1 do
       if Int64(PtrUInt(View.Items[I].Data)) = Target then
@@ -1112,7 +1112,7 @@ procedure CheckFrozenPvSurvivesRefresh(AForm: TMainForm);
 var
   Actor: TGameTreeActor;
   Command: TGameTreeCommand;
-  Memo, MovesMemo: TMemo;
+  Memo: TMemo; MovesMemo: TGameNotationView;
   MiniBoard: TDraughtsBoardControl;
   Expected: TDraughtsBoard;
   Key: Word;
@@ -1130,7 +1130,7 @@ begin
     finally
       Command.Free;
     end;
-    MovesMemo := TMemo(AForm.FindComponent('GameMoveMemo'));
+    MovesMemo := TGameNotationView(AForm.FindComponent('GameMoveMemo'));
     Key := VK_LEFT;
     MovesMemo.OnKeyDown(MovesMemo, Key, []);
     Memo := TMemo(AForm.FindComponent('EnginePvMemo'));
