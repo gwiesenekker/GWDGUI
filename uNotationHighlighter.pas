@@ -7,6 +7,9 @@ type
   private
     FDoc: TNotationDocument;
     FPos, FNext, FOffset: Integer;
+    // Own copy of the current line: TSynCustomHighlighter.CurrentLineText
+    // only exists from Lazarus 4.x on.
+    FLine: string;
     FAttributes: array[TNotationStyle] of TSynHighlighterAttributes;
   protected
     function GetDefaultAttribute(Index: Integer): TSynHighlighterAttributes; override;
@@ -59,6 +62,7 @@ end;
 procedure TNotationRangeHighlighter.SetLine(const NewValue: string; LineNumber: Integer);
 begin
   inherited;
+  FLine := NewValue;
   FOffset := 0;
   if Assigned(FDoc) then FOffset := FDoc.PointOffset(Point(1, LineNumber+1));
   FNext := 0; Next;
@@ -69,17 +73,17 @@ begin
   FPos := FNext;
   if GetEol then Exit;
   // SynEdit wrapping expects a terminal NUL token before GetEol becomes true.
-  if FPos = Length(CurrentLineText) then begin Inc(FNext); Exit; end;
+  if FPos = Length(FLine) then begin Inc(FNext); Exit; end;
   S := FDoc.StyleAt(FOffset+FPos); Inc(FNext);
-  while (FNext < Length(CurrentLineText)) and
+  while (FNext < Length(FLine)) and
     (FDoc.StyleAt(FOffset+FNext) = S) do Inc(FNext);
 end;
 function TNotationRangeHighlighter.GetEol: Boolean;
-begin Result := FPos > Length(CurrentLineText); end;
+begin Result := FPos > Length(FLine); end;
 function TNotationRangeHighlighter.GetToken: string;
-begin Result := Copy(CurrentLineText, FPos+1, FNext-FPos); end;
+begin Result := Copy(FLine, FPos+1, FNext-FPos); end;
 procedure TNotationRangeHighlighter.GetTokenEx(out TokenStart: PChar; out TokenLength: Integer);
-begin TokenStart := PChar(CurrentLineText)+FPos; TokenLength := FNext-FPos; end;
+begin TokenStart := PChar(FLine)+FPos; TokenLength := FNext-FPos; end;
 function TNotationRangeHighlighter.GetTokenKind: Integer;
 begin Result := Ord(FDoc.StyleAt(FOffset+FPos)); end;
 function TNotationRangeHighlighter.GetTokenAttribute: TSynHighlighterAttributes;

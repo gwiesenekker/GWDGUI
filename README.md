@@ -5,7 +5,8 @@ Current release: [Version 3.3](https://github.com/gwiesenekker/GWDGUI/releases/t
 
 See [Change history](CHANGELOG.md) for fixes and validation results.
 
-Build on Linux with Lazarus/LCL (GTK2), its bundled SynEdit package, FPC and Python 3 installed:
+Build on Linux with Lazarus/LCL 3.0 or later (GTK2), its bundled SynEdit package, FPC 3.2.2
+or later and Python 3 installed:
 
 ```sh
 bash build.sh

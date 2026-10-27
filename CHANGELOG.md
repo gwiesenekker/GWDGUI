@@ -3,6 +3,19 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+## Unreleased
+
+### 2026-10-27 — Build with Lazarus 3.0 again (review C10)
+
+- The notation highlighter keeps its own copy of the current line instead of
+  using `TSynCustomHighlighter.CurrentLineText`, which only exists from Lazarus
+  4.x on. GWDGUI builds with Lazarus 3.0 (as packaged by Debian/Ubuntu) again;
+  highlighting behaviour is unchanged.
+- The README now states the supported toolchain: Lazarus 3.0 or later, FPC 3.2.2
+  or later.
+- Built with Lazarus 3.0 / FPC 3.2.2 / GTK2; regression, lifecycle, DXP, GUI
+  (including `notation_preferences_check`) and tournament suites pass. No push.
+
 ## Version 3.3 — 2026-10-27
 
 - Publish the styled SynEdit moves window, separate Notation preferences, common
