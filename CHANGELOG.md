@@ -3,6 +3,18 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+## Version 3.3 — 2026-10-27
+
+- Publish the styled SynEdit moves window, separate Notation preferences, common
+  font chooser and independent engine/annotator PV colours described below.
+- Include Windows source-build fixes for atomic file writes and native Lazarus
+  build identity/manual embedding, without requiring Python on Windows.
+- Publish a clean tagged Linux build, portable archive, current manual, draughts
+  font and SHA256SUMS. Update the README release link.
+- Headless/source-audit/archive, GTK interface/tournament, build-info and default
+  performance checks pass. Native Windows validation remains outstanding.
+- Earlier "no push" statements below describe development before this release.
+
 ### 2026-10-27 — Choose the common notation font
 
 - Add Font... on the Notation preferences tab for one font family/point size

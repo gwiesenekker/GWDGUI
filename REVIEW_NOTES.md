@@ -1,5 +1,24 @@
 # Responses to Claude's reviews
 
+## Version 3.3 publication — 2026-10-27
+
+Publish the notation work since 3.2: a wrapped, styled SynEdit view with one
+selectable font, independent engine/annotator/Auto Play PV styles and a separate
+Notation preferences tab. Preserve tree ownership, PDN output, selection and
+navigation. The isolated control comparison and recorded GTK2 timings explain
+the choice; RichMemo is not a production dependency.
+
+Include the FPC 3.2.2 Windows file-write flag fix and native Lazarus Windows
+build-info/manual generator. Native Windows execution and font-dialog interaction
+remain unverified. The downloadable executable is Linux x86_64 only.
+
+Headless regressions, source/mutation audits, Git-less archive checks, GTK
+preservation/boundary/delivery/Help/notation and tournament checks, build-info
+checks and default performance checks pass. Build the release from the clean
+v3.3 tag, embed its commit and current manual, and supply a portable archive plus
+separate executable/font/manual downloads with SHA256SUMS. Earlier "no push"
+entries record the development phase and are superseded by this publication.
+
 ## Common notation font chooser — 2026-10-27
 
 Add Font... under Notation preferences, using the standard native font dialog
