@@ -3,6 +3,15 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+### 2026-10-27 — Separate engine and annotator PV styles
+
+- Add independent Engine PVs and Annotator PVs colour/bold/italic preferences;
+  defaults are blue and purple. Keep a separate Auto Play PV category.
+- Retain customised legacy shared-PV settings unless explicit new settings
+  override them; ordinary legacy defaults get distinct source colours.
+- Cover identical PV content, source-specific prefix/move styles, persistence,
+  migration, dialog controls and actual SynEdit attributes. Font is unchanged.
+
 ### 2026-10-27 — Preserve PV sources in notation ranges
 
 - Carry explicit engine, annotator and Auto Play source metadata on displayed

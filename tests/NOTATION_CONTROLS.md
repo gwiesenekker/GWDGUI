@@ -7,7 +7,8 @@ renderer and no RTF round trip.
 
 The three controls use the same font family and size. Played moves are bold,
 branch moves green/italic, PVs blue, and other text gray/italic. Engine and
-annotator PVs share the analysis style in this prototype. Move numbers and
+annotator PVs originally shared the analysis style in the recorded comparison.
+The current shared styling code gives engine PVs blue and annotator PVs purple. Move numbers and
 punctuation also use the gray fallback style; this is not a final visual design.
 TMemo provides the unformatted baseline. RichMemo applies attributes directly to
 presenter-derived spans; SynEdit uses a highlighter over the same style map.

@@ -110,9 +110,10 @@ var
   Data: TJSONData;
   FileName: string;
   Lines: TStringList;
-  S: TNotationStyle; Key: string;
+  S: TNotationStyle; Key: string; Defaults: TNotationStyles;
 begin
   APrefs := DefaultGuiPreferences;
+  Defaults := DefaultNotationStyles;
   FileName := PreferencesJsonFileName;
   if not FileExists(FileName) then
     Exit;
@@ -130,6 +131,12 @@ begin
     begin
       for S := Low(S) to High(S) do
       begin
+        // Keep customised legacy shared-PV styles; otherwise use distinct defaults.
+        if (S in [nsEnginePV, nsAnnotatorPV]) and
+          ((APrefs.NotationStyles[nsAnalysis].Color <> Defaults[nsAnalysis].Color) or
+           (APrefs.NotationStyles[nsAnalysis].Bold <> Defaults[nsAnalysis].Bold) or
+           (APrefs.NotationStyles[nsAnalysis].Italic <> Defaults[nsAnalysis].Italic)) then
+          APrefs.NotationStyles[S] := APrefs.NotationStyles[nsAnalysis];
         Key := 'notation_' + IntToStr(Ord(S));
         LoadColor(TJSONObject(Data), Key + '_color', APrefs.NotationStyles[S].Color);
         LoadBoolean(TJSONObject(Data), Key+'_bold', APrefs.NotationStyles[S].Bold);

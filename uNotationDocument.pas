@@ -63,7 +63,11 @@ begin
   begin
     H := FPresenter.VariationHits[I];
     if H.NodeId > 0 then Mark(H.Start, H.Length, nsVariation)
-    else Mark(H.Start, H.Length, nsAnalysis);
+    else case H.AnalysisSource of
+      nasEngine: Mark(H.Start, H.Length, nsEnginePV);
+      nasAnnotator: Mark(H.Start, H.Length, nsAnnotatorPV);
+      else Mark(H.Start, H.Length, nsAnalysis);
+    end;
   end;
   SetLength(FSpans, 0);
   I := 0;

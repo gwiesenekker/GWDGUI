@@ -19,7 +19,7 @@ type
     FEvaluationScaleGroup: TRadioGroup;
     FOnAccepted: TPreferencesAcceptedEvent;
     FPreferences: TGuiPreferences;
-    FSwatches: array[0..11] of TPanel;
+    FSwatches: array[0..8+Ord(High(TNotationStyle))] of TPanel;
     FNotationBold, FNotationItalic: array[TNotationStyle] of TCheckBox;
     FNotationSamples: array[TNotationStyle] of TLabel;
     procedure AddNotationRow(AParent: TWinControl; AStyle: TNotationStyle; ATop: Integer);
@@ -146,7 +146,7 @@ begin
     Caption := 'Game moves use one font. Choose colours and bold/italic styles below.';
   end;
   LGroup := TGroupBox.Create(Self); LGroup.Parent := LTab;
-  LGroup.SetBounds(8, 66, 464, 240); LGroup.Caption := 'Moves window';
+  LGroup.SetBounds(8, 66, 464, 40+46*(Ord(High(TNotationStyle))+1)); LGroup.Caption := 'Moves window';
   for S := Low(S) to High(S) do AddNotationRow(LGroup, S, 30+Ord(S)*46);
 
   LDefaultsButton := TButton.Create(Self);
@@ -249,7 +249,7 @@ begin
     5: Result := FPreferences.LastMoveColor;
     6: Result := FPreferences.PvMoveColor;
     7: Result := FPreferences.HintMoveColor;
-    8..11: Result := FPreferences.NotationStyles[TNotationStyle(AIndex-8)].Color;
+    8..8+Ord(High(TNotationStyle)): Result := FPreferences.NotationStyles[TNotationStyle(AIndex-8)].Color;
   else
     Result := clBlack;
   end;
@@ -266,7 +266,7 @@ begin
     5: FPreferences.LastMoveColor := AColor;
     6: FPreferences.PvMoveColor := AColor;
     7: FPreferences.HintMoveColor := AColor;
-    8..11: FPreferences.NotationStyles[TNotationStyle(AIndex-8)].Color := AColor;
+    8..8+Ord(High(TNotationStyle)): FPreferences.NotationStyles[TNotationStyle(AIndex-8)].Color := AColor;
   end;
 end;
 

@@ -654,9 +654,14 @@ The **Notation** tab controls the game moves window. Choose a colour and set
 
 - **Played moves**: bold by default;
 - **Variations**: green and italic by default;
-- **Analysis / PVs**: blue by default, for both engine and annotator analysis;
+- **Engine PVs**: blue by default;
+- **Annotator PVs**: purple by default;
+- **Auto Play PVs**: blue by default;
 - **Comments / other text**: gray and italic by default, including move numbers,
   punctuation, scores and clocks outside move ranges.
+
+Customised older shared PV styles are retained for the new source categories
+until you change them; otherwise engine and annotator PVs get distinct defaults.
 
 The moves window uses SynEdit with wrapping and one font family/size (DejaVu
 Sans Mono on Linux, Consolas on Windows). Changing these styles affects only

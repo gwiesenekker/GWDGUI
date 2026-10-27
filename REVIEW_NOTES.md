@@ -1,5 +1,15 @@
 # Responses to Claude's reviews
 
+## Separate engine/annotator PV preferences — 2026-10-27
+
+Add Engine PVs (blue) and Annotator PVs (purple) categories, retaining Auto Play
+under its own category. The source metadata drives both prefixes and move tokens,
+including identical PVs and hidden scores. Keep previous style ordinals stable.
+Customised legacy shared styles seed the new categories; explicit source settings
+override them. Non-customised defaults use distinct colours. Headless source/style
+and GUI persistence/migration/attribute checks pass. Update the manual and keep
+the same font. The requested font chooser is the next separate step. No push.
+
 ## Explicit notation PV sources — 2026-10-27
 
 Prepare separate engine/annotator colours by carrying the source through renderer

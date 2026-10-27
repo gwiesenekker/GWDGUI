@@ -1,15 +1,15 @@
 program notation_analysis_source_check;
 {$mode objfpc}{$H+}{$codepage utf8}
-uses SysUtils, uGameTree, uGameTreePdn, uNotationPresentation, uTreeTestUtils;
+uses SysUtils, uGameTree, uGameTreePdn, uNotationPresentation, uTreeTestUtils, uNotationDocument, uNotationStyles;
 procedure Check(B: Boolean; const Text: string);
 begin if not B then raise Exception.Create(Text); end;
 procedure Fixture(BlackStart: Boolean; MoveCount: Integer);
 var Tree: TGameTree; Presenter: TNotationPresentation; Options: TGameTreePdnRenderOptions;
     Flags, I, Expected: Integer; Hit: TMoveVariationHit; Source: TNotationAnalysisSource;
-    Counts: array[TNotationAnalysisSource] of Integer; Changed: Boolean;
+    Counts: array[TNotationAnalysisSource] of Integer; Doc: TNotationDocument; ExpectedStyle: TNotationStyle; Changed: Boolean;
     PV, Before: string; Selection: TNotationSelection; Target: TNotationBrowseTarget;
 begin
-  Tree := TGameTree.Create; Presenter := TNotationPresentation.Create;
+  Tree := TGameTree.Create; Presenter := TNotationPresentation.Create; Doc := TNotationDocument.Create;
   try
     if BlackStart then Tree.BeginRebuild('black', '?', 'W', 'B', '*', 'B:W31-50:B1-20');
     Tree.RecordNodeAnnotation(Tree.Root, 'Unicode 棋 😀');
@@ -33,13 +33,20 @@ begin
       Options.ShowEngineScore := (Flags and 16) <> 0;
       Options.ShowAnnotatorScore := (Flags and 16) <> 0;
       Options.HideAnnotations := (Flags and 32) <> 0;
-      Presenter.Render(Tree, Options); FillChar(Counts, SizeOf(Counts), 0);
+      Presenter.Render(Tree, Options); Doc.UsePresentation(Presenter); FillChar(Counts, SizeOf(Counts), 0);
       for I := 0 to Presenter.VariationCount-1 do
       begin
         Hit := Presenter.VariationHits[I]; Inc(Counts[Hit.AnalysisSource]);
         if Hit.NodeId > 0 then Check(Hit.AnalysisSource = nasNone, 'real branch has no analysis source')
         else begin
           Check(Hit.AnalysisSource <> nasNone, 'each PV prefix/move has a source');
+          case Hit.AnalysisSource of
+            nasEngine: ExpectedStyle := nsEnginePV;
+            nasAnnotator: ExpectedStyle := nsAnnotatorPV;
+            else ExpectedStyle := nsAnalysis;
+          end;
+          Check((Doc.StyleAt(Hit.Start) = ExpectedStyle) and
+            (Doc.StyleAt(Hit.Start+Hit.Length-1) = ExpectedStyle), 'source-specific prefix/move style');
           Check((Hit.BasePly = 0) and (Hit.MovesText = PV), 'source preserves preview base/content');
           Target := Presenter.HitTest(Hit.Start+1, 0, Selection);
           Check((Target.Kind = nbPreview) and (Target.Variation.AnalysisSource = Hit.AnalysisSource), 'preview target retains source');
@@ -57,7 +64,7 @@ begin
       Check(GameTreeToPdnText(Tree) = Before, 'metadata cannot change PDN export');
     end;
     Presenter.ClearVariationHits; Check(Presenter.VariationCount = 0, 'clears source-bearing hits');
-  finally Presenter.Free; Tree.Free; end;
+  finally Doc.Free; Presenter.Free; Tree.Free; end;
 end;
 begin
   Fixture(False,0); Fixture(False,1); Fixture(True,0); Fixture(True,1);

@@ -25,7 +25,7 @@ var Prefs, Loaded: TGuiPreferences; S: TNotationStyle; Existing: TMemoryStream;
     HadFile: Boolean; Lines: TStringList; Dialog: TPreferencesForm; Receiver: TReceiver;
     Host: TForm; View: TGameNotationView; Tree: TGameTree; Presenter: TNotationPresentation;
     Before, Expected: string; R: TNotationRange; Highlighter: TNotationRangeHighlighter;
-    I: Integer; P, Pixel: TPoint; B: TCheckBox;
+    I, J, Offset: Integer; Hit: TMoveVariationHit; P, Pixel: TPoint; B: TCheckBox;
 begin
   try
     RequireDerivedFormResource := False;
@@ -54,6 +54,14 @@ begin
         Check(Loaded.NotationStyles[nsPlayed].Bold, 'old/malformed style values retain defaults');
         Check(Loaded.NotationStyles[nsVariation].Italic, 'missing styles retain defaults');
         Check(Loaded.MainBoardLightColor = RGBToColor($12,$34,$56), 'legacy preferences still load');
+        Check(Loaded.NotationStyles[nsEnginePV].Color <> Loaded.NotationStyles[nsAnnotatorPV].Color,
+          'distinct default PV colours for legacy default settings');
+        Lines.Text := '{"notation_3_color":"#204060","notation_3_bold":true,"notation_5_color":"#aa00bb","notation_5_bold":false}';
+        Lines.SaveToFile(PreferencesJsonFileName); LoadGuiPreferences(Loaded);
+        Check((Loaded.NotationStyles[nsEnginePV].Color = RGBToColor($20,$40,$60)) and
+          Loaded.NotationStyles[nsEnginePV].Bold, 'custom shared PV settings migrate to engine');
+        Check((Loaded.NotationStyles[nsAnnotatorPV].Color = RGBToColor($aa,0,$bb)) and
+          not Loaded.NotationStyles[nsAnnotatorPV].Bold, 'explicit annotator settings override legacy shared settings');
       finally Lines.Free; end;
       Receiver := TReceiver.Create; Dialog := TPreferencesForm.Create(nil);
       Dialog.OnAccepted := @Receiver.Accepted; Dialog.StartEdit(Prefs);
@@ -85,7 +93,7 @@ begin
       Tree.RecordMainlineMove(1,'32-28'); Tree.RecordMainlineMove(2,'18-23');
       AddFixtureBranch(Tree, 0, '33-29 19-23', 'Variation comment');
       Tree.RecordEnginePV(0, '0.1', '31-26 19-23');
-      Tree.RecordAnnotatorPV(0, '0.2', '34-29 20-25');
+      Tree.RecordAnnotatorPV(0, '0.1', '31-26 19-23');
       Before := GameTreeToPdnText(Tree);
       Presenter.Render(Tree, DefaultGameTreePdnRenderOptions); View.SetPresentation(Presenter);
       Host.Show; Application.ProcessMessages;
@@ -113,6 +121,20 @@ begin
       Check((Highlighter.GetTokenAttribute.Foreground = Prefs.NotationStyles[nsPlayed].Color) and
         ((fsBold in Highlighter.GetTokenAttribute.Style) = Prefs.NotationStyles[nsPlayed].Bold) and
         ((fsItalic in Highlighter.GetTokenAttribute.Style) = Prefs.NotationStyles[nsPlayed].Italic), 'applied highlighter preferences');
+      for J := 0 to Presenter.VariationCount-1 do
+      begin
+        Hit := Presenter.VariationHits[J];
+        if Hit.AnalysisSource = nasEngine then S := nsEnginePV
+        else if Hit.AnalysisSource = nasAnnotator then S := nsAnnotatorPV else Continue;
+        P := View.Document.LinePoint(Hit.Start); Offset := View.Document.PointOffset(Point(1,P.Y));
+        Highlighter.SetLine(View.Lines[P.Y-1], P.Y-1);
+        while (not Highlighter.GetEol) and (Offset+Highlighter.GetTokenPos+Length(Highlighter.GetToken) <= Hit.Start) do Highlighter.Next;
+        Check(Highlighter.GetTokenAttribute.Foreground = Prefs.NotationStyles[S].Color,
+          'identical engine/annotator PVs receive independent colours');
+        Check(((fsBold in Highlighter.GetTokenAttribute.Style) = Prefs.NotationStyles[S].Bold) and
+          ((fsItalic in Highlighter.GetTokenAttribute.Style) = Prefs.NotationStyles[S].Italic),
+          'source-specific bold/italic attributes');
+      end;
       View.SetPresentation(Presenter);
       Check((View.Text = Presenter.Text) and (GameTreeToPdnText(Tree) = Before), 'styles cannot change notation/tree/export');
       Check((View.SelStart = R.Start) and (View.SelText = Expected), 'unchanged presentation preserves selection');

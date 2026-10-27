@@ -2,7 +2,7 @@ unit uNotationStyles;
 {$mode objfpc}{$H+}
 interface
 type
-  TNotationStyle = (nsComment, nsPlayed, nsVariation, nsAnalysis);
+  TNotationStyle = (nsComment, nsPlayed, nsVariation, nsAnalysis, nsEnginePV, nsAnnotatorPV);
   TNotationStyleSetting = record
     Color: LongInt;
     Bold, Italic: Boolean;
@@ -10,7 +10,7 @@ type
   TNotationStyles = array[TNotationStyle] of TNotationStyleSetting;
 const
   NotationStyleNames: array[TNotationStyle] of string =
-    ('Comments / other text', 'Played moves', 'Variations', 'Analysis / PVs');
+    ('Comments / other text', 'Played moves', 'Variations', 'Auto Play PVs', 'Engine PVs', 'Annotator PVs');
 function DefaultNotationStyles: TNotationStyles;
 implementation
 function DefaultNotationStyles: TNotationStyles;
@@ -21,6 +21,8 @@ begin
   Result[nsPlayed].Bold := True;
   Result[nsVariation].Color := $008000; Result[nsVariation].Italic := True;
   Result[nsAnalysis].Color := $FF0000;
+  Result[nsEnginePV].Color := $FF0000;
+  Result[nsAnnotatorPV].Color := $800080;
   Result[nsComment].Color := $808080; Result[nsComment].Italic := True;
 end;
 end.

@@ -32,8 +32,8 @@ type
 const PrototypeNames: array[TPrototypeControlKind] of string = ('TMemo', 'TSynEdit', 'RichMemo');
 implementation
 {$IFDEF MSWINDOWS}uses Windows;{$ENDIF}
-const StyleColors: array[TNotationStyle] of TColor = (clGray, clBlack, clGreen, clBlue);
-      StyleFonts: array[TNotationStyle] of TFontStyles = ([fsItalic], [fsBold], [fsItalic], []);
+const StyleColors: array[TNotationStyle] of TColor = (clGray, clBlack, clGreen, clBlue, clBlue, clPurple);
+      StyleFonts: array[TNotationStyle] of TFontStyles = ([fsItalic], [fsBold], [fsItalic], [], [], []);
 constructor TNotationControlPrototype.Create(Owner: TComponent; Parent: TWinControl;
   Kind: TPrototypeControlKind);
 var Syn: TSynEdit; Memo: TMemo; Rich: TRichMemo;

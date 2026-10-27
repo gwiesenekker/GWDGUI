@@ -45,7 +45,11 @@ begin
       begin
         H := Doc.Presenter.VariationHits[I];
         if H.NodeId > 0 then Check(Doc.StyleAt(H.Start) = nsVariation, 'branch style')
-        else Check(Doc.StyleAt(H.Start) = nsAnalysis, 'analysis style');
+        else case H.AnalysisSource of
+          nasEngine: Check(Doc.StyleAt(H.Start) = nsEnginePV, 'engine style');
+          nasAnnotator: Check(Doc.StyleAt(H.Start) = nsAnnotatorPV, 'annotator style');
+          else Check(Doc.StyleAt(H.Start) = nsAnalysis, 'Auto Play style');
+        end;
       end;
       Check(GameTreeToPdnText(Tree) = Before, 'prototype must preserve model/export');
     end;
