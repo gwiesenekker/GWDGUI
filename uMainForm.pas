@@ -310,8 +310,6 @@ type
     procedure SetDisplayedTreeTracking(const AAnnotationsSignature,
       AMovesSignature, ARunningSignature: string; AGameTreeId,
       AGameTreeRevision: Int64);
-    procedure SetDisplayedPvCache(const APV, AScore, ADepth,
-      ATimeText: string; ABasePosition: TGamePosition; ABasePly: Integer);
     function UpdateDisplayedPvCacheFromTree(AGameTree: TGameTree): Boolean;
     procedure ClearDisplayedPvCache(const ABasePositionKey: string;
       ABasePly: Integer);
@@ -3391,15 +3389,6 @@ begin
   FDisplayedGameTreeRevision := AGameTreeRevision;
 end;
 
-procedure TMainForm.SetDisplayedPvCache(const APV, AScore, ADepth,
-  ATimeText: string; ABasePosition: TGamePosition; ABasePly: Integer);
-var LKey: string;
-begin
-  LKey := '';
-  if ABasePosition <> nil then LKey := ABasePosition.PositionKey;
-  FAnalysis.Pv.SetCache(APV, AScore, ADepth, ATimeText, LKey, ABasePly);
-end;
-
 function TMainForm.UpdateDisplayedPvCacheFromTree(
   AGameTree: TGameTree): Boolean;
 var
@@ -3423,11 +3412,8 @@ begin
   else
     LPvBasePositionKey := '';
 
-  Result := not FAnalysis.Pv.CacheMatches(LPvText, LPvScore, LPvDepth,
+  Result := FAnalysis.Pv.UpdateCache(LPvText, LPvScore, LPvDepth,
     LPvTimeText, LPvBasePositionKey, LPvBasePly);
-  if Result then
-    SetDisplayedPvCache(LPvText, LPvScore, LPvDepth, LPvTimeText,
-      LPvBase, LPvBasePly);
 end;
 
 procedure TMainForm.ClearDisplayedPvCache(const ABasePositionKey: string;

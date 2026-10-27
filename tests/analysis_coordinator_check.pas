@@ -58,6 +58,12 @@ begin
     Check(not Pv.CacheMatches('12-18', '0.2', '9', '0.1', 'other position', BasePly), 'board identity change invalidates PV cache');
     Pv.SetCache('', '', '', '', '', 0);
     Check(Pv.CacheMatches('', '', '', '', '', 0), 'clear resets tuple including board key');
+    // No visible PV: the form passes an empty key; a second update is no change.
+    Pv.SetCache('', '', '', '', Visible.PositionKey, 0);
+    Check(Pv.UpdateCache('', '', '', '', '', 0), 'switching to no PV is a change');
+    Check(not Pv.UpdateCache('', '', '', '', '', 0), 'no PV twice is not a change');
+    Check(Pv.UpdateCache('12-18', '0.2', '9', '0.1', Key, 3), 'new PV is a change');
+    Check(not Pv.UpdateCache('12-18', '0.2', '9', '0.1', Key, 3), 'same PV is not a change');
   finally Board.Free; Display.Free; Pv.Free; Actor.Free; end;
 end;
 

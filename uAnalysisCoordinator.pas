@@ -35,6 +35,11 @@ type
       ABasePositionKey: string; ABasePly: Integer): Boolean;
     procedure SetCache(const APV, AScore, ADepth, ATimeText,
       ABasePositionKey: string; ABasePly: Integer);
+    // Stores the displayed PV tuple; True when it differs from the cached one.
+    // Comparison and storage use the same key, so an unchanged tuple (also
+    // "no PV") reports no change.
+    function UpdateCache(const APV, AScore, ADepth, ATimeText,
+      ABasePositionKey: string; ABasePly: Integer): Boolean;
     property AnalyzerBasePosition: TGamePosition read FAnalyzerPvBase;
     property AnalyzerBaseNodeId: Int64 read FAnalyzerPvBaseNodeId;
     property AnalyzerBasePly: Integer read FAnalyzerPvBasePly;
@@ -535,6 +540,14 @@ begin
   FPrincipalVariationTimeText := ATimeText;
   FPvBasePositionKey := ABasePositionKey;
   FPvBasePly := ABasePly;
+end;
+function TAnalysisPvState.UpdateCache(const APV, AScore, ADepth, ATimeText,
+  ABasePositionKey: string; ABasePly: Integer): Boolean;
+begin
+  Result := not CacheMatches(APV, AScore, ADepth, ATimeText, ABasePositionKey,
+    ABasePly);
+  if Result then
+    SetCache(APV, AScore, ADepth, ATimeText, ABasePositionKey, ABasePly);
 end;
 function EnginePvForTree(AGameTree: TGameTree; APly: Integer;
   out APV, AScore, ADepth, ATimeText: string): Boolean;

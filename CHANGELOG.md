@@ -5,6 +5,14 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-27 — No PV refresh per snapshot when no PV is shown
+
+- With no visible main PV, the displayed-PV cache compared an empty position key
+  but stored the base position's key, so it never matched and every running-game
+  snapshot refreshed the PV view. `TAnalysisPvState.UpdateCache` now compares and
+  stores the same key; `analysis_coordinator_check` covers it.
+- Regression, lifecycle, GUI and tournament suites pass. No push.
+
 ### 2026-10-27 — Analysis state on the position boundary (position interface, step 6)
 
 - The analysis coordinator, auto play and PV snapshots (`uAnalysisCoordinator`,

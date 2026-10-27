@@ -281,9 +281,10 @@ Step 6 notes:
   on its mini board. The game runner keeps its orchestrator board until step 7 and
   feeds snapshots through `TDraughtsPosition.AssignBoard`.
 - `TAnalysisPvState.SetCache` takes a position key; the form computes it as before.
-- Observed, not changed (behaviour kept): `UpdateDisplayedPvCacheFromTree` compares
-  an empty key when no PV is visible but stores the base position's key, so with
-  no PV the cache never matches and every running-game snapshot reports a PV change.
+- `UpdateDisplayedPvCacheFromTree` compared an empty key when no PV was visible
+  but stored the base position's key, so with no PV every running-game snapshot
+  reported a PV change. Fixed in the commit after step 6:
+  `TAnalysisPvState.UpdateCache` compares and stores the same key.
 - `uAnalysisCoordinator` still uses `uGameOrchestrator` for `TGameOrchestratorState`
   (step 7).
 
