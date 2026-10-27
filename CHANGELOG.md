@@ -3,6 +3,16 @@
 Entries are newest first. Review IDs refer to the code reviews of commits
 `98da11d` and `8ad88b5`; they identify individual fixes, not release versions.
 
+## Unreleased
+
+### 2026-10-27 — Allow disabling PV hints
+
+- Add Do not show hints as a third board-menu radio option alongside main and
+  annotator PV. Keep main PV as the default and preserve last-move/click markers.
+- Test all three choices through the actual GUI, immediate clearing, repeated
+  selection, refresh, re-enabling and unchanged game/position data.
+- Document the three modes in the manual; keep the published 3.1 release unchanged.
+
 ## Version 3.1 — 2026-10-26
 
 This release includes the accumulated improvements below since v3.0.

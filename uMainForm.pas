@@ -16,7 +16,7 @@ uses
   uPreferences, uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm, uGameMoveHistory;
 
 type
-  TPvHintSource = (phsMain, phsAnalyzer);
+  TPvHintSource = (phsMain, phsAnalyzer, phsNone);
 
   TDisplayedBoardInfo = record
     WhiteName: string;
@@ -115,6 +115,7 @@ type
     FNextGameId: Integer;
     FHintFromAnalyzerMenuItem: TMenuItem;
     FHintFromMainMenuItem: TMenuItem;
+    FHintNoneMenuItem: TMenuItem;
     FPvHintSource: TPvHintSource;
     FPopoutBoard: TDraughtsBoard;
     FPopoutBoardControl: TDraughtsBoardControl;
@@ -1196,6 +1197,12 @@ begin
   FHintFromAnalyzerMenuItem.GroupIndex := 1;
   FHintFromAnalyzerMenuItem.OnClick := @HintSourceClick;
   LBoardPopup.Items.Add(FHintFromAnalyzerMenuItem);
+  FHintNoneMenuItem := TMenuItem.Create(Self);
+  FHintNoneMenuItem.Caption := 'Do not show hints';
+  FHintNoneMenuItem.RadioItem := True;
+  FHintNoneMenuItem.GroupIndex := 1;
+  FHintNoneMenuItem.OnClick := @HintSourceClick;
+  LBoardPopup.Items.Add(FHintNoneMenuItem);
   LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := '-';
   LBoardPopup.Items.Add(LMenuItem);
@@ -2295,7 +2302,9 @@ end;
 
 procedure TMainForm.HintSourceClick(Sender: TObject);
 begin
-  if Sender = FHintFromAnalyzerMenuItem then
+  if Sender = FHintNoneMenuItem then
+    FPvHintSource := phsNone
+  else if Sender = FHintFromAnalyzerMenuItem then
     FPvHintSource := phsAnalyzer
   else
     FPvHintSource := phsMain;
@@ -2304,6 +2313,8 @@ begin
     FHintFromMainMenuItem.Checked := FPvHintSource = phsMain;
   if FHintFromAnalyzerMenuItem <> nil then
     FHintFromAnalyzerMenuItem.Checked := FPvHintSource = phsAnalyzer;
+  if FHintNoneMenuItem <> nil then
+    FHintNoneMenuItem.Checked := FPvHintSource = phsNone;
 
   UpdateBoardHighlights(ActiveGameTree);
   if FBoardControl <> nil then
@@ -3856,6 +3867,8 @@ begin
     PositionValid := TryBuildDisplayedBoard(AGameTree, LDisplayedBoard);
     if PositionValid and (LDisplayedBoard.MovesPlayedCount > 0) then
       DisplayedMove := LDisplayedBoard.MovesPlayed[LDisplayedBoard.MovesPlayedCount - 1];
+    LPvBaseBoard := nil;
+    LPvText := '';
     if FPvHintSource = phsAnalyzer then
     begin
       LPvBaseBoard := FAnalysis.Pv.AnalyzerBaseBoard;
@@ -3863,7 +3876,7 @@ begin
         LPvText, LPvScore, LPvDepth, LPvTimeText) then
         LPvText := '';
     end
-    else
+    else if FPvHintSource = phsMain then
       VisibleMainPvForTree(AGameTree, LPvBaseBoard, LPvBasePly, LPvText,
         LPvScore, LPvDepth, LPvTimeText);
     LPvHighlightsActive := PositionValid and (LPvBaseBoard <> nil) and

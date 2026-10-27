@@ -317,8 +317,11 @@ The engine PV belongs to the engine playing the game. The annotator PV belongs
 to the separately loaded annotator. Both are attached to their source nodes and
 can be displayed as browsable PDN variations.
 
-Right-clicking the main board offers hint actions based on the main engine PV or
-annotator PV when those lines are available.
+Right-click the main board and choose **Show hints from main PV**, **Show hints
+from annotator PV**, or **Do not show hints**. These three options are mutually
+exclusive; main PV is the default. Hints appear only when the selected PV belongs
+to the displayed position. **Do not show hints** clears the PV hints while keeping
+the last-move marker and normal move-selection highlights.
 
 Click a move in a PV or use Left/Right to inspect its position. The line stays
 frozen while you browse; press Escape in the PV to resume updates. If a PV

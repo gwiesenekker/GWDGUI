@@ -8,7 +8,7 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF}
   LCLType, Types, uMainForm, uRunningGame, uBoardControl, uDraughtsBoard, uPdn,
   uGameTree, uGameTreePdn, uGameTreeBuilder, uGameSetupTypes, uGameOrchestrator, uGuiDialogs,
   uPositionSetupForm, uEngineRegistry, uEngineParamsJson, uAnalyzerRunnerThread,
-  uGameGuiMessages, uGameTreeSearchRef, uEngineEditForm;
+  uGameGuiMessages, uGameTreeSearchRef, uEngineEditForm, uGameTreeActor, uDisplayedPosition;
 
 type
   TCaptureChoice = class
@@ -380,6 +380,53 @@ begin
   end;
 end;
 
+procedure CheckHintModes;
+var Form: TMainForm; Board: TDraughtsBoardControl; Actor: TGameTreeActor;
+  Display: TDisplayedPosition; Command: TGameTreeCommand;
+  Main, Annotator, None: TMenuItem; Before, Fen: string; Key: Word; I: Integer;
+begin
+  Form := TMainForm.Create(nil); Display := TDisplayedPosition.Create;
+  Form.LoadStandaloneFen(DefaultStartingFEN);
+  Actor := TGameTreeActor.Create(Form.ActiveGameTree, False);
+  try
+    Board := TDraughtsBoardControl(Form.FindComponent('MainBoard'));
+    Main := Menu(Form, 'Show hints from main PV');
+    Annotator := Menu(Form, 'Show hints from annotator PV');
+    None := Menu(Form, 'Do not show hints');
+    Check(Main.Checked and not Annotator.Checked and not None.Checked, 'main PV remains the default');
+    Command := Actor.CreateRecordEnginePVCommand(Form.ActiveGameTree.Root.NodeId, '0', '32-28 18-23');
+    try Actor.ExecuteCommand(Command); Check(Command.Accepted, Command.ErrorText); finally Command.Free; end;
+    Command := Actor.CreateRecordAnnotatorPVCommand(Form.ActiveGameTree.Root.NodeId, '0', '34-30 20-25');
+    try Actor.ExecuteCommand(Command); Check(Command.Accepted, Command.ErrorText); finally Command.Free; end;
+    Form.TestAnalysis.Pv.SetAnalyzerBaseFromTree(Form.ActiveGameTree, Form.ActiveGameTree.Root.NodeId,
+      0, Board.Board, Display, Actor.Revision);
+    Before := GameTreeToPdnText(Form.ActiveGameTree); Fen := Board.Board.CurrentFEN;
+    Main.Click;
+    Check((Board.PvSourceSquare = 32) and (Board.HintSourceSquare = 18), 'main PV supplies its hints');
+    Annotator.Click;
+    Check(Annotator.Checked and not Main.Checked and not None.Checked, 'annotator choice is exclusive');
+    Check((Board.PvSourceSquare = 34) and (Board.HintSourceSquare = 20), 'annotator PV supplies its hints');
+    for I := 1 to 2 do
+    begin
+      None.Click;
+      Check(None.Checked and not Main.Checked and not Annotator.Checked, 'none remains selected when clicked again');
+      Check((Board.PvSourceSquare = 0) and (Board.HintSourceSquare = 0), 'none clears both PV hints immediately');
+    end;
+    Key := Ord('F'); Form.OnKeyDown(Form, Key, []);
+    Check(None.Checked and (Board.PvSourceSquare = 0) and (Board.HintSourceSquare = 0), 'refresh cannot re-enable disabled hints');
+    Key := Ord('F'); Form.OnKeyDown(Form, Key, []);
+    Main.Click;
+    Check(Main.Checked and not Annotator.Checked and not None.Checked and
+      (Board.PvSourceSquare = 32), 'main hints can be re-enabled');
+    Check((GameTreeToPdnText(Form.ActiveGameTree) = Before) and (Board.Board.CurrentFEN = Fen),
+      'hint choices do not modify game data or displayed position');
+    ClickSquare(Board, 32); ClickSquare(Board, 28);
+    None.Click;
+    Check((Board.LastMoveTargetSquare = 28) and (Board.PvSourceSquare = 0) and
+      (Board.HintSourceSquare = 0), 'none preserves the last-move marker');
+  finally Actor.Free; Display.Free; Form.Free; end;
+end;
+
 procedure CheckInvalidEngineParameters;
 var Form: TEngineEditForm; Definition: TExternalEngineDefinition;
   Lines: TStringList; Params: TEngineParamArray; ExeName, ParamName, Before: string;
@@ -420,6 +467,7 @@ begin
     CheckReplacementPrompt;
     CheckAnalysisControls;
     CheckInvalidEngineParameters;
+    CheckHintModes;
     Application.OnException := nil; Reporter.Free;
     WriteLn('OK');
   except on E: Exception do begin WriteLn('FAIL: ', E.ClassName, ': ', E.Message); DumpExceptionBackTrace(Output); Halt(1); end; end;
