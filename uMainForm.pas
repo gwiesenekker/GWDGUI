@@ -63,6 +63,9 @@ type
     FDisplayedPosition: TDisplayedPosition;
     // Reused by the draughts board wrappers (main thread only).
     FDraughtsScratch: TDraughtsPosition;
+    // Reused displayed-position scratch for the active tree's game (main thread).
+    FPositionScratch: TGamePosition;
+    FPositionScratchVariant: TGameVariant;
     FGameResult: string;
     FGames: TList;
     FGamesListBox: TListBox;
@@ -294,12 +297,15 @@ type
     function ClockValuesForTree(AGameTree: TGameTree;
       out AWhiteRemainingSeconds, ABlackRemainingSeconds, AWhiteUsedSeconds,
       ABlackUsedSeconds: Double): Boolean;
-    function TryBuildTreeBoardAtNode(AGameTree: TGameTree;
-      ANode: TGameTreePlyNode; ABoard: TDraughtsBoard): Boolean;
+    // Board-control path only: the displayed position as a draughts board.
     function TryBuildDisplayedBoard(AGameTree: TGameTree;
       ABoard: TDraughtsBoard): Boolean;
     function TryBuildDisplayedPosition(AGameTree: TGameTree;
-      APosition: TGamePosition): Boolean;
+      APosition: TGamePosition): Boolean; overload;
+    function TryBuildDisplayedPosition(AGameTree: TGameTree;
+      APosition: TGamePosition; out ALastMove: string): Boolean; overload;
+    // A reused position of AGameTree's game for short, non-reentrant queries.
+    function PositionScratch(AGameTree: TGameTree): TGamePosition;
     function VisibleMainPvForTree(AGameTree: TGameTree;
       out ABasePosition: TGamePosition; out ABasePly: Integer; out APV,
       AScore, ADepth, ATimeText: string): Boolean;
@@ -1263,6 +1269,7 @@ begin
   FNotation.Free;
   FDisplayedPosition.Free;
   FDraughtsScratch.Free;
+  FPositionScratch.Free;
   FMoveInteraction.Free;
   FGameTreeActor.Free;
   FGameTree.Free;
@@ -1826,7 +1833,7 @@ begin
   if LGameTree = nil then
     Exit;
 
-  LMove := NormalizeMoveNotation(AMove);
+  LMove := LGameTree.Variant.NormalizeMove(AMove);
   if LMove = '' then
     Exit;
 
@@ -2725,14 +2732,14 @@ end;
 
 procedure TMainForm.LoadStandaloneFen(const AFEN: string);
 var
-  LBoard: TDraughtsBoard;
+  LBoard: TGamePosition;
   LStartingFEN: string;
 begin
   ClearHumanMoveSelection;
-  LBoard := TDraughtsBoard.Create;
+  LBoard := FGameTree.Variant.CreatePosition;
   try
     LBoard.LoadFromFEN(AFEN);
-    LStartingFEN := LBoard.StartingFEN;
+    LStartingFEN := Trim(AFEN);
 
     if not RebuildStandaloneGameTreeFromImport(FGameTree, '?', 'White',
       'Black', '*', LStartingFEN, '', '') then
@@ -2842,7 +2849,7 @@ end;
 procedure TMainForm.LoadPdnGameToDisplay(AGame: TPdnGame);
 var
   I: Integer;
-  LBoard: TDraughtsBoard;
+  LBoard: TGamePosition;
   LEventName: string;
   LMoves: TStringList;
   LResultText: string;
@@ -2854,14 +2861,14 @@ begin
     Exit;
 
   ClearHumanMoveSelection;
-  LBoard := TDraughtsBoard.Create;
+  LBoard := FGameTree.Variant.CreatePosition;
   LMoves := TStringList.Create;
   try
     LBoard.LoadFromFEN(AGame.StartingFEN);
     TextToMoveList(AGame.MovesText, LMoves);
     for I := 0 to LMoves.Count - 1 do
       try
-        LBoard.PlayMove(LMoves[I], True, True);
+        LBoard.PlayMoveText(LMoves[I]);
       except
         on E: Exception do
         begin
@@ -2908,13 +2915,6 @@ begin
   end;
 end;
 
-function FenSideToMove(const AFEN: string): TDraughtsSide;
-begin
-  if (Trim(AFEN) <> '') and (UpCase(Trim(AFEN)[1]) = 'B') then
-    Result := dsBlack
-  else
-    Result := dsWhite;
-end;
 
 procedure TMainForm.ApplyAnnotatorVariationBrowsePly(ABasePly,
   AVariationPly: Integer; const AMovesText: string; AGameTree: TGameTree);
@@ -3274,17 +3274,6 @@ end;
 
 
 
-function TMainForm.TryBuildTreeBoardAtNode(AGameTree: TGameTree;
-  ANode: TGameTreePlyNode; ABoard: TDraughtsBoard): Boolean;
-var Actor: TGameTreeActor; Revision: Int64;
-begin
-  Actor := ActorForGameTree(AGameTree);
-  Revision := -1;
-  if Actor <> nil then Revision := Actor.Revision;
-  Result := TryBuildDraughtsNodeBoard(FDisplayedPosition, AGameTree, ANode, Revision,
-    ABoard, FDraughtsScratch);
-end;
-
 function TMainForm.TryBuildDisplayedBoard(AGameTree: TGameTree;
   ABoard: TDraughtsBoard): Boolean;
 var Actor: TGameTreeActor; Revision: Int64;
@@ -3298,13 +3287,31 @@ end;
 
 function TMainForm.TryBuildDisplayedPosition(AGameTree: TGameTree;
   APosition: TGamePosition): Boolean;
+var LLastMove: string;
+begin
+  Result := TryBuildDisplayedPosition(AGameTree, APosition, LLastMove);
+end;
+
+function TMainForm.TryBuildDisplayedPosition(AGameTree: TGameTree;
+  APosition: TGamePosition; out ALastMove: string): Boolean;
 var Actor: TGameTreeActor; Revision: Int64;
 begin
   Actor := ActorForGameTree(AGameTree);
   Revision := -1;
   if Actor <> nil then Revision := Actor.Revision;
   Result := FDisplayedPosition.TryBuildPosition(AGameTree, AGameTree = ActiveGameTree,
-    Revision, APosition);
+    Revision, APosition, ALastMove);
+end;
+
+function TMainForm.PositionScratch(AGameTree: TGameTree): TGamePosition;
+begin
+  if (FPositionScratch = nil) or (FPositionScratchVariant <> AGameTree.Variant) then
+  begin
+    FreeAndNil(FPositionScratch);
+    FPositionScratchVariant := AGameTree.Variant;
+    FPositionScratch := FPositionScratchVariant.CreatePosition;
+  end;
+  Result := FPositionScratch;
 end;
 
 function TMainForm.VisibleMainPvForTree(AGameTree: TGameTree;
@@ -3672,8 +3679,8 @@ var
       Exit;
 
     for I := 1 to ATreeMoveCount do
-      if not SameText(NormalizeMoveNotation(LGameTree.MainlineNode[I].MoveText),
-        NormalizeMoveNotation(LMoves[I - 1])) then
+      if not SameText(LGameTree.Variant.NormalizeMove(LGameTree.MainlineNode[I].MoveText),
+        LGameTree.Variant.NormalizeMove(LMoves[I - 1])) then
         Exit;
 
     Result := True;
@@ -3860,7 +3867,7 @@ end;
 
 procedure TMainForm.UpdateBoardHighlights(AGameTree: TGameTree);
 var
-  LDisplayedBoard: TDraughtsBoard;
+  LDisplayed: TGamePosition;
   DisplayedMove: string;
   PositionValid: Boolean;
   LPvBase: TGamePosition;
@@ -3877,37 +3884,30 @@ begin
   if AGameTree = nil then
     Exit;
 
-  LDisplayedBoard := TDraughtsBoard.Create;
-  try
-    DisplayedMove := '';
-    PositionValid := TryBuildDisplayedBoard(AGameTree, LDisplayedBoard);
-    if PositionValid and (LDisplayedBoard.MovesPlayedCount > 0) then
-      DisplayedMove := LDisplayedBoard.MovesPlayed[LDisplayedBoard.MovesPlayedCount - 1];
-    LPvBase := nil;
-    LPvText := '';
-    if FPvHintSource = phsAnalyzer then
-    begin
-      LPvBase := FAnalysis.Pv.AnalyzerBasePosition;
-      if not AnnotatorPvForTreeNode(AGameTree, FAnalysis.Pv.AnalyzerBaseNodeId,
-        LPvText, LPvScore, LPvDepth, LPvTimeText) then
-        LPvText := '';
-    end
-    else if FPvHintSource = phsMain then
-      VisibleMainPvForTree(AGameTree, LPvBase, LPvBasePly, LPvText,
-        LPvScore, LPvDepth, LPvTimeText);
-    LPvHighlightsActive := PositionValid and (LPvBase <> nil) and
-      (LDisplayedBoard.PositionKey = LPvBase.PositionKey);
+  LDisplayed := PositionScratch(AGameTree);
+  PositionValid := TryBuildDisplayedPosition(AGameTree, LDisplayed, DisplayedMove);
+  LPvBase := nil;
+  LPvText := '';
+  if FPvHintSource = phsAnalyzer then
+  begin
+    LPvBase := FAnalysis.Pv.AnalyzerBasePosition;
+    if not AnnotatorPvForTreeNode(AGameTree, FAnalysis.Pv.AnalyzerBaseNodeId,
+      LPvText, LPvScore, LPvDepth, LPvTimeText) then
+      LPvText := '';
+  end
+  else if FPvHintSource = phsMain then
+    VisibleMainPvForTree(AGameTree, LPvBase, LPvBasePly, LPvText,
+      LPvScore, LPvDepth, LPvTimeText);
+  LPvHighlightsActive := PositionValid and (LPvBase <> nil) and
+    (LDisplayed.PositionKey = LPvBase.PositionKey);
 
-    Highlights := CalculateMoveHighlights(AGameTree.Variant, DisplayedMove, LPvText,
-      LPvHighlightsActive);
-    FBoardControl.LastMoveTargetSquare := Highlights.LastMoveTargetSquare;
-    FBoardControl.PvSourceSquare := Highlights.PvSourceSquare;
-    FBoardControl.PvTargetSquare := Highlights.PvTargetSquare;
-    FBoardControl.HintSourceSquare := Highlights.HintSourceSquare;
-    FBoardControl.HintTargetSquare := Highlights.HintTargetSquare;
-  finally
-    LDisplayedBoard.Free;
-  end;
+  Highlights := CalculateMoveHighlights(AGameTree.Variant, DisplayedMove, LPvText,
+    LPvHighlightsActive);
+  FBoardControl.LastMoveTargetSquare := Highlights.LastMoveTargetSquare;
+  FBoardControl.PvSourceSquare := Highlights.PvSourceSquare;
+  FBoardControl.PvTargetSquare := Highlights.PvTargetSquare;
+  FBoardControl.HintSourceSquare := Highlights.HintSourceSquare;
+  FBoardControl.HintTargetSquare := Highlights.HintTargetSquare;
 end;
 
 procedure TMainForm.UpdateBoardFromBrowseState(AGameTree: TGameTree);
@@ -4866,7 +4866,7 @@ end;
 function TMainForm.StartGameFromSetup(const ASetup: TGameSetup;
   const ATitlePrefix: string): TRunningGame;
 var
-  LBoard: TDraughtsBoard;
+  LBoard: TGamePosition;
   LBlackEngineKey: string;
   LBlackName: string;
   LGameId: Integer;
@@ -4920,7 +4920,7 @@ begin
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
   InitializeRunningGameTree(Result);
-  LBoard := TDraughtsBoard.Create;
+  LBoard := Result.GameTree.Variant.CreatePosition;
   try
     LBoard.LoadFromFEN(ASetup.StartingFEN);
     ClearDisplayedPvCache(LBoard.PositionKey, 0);
@@ -5499,7 +5499,7 @@ procedure TMainForm.LegalMovesMemoClick(Sender: TObject);
 var
   LLineIndex: Integer;
   LMove: string;
-  LBoard: TDraughtsBoard;
+  LBoard: TGamePosition;
   LGameTree: TGameTree;
 begin
   LLineIndex := FLegalMovesMemo.CaretPos.Y;
@@ -5508,14 +5508,12 @@ begin
 
   LMove := Trim(FLegalMovesMemo.Lines[LLineIndex]);
   LGameTree := ActiveGameTree;
-  LBoard := TDraughtsBoard.Create;
-  try
-    if (not TryBuildDisplayedBoard(LGameTree, LBoard)) or
-      (not LBoard.IsLegalMove(LMove)) then
-      Exit;
-  finally
-    LBoard.Free;
-  end;
+  if LGameTree = nil then
+    Exit;
+  LBoard := PositionScratch(LGameTree);
+  if (not TryBuildDisplayedPosition(LGameTree, LBoard)) or
+    (not LBoard.IsLegal(LMove)) then
+    Exit;
 
   PlayHumanMove(LMove);
 end;
@@ -5700,19 +5698,17 @@ end;
 function TMainForm.TryGetDisplayedBoardFen(AGameTree: TGameTree;
   out AFen: string): Boolean;
 var
-  LBoard: TDraughtsBoard;
+  LBoard: TGamePosition;
 begin
   Result := False;
   AFen := '';
-  LBoard := TDraughtsBoard.Create;
-  try
-    if not TryBuildDisplayedBoard(AGameTree, LBoard) then
-      Exit;
-    AFen := LBoard.CurrentFEN;
-    Result := True;
-  finally
-    LBoard.Free;
-  end;
+  if AGameTree = nil then
+    Exit;
+  LBoard := PositionScratch(AGameTree);
+  if not TryBuildDisplayedPosition(AGameTree, LBoard) then
+    Exit;
+  AFen := LBoard.ToFEN;
+  Result := True;
 end;
 
 procedure TMainForm.UpdateDatabaseSearchPositionFromTree(AGameTree: TGameTree);
@@ -5766,14 +5762,14 @@ begin
 
   FScoreHistoryControl.MaxScore := FPreferences.EvaluationMaxScore;
   FScoreHistoryControl.Scale := FPreferences.EvaluationScale;
-  FScoreHistoryControl.StartingSide := FenSideToMove(LStartingFEN);
+  FScoreHistoryControl.StartingSide := LGameTree.Variant.SideFromFEN(LStartingFEN);
   FScoreHistoryControl.PlyCount := LMoveCount;
   FScoreHistoryControl.AnnotationsText := LAnnotationsText;
   FScoreHistoryControl.CurrentPly := LPly;
   if FScoreHistoryForm <> nil then
     FScoreHistoryForm.UpdateScores(LAnnotationsText, LMoveCount, LPly,
       FPreferences.EvaluationMaxScore, FPreferences.EvaluationScale,
-      FenSideToMove(LStartingFEN));
+      LGameTree.Variant.SideFromFEN(LStartingFEN));
 end;
 
 procedure TMainForm.RefreshVisibleGameTreeView(AGameTree: TGameTree);
@@ -5912,13 +5908,15 @@ end;
 
 procedure TMainForm.UpdateLegalMovesFromTree(AGameTree: TGameTree);
 var
-  LBoard: TDraughtsBoard;
+  LBoard: TGamePosition;
   LHasBoard: Boolean;
 begin
-  LBoard := TDraughtsBoard.Create;
+  LBoard := nil;
+  if AGameTree <> nil then
+    LBoard := PositionScratch(AGameTree);
   FLegalMovesMemo.Lines.BeginUpdate;
   try
-    LHasBoard := TryBuildDisplayedBoard(AGameTree, LBoard);
+    LHasBoard := (LBoard <> nil) and TryBuildDisplayedPosition(AGameTree, LBoard);
     FLegalMovesMemo.Clear;
     if (not LHasBoard) or (LBoard.LegalMoveCount = 0) then
       FLegalMovesMemo.Lines.Add('(none)')
@@ -5926,7 +5924,6 @@ begin
       LBoard.CopyLegalMovesTo(FLegalMovesMemo.Lines);
   finally
     FLegalMovesMemo.Lines.EndUpdate;
-    LBoard.Free;
   end;
 end;
 

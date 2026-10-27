@@ -5,6 +5,18 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-27 — Main form on the position boundary (position interface, step 8)
+
+- The main form uses game positions for everything except its draughts board
+  controls: legal moves, FEN copy, board highlights, loading FEN and PDN games,
+  starting games, variation input and the score history.
+- The last-move highlight comes from the displayed position (the node's move or
+  the last preview move) instead of the draughts board's history; covered by
+  `game_tree_variant_check`.
+- `REFACTORING.md` lists the remaining chess replacement points per area.
+- Regression, lifecycle, DXP, GUI and tournament suites pass; GUI harness timings
+  within noise. No push.
+
 ### 2026-10-27 — Game rules, orchestrator and runner on the position boundary (position interface, step 7)
 
 - New `TGameRules` in `uGamePosition`; `TDraughtsRules` holds the draughts

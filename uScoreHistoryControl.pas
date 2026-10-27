@@ -5,7 +5,7 @@ unit uScoreHistoryControl;
 interface
 
 uses
-  Classes, Controls, Forms, Graphics, LMessages, SysUtils, Types, uDraughtsBoard,
+  Classes, Controls, Forms, Graphics, LMessages, SysUtils, Types, uGamePosition,
   uPdn, uPdnText, uPreferences;
 
 type
@@ -21,7 +21,7 @@ type
     FPlyCount: Integer;
     FScale: TScoreScale;
     FShowEvaluationBar: Boolean;
-    FStartingSide: TDraughtsSide;
+    FStartingSide: TGameSide;
     function BarPenWidth(APlotWidth, ACount: Integer): Integer;
     function ChartBounds(out APlotLeft, APlotRight: Integer): Boolean;
     function LayoutBounds(out ABarRect, AChartRect: TRect;
@@ -46,7 +46,7 @@ type
     procedure SetPlyCount(AValue: Integer);
     procedure SetScale(AValue: TScoreScale);
     procedure SetShowEvaluationBar(AValue: Boolean);
-    procedure SetStartingSide(AValue: TDraughtsSide);
+    procedure SetStartingSide(AValue: TGameSide);
     function ScoreHintForPly(APly: Integer): string;
     procedure SetScoreHint(const AText: string; AX, AY: Integer);
     function TryAnnotationScoreTextInLines(ALines: TStrings; APly: Integer;
@@ -75,7 +75,7 @@ type
     property Scale: TScoreScale read FScale write SetScale;
     property ShowEvaluationBar: Boolean read FShowEvaluationBar
       write SetShowEvaluationBar;
-    property StartingSide: TDraughtsSide read FStartingSide
+    property StartingSide: TGameSide read FStartingSide
       write SetStartingSide;
   published
     property Align;
@@ -149,7 +149,7 @@ begin
   FPlyCount := 0;
   FScale := ssLogarithmic;
   FShowEvaluationBar := True;
-  FStartingSide := dsWhite;
+  FStartingSide := gsWhite;
 end;
 
 destructor TScoreHistoryControl.Destroy;
@@ -321,19 +321,19 @@ function TScoreHistoryControl.PlyLabel(APly: Integer): string;
 var
   LMoveNumber: Integer;
   LPlyFromWhiteStart: Integer;
-  LSide: TDraughtsSide;
+  LSide: TGameSide;
 begin
   LPlyFromWhiteStart := APly;
-  if FStartingSide = dsBlack then
+  if FStartingSide = gsBlack then
     Inc(LPlyFromWhiteStart);
   LMoveNumber := ((LPlyFromWhiteStart - 1) div 2) + 1;
-  if ((FStartingSide = dsWhite) and Odd(APly)) or
-    ((FStartingSide = dsBlack) and (not Odd(APly))) then
-    LSide := dsWhite
+  if ((FStartingSide = gsWhite) and Odd(APly)) or
+    ((FStartingSide = gsBlack) and (not Odd(APly))) then
+    LSide := gsWhite
   else
-    LSide := dsBlack;
+    LSide := gsBlack;
 
-  if LSide = dsWhite then
+  if LSide = gsWhite then
     Result := 'Move ' + IntToStr(LMoveNumber) + ' White'
   else
     Result := 'Move ' + IntToStr(LMoveNumber) + ' Black';
@@ -661,7 +661,7 @@ begin
   Invalidate;
 end;
 
-procedure TScoreHistoryControl.SetStartingSide(AValue: TDraughtsSide);
+procedure TScoreHistoryControl.SetStartingSide(AValue: TGameSide);
 begin
   if FStartingSide = AValue then
     Exit;

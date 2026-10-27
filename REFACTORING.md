@@ -192,7 +192,7 @@ or move the published v3.0 tag as part of this work.
 - Node-index removal work is bounded by one invalidation and one subsequent rebuild;
   the regression checks 20,000 removed IDs and preserves surviving identities.
 
-## Game-position boundary (in progress)
+## Game-position boundary (steps 1-8 done)
 
 Design and rationale: `claude/position-interface-proposal.md`. Generic units reach
 the game only through `uGamePosition` (`TGamePosition`, `TGameVariant`); moves are
@@ -209,7 +209,7 @@ generic unit is converted; behaviour, formats and performance stay unchanged.
 | 5 | Notation walker and presentation (`MoveNotation`) | Done |
 | 6 | Analysis coordination and PV state | Done |
 | 7 | `TGameRules`; orchestrator, runner and running game | Done |
-| 8 | Remaining main-form uses; list the chess replacement points | |
+| 8 | Remaining main-form uses; list the chess replacement points | Done |
 
 Each step is one local commit with all suites and the performance baseline passing.
 
@@ -311,6 +311,38 @@ Step 7 notes:
   (300 random games, 81,870 moves, identical results) costs about 8% more per move
   (about 33 µs instead of 30 µs), which is negligible next to engine searches.
 - With step 7, `uGameTree`'s dependency on `uGameOrchestrator` is game-neutral too.
+
+Step 8 notes:
+- The main form builds displayed positions as game positions everywhere except
+  for its board controls: legal moves list and clicks, FEN copy, board highlights,
+  loading a FEN or PDN game, starting a game, score-history side, variation input
+  and snapshot comparison. Short queries reuse one position of the tree's game
+  (`PositionScratch`).
+- The last-move highlight comes from the displayed position
+  (`TDisplayedPosition.TryBuildPosition(..., out ALastMove)`: the node's move, or
+  the canonical last preview move) instead of the draughts board's move history.
+- `TScoreHistoryControl`/`TScoreHistoryForm` take a `TGameSide`.
+- GUI harness (8 interleaved runs): load, browse, jump and human moves within the
+  run-to-run spread.
+
+### Chess replacement points
+
+What still names draughts after step 8. Units outside the source audit's list are
+per game by design (proposal, section 4); a chess build supplies its own version or
+a per-game strategy. Counts are of code references at step 8.
+
+| Area | Where | What a chess port replaces |
+|---|---|---|
+| Rules, moves, notation | `uDraughtsBoard`, `uDraughtsDrawRules`, `uDraughtsPosition` (`TDraughtsPosition`, `TDraughtsVariant`, `TDraughtsRules`) | `uChessPosition`: position, variant (FEN, SAN, result texts), rules (mate, stalemate, 50 moves, repetition, material) |
+| Program wiring | `gwdgui.lpr` links `uDraughtsPosition`, `uHubEngine`, `uDxpEngine` | Link the chess game and engine units instead |
+| Main form, board controls | `uMainForm`: 5 `TDraughtsBoard`s with their `TDraughtsBoardControl`s (main board, PV and annotator mini boards, two pop-outs), `TryBuildDisplayedBoard` with `FDraughtsScratch` (draughts helper `TryBuildDraughtsDisplayedBoard`), `ApplyBoardTheme`; 12 `TDraughtsBoard` and 12 `TDraughtsBoardControl` references | A chess board control behind the same events (square clicked, targets, highlights); the form keeps one control-facing helper per game |
+| Main form, other | `FPositionSetupForm` (`TPositionSetupForm`); window caption "International Polish Draughts" (2 places) | Chess setup form; caption from the variant name |
+| PV view | `uPvBrowser` (mini board, move numbering from the FEN's side letter) | Chess PV browser or a game-neutral one over a chess board control |
+| Board widgets | `uBoardControl`, `uPositionSetupForm` | Chess board control and setup form |
+| Engines | `uDraughtsEngine`, `uHubEngine`, `uDxpEngine`, `uDxpProtocol`; `uAnalyzerRunnerThread` creates `THubEngine` directly (annotator, MCTS); `uEngineRegistry` kinds `eekHub`/`eekDxp`; `uEnginesDialog`, `uEngineEditForm` (Hub/DXP fields) | UCI engine unit registered through `RegisterGameEngineFactory`; the annotator runner should use `CreateGameEngine`; a UCI engine kind and its settings |
+| Game records | `uPdn` (PDN reader/writer, `TPdnMoveNode`), the PDN-syntax part of `uGameTreePdn` (tags, `PdnExportResult`), `uPdnText` (2-0/1-1/0-2 result normalization), `uPdnOpenDialog` | PGN reader/writer reusing the line walker; `uGameTreeActor` imports `TPdnMoveNode` (move this record-tree type to a neutral unit); `uScoreHistoryControl` and `uTournamentGameRecord` use `uPdn` |
+| Database | `uGameDatabase` (draughts board replay, `TDraughtsSide` in position search), `uDatabaseForm` (board control) | Replay and position keys through `TGamePosition`; side through `TGameSide`; chess board control |
+| Tournaments | `uTournamentResults`, `uTournamentDialog`, `uTournamentGridModel` (2-0/1-1/0-2 scoring and menus), `uTournamentStorage`/`uTournamentGameRecord` (PDN) | A per-game scoring strategy (1-0/½-½/0-1) and the record format |
 - `uAnalysisCoordinator` still uses `uGameOrchestrator` for `TGameOrchestratorState`
   (step 7).
 

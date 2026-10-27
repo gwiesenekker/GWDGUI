@@ -34,7 +34,11 @@ type
     function TryBuildNodePosition(AGameTree: TGameTree; ANode: TGameTreePlyNode;
       Revision: Int64; APosition: TGamePosition): Boolean;
     function TryBuildPosition(AGameTree: TGameTree; AActive: Boolean;
-      ARevision: Int64; APosition: TGamePosition): Boolean;
+      ARevision: Int64; APosition: TGamePosition): Boolean; overload;
+    // Also returns the move that led to the displayed position: the last
+    // preview move, else the displayed node's move ('' at the tree start).
+    function TryBuildPosition(AGameTree: TGameTree; AActive: Boolean;
+      ARevision: Int64; APosition: TGamePosition; out ALastMove: string): Boolean; overload;
     property Cursor: TGameTreeCursor read FCursor;
     property PreviewPly: Integer read FPreviewPly;
     property PreviewMoves: string read FPreviewMoves;
@@ -201,12 +205,20 @@ end;
 function TDisplayedPosition.TryBuildPosition(AGameTree: TGameTree; AActive: Boolean;
   ARevision: Int64; APosition: TGamePosition): Boolean;
 var
+  LLastMove: string;
+begin
+  Result := TryBuildPosition(AGameTree, AActive, ARevision, APosition, LLastMove);
+end;
+function TDisplayedPosition.TryBuildPosition(AGameTree: TGameTree; AActive: Boolean;
+  ARevision: Int64; APosition: TGamePosition; out ALastMove: string): Boolean;
+var
   I: Integer;
   LNode: TGameTreePlyNode;
   LMoves: TStringList;
   Candidate: TGamePosition;
 begin
   Result := False;
+  ALastMove := '';
   if (AGameTree = nil) or (APosition = nil) then
     Exit;
   LNode := ResolveNode(AGameTree, AActive);
@@ -215,6 +227,7 @@ begin
   try
     if not TryBuildNodePosition(AGameTree, LNode, ARevision, Candidate) then
       Exit;
+    ALastMove := LNode.MoveText;
     try
       if (Trim(FPreviewMoves) <> '') and (FPreviewPly > 0) then
       begin
@@ -223,7 +236,7 @@ begin
           Exit;
         // Preview moves come from engines and PV text: validate each one.
         for I := 0 to FPreviewPly - 1 do
-          Candidate.PlayMoveText(LMoves[I]);
+          ALastMove := Candidate.PlayMoveText(LMoves[I]);
       end;
       APosition.AssignFrom(Candidate);
       Result := True;
@@ -231,6 +244,8 @@ begin
       Result := False;
     end;
   finally
+    if not Result then
+      ALastMove := '';
     Candidate.Free;
     LMoves.Free;
   end;

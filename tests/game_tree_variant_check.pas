@@ -551,6 +551,49 @@ begin
   end;
 end;
 
+{ The displayed position reports the move that led to it (board highlights):
+  the node's move, or the canonical last preview move. }
+procedure CheckDisplayedMoveOnInjectedVariant;
+var
+  LVariant: TCounterVariant;
+  LTree: TGameTree;
+  LActor: TGameTreeActor;
+  LDisplay: TDisplayedPosition;
+  LPosition: TGamePosition;
+  LError, LMove: string;
+  LNodeId: Int64;
+begin
+  LVariant := TCounterVariant.Create;
+  LTree := TGameTree.Create(LVariant);
+  LActor := TGameTreeActor.Create(LTree, False);
+  LDisplay := TDisplayedPosition.Create;
+  LPosition := LVariant.CreatePosition;
+  try
+    Check(LDisplay.TryBuildPosition(LTree, True, LActor.Revision, LPosition, LMove) and
+      (LMove = ''), 'no move leads to the start position, got "' + LMove + '"');
+    Check(Execute(LActor, LActor.CreateAppendMainlineMoveCommand('p2', gmsHuman), LError, LNodeId),
+      'append: ' + LError);
+    Check(LDisplay.TryBuildPosition(LTree, True, LActor.Revision, LPosition, LMove) and
+      (LMove = '+2'), 'the displayed node''s move, got "' + LMove + '"');
+    Check(LDisplay.SelectPreview(1, 2, 'one two', LTree), 'select a preview');
+    Check(LDisplay.TryBuildPosition(LTree, True, LActor.Revision, LPosition, LMove) and
+      (LMove = '+2') and (LPosition.ToFEN = 'B:5'),
+      'the canonical last preview move, got "' + LMove + '" at ' + LPosition.ToFEN);
+    Check(LDisplay.SelectPreview(1, 1, 'one two', LTree), 'select a shorter preview');
+    Check(LDisplay.TryBuildPosition(LTree, True, LActor.Revision, LPosition, LMove) and
+      (LMove = '+1'), 'the first preview move in canonical form, got "' + LMove + '"');
+    Check(LDisplay.SelectPreview(1, 1, '32-28', LTree), 'select an invalid preview');
+    Check(not LDisplay.TryBuildPosition(LTree, True, LActor.Revision, LPosition, LMove) and
+      (LMove = ''), 'no move for a position that cannot be built');
+  finally
+    LPosition.Free;
+    LDisplay.Free;
+    LActor.Free;
+    LTree.Free;
+    LVariant.Free;
+  end;
+end;
+
 begin
   CheckRootSideFollowsVariant;
   CheckActorOnInjectedVariant;
@@ -559,6 +602,7 @@ begin
   CheckAnalysisOnInjectedVariant;
   CheckOrchestratorOnInjectedVariant;
   CheckRunnerOnInjectedVariant;
+  CheckDisplayedMoveOnInjectedVariant;
   if Failures > 0 then
   begin
     WriteLn(Failures, ' game tree variant checks failed');

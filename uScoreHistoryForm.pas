@@ -5,7 +5,7 @@ unit uScoreHistoryForm;
 interface
 
 uses
-  Classes, Controls, Forms, uDraughtsBoard, uPreferences,
+  Classes, Controls, Forms, uGamePosition, uPreferences,
   uScoreHistoryControl;
 
 type
@@ -16,7 +16,7 @@ type
     constructor Create(AOwner: TComponent); override;
     procedure UpdateScores(const AAnnotationsText: string; APlyCount,
       ACurrentPly: Integer; AMaxScore: Double; AScale: TScoreScale;
-      AStartingSide: TDraughtsSide);
+      AStartingSide: TGameSide);
   end;
 
 implementation
@@ -41,7 +41,7 @@ end;
 
 procedure TScoreHistoryForm.UpdateScores(const AAnnotationsText: string;
   APlyCount, ACurrentPly: Integer; AMaxScore: Double; AScale: TScoreScale;
-  AStartingSide: TDraughtsSide);
+  AStartingSide: TGameSide);
 begin
   FScoreHistoryControl.MaxScore := AMaxScore;
   FScoreHistoryControl.Scale := AScale;
