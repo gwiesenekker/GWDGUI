@@ -752,8 +752,9 @@ bash build.sh
 `build.sh` embeds the current manual and Git build identity. On Windows, run
 `build.bat` from the source directory; it finds `lazbuild.exe` on PATH or in a
 standard Lazarus folder (or takes its path as an argument), builds `gwdgui.exe`
-with the **Windows** build mode, and keeps the previous executable if the build
-fails. Alternatively, open `gwdgui.lpi` in Lazarus, select the **Windows** build
+with the **Windows** build mode in `lib\candidate`, and replaces `gwdgui.exe`
+only after a successful build, so a failed or interrupted build keeps the
+previous executable. Alternatively, open `gwdgui.lpi` in Lazarus, select the **Windows** build
 mode under Project → Project Options → Build modes, then choose **Build**. Both
 use the build mode's pre-build step, which uses
 Lazarus’s configured compiler to embed the manual and Git identity; Python is

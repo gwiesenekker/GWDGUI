@@ -47,6 +47,10 @@ type
   TManualStyledLine = record
     Text: string;
     Styles: TManualStyles; // one per byte of Text
+    // One per byte of Text: the byte's position in the logical (unwrapped)
+    // text of the manual, or -1 for layout (indents, bullets, table padding
+    // and rules). Search runs on the logical text (review U11).
+    Sources: array of Integer;
   end;
   TManualStyledLines = array of TManualStyledLine;
 
@@ -65,6 +69,9 @@ type
     FLineStarts: array of Integer;
     FHeadings: TManualHeadings;
     FWidth: Integer;
+    FSources: array of Integer;      // per byte of FText, see TManualStyledLine
+    FNextSource: Integer;
+    function NewSegment(ALength: Integer): Integer;
     procedure AddBlock(const ABlock: TManualBlock);
     procedure AddLine(const ALine: TManualStyledLine);
     procedure AddBlank;
@@ -84,6 +91,11 @@ type
     // Zero-based line containing byte offset AOffset.
     function LineOfOffset(AOffset: Integer): Integer;
     function StyleAt(AOffset: Integer): TManualStyle;
+    // FindManualMatches on the logical text: words split by wrapping and table
+    // cells wrapped over several lines are found whole, while real spaces
+    // between words still separate them. Matches are in rendered offsets
+    // (start of the first character to the end of the last).
+    function FindMatches(const AQuery: string): TManualMatches;
     property Text: string read FText;
     property Headings: TManualHeadings read FHeadings;
     property Width: Integer read FWidth;
@@ -95,9 +107,10 @@ procedure ParseManualInline(const ARaw: string; ABase: TManualStyle;
 // Number of characters (UTF-8 code points) in AText.
 function ManualCharCount(const AText: string): Integer;
 // Greedy word wrap of a styled text into lines of at most AWidth characters.
-// Words longer than AWidth are split.
+// Words longer than AWidth are split. Sources are ASourceBase + the byte's
+// zero-based offset in APlain.
 function WrapManualText(const APlain: string; const AStyles: TManualStyles;
-  AWidth: Integer): TManualStyledLines;
+  AWidth: Integer; ASourceBase: Integer = 0): TManualStyledLines;
 // Case-insensitive (ASCII letters) search in rendered text. Any run of spaces
 // and line breaks matches any run in the query, so a phrase is found where
 // the layout wrapped it. Matches do not overlap.
@@ -147,8 +160,23 @@ var
 begin
   Result.Text := AText;
   SetLength(Result.Styles, Length(AText));
+  SetLength(Result.Sources, Length(AText));
   for I := 0 to High(Result.Styles) do
+  begin
     Result.Styles[I] := AStyle;
+    Result.Sources[I] := -1;
+  end;
+end;
+
+// AText as logical content starting at source ASource.
+function SourcedLine(const AText: string; AStyle: TManualStyle;
+  ASource: Integer): TManualStyledLine;
+var
+  I: Integer;
+begin
+  Result := StyledLine(AText, AStyle);
+  for I := 0 to High(Result.Sources) do
+    Result.Sources[I] := ASource + I;
 end;
 
 procedure AppendStyled(var ALine: TManualStyledLine; const AText: string;
@@ -159,8 +187,12 @@ begin
   LStart := Length(ALine.Text);
   ALine.Text := ALine.Text + AText;
   SetLength(ALine.Styles, Length(ALine.Text));
+  SetLength(ALine.Sources, Length(ALine.Text));
   for I := LStart to High(ALine.Styles) do
+  begin
     ALine.Styles[I] := AStyle;
+    ALine.Sources[I] := -1;
+  end;
 end;
 
 procedure AppendLine(var ALine: TManualStyledLine; const AOther: TManualStyledLine);
@@ -170,8 +202,15 @@ begin
   LStart := Length(ALine.Text);
   ALine.Text := ALine.Text + AOther.Text;
   SetLength(ALine.Styles, Length(ALine.Text));
+  SetLength(ALine.Sources, Length(ALine.Text));
   for I := 0 to High(AOther.Styles) do
+  begin
     ALine.Styles[LStart + I] := AOther.Styles[I];
+    if I <= High(AOther.Sources) then
+      ALine.Sources[LStart + I] := AOther.Sources[I]
+    else
+      ALine.Sources[LStart + I] := -1;
+  end;
 end;
 
 function RepeatText(const AText: string; ACount: Integer): string;
@@ -265,7 +304,7 @@ begin
 end;
 
 function WrapManualText(const APlain: string; const AStyles: TManualStyles;
-  AWidth: Integer): TManualStyledLines;
+  AWidth: Integer; ASourceBase: Integer): TManualStyledLines;
 var
   I, LWordStart, LWordEnd, LLineChars, LWordChars, LCharBytes: Integer;
   LCurrent: TManualStyledLine;
@@ -277,6 +316,7 @@ var
     Result[High(Result)] := LCurrent;
     LCurrent.Text := '';
     LCurrent.Styles := nil;
+    LCurrent.Sources := nil;
     LLineChars := 0;
     LHasWords := False;
   end;
@@ -288,8 +328,12 @@ var
     N := Length(LCurrent.Text);
     LCurrent.Text := LCurrent.Text + Copy(APlain, AFrom, ACount);
     SetLength(LCurrent.Styles, Length(LCurrent.Text));
+    SetLength(LCurrent.Sources, Length(LCurrent.Text));
     for P := 0 to ACount - 1 do
+    begin
       LCurrent.Styles[N + P] := AStyles[AFrom - 1 + P];
+      LCurrent.Sources[N + P] := ASourceBase + AFrom - 1 + P;
+    end;
   end;
 
 begin
@@ -298,6 +342,7 @@ begin
     AWidth := 1;
   LCurrent.Text := '';
   LCurrent.Styles := nil;
+  LCurrent.Sources := nil;
   LLineChars := 0;
   LHasWords := False;
   I := 1;
@@ -338,10 +383,16 @@ begin
     Flush;
 end;
 
-function FindManualMatches(const AText, AQuery: string): TManualMatches;
+type
+  TManualOffsets = array of Integer;
+
+// The search of FindManualMatches on AText, whose byte I (one-based) lies at
+// rendered offset AOffsets[I - 1].
+function FindMappedMatches(const AText: string; const AOffsets: TManualOffsets;
+  const AQuery: string): TManualMatches;
 var
   LText, LQuery: string;
-  LMap: array of Integer; // byte offset in AText of each byte of LText
+  LMap: array of Integer; // rendered offset of each byte of LText
   I, P, N: Integer;
   LSpace: Boolean;
 begin
@@ -373,7 +424,7 @@ begin
       begin
         Inc(N);
         LText[N] := ' ';
-        LMap[N - 1] := I - 1;
+        LMap[N - 1] := AOffsets[I - 1];
         LSpace := True;
       end;
     end
@@ -381,7 +432,7 @@ begin
     begin
       Inc(N);
       LText[N] := LowerCase(AText[I]);
-      LMap[N - 1] := I - 1;
+      LMap[N - 1] := AOffsets[I - 1];
       LSpace := False;
     end;
   SetLength(LText, N);
@@ -393,6 +444,17 @@ begin
     Result[High(Result)].Count := LMap[P + Length(LQuery) - 2] + 1 - LMap[P - 1];
     P := PosEx(LQuery, LText, P + Length(LQuery));
   end;
+end;
+
+function FindManualMatches(const AText, AQuery: string): TManualMatches;
+var
+  LOffsets: TManualOffsets;
+  I: Integer;
+begin
+  SetLength(LOffsets, Length(AText));
+  for I := 0 to High(LOffsets) do
+    LOffsets[I] := I;
+  Result := FindMappedMatches(AText, LOffsets, AQuery);
 end;
 
 { Parsing }
@@ -612,6 +674,14 @@ end;
 
 { Rendering }
 
+function TManualDocument.NewSegment(ALength: Integer): Integer;
+begin
+  // A gap of two keeps segments apart in the logical text (FindMatches puts a
+  // space there).
+  Result := FNextSource;
+  Inc(FNextSource, ALength + 2);
+end;
+
 procedure TManualDocument.AddLine(const ALine: TManualStyledLine);
 begin
   SetLength(FLines, Length(FLines) + 1);
@@ -635,7 +705,7 @@ var
 begin
   ParseManualInline(AText, ABase, LPlain, LStyles);
   LWrapped := WrapManualText(LPlain, LStyles,
-    FWidth - ManualCharCount(ARestPrefix));
+    FWidth - ManualCharCount(ARestPrefix), NewSegment(Length(LPlain)));
   for I := 0 to High(LWrapped) do
   begin
     if I = 0 then
@@ -743,7 +813,8 @@ begin
       else
         LText := '';
       ParseManualInline(LText, LStyle, LPlain, LStyles);
-      LCells[LRowIndex][LCol] := WrapManualText(LPlain, LStyles, LWidths[LCol]);
+      LCells[LRowIndex][LCol] := WrapManualText(LPlain, LStyles, LWidths[LCol],
+        NewSegment(Length(LPlain)));
     end;
   end;
   for LRowIndex := 0 to High(ABlock.Rows) do
@@ -771,6 +842,7 @@ begin
       end;
       LLine.Text := TrimRight(LLine.Text);
       SetLength(LLine.Styles, Length(LLine.Text));
+      SetLength(LLine.Sources, Length(LLine.Text));
       AddLine(LLine);
     end;
     if LRowIndex = 0 then
@@ -795,7 +867,8 @@ begin
   for I := 0 to High(ABlock.CodeLines) do
   begin
     LLine := StyledLine('    ', msText);
-    AppendStyled(LLine, ABlock.CodeLines[I], msCodeBlock);
+    AppendLine(LLine, SourcedLine(ABlock.CodeLines[I], msCodeBlock,
+      NewSegment(Length(ABlock.CodeLines[I]))));
     AddLine(LLine);
   end;
 end;
@@ -811,6 +884,7 @@ begin
     Inc(LTotal, Length(FLines[I].Text) + 1);
   SetLength(FText, LTotal);
   SetLength(FStyles, LTotal);
+  SetLength(FSources, LTotal);
   SetLength(FLineStarts, Length(FLines));
   LOffset := 0;
   for I := 0 to High(FLines) do
@@ -820,10 +894,15 @@ begin
     begin
       FText[LOffset + J] := FLines[I].Text[J];
       FStyles[LOffset + J - 1] := FLines[I].Styles[J - 1];
+      if J <= Length(FLines[I].Sources) then
+        FSources[LOffset + J - 1] := FLines[I].Sources[J - 1]
+      else
+        FSources[LOffset + J - 1] := -1;
     end;
     Inc(LOffset, Length(FLines[I].Text));
     FText[LOffset + 1] := #10;
     FStyles[LOffset] := msText;
+    FSources[LOffset] := -1;
     Inc(LOffset);
   end;
   // No line break after the last line.
@@ -831,6 +910,7 @@ begin
   begin
     SetLength(FText, LTotal - 1);
     SetLength(FStyles, LTotal - 1);
+    SetLength(FSources, LTotal - 1);
   end;
   FLines := nil;
 end;
@@ -846,6 +926,7 @@ begin
   FWidth := AWidth;
   FLines := nil;
   FHeadings := nil;
+  FNextSource := 0;
   for I := 0 to High(FBlocks) do
   begin
     LBlock := FBlocks[I];
@@ -926,6 +1007,52 @@ begin
       H := M - 1;
   end;
   Result := L;
+end;
+
+function TManualDocument.FindMatches(const AQuery: string): TManualMatches;
+var
+  LRendered: TManualOffsets; // rendered offset of each logical position
+  LText: string;
+  LOffsets: TManualOffsets;
+  I, LSource, N, LLast: Integer;
+begin
+  SetLength(LRendered, FNextSource);
+  for I := 0 to High(LRendered) do
+    LRendered[I] := -1;
+  for I := 0 to High(FSources) do
+  begin
+    LSource := FSources[I];
+    if (LSource >= 0) and (LSource < FNextSource) then
+      LRendered[LSource] := I;
+  end;
+  // The logical text in source order (table cells are laid out side by side,
+  // but read one after the other); a gap becomes one space.
+  SetLength(LText, FNextSource);
+  SetLength(LOffsets, FNextSource);
+  N := 0;
+  LLast := -2;
+  for LSource := 0 to High(LRendered) do
+  begin
+    if LRendered[LSource] < 0 then
+      Continue;
+    if (LLast >= 0) and (LSource > LLast + 1) then
+    begin
+      Inc(N);
+      LText[N] := ' ';
+      LOffsets[N - 1] := LRendered[LSource];
+    end;
+    Inc(N);
+    LText[N] := FText[LRendered[LSource] + 1];
+    LOffsets[N - 1] := LRendered[LSource];
+    LLast := LSource;
+  end;
+  SetLength(LText, N);
+  SetLength(LOffsets, N);
+  Result := FindMappedMatches(LText, LOffsets, AQuery);
+  // A match whose pieces lie on several lines ends at its last character.
+  for I := 0 to High(Result) do
+    if Result[I].Count < 1 then
+      Result[I].Count := 1;
 end;
 
 function TManualDocument.StyleAt(AOffset: Integer): TManualStyle;

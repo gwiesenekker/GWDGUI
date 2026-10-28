@@ -33,7 +33,7 @@ type
     procedure ContentsChanged(Sender: TObject);
     procedure TextResized(Sender: TObject);
     procedure TextStatusChanged(Sender: TObject; Changes: TSynStatusChanges);
-    procedure SelectMatch(Index: Integer);
+    procedure SelectMatch(Index: Integer; AReveal: Boolean = True);
     procedure BuildContents;
     procedure SyncContents;
     function HeadingAtLine(ALine: Integer): Integer;
@@ -208,11 +208,17 @@ begin
     FText.EndUpdate;
   end;
   BuildContents;
+  // Replacing the text dropped the selection. Search runs on the logical text,
+  // so the same match index is the same hit at every width; select it again
+  // and keep the reading position (review U10).
   if FSearch.Text <> '' then
   begin
-    FMatches := FindManualMatches(FDocument.Text, FSearch.Text);
+    FMatches := FDocument.FindMatches(FSearch.Text);
     if FMatchIndex >= Length(FMatches) then
+      FMatchIndex := Length(FMatches) - 1;
+    if (FMatchIndex < 0) and (Length(FMatches) > 0) then
       FMatchIndex := 0;
+    SelectMatch(FMatchIndex, False);
   end;
   if LHeading >= 0 then
     FText.TopLine := FDocument.Headings[LHeading].Line + LOffsetInSection + 1
@@ -328,7 +334,7 @@ begin
   Result := Point(AOffset - FDocument.LineStart(LLine) + 1, LLine + 1);
 end;
 
-procedure TManualForm.SelectMatch(Index: Integer);
+procedure TManualForm.SelectMatch(Index: Integer; AReveal: Boolean);
 var
   LStart, LEnd: TPoint;
 begin
@@ -350,14 +356,15 @@ begin
   FText.BlockBegin := LStart;
   FText.BlockEnd := LEnd;
   // Show the match a little below the top rather than at the window edge.
-  if (LStart.Y < FText.TopLine) or (LEnd.Y >= FText.TopLine + FText.LinesInWindow) then
+  if AReveal and ((LStart.Y < FText.TopLine) or
+    (LEnd.Y >= FText.TopLine + FText.LinesInWindow)) then
     FText.TopLine := LStart.Y - FText.LinesInWindow div 3;
   FStatus.Caption := Format('%d of %d matches', [FMatchIndex + 1, Length(FMatches)]);
 end;
 
 procedure TManualForm.SearchChanged(Sender: TObject);
 begin
-  FMatches := FindManualMatches(FDocument.Text, FSearch.Text);
+  FMatches := FDocument.FindMatches(FSearch.Text);
   SelectMatch(0);
 end;
 

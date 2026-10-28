@@ -40,34 +40,71 @@ if not exist "draughts.ttf" (
   echo Warning: draughts.ttf is missing; keep it beside gwdgui.exe.
 )
 
-rem Keep the previous executable until the new one is linked.
+set "CANDIDATE_DIR=lib\candidate\"
+
+rem Repair an interrupted replacement: only the previous executable is left.
+if not exist "gwdgui.exe" if exist "gwdgui.old.exe" (
+  move /y "gwdgui.old.exe" "gwdgui.exe" >nul
+  if errorlevel 1 (
+    echo gwdgui.exe is missing and gwdgui.old.exe could not be renamed back.
+    echo Rename gwdgui.old.exe to gwdgui.exe and retry.
+    exit /b 1
+  )
+  echo Restored gwdgui.exe from gwdgui.old.exe ^(an earlier build was interrupted^).
+)
+
+if not exist "%CANDIDATE_DIR%" mkdir "%CANDIDATE_DIR%"
+if exist "%CANDIDATE_DIR%gwdgui.exe" del /f /q "%CANDIDATE_DIR%gwdgui.exe" >nul 2>nul
+if exist "%CANDIDATE_DIR%gwdgui.exe" (
+  echo Could not remove the old build output %CANDIDATE_DIR%gwdgui.exe.
+  exit /b 1
+)
+
+echo Building with "%LAZBUILD%" ...
+set "GWDGUI_BUILD_DIR=%CANDIDATE_DIR%"
+rem call also runs a lazbuild wrapper script (and the build check's stand-in).
+call "%LAZBUILD%" --build-all --build-mode=Windows --no-write-project gwdgui.lpi
+set "RESULT=%ERRORLEVEL%"
+set "GWDGUI_BUILD_DIR="
+if not "%RESULT%"=="0" goto failed
+if not exist "%CANDIDATE_DIR%gwdgui.exe" goto failed
+
+rem Replace gwdgui.exe. gwdgui.exe is good here (only a successful build is
+rem ever moved in), so a backup left beside it by an earlier build can go.
 if exist "gwdgui.old.exe" del /f /q "gwdgui.old.exe" >nul 2>nul
+if exist "gwdgui.old.exe" (
+  echo gwdgui.old.exe is still in use ^(an older GWDGUI is running^); close it and retry.
+  echo The new build is in %CANDIDATE_DIR%gwdgui.exe; gwdgui.exe was not changed.
+  exit /b 1
+)
 set "MOVED_OLD="
 if exist "gwdgui.exe" (
   move /y "gwdgui.exe" "gwdgui.old.exe" >nul
   if errorlevel 1 (
-    echo Could not rename gwdgui.exe; close GWDGUI or remove gwdgui.old.exe and retry.
+    echo Could not rename gwdgui.exe; close GWDGUI and retry.
+    echo The new build is in %CANDIDATE_DIR%gwdgui.exe; gwdgui.exe was not changed.
     exit /b 1
   )
   set "MOVED_OLD=1"
 )
-
-echo Building with "%LAZBUILD%" ...
-"%LAZBUILD%" --build-all --build-mode=Windows --no-write-project gwdgui.lpi
-set "RESULT=%ERRORLEVEL%"
-
-if not "%RESULT%"=="0" goto failed
-if not exist "gwdgui.exe" goto failed
-
+move /y "%CANDIDATE_DIR%gwdgui.exe" "gwdgui.exe" >nul
+if errorlevel 1 goto publishfailed
 if defined MOVED_OLD del /f /q "gwdgui.old.exe" >nul 2>nul
 echo Built %~dp0gwdgui.exe
 exit /b 0
 
-:failed
-echo Build failed (lazbuild exit code %RESULT%).
-if defined MOVED_OLD (
-  if not exist "gwdgui.exe" move /y "gwdgui.old.exe" "gwdgui.exe" >nul
-  echo The previous gwdgui.exe was kept.
+:publishfailed
+echo Could not move the new build into place.
+if not defined MOVED_OLD exit /b 1
+move /y "gwdgui.old.exe" "gwdgui.exe" >nul
+if errorlevel 1 (
+  echo The previous executable is gwdgui.old.exe; rename it to gwdgui.exe.
+  exit /b 1
 )
+echo The previous gwdgui.exe was kept.
+exit /b 1
+
+:failed
+echo Build failed ^(lazbuild exit code %RESULT%^); gwdgui.exe was not changed.
 if "%RESULT%"=="0" exit /b 1
 exit /b %RESULT%

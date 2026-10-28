@@ -121,6 +121,35 @@ begin
       (Pos('launched', MatchText(Manual.Matches[0])) = 1), 'phrase found at 40 columns');
     Manual.RenderForColumns(160);
     Check(Length(Manual.Matches) = 1, 'search results follow a re-render');
+    Check(Text.SelAvail and (Pos('launched', Selected) = 1) and
+      (Status.Caption = '1 of 1 matches'), 'a re-render selects the match again (U10)');
+
+    // U10: a non-first match stays selected through re-renders, with a
+    // consistent index and status, and the reading position is kept.
+    Search.Text := 'tournament';
+    TButton(Manual.FindComponent('ManualNext')).Click;
+    TButton(Manual.FindComponent('ManualNext')).Click;
+    I := Length(Manual.Matches);
+    Manual.RenderForColumns(40);
+    Check((Manual.MatchIndex = 2) and (Length(Manual.Matches) = I) and
+      (UTF8LowerCase(StringReplace(Selected, #10, ' ', [rfReplaceAll])) = 'tournament') and
+      (Status.Caption = Format('3 of %d matches', [I])),
+      Format('narrow re-render keeps match 3: index=%d sel=%s status=%s',
+        [Manual.MatchIndex, Selected, Status.Caption]));
+    Manual.RenderForColumns(160);
+    Check((Manual.MatchIndex = 2) and (UTF8LowerCase(Selected) = 'tournament') and
+      (Status.Caption = Format('3 of %d matches', [I])), 'wide re-render keeps match 3');
+
+    // U11: a parameter name that the layout splits is found at every width.
+    Manual.RenderForColumns(40);
+    Search.Text := 'gui-send-starting-position';
+    Check((Length(Manual.Matches) >= 1) and (Status.Caption <> 'No matches') and Text.SelAvail,
+      'split parameter name found at 40 columns: ' + Status.Caption);
+    I := Length(Manual.Matches);
+    Manual.RenderForColumns(80);
+    Check((Length(Manual.Matches) = I) and (Manual.MatchIndex = 0) and
+      (Status.Caption = Format('1 of %d matches', [I])) and
+      (Selected = 'gui-send-starting-position'), 'and at 80 columns: ' + Selected);
     for I := 0 to Text.Lines.Count - 1 do
       if UTF8Length(Text.Lines[I]) > 160 then
         Check(Copy(Text.Lines[I], 1, 4) = '    ', 'only code lines may exceed the width');

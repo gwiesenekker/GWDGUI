@@ -228,10 +228,79 @@ begin
   end;
 end;
 
+{ U11: search on the logical text finds words that wrapping split and table
+  cells that wrap, at every width; real spaces still separate words. }
+procedure CheckLogicalSearch;
+var
+  LDoc: TManualDocument;
+  LSource: TStringList;
+  LMatches: TManualMatches;
+  LRoot, LHit: string;
+  J, LCount, LTournament: Integer;
+const
+  Widths: array[0..3] of Integer = (30, 40, 80, 140);
+  Synthetic =
+    'Before averyveryveryverylongidentifierthatcannotfitononeline after.' + LineEnding +
+    '' + LineEnding +
+    '| Name | Meaning |' + LineEnding +
+    '| --- | --- |' + LineEnding +
+    '| `gui-another-long-parameter-name` | text of the cell that wraps |' + LineEnding;
+begin
+  LDoc := TManualDocument.Create;
+  LSource := TStringList.Create;
+  try
+    LDoc.Load(Synthetic);
+    for J := Low(Widths) to High(Widths) do
+    begin
+      LDoc.Render(Widths[J]);
+      LMatches := LDoc.FindMatches('averyveryveryverylongidentifierthatcannotfitononeline');
+      Check(Length(LMatches) = 1, Format('split word found at width %d', [Widths[J]]));
+      LMatches := LDoc.FindMatches('gui-another-long-parameter-name');
+      Check(Length(LMatches) = 1, Format('split table cell found at width %d', [Widths[J]]));
+      if Length(LMatches) = 1 then
+      begin
+        LHit := Copy(LDoc.Text, LMatches[0].Start + 1, LMatches[0].Count);
+        Check(Copy(LHit, 1, 4) = 'gui-', 'match starts at the cell: ' + LHit);
+      end;
+      Check(Length(LDoc.FindMatches('cell that wraps')) = 1,
+        Format('phrase in a wrapped cell at width %d', [Widths[J]]));
+      Check(Length(LDoc.FindMatches('beforeavery')) = 0, 'a real space still separates words');
+      Check(Length(LDoc.FindMatches('meaning gui-another')) = 1,
+        'table cells read one after another, separated by a space');
+    end;
+
+    LRoot := GetEnvironmentVariable('GWDGUI_ROOT');
+    if LRoot = '' then
+      LRoot := ExtractFilePath(ParamStr(0)) + '..';
+    LSource.LoadFromFile(IncludeTrailingPathDelimiter(LRoot) + 'MANUAL.md');
+    LDoc.Load(LSource.Text);
+    LCount := -1;
+    LTournament := -1;
+    for J := Low(Widths) to High(Widths) do
+    begin
+      LDoc.Render(Widths[J]);
+      LMatches := LDoc.FindMatches('gui-send-starting-position');
+      Check(Length(LMatches) >= 1, Format('real parameter found at width %d', [Widths[J]]));
+      if J = 0 then
+      begin
+        LCount := Length(LMatches);
+        LTournament := Length(LDoc.FindMatches('tournament'));
+      end;
+      Check(Length(LMatches) = LCount, 'same number of parameter matches at every width');
+      Check(Length(LDoc.FindMatches('tournament')) = LTournament,
+        'same number of tournament matches at every width');
+    end;
+  finally
+    LSource.Free;
+    LDoc.Free;
+  end;
+end;
+
 begin
   CheckSample;
   CheckWrap;
   CheckRealManual;
+  CheckLogicalSearch;
   if Failures > 0 then
   begin
     WriteLn(Failures, ' manual document checks failed');

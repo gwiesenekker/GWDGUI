@@ -103,6 +103,22 @@ assert b'\r\n' in batch and b'\n' not in batch.replace(b'\r\n', b''), 'build.bat
 batch_text = batch.decode('ascii')
 assert '--build-mode=Windows' in batch_text and 'gwdgui.lpi' in batch_text
 assert '--no-write-project' in batch_text
-for label in ('failed',):
+for label in ('failed', 'publishfailed'):
     assert 'goto ' + label in batch_text and '\r\n:' + label + '\r\n' in batch_text
+# C12: the build goes to a candidate path; gwdgui.exe is replaced only after
+# success, and gwdgui.old.exe is never deleted unless gwdgui.exe exists.
+target = mode.find('Target/Filename').get('Value')
+assert target == '$Env(GWDGUI_BUILD_DIR)gwdgui', target
+assert 'set "GWDGUI_BUILD_DIR=%CANDIDATE_DIR%"' in batch_text
+lines = batch_text.split('\r\n')
+build_line = next(i for i, l in enumerate(lines) if '--build-mode=Windows' in l)
+assert lines[build_line].startswith('call "%LAZBUILD%"')
+restore_line = next(i for i, l in enumerate(lines)
+                    if l.startswith('if not exist "gwdgui.exe" if exist "gwdgui.old.exe"'))
+for i, line in enumerate(lines):
+    if 'gwdgui.old.exe' in line and line.lstrip().startswith(('del ', 'if exist "gwdgui.old.exe" del')):
+        assert i > build_line, 'gwdgui.old.exe deleted before the build: line %d' % (i + 1)
+    if line.lstrip().startswith('move /y "gwdgui.exe" "gwdgui.old.exe"'):
+        assert i > build_line, 'gwdgui.exe renamed before the build: line %d' % (i + 1)
+assert restore_line < build_line
 print('Native Windows build-info generator checks passed (host execution; Windows IDE still needs validation)')

@@ -5,6 +5,36 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-28 — build.bat keeps the last good executable; manual search and re-render
+
+Responds to ChatGPT's review of `50b16ce` (`chatgpt/review-50b16ce.md`).
+
+- C12: `build.bat` builds into `lib\candidate\` (the Windows build mode's
+  target is now `$Env(GWDGUI_BUILD_DIR)gwdgui`, so IDE builds are unchanged)
+  and replaces `gwdgui.exe` only after a successful build. A failed build,
+  including one that leaves a partial executable, no longer touches
+  `gwdgui.exe`; a build interrupted while replacing it is repaired at the start
+  of the next run, and a backup is only deleted when a good `gwdgui.exe` is in
+  place. Every rename is checked.
+- New `tests/windows_build_bat_check.bat` runs `build.bat` with a stand-in
+  lazbuild (success, failure, partial output, no output, interrupted builds,
+  leftover backups, retries) and checks that `gwdgui.exe` always holds the new
+  or the previous build. It runs on Windows, and under Wine's `cmd.exe` in
+  `run_windows_cross_check.sh` when Wine is installed; the old `build.bat`
+  fails 5 of its 12 cases. `windows_build_info_check` checks the order of the
+  renames and the candidate target.
+- U11: manual search runs on the logical text (`TManualDocument.FindMatches`):
+  every rendered byte knows its position in the unwrapped text, so words split
+  by wrapping and table cells wrapped over several lines are found whole, while
+  real spaces still separate words. `gui-send-starting-position` is found at
+  every width, and match counts no longer depend on the window width.
+- U10: after a re-render (resizing the window or the contents pane) the
+  current match is selected again with a consistent index and status, and the
+  reading position is kept.
+- Tests: `manual_document_check` (split words, wrapped table cells, real
+  manual at four widths) and `help_menu_check` (selection, index and status
+  through re-renders, a split parameter). All suites pass. No push.
+
 ### 2026-10-28 — Game boundary: timeout result, starting move number, draw policy
 
 Responds to ChatGPT's game-boundary review of `aca852b`

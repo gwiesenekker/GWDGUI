@@ -15,7 +15,7 @@
         <CompilerOptions>
           <Version Value="11"/>
           <Target>
-            <Filename Value="gwdgui"/>
+            <Filename Value="$Env(GWDGUI_BUILD_DIR)gwdgui"/>
           </Target>
           <SearchPaths>
             <IncludeFiles Value="lib/build-info;$(ProjOutDir)"/>

@@ -19,8 +19,9 @@ configuration and output files. Those local files are not published to GitHub.
 
 On Windows, run `build.bat` from this directory (or pass the path to
 `lazbuild.exe` if Lazarus is not on PATH or in `C:\lazarus`). It builds
-`gwdgui.exe` with the **Windows** build mode and keeps the previous executable
-if the build fails. Alternatively, open `gwdgui.lpi` in Lazarus, select the
+`gwdgui.exe` with the **Windows** build mode in `lib\candidate` and replaces
+`gwdgui.exe` only after a successful build, so a failed or interrupted build
+keeps the previous executable. Alternatively, open `gwdgui.lpi` in Lazarus, select the
 **Windows** build mode (Project → Project Options → Build modes), and choose
 **Build**.
 This embeds the manual and current Git commit without Python. Install Git for

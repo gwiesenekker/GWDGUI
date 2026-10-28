@@ -48,7 +48,11 @@ fpc -B -FU"$out" -FE"$out" -o"$out/generate_build_info" "$root/tools/generate_bu
 "$out/generate_build_info" "$root" "$out/gwdgui-build.inc"
 FAKE
 chmod +x "$OUT_DIR/fakebin/cmd.exe"
-if ! PATH="$OUT_DIR/fakebin:$PATH" GWDGUI_CROSS_ROOT="$COPY_DIR" lazbuild --build-all \
+# build.bat builds into lib/candidate/ through the Windows mode's target
+# ($Env(GWDGUI_BUILD_DIR)gwdgui, review C12).
+rm -f "$COPY_DIR/gwdgui.exe"
+if ! PATH="$OUT_DIR/fakebin:$PATH" GWDGUI_CROSS_ROOT="$COPY_DIR" \
+  GWDGUI_BUILD_DIR=lib/candidate/ lazbuild --build-all \
   --build-mode=Windows --no-write-project --os=win64 --cpu=x86_64 --ws=win32 \
   --pcp="$OUT_DIR/app/config" "$COPY_DIR/gwdgui.lpi" > "$OUT_DIR/mode.log" 2>&1; then
   grep -E 'Error|Fatal|unexpected|did not' "$OUT_DIR/mode.log" || tail -40 "$OUT_DIR/mode.log"
@@ -56,5 +60,27 @@ if ! PATH="$OUT_DIR/fakebin:$PATH" GWDGUI_CROSS_ROOT="$COPY_DIR" lazbuild --buil
 fi
 [[ -f "$COPY_DIR/lib/build-info/gwdgui-build.inc" ]] ||
   { echo "the Windows build mode did not run its pre-build step"; exit 1; }
-[[ -f "$COPY_DIR/gwdgui.exe" ]] || { echo "the Windows build mode produced no gwdgui.exe"; exit 1; }
+[[ -f "$COPY_DIR/lib/candidate/gwdgui.exe" ]] ||
+  { echo "the Windows build mode produced no lib/candidate/gwdgui.exe"; exit 1; }
+[[ ! -e "$COPY_DIR/gwdgui.exe" ]] ||
+  { echo "the Windows build mode wrote gwdgui.exe instead of the candidate path"; exit 1; }
+
+# build.bat's replacement logic under Wine's cmd.exe, when Wine is installed.
+WINE=""
+for candidate in wine64 wine /usr/lib/wine/wine64; do
+  if command -v "$candidate" >/dev/null 2>&1; then WINE="$candidate"; break; fi
+done
+if [[ -n "$WINE" ]]; then
+  echo "==> windows_build_bat_check (build.bat under Wine cmd.exe)"
+  cp "$ROOT_DIR/build.bat" "$COPY_DIR/build.bat"
+  cp "$ROOT_DIR/tests/windows_build_bat_check.bat" "$COPY_DIR/tests/"
+  BAT_PATH="$(printf 'Z:%s/tests/windows_build_bat_check.bat' "$COPY_DIR" | sed 's#/#\\#g')"
+  WINEPREFIX="${WINEPREFIX:-$OUT_DIR/wineprefix}" WINEDEBUG=-all \
+    "$WINE" cmd /c "$BAT_PATH" 2>/dev/null |
+    tr -d '\r' | tee "$OUT_DIR/build-bat.log"
+  grep -q '^build.bat checks passed$' "$OUT_DIR/build-bat.log" ||
+    { echo "build.bat checks failed"; exit 1; }
+else
+  echo "Wine not installed: skipping tests/windows_build_bat_check.bat (run it on Windows)"
+fi
 echo "Windows cross-compile check passed (gwdgui.exe built in both modes, not run)"
