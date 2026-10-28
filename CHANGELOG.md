@@ -5,6 +5,35 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-28 — Game boundary: timeout result, starting move number, draw policy
+
+Responds to ChatGPT's game-boundary review of `aca852b`
+(`chatgpt/review-game-boundary-aca852b.md`; comments in
+`claude/comments-on-chatgpt-review-game-boundary-aca852b.md`).
+
+- M9: when a side's time runs out, the orchestrator now asks the game's rules
+  for the result (`TGameRules.TimeoutOutcome`, default: the opponent wins). Both
+  flag-fall paths (a move completed too late, an engine deadline) use it. Chess
+  can then draw when the opponent cannot mate (FIDE 6.9). Draughts results and
+  reason texts are unchanged.
+- G10: `TGameVariant.StartingMoveNumberFromFEN` (default 1) and the shared
+  `GameMoveNumberForPly`/`GameSideForPly`. The game tree, analysis lines in the
+  move list, the PV browser and the score-history hints number moves from the
+  start position's move number; a header change renumbers existing moves.
+  Draughts output is unchanged.
+- Fixed on the way: an analysis line at the root of a game that starts with
+  Black to move numbered White's reply as move 1 instead of 2, and a root
+  comment dropped the number of the first move ("{...} 1... 18-23").
+- R9: the `TGameRules` comment states the draw policy: every available draw
+  claim is treated as made at once (engine-game practice); automatic draws
+  likewise, with checkmate first. No claim command.
+- R10: `PositionKey` is documented as the repetition identity (no move
+  counters; `ToFEN` carries the complete state). Its consumers were audited;
+  none needs the counters.
+- Tests: `game_tree_variant_check` covers move numbers from 37 for both
+  starting sides, header renumbering, Clear, analysis lines, and both timeout
+  paths with a rules object that draws. All suites pass. No push.
+
 ### 2026-10-28 — Engine start failures are shown in a dialog
 
 - QA: with an `engines.json` copied from Linux, opening an annotator on Windows

@@ -4918,7 +4918,7 @@ begin
   FScoreHistoryForm.UpdateScores(FScoreHistoryControl.AnnotationsText,
     FScoreHistoryControl.PlyCount, FScoreHistoryControl.CurrentPly,
     FScoreHistoryControl.MaxScore, FScoreHistoryControl.Scale,
-    FScoreHistoryControl.StartingSide);
+    FScoreHistoryControl.StartingSide, FScoreHistoryControl.StartingMoveNumber);
   ShowFormCenteredOnOwner(FScoreHistoryForm, Self);
 end;
 
@@ -5872,13 +5872,16 @@ begin
   FScoreHistoryControl.MaxScore := FPreferences.EvaluationMaxScore;
   FScoreHistoryControl.Scale := FPreferences.EvaluationScale;
   FScoreHistoryControl.StartingSide := LGameTree.Variant.SideFromFEN(LStartingFEN);
+  FScoreHistoryControl.StartingMoveNumber :=
+    LGameTree.Variant.StartingMoveNumberFromFEN(LStartingFEN);
   FScoreHistoryControl.PlyCount := LMoveCount;
   FScoreHistoryControl.AnnotationsText := LAnnotationsText;
   FScoreHistoryControl.CurrentPly := LPly;
   if FScoreHistoryForm <> nil then
     FScoreHistoryForm.UpdateScores(LAnnotationsText, LMoveCount, LPly,
       FPreferences.EvaluationMaxScore, FPreferences.EvaluationScale,
-      LGameTree.Variant.SideFromFEN(LStartingFEN));
+      LGameTree.Variant.SideFromFEN(LStartingFEN),
+      LGameTree.Variant.StartingMoveNumberFromFEN(LStartingFEN));
 end;
 
 procedure TMainForm.RefreshVisibleGameTreeView(AGameTree: TGameTree);

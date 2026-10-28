@@ -125,6 +125,7 @@ type
     function IncrementModeCaption(AMode: TClockIncrementMode): string;
     function SideForPly(APlyNumber: Integer): TGameSide;
     function MoveNumberForPly(APlyNumber: Integer): Integer;
+    procedure ApplyStartingFEN(ARenumber: Boolean);
     function AddMove(AParent: TGameTreePlyNode; APlyNumber: Integer;
       const AMoveText: string): TGameTreePlyNode;
     function AddMainlineMove(APlyNumber: Integer;
@@ -401,10 +402,9 @@ begin
   FBlackName := 'Black';
   FResultText := '*';
   FStartingFEN := FVariant.DefaultStartingFEN;
-  // The root's side always follows the starting FEN (review G9); SetHeader
-  // does the same when a header supplies another FEN.
-  if FRoot <> nil then
-    FRoot.FSideToMove := FVariant.SideFromFEN(FStartingFEN);
+  // The root's side and starting move number always follow the starting FEN
+  // (reviews G9, G10); SetHeader does the same when a header supplies another FEN.
+  ApplyStartingFEN(False);
   FStatusText := '';
   FGameState := gosWaiting;
   FHasTimeControl := False;
@@ -530,20 +530,45 @@ procedure TGameTree.SetHeader(const AEventName, AWhiteName, ABlackName,
   AResultText, AStartingFEN: string; out AChanged: Boolean);
 var
   EffectiveStartingFEN: string;
+  LFENChanged: Boolean;
 begin
   EffectiveStartingFEN := Trim(AStartingFEN);
   if EffectiveStartingFEN = '' then
     EffectiveStartingFEN := FVariant.DefaultStartingFEN;
+  LFENChanged := FStartingFEN <> EffectiveStartingFEN;
   AChanged := (FEventName <> AEventName) or (FWhiteName <> AWhiteName) or
-    (FBlackName <> ABlackName) or (FResultText <> AResultText) or
-    (FStartingFEN <> EffectiveStartingFEN);
+    (FBlackName <> ABlackName) or (FResultText <> AResultText) or LFENChanged;
   FEventName := AEventName;
   FWhiteName := AWhiteName;
   FBlackName := ABlackName;
   FResultText := AResultText;
   FStartingFEN := EffectiveStartingFEN;
-  if FRoot <> nil then
-    FRoot.FSideToMove := FVariant.SideFromFEN(FStartingFEN);
+  ApplyStartingFEN(LFENChanged);
+end;
+
+procedure TGameTree.ApplyStartingFEN(ARenumber: Boolean);
+
+  procedure Renumber(ANode: TGameTreePlyNode);
+  var
+    I: Integer;
+  begin
+    for I := 0 to ANode.ChildCount - 1 do
+    begin
+      ANode.Children[I].FMoveNumber := MoveNumberForPly(ANode.Children[I].FPlyNumber);
+      ANode.Children[I].FSideToMove := SideForPly(ANode.Children[I].FPlyNumber);
+      Renumber(ANode.Children[I]);
+    end;
+  end;
+
+begin
+  if FRoot = nil then
+    Exit;
+  FRoot.FSideToMove := FVariant.SideFromFEN(FStartingFEN);
+  // The root has no move; its number is that of the first move (used for
+  // analysis lines that start at the root).
+  FRoot.FMoveNumber := FVariant.StartingMoveNumberFromFEN(FStartingFEN);
+  if ARenumber then
+    Renumber(FRoot);
 end;
 
 procedure TGameTree.SetGameState(AState: TGameOrchestratorState;
@@ -964,10 +989,8 @@ end;
 
 function TGameTree.MoveNumberForPly(APlyNumber: Integer): Integer;
 begin
-  if FVariant.SideFromFEN(FStartingFEN) = gsBlack then
-    Result := (APlyNumber div 2) + 1
-  else
-    Result := ((APlyNumber - 1) div 2) + 1;
+  Result := GameMoveNumberForPly(FVariant.SideFromFEN(FStartingFEN),
+    FVariant.StartingMoveNumberFromFEN(FStartingFEN), APlyNumber);
 end;
 
 function TGameTree.AddMove(AParent: TGameTreePlyNode; APlyNumber: Integer;

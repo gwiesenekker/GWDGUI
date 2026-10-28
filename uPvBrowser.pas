@@ -100,12 +100,12 @@ function MoveSegmentText(APly, ADisplayedIndex: Integer; const AMove: string;
 var
   LMoveNumber: Integer;
   LSide: TDraughtsSide;
-  LPlyFromWhiteStart: Integer;
 begin
-  LPlyFromWhiteStart := APly;
+  // Draughts FEN has no move number: the start is move 1.
   if AStartingSide = dsBlack then
-    Inc(LPlyFromWhiteStart);
-  LMoveNumber := ((LPlyFromWhiteStart - 1) div 2) + 1;
+    LMoveNumber := GameMoveNumberForPly(gsBlack, 1, APly)
+  else
+    LMoveNumber := GameMoveNumberForPly(gsWhite, 1, APly);
   if ((AStartingSide = dsWhite) and Odd(APly)) or
     ((AStartingSide = dsBlack) and (not Odd(APly))) then
     LSide := dsWhite

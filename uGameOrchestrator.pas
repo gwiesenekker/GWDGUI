@@ -63,6 +63,9 @@ type
     function ExtractDoneMove(const AResponse: string): string;
     procedure FinishGame(const AResult, AReason: string);
     procedure FinishWithOutcome(AOutcome: TGameOutcome; const AReason: string);
+    // AExpired's time ran out with AExpired to move; the game's rules decide
+    // the result (review M9).
+    procedure FinishOnTimeout(AExpired: TGameSide; const AReason: string);
     function GetEngine(ASide: TGameSide): TGameEngine;
     function GetMovesRemaining(ASide: TGameSide): Integer;
     function GetMoveAnnotationsText: string;
@@ -407,6 +410,15 @@ begin
   LogMessage('game finished; result=' + FGameResult + '; reason=' + Trim(AReason));
 end;
 
+procedure TGameOrchestrator.FinishOnTimeout(AExpired: TGameSide;
+  const AReason: string);
+var
+  LReason: string;
+begin
+  LReason := AReason;
+  FinishWithOutcome(FRules.TimeoutOutcome(FPosition, AExpired, LReason), LReason);
+end;
+
 procedure TGameOrchestrator.FinishWithOutcome(AOutcome: TGameOutcome;
   const AReason: string);
 begin
@@ -439,8 +451,7 @@ begin
   // applicable increment policy aligned with the engine's search deadline.
   if FRemainingSeconds[ASide] <= 0 then
   begin
-    FinishWithOutcome(WinFor(OppositeGameSide(ASide)),
-      'flag fell for ' + SideToString(ASide));
+    FinishOnTimeout(ASide, 'flag fell for ' + SideToString(ASide));
     Exit;
   end;
 
@@ -479,8 +490,8 @@ var
     FUsedSeconds[LSide] := FUsedSeconds[LSide] +
       (GetTickCount64 - LStartTick) / 1000;
     FRemainingSeconds[LSide] := 0;
-    FinishWithOutcome(WinFor(OppositeGameSide(LSide)),
-      'flag fell for ' + SideToString(LSide) + '; engine move deadline expired');
+    FinishOnTimeout(LSide, 'flag fell for ' + SideToString(LSide) +
+      '; engine move deadline expired');
     Result := '';
   end;
 begin

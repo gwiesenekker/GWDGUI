@@ -22,6 +22,7 @@ type
     FScale: TScoreScale;
     FShowEvaluationBar: Boolean;
     FStartingSide: TGameSide;
+    FStartingMoveNumber: Integer;
     function BarPenWidth(APlotWidth, ACount: Integer): Integer;
     function ChartBounds(out APlotLeft, APlotRight: Integer): Boolean;
     function LayoutBounds(out ABarRect, AChartRect: TRect;
@@ -47,6 +48,7 @@ type
     procedure SetScale(AValue: TScoreScale);
     procedure SetShowEvaluationBar(AValue: Boolean);
     procedure SetStartingSide(AValue: TGameSide);
+    procedure SetStartingMoveNumber(AValue: Integer);
     function ScoreHintForPly(APly: Integer): string;
     procedure SetScoreHint(const AText: string; AX, AY: Integer);
     function TryAnnotationScoreTextInLines(ALines: TStrings; APly: Integer;
@@ -77,6 +79,9 @@ type
       write SetShowEvaluationBar;
     property StartingSide: TGameSide read FStartingSide
       write SetStartingSide;
+    // Number of the first move (chess FEN fullmove number; draughts 1).
+    property StartingMoveNumber: Integer read FStartingMoveNumber
+      write SetStartingMoveNumber;
   published
     property Align;
     property Anchors;
@@ -150,6 +155,7 @@ begin
   FScale := ssLogarithmic;
   FShowEvaluationBar := True;
   FStartingSide := gsWhite;
+  FStartingMoveNumber := 1;
 end;
 
 destructor TScoreHistoryControl.Destroy;
@@ -320,13 +326,9 @@ end;
 function TScoreHistoryControl.PlyLabel(APly: Integer): string;
 var
   LMoveNumber: Integer;
-  LPlyFromWhiteStart: Integer;
   LSide: TGameSide;
 begin
-  LPlyFromWhiteStart := APly;
-  if FStartingSide = gsBlack then
-    Inc(LPlyFromWhiteStart);
-  LMoveNumber := ((LPlyFromWhiteStart - 1) div 2) + 1;
+  LMoveNumber := GameMoveNumberForPly(FStartingSide, FStartingMoveNumber, APly);
   if ((FStartingSide = gsWhite) and Odd(APly)) or
     ((FStartingSide = gsBlack) and (not Odd(APly))) then
     LSide := gsWhite
@@ -658,6 +660,17 @@ begin
     Exit;
   ClearScoreHint;
   FShowEvaluationBar := AValue;
+  Invalidate;
+end;
+
+procedure TScoreHistoryControl.SetStartingMoveNumber(AValue: Integer);
+begin
+  if AValue < 1 then
+    AValue := 1;
+  if FStartingMoveNumber = AValue then
+    Exit;
+  ClearScoreHint;
+  FStartingMoveNumber := AValue;
   Invalidate;
 end;
 

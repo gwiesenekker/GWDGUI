@@ -16,7 +16,7 @@ uses
   Classes, SysUtils, uGamePosition, uDraughtsPosition, uCounterGamePosition,
   uGameTree, uGameTreeActor, uGameTreeBuilder, uGameMoveHistory, uGameTreePdn,
   uAnalysisCoordinator, uDisplayedPosition, uPvSnapshot, uGameTreeSearchRef,
-  SyncObjs, uGameOrchestrator, uGameRunnerThread, uGameSetupTypes;
+  SyncObjs, uGameOrchestrator, uGameRunnerThread, uGameSetupTypes, uEngineBase;
 
 var
   Failures: Integer = 0;
@@ -507,6 +507,169 @@ begin
   end;
 end;
 
+type
+  // Counter-game engine whose search always misses its deadline (review M9).
+  TTimeoutCounterEngine = class(TGameEngine)
+  protected
+    function DoStartThinking: string; override;
+  end;
+
+function TTimeoutCounterEngine.DoStartThinking: string;
+begin
+  MarkMoveTimedOut;
+  Result := '';
+end;
+
+function RenderedMoves(ATree: TGameTree): string;
+var
+  LOptions: TGameTreePdnRenderOptions;
+  LResult: TGameTreePdnRenderResult;
+begin
+  LOptions := DefaultGameTreePdnRenderOptions;
+  LOptions.ShowEnginePVMove := True;
+  LOptions.ShowEngineFullPV := True;
+  RenderGameTreeMovesToPdn(ATree, LOptions, LResult);
+  Result := LResult.Text;
+end;
+
+{ G10: move numbers start at the variant's starting move number (chess FEN
+  fullmove number) in the tree, the PDN text and analysis lines, and follow a
+  header change. }
+procedure CheckMoveNumbering;
+var
+  LVariant: TCounterVariant;
+  LTree: TGameTree;
+  LActor: TGameTreeActor;
+  LError, LText: string;
+  LNodeId, LSecondId: Int64;
+begin
+  Check((GameMoveNumberForPly(gsWhite, 37, 1) = 37) and
+    (GameMoveNumberForPly(gsWhite, 37, 2) = 37) and
+    (GameMoveNumberForPly(gsWhite, 37, 3) = 38) and
+    (GameMoveNumberForPly(gsBlack, 37, 1) = 37) and
+    (GameMoveNumberForPly(gsBlack, 37, 2) = 38) and
+    (GameMoveNumberForPly(gsBlack, 37, 3) = 38) and
+    (GameMoveNumberForPly(gsWhite, 1, 0) = 1) and
+    (GameMoveNumberForPly(gsWhite, 0, 1) = 1), 'GameMoveNumberForPly');
+  Check((GameSideForPly(gsBlack, 1) = gsBlack) and (GameSideForPly(gsBlack, 2) = gsWhite),
+    'GameSideForPly');
+
+  LVariant := TCounterVariant.Create;
+  LTree := TGameTree.Create(LVariant);
+  LActor := TGameTreeActor.Create(LTree, False);
+  try
+    Check((LVariant.StartingMoveNumberFromFEN('W:0:37') = 37) and
+      (LVariant.StartingMoveNumberFromFEN('W:0') = 1), 'counter starting move number');
+    Check(LTree.Root.MoveNumber = 1, 'default root move number');
+    LTree.SetHeader('E', 'W', 'B', '*', 'W:0:37');
+    Check(LTree.Root.MoveNumber = 37, 'root carries the starting move number');
+    Check(Execute(LActor, LActor.CreateAppendMainlineMoveCommand('p1', gmsHuman), LError, LNodeId),
+      'append: ' + LError);
+    Check(Execute(LActor, LActor.CreateAppendMainlineMoveCommand('p1', gmsHuman), LError, LSecondId),
+      'append: ' + LError);
+    Check(Execute(LActor, LActor.CreateAppendMainlineMoveCommand('p1', gmsHuman), LError, LNodeId),
+      'append: ' + LError);
+    Check(Execute(LActor, LActor.CreateStoreMoveVariationCommand(LSecondId, 'p2', gmsHuman),
+      LError, LNodeId), 'variation: ' + LError);
+    Check((LTree.MainlineNode[1].MoveNumber = 37) and (LTree.MainlineNode[2].MoveNumber = 37) and
+      (LTree.MainlineNode[3].MoveNumber = 38), 'White start at move 37: 37, 37, 38');
+    LText := GameTreeToPdnText(LTree);
+    Check((Pos('37. one', LText) > 0) and (Pos('38. one', LText) > 0) and
+      (Pos('(38. two)', LText) > 0) and (Pos('1. ', LText) = 0),
+      'PDN text numbers from 37: ' + LText);
+
+    LTree.RecordEnginePV(0, '0.1', '+1 +1 +1');
+    LTree.RecordEnginePV(2, '0.1', '+1 +1');
+    LText := RenderedMoves(LTree);
+    Check(Pos('(37.+1 {E: 0.1} +1 38.+1)', LText) > 0,
+      'root analysis line numbers from 37: ' + LText);
+    Check(Pos('(38.+1 +1)', LText) > 0,
+      'analysis line after Black''s move continues with 38: ' + LText);
+
+    LTree.SetHeader('E', 'W', 'B', '*', 'B:0:37');
+    Check((LTree.MainlineNode[1].MoveNumber = 37) and
+      (LTree.MainlineNode[1].SideToMove = gsBlack) and
+      (LTree.MainlineNode[2].MoveNumber = 38) and (LTree.MainlineNode[3].MoveNumber = 38),
+      'a header change renumbers the moves: Black start 37, 38, 38');
+    LText := GameTreeToPdnText(LTree);
+    Check((Pos('37... one 38. one', LText) > 0) and (Pos('} 37... one', LText) > 0), 'Black start PDN text: ' + LText);
+
+    LTree.Clear;
+    Check(LTree.Root.MoveNumber = 1, 'Clear restores move 1');
+    Check(Execute(LActor, LActor.CreateAppendMainlineMoveCommand('p1', gmsHuman), LError, LNodeId),
+      'append after clear: ' + LError);
+    Check(LTree.MainlineNode[1].MoveNumber = 1, 'first move after Clear is move 1');
+  finally
+    LActor.Free;
+    LTree.Free;
+    LVariant.Free;
+  end;
+
+  // Regression: an analysis line at the root of a Black-to-move game numbered
+  // White's reply as move 1 instead of 2.
+  LVariant := TBlackStartCounterVariant.Create;
+  LTree := TGameTree.Create(LVariant);
+  try
+    LTree.RecordEnginePV(0, '0.1', '+1 +1 +1');
+    LText := RenderedMoves(LTree);
+    Check(Pos('(1...+1 {E: 0.1} 2.+1 +1)', LText) > 0,
+      'Black-start root analysis line: ' + LText);
+  finally
+    LTree.Free;
+    LVariant.Free;
+  end;
+end;
+
+{ M9: both flag-fall paths ask the game's rules for the result. }
+procedure CheckTimeoutOutcome;
+var
+  LVariant: TCounterVariant;
+  LGame: TGameOrchestrator;
+  LControl: TTimeControl;
+  LSide: TGameSide;
+  LStart: string;
+begin
+  LVariant := TCounterVariant.Create;
+  LGame := TGameOrchestrator.Create(LVariant);
+  try
+    LControl := LGame.TimeControl;
+    LControl.MinutesPerPeriod := 0.001;
+    LGame.TimeControl := LControl;
+    for LSide := Low(TGameSide) to High(TGameSide) do
+    begin
+      if LSide = gsWhite then LStart := 'W:' else LStart := 'B:';
+      // Completed move after the time ran out; the opponent can still win.
+      LGame.NewGame(LStart + '0');
+      LGame.PlayMove('p1', LSide, 1, 'human');
+      Check((LGame.State = gosGameOver) and
+        (LGame.GameResult = LVariant.ResultText(WinFor(OppositeGameSide(LSide)))) and
+        (LGame.MoveHistory.Count = 0),
+        'flag fall: opponent wins and the late move is not played, got ' + LGame.GameResult);
+      // The opponent cannot win: the rules make it a draw.
+      LGame.NewGame(LStart + '4');
+      LGame.PlayMove('p1', LSide, 1, 'human');
+      Check((LGame.GameResult = '1/2-1/2') and
+        (Pos('opponent cannot win', LGame.Log.Text) > 0),
+        'flag fall without winning chances is a draw, got ' + LGame.GameResult);
+      // Engine deadline path.
+      LGame.Engine[LSide] := TTimeoutCounterEngine.Create('Timeout');
+      LGame.NewGame(LStart + '4');
+      LGame.PlayNextMove;
+      Check((LGame.State = gosGameOver) and (LGame.GameResult = '1/2-1/2') and
+        (Pos('engine move deadline expired; opponent cannot win', LGame.Log.Text) > 0),
+        'engine deadline without winning chances is a draw, got ' + LGame.GameResult);
+      LGame.NewGame(LStart + '1');
+      LGame.PlayNextMove;
+      Check(LGame.GameResult = LVariant.ResultText(WinFor(OppositeGameSide(LSide))),
+        'engine deadline: opponent wins, got ' + LGame.GameResult);
+      LGame.Engine[LSide] := nil;
+    end;
+  finally
+    LGame.Free;
+    LVariant.Free;
+  end;
+end;
+
 procedure CheckRunnerOnInjectedVariant;
 var
   LVariant: TCounterVariant;
@@ -603,6 +766,8 @@ begin
   CheckOrchestratorOnInjectedVariant;
   CheckRunnerOnInjectedVariant;
   CheckDisplayedMoveOnInjectedVariant;
+  CheckMoveNumbering;
+  CheckTimeoutOutcome;
   if Failures > 0 then
   begin
     WriteLn(Failures, ' game tree variant checks failed');

@@ -36,8 +36,11 @@ type
     procedure AssignFrom(ASource: TGamePosition); virtual; abstract;
     function Clone: TGamePosition; virtual; abstract;
     function SideToMove: TGameSide; virtual; abstract;
-    // Identifies the position for repetition, caches and databases. Includes the
-    // side to move and every other rule-relevant state of the game.
+    // Repetition identity, also used for position lookup (PV caches, databases):
+    // placement, side to move and every state that changes the legal moves
+    // (chess: castling rights; en passant only when an en passant capture is
+    // legal). Move counters are not part of it; ToFEN carries the complete
+    // state. Equal keys therefore do not imply equal FEN text (review R10).
     function PositionKey: string; virtual; abstract;
 
     { Moves (canonical text only) }
@@ -85,8 +88,16 @@ type
 
   { End-of-game rules that depend on the game history (repetition, progress
     counters, endgame limits) as well as the position. One instance follows one
-    game: Reset at its start, MovePlayed after every move. Loss on time is not a
-    rule of the game here; the orchestrator decides it. }
+    game: Reset at its start, MovePlayed after every move.
+
+    Draw policy (review R9): Outcome reports a draw as soon as either side may
+    claim one (chess: threefold repetition, 50-move rule) as well as for
+    automatic draws (fivefold repetition, 75-move rule), with checkmate taking
+    precedence. Every available claim is treated as made at once, as is usual
+    in engine games; the GUI has no claim command.
+
+    The orchestrator keeps the clocks; when a side's time runs out it asks
+    TimeoutOutcome for the result (review M9). }
   TGameRules = class
   public
     procedure Reset(AStart: TGamePosition); virtual; abstract;
@@ -97,6 +108,13 @@ type
     // AReason is a short log text when the game is over.
     function Outcome(APosition: TGamePosition; out AReason: string): TGameOutcome;
       virtual; abstract;
+    // The result when AExpired's time has run out in APosition (AExpired is to
+    // move; a move made after the time ran out is not played). AReason
+    // describes the clock event and is extended by the game when needed. The
+    // default is a win for the opponent; chess draws when the opponent cannot
+    // mate by any legal sequence (FIDE Article 6.9).
+    function TimeoutOutcome(APosition: TGamePosition; AExpired: TGameSide;
+      var AReason: string): TGameOutcome; virtual;
   end;
 
   TGameVariant = class
@@ -105,6 +123,9 @@ type
     function DefaultStartingFEN: string; virtual; abstract;
     // Side to move from FEN text without full validation (tree headers).
     function SideFromFEN(const AFEN: string): TGameSide; virtual; abstract;
+    // The number of the first move after AFEN (chess: the FEN fullmove
+    // number), without full validation. Default 1 (draughts FEN has none).
+    function StartingMoveNumberFromFEN(const AFEN: string): Integer; virtual;
     function CreatePosition: TGamePosition; virtual; abstract;
     // A position loaded from AFEN, or from DefaultStartingFEN when AFEN is
     // empty. Raises EConvertError for invalid text.
@@ -135,6 +156,13 @@ function OppositeGameSide(ASide: TGameSide): TGameSide;
 function GameSideName(ASide: TGameSide): string;
 // The outcome in which ASide wins.
 function WinFor(ASide: TGameSide): TGameOutcome;
+// The move number of ply APly (1 = the first move after the start position),
+// for a start with AStartSide to move and AStartNumber as its move number.
+// The one place that numbers moves (review G10).
+function GameMoveNumberForPly(AStartSide: TGameSide; AStartNumber,
+  APly: Integer): Integer;
+// The side that makes ply APly (1 = the first move).
+function GameSideForPly(AStartSide: TGameSide; APly: Integer): TGameSide;
 
 { Copies ASource into ATarget. ATarget is created (Clone) when it is nil or of
   another class, so holders of a position need not know the game in advance.
@@ -187,6 +215,24 @@ begin
     Result := goWhiteWins
   else
     Result := goBlackWins;
+end;
+
+function GameMoveNumberForPly(AStartSide: TGameSide; AStartNumber,
+  APly: Integer): Integer;
+begin
+  if AStartNumber < 1 then
+    AStartNumber := 1;
+  if APly < 1 then
+    Exit(AStartNumber);
+  Result := AStartNumber + (APly - 1 + Ord(AStartSide = gsBlack)) div 2;
+end;
+
+function GameSideForPly(AStartSide: TGameSide; APly: Integer): TGameSide;
+begin
+  if Odd(APly) then
+    Result := AStartSide
+  else
+    Result := OppositeGameSide(AStartSide);
 end;
 
 procedure AssignGamePosition(var ATarget: TGamePosition; ASource: TGamePosition);
@@ -255,6 +301,17 @@ begin
   Result := TryParseMove(AText, LMove);
   if Result then
     PlayMove(LMove);
+end;
+
+function TGameRules.TimeoutOutcome(APosition: TGamePosition; AExpired: TGameSide;
+  var AReason: string): TGameOutcome;
+begin
+  Result := WinFor(OppositeGameSide(AExpired));
+end;
+
+function TGameVariant.StartingMoveNumberFromFEN(const AFEN: string): Integer;
+begin
+  Result := 1;
 end;
 
 function TGameVariant.CreatePositionFromFEN(const AFEN: string): TGamePosition;

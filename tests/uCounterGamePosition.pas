@@ -8,12 +8,17 @@ unit uCounterGamePosition;
   assumes draughts (square numbers in move text, draughts FENs, the default
   variant) fails with it.
 
-  - Position: a counter 0..CounterLimit and a side to move. FEN: 'W:3', 'B:0'.
+  - Position: a counter 0..CounterLimit and a side to move. FEN: 'W:3', 'B:0';
+    an optional third field is the number of the first move ('W:0:37', for
+    review G10). The position ignores it, as chess positions keep move counters
+    out of PositionKey (review R10).
   - Moves: '+1' and '+2' (canonical); the counter may not exceed CounterLimit,
     so the game ends there. Aliases: 'p1', 'p2', and the notation 'one', 'two'.
   - Squares: from = counter + 1, to = counter + step + 1.
   - Rules: the side without a legal move loses; results are written 1-0, 0-1
-    (not the draughts 2-0, 0-2). The rules count the moves they were told of. }
+    (not the draughts 2-0, 0-2). The rules count the moves they were told of.
+    A timeout is a draw from counter CounterLimit - 1 on (the opponent "cannot
+    win" any more; a stand-in for FIDE 6.9, review M9), otherwise a loss. }
 
 interface
 
@@ -55,6 +60,7 @@ type
     function Name: string; override;
     function DefaultStartingFEN: string; override;
     function SideFromFEN(const AFEN: string): TGameSide; override;
+    function StartingMoveNumberFromFEN(const AFEN: string): Integer; override;
     function CreatePosition: TGamePosition; override;
     function SameMove(const A, B: string): Boolean; override;
     // Counter squares depend on the position, not on the move text.
@@ -73,6 +79,8 @@ type
       AAfter: TGamePosition); override;
     function Outcome(APosition: TGamePosition; out AReason: string): TGameOutcome;
       override;
+    function TimeoutOutcome(APosition: TGamePosition; AExpired: TGameSide;
+      var AReason: string): TGameOutcome; override;
     property MovesSeen: Integer read FMovesSeen;
   end;
 
@@ -127,7 +135,14 @@ begin
   else
     raise EConvertError.Create('Invalid counter FEN side: ' + AText);
   end;
-  LCount := StrToIntDef(Copy(LText, 3, MaxInt), -1);
+  LText := Copy(LText, 3, MaxInt);
+  if Pos(':', LText) > 0 then
+  begin
+    if StrToIntDef(Copy(LText, Pos(':', LText) + 1, MaxInt), 0) < 1 then
+      raise EConvertError.Create('Invalid counter FEN move number: ' + AText);
+    LText := Copy(LText, 1, Pos(':', LText) - 1);
+  end;
+  LCount := StrToIntDef(LText, -1);
   if (LCount < 0) or (LCount > CounterLimit) then
     raise EConvertError.Create('Invalid counter FEN count: ' + AText);
   FSide := LSide;
@@ -263,6 +278,21 @@ begin
     Result := gsWhite;
 end;
 
+function TCounterVariant.StartingMoveNumberFromFEN(const AFEN: string): Integer;
+var
+  LText: string;
+  LPos: Integer;
+begin
+  LText := Trim(AFEN);
+  Delete(LText, 1, 2);
+  LPos := Pos(':', LText);
+  Result := 1;
+  if LPos > 0 then
+    Result := StrToIntDef(Copy(LText, LPos + 1, MaxInt), 1);
+  if Result < 1 then
+    Result := 1;
+end;
+
 function TCounterVariant.CreatePosition: TGamePosition;
 begin
   Result := TCounterPosition.Create;
@@ -332,6 +362,18 @@ begin
     AReason := 'counter limit reached';
     Result := WinFor(OppositeGameSide(APosition.SideToMove));
   end;
+end;
+
+function TCounterRules.TimeoutOutcome(APosition: TGamePosition;
+  AExpired: TGameSide; var AReason: string): TGameOutcome;
+begin
+  if (APosition as TCounterPosition).Count >= CounterLimit - 1 then
+  begin
+    AReason := AReason + '; opponent cannot win';
+    Result := goDraw;
+  end
+  else
+    Result := inherited TimeoutOutcome(APosition, AExpired, AReason);
 end;
 
 { TBlackStartCounterVariant }

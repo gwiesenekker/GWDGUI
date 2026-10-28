@@ -16,7 +16,7 @@ type
     constructor Create(AOwner: TComponent); override;
     procedure UpdateScores(const AAnnotationsText: string; APlyCount,
       ACurrentPly: Integer; AMaxScore: Double; AScale: TScoreScale;
-      AStartingSide: TGameSide);
+      AStartingSide: TGameSide; AStartingMoveNumber: Integer = 1);
   end;
 
 implementation
@@ -41,11 +41,12 @@ end;
 
 procedure TScoreHistoryForm.UpdateScores(const AAnnotationsText: string;
   APlyCount, ACurrentPly: Integer; AMaxScore: Double; AScale: TScoreScale;
-  AStartingSide: TGameSide);
+  AStartingSide: TGameSide; AStartingMoveNumber: Integer);
 begin
   FScoreHistoryControl.MaxScore := AMaxScore;
   FScoreHistoryControl.Scale := AScale;
   FScoreHistoryControl.StartingSide := AStartingSide;
+  FScoreHistoryControl.StartingMoveNumber := AStartingMoveNumber;
   FScoreHistoryControl.PlyCount := APlyCount;
   FScoreHistoryControl.AnnotationsText := AAnnotationsText;
   FScoreHistoryControl.CurrentPly := ACurrentPly;

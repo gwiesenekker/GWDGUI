@@ -264,16 +264,13 @@ begin
   Result := ' {A: ' + Trim(APrevious.AnnotatorScore) + '}';
 end;
 
-function PlyMoveCaption(APlyNumber: Integer; ASideToMove: TGameSide;
+function PlyMoveCaption(AMoveNumber: Integer; ASideToMove: TGameSide;
   const AMoveText: string; AForceMoveNumber, ACompact: Boolean): string;
-var
-  LMoveNumber: Integer;
 begin
   Result := '';
-  LMoveNumber := ((APlyNumber - 1) div 2) + 1;
   if (ASideToMove = gsWhite) or AForceMoveNumber then
   begin
-    Result := IntToStr(LMoveNumber);
+    Result := IntToStr(AMoveNumber);
     if ASideToMove = gsWhite then
       Result += '.'
     else
@@ -299,7 +296,7 @@ var
   LLimit: Integer;
   LMoveStart: Integer;
   LMoves: TStringList;
-  LPlyNumber: Integer;
+  LMoveNumber: Integer;
   LSegment: string;
   LSegmentOffset: Integer;
   LSide: TGameSide;
@@ -317,13 +314,19 @@ begin
     LLimit := 1;
     if AShowFullPv then
       LLimit := LMoves.Count;
+    // The root carries the side to move and the number of the first move; a
+    // move node carries the side that moved and that move's number.
     LSide := SideForNextPly(ABaseNode.SideToMove);
+    LMoveNumber := ABaseNode.MoveNumber;
     if ABaseNode.PlyNumber = 0 then
-      LSide := ABaseNode.SideToMove;
+      LSide := ABaseNode.SideToMove
+    else if ABaseNode.SideToMove = gsBlack then
+      Inc(LMoveNumber);
     for I := 0 to LLimit - 1 do
     begin
-      LPlyNumber := ABaseNode.PlyNumber + I + 1;
-      LSegment := PlyMoveCaption(LPlyNumber, LSide, LMoves[I], I = 0,
+      if (I > 0) and (LSide = gsWhite) then
+        Inc(LMoveNumber);
+      LSegment := PlyMoveCaption(LMoveNumber, LSide, LMoves[I], I = 0,
         ACompact);
       if (I = 0) and (ABaseNode.PlyNumber = 0) and
         AShowScore and
@@ -667,7 +670,10 @@ begin
     LPreviousPosition := AGameTree.Root;
     if LChild.PlyNumber > 1 then
       LPreviousPosition := AGameTree.MainlineNode[LChild.PlyNumber - 1];
-    LSegment := NodeMoveCaption(Board, LChild, Result = '', ACompact, LRenderedMove) +
+    // The first move always carries its number, also after a root comment
+    // ('{...} 37... e5' for a Black-to-move start).
+    LSegment := NodeMoveCaption(Board, LChild, (I = 1) or (Result = ''), ACompact,
+      LRenderedMove) +
       NodeAnnotation(AGameTree.Variant, LChild, AOptions, not ACompact) +
       PreviousPositionAnnotation(LPreviousPosition, LChild, AOptions);
     LMoveStart := Pos(LRenderedMove, LSegment);
