@@ -2,13 +2,36 @@
 # Compiles GWDGUI for 64-bit Windows from Linux, so Windows-only code paths
 # ({$IFDEF MSWINDOWS}) are checked without a Windows host. Needs the FPC RTL
 # and packages built for x86_64-win64 where fpc finds them; skips otherwise.
-# The result is not run: this is a compile check only.
+# The result is not run: this is a compile check only. When Wine is
+# installed, build.bat's replacement logic is checked first, also when the
+# Windows units are missing.
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." >/dev/null && pwd -P)"
 OUT_DIR="${TMPDIR:-/tmp}/gwdgui-windows-cross-check"
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR/probe"
 
+# build.bat's replacement logic under Wine's cmd.exe, when Wine is installed.
+# It needs no Windows compiler units, so it runs before the cross-compile probe.
+WINE=""
+for candidate in wine64 wine /usr/lib/wine/wine64; do
+  if command -v "$candidate" >/dev/null 2>&1; then WINE="$candidate"; break; fi
+done
+if [[ -n "$WINE" ]]; then
+  echo "==> windows_build_bat_check (build.bat under Wine cmd.exe)"
+  BAT_DIR="$OUT_DIR/batcheck"
+  mkdir -p "$BAT_DIR/tests"
+  cp "$ROOT_DIR/build.bat" "$BAT_DIR/build.bat"
+  cp "$ROOT_DIR/tests/windows_build_bat_check.bat" "$BAT_DIR/tests/"
+  BAT_PATH="$(printf 'Z:%s/tests/windows_build_bat_check.bat' "$BAT_DIR" | sed 's#/#\\#g')"
+  WINEPREFIX="${WINEPREFIX:-$OUT_DIR/wineprefix}" WINEDEBUG=-all \
+    "$WINE" cmd /c "$BAT_PATH" 2>/dev/null |
+    tr -d '\r' | tee "$OUT_DIR/build-bat.log"
+  grep -q '^build.bat checks passed$' "$OUT_DIR/build-bat.log" ||
+    { echo "build.bat checks failed"; exit 1; }
+else
+  echo "Wine not installed: skipping tests/windows_build_bat_check.bat (run it on Windows)"
+fi
 echo "==> windows_cross_check (x86_64-win64, win32 widgetset)"
 printf 'program probe; uses Windows, SyncObjs; begin end.\n' > "$OUT_DIR/probe/probe.pas"
 if ! fpc -Twin64 -Px86_64 -FE"$OUT_DIR/probe" "$OUT_DIR/probe/probe.pas" > "$OUT_DIR/probe.log" 2>&1; then
@@ -65,22 +88,4 @@ fi
 [[ ! -e "$COPY_DIR/gwdgui.exe" ]] ||
   { echo "the Windows build mode wrote gwdgui.exe instead of the candidate path"; exit 1; }
 
-# build.bat's replacement logic under Wine's cmd.exe, when Wine is installed.
-WINE=""
-for candidate in wine64 wine /usr/lib/wine/wine64; do
-  if command -v "$candidate" >/dev/null 2>&1; then WINE="$candidate"; break; fi
-done
-if [[ -n "$WINE" ]]; then
-  echo "==> windows_build_bat_check (build.bat under Wine cmd.exe)"
-  cp "$ROOT_DIR/build.bat" "$COPY_DIR/build.bat"
-  cp "$ROOT_DIR/tests/windows_build_bat_check.bat" "$COPY_DIR/tests/"
-  BAT_PATH="$(printf 'Z:%s/tests/windows_build_bat_check.bat' "$COPY_DIR" | sed 's#/#\\#g')"
-  WINEPREFIX="${WINEPREFIX:-$OUT_DIR/wineprefix}" WINEDEBUG=-all \
-    "$WINE" cmd /c "$BAT_PATH" 2>/dev/null |
-    tr -d '\r' | tee "$OUT_DIR/build-bat.log"
-  grep -q '^build.bat checks passed$' "$OUT_DIR/build-bat.log" ||
-    { echo "build.bat checks failed"; exit 1; }
-else
-  echo "Wine not installed: skipping tests/windows_build_bat_check.bat (run it on Windows)"
-fi
 echo "Windows cross-compile check passed (gwdgui.exe built in both modes, not run)"

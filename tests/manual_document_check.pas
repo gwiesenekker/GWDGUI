@@ -296,11 +296,69 @@ begin
   end;
 end;
 
+{ U12: a match that crosses table cells maps to a rendered range that contains
+  all of it, also when the left cell continues below its neighbour's start. }
+procedure CheckCrossCellRange;
+var
+  LDoc: TManualDocument;
+  LSource: TStringList;
+  LMatches: TManualMatches;
+  LRoot, LHit: string;
+  J: Integer;
+const
+  Widths: array[0..2] of Integer = (30, 40, 140);
+  Table =
+    '| Left | Right |' + LineEnding +
+    '|---|---|' + LineEnding +
+    '| aaaaaaaaaa bbbbbbbbbb END | NEXT words |' + LineEnding;
+begin
+  LDoc := TManualDocument.Create;
+  LSource := TStringList.Create;
+  try
+    LDoc.Load(Table);
+    for J := Low(Widths) to High(Widths) do
+    begin
+      LDoc.Render(Widths[J]);
+      LMatches := LDoc.FindMatches('END NEXT');
+      Check(Length(LMatches) = 1, Format('cross-cell match at width %d', [Widths[J]]));
+      if Length(LMatches) = 1 then
+      begin
+        LHit := Copy(LDoc.Text, LMatches[0].Start + 1, LMatches[0].Count);
+        Check((Pos('END', LHit) > 0) and (Pos('NEXT', LHit) > 0),
+          Format('cross-cell range covers the match at width %d: [%s]', [Widths[J], LHit]));
+      end;
+    end;
+
+    LRoot := GetEnvironmentVariable('GWDGUI_ROOT');
+    if LRoot = '' then
+      LRoot := ExtractFilePath(ParamStr(0)) + '..';
+    LSource.LoadFromFile(IncludeTrailingPathDelimiter(LRoot) + 'MANUAL.md');
+    LDoc.Load(LSource.Text);
+    for J := Low(Widths) to High(Widths) do
+    begin
+      LDoc.Render(Widths[J]);
+      LMatches := LDoc.FindMatches('position Whether');
+      Check(Length(LMatches) = 1, Format('real cross-cell match at width %d', [Widths[J]]));
+      if Length(LMatches) = 1 then
+      begin
+        LHit := Copy(LDoc.Text, LMatches[0].Start + 1, LMatches[0].Count);
+        Check((Pos('Whether', LHit) > 0) and (Pos('on', LHit) > 0) and
+          (LMatches[0].Count >= Length('position Whether')),
+          Format('real cross-cell range at width %d: [%s]', [Widths[J], LHit]));
+      end;
+    end;
+  finally
+    LSource.Free;
+    LDoc.Free;
+  end;
+end;
+
 begin
   CheckSample;
   CheckWrap;
   CheckRealManual;
   CheckLogicalSearch;
+  CheckCrossCellRange;
   if Failures > 0 then
   begin
     WriteLn(Failures, ' manual document checks failed');

@@ -93,8 +93,9 @@ type
     function StyleAt(AOffset: Integer): TManualStyle;
     // FindManualMatches on the logical text: words split by wrapping and table
     // cells wrapped over several lines are found whole, while real spaces
-    // between words still separate them. Matches are in rendered offsets
-    // (start of the first character to the end of the last).
+    // between words still separate them. Each match is the smallest rendered
+    // range that contains all its bytes; across table cells it can include
+    // other text of the row.
     function FindMatches(const AQuery: string): TManualMatches;
     property Text: string read FText;
     property Headings: TManualHeadings read FHeadings;
@@ -393,7 +394,7 @@ function FindMappedMatches(const AText: string; const AOffsets: TManualOffsets;
 var
   LText, LQuery: string;
   LMap: array of Integer; // rendered offset of each byte of LText
-  I, P, N: Integer;
+  I, P, N, LFirst, LLast: Integer;
   LSpace: Boolean;
 begin
   Result := nil;
@@ -439,9 +440,22 @@ begin
   P := Pos(LQuery, LText);
   while P > 0 do
   begin
+    // The range encloses every byte of the match. In a table the logical order
+    // is not the screen order (a left cell can continue below the start of its
+    // right neighbour), so the first and last bytes are not the ends of the
+    // range (review U12). The range may include other text of the row.
+    LFirst := LMap[P - 1];
+    LLast := LMap[P - 1];
+    for I := P to P + Length(LQuery) - 2 do
+    begin
+      if LMap[I] < LFirst then
+        LFirst := LMap[I];
+      if LMap[I] > LLast then
+        LLast := LMap[I];
+    end;
     SetLength(Result, Length(Result) + 1);
-    Result[High(Result)].Start := LMap[P - 1];
-    Result[High(Result)].Count := LMap[P + Length(LQuery) - 2] + 1 - LMap[P - 1];
+    Result[High(Result)].Start := LFirst;
+    Result[High(Result)].Count := LLast + 1 - LFirst;
     P := PosEx(LQuery, LText, P + Length(LQuery));
   end;
 end;
@@ -1049,10 +1063,6 @@ begin
   SetLength(LText, N);
   SetLength(LOffsets, N);
   Result := FindMappedMatches(LText, LOffsets, AQuery);
-  // A match whose pieces lie on several lines ends at its last character.
-  for I := 0 to High(Result) do
-    if Result[I].Count < 1 then
-      Result[I].Count := 1;
 end;
 
 function TManualDocument.StyleAt(AOffset: Integer): TManualStyle;

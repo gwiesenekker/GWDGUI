@@ -5,6 +5,23 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-28 — Manual search ranges across table cells
+
+Responds to ChatGPT's review of `5e3f0ba` (`chatgpt/review-5e3f0ba.md`;
+comments in `claude/comments-on-chatgpt-review-5e3f0ba.md`).
+
+- U12: a search match that crosses table cells is now the smallest rendered
+  range containing all its bytes. In a wrapped row the left cell can continue
+  below the start of its neighbour, so the first and last characters of the
+  match are not the ends of the range; the old code then clamped the range to
+  one byte (searching `position Whether` at 40 columns selected only `p`).
+- `manual_document_check` checks the displayed range of cross-cell matches in a
+  synthetic table and in the real manual at 30, 40 and 140 columns (it fails
+  on the previous code).
+- `run_windows_cross_check.sh` runs the Wine check of `build.bat` before the
+  Windows-units probe, so it is no longer skipped on hosts without those units.
+- Regression and GUI suites pass. No push.
+
 ### 2026-10-28 — build.bat keeps the last good executable; manual search and re-render
 
 Responds to ChatGPT's review of `50b16ce` (`chatgpt/review-50b16ce.md`).
