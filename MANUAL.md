@@ -235,7 +235,8 @@ Stop does not replace an already completed result.
 ## 4. Browsing games and variations
 
 Click a move in the notation to display the position after that move. Place the
-caret before the first move to display the starting position.
+caret before the first move to display the starting position. A click to the right
+of a line's end places the caret at the end of that line.
 
 While the move list has focus:
 
@@ -723,9 +724,10 @@ game to an existing collection.
 
 ## 12. Installation and developer notes
 
-GWDGUI is an Object Pascal application built with Free Pascal and Lazarus/LCL.
-The `draughts.ttf` piece font must be available beside the application as
-expected by the build or distribution.
+GWDGUI is an Object Pascal application built with Lazarus/LCL 3.0 or later (GTK2
+on Linux), its bundled SynEdit package, and Free Pascal 3.2.2 or later. The
+`draughts.ttf` piece font must be available beside the application as expected
+by the build or distribution.
 
 A typical source build is:
 
@@ -752,6 +754,17 @@ The repository's regression checks can be run with:
 ```bash
 bash tests/run_regression_checks.sh
 ```
+
+They need FPC, Python 3 and ripgrep. The other suites in `tests/`
+(`run_gui_checks.sh`, `run_tournament_checks.sh`, `run_lifecycle_checks.sh` and
+`run_dxp_checks.sh`) also need Lazarus/GTK2 and a display.
+
+The source separates the game from the rest of the program. Game-neutral units
+(game tree, notation walker, analysis state, orchestrator and game runner) reach
+the game only through `uGamePosition`; international draughts is implemented in
+units named `uDraughts*`. `tests/source_audit_check.sh` enforces the separation.
+`REFACTORING.md` (section "Game-position boundary") describes the design and lists
+what a port to another game, such as chess, has to replace.
 
 For protocol details, see [DXP Protocol.md](DXP%20Protocol.md) and
 [`protocol.txt`](protocol.txt) in the source tree.
@@ -801,11 +814,22 @@ Choose **Help → Manual** (F1) to open this manual inside GWDGUI. The manual is
 read-only and available offline in builds made with `build.sh` or the Windows
 Lazarus build mode.
 
-Type in **Find** to search without regard to letter case. The first match is
-highlighted and the result count is shown. **Next** / **Previous** move between
-matches and wrap at the ends; use **F3** / **Shift+F3** for the same actions.
-**Ctrl+F** focuses and selects the search query. **Enter** finds the next match,
-and **Escape** closes the manual window.
+The manual window shows the contents on the left and the formatted manual on the
+right: headings, bold labels, `highlighted` names and values, bulleted and
+numbered lists, and tables with aligned columns. Click a section or subsection in
+the contents to show it at the top; while you scroll, the contents mark the
+section you are reading. Drag the divider to change the width of the contents.
+The text is laid out again for the width of the window, so long lines never need
+horizontal scrolling (only example code keeps its original lines). You can select
+and copy text as usual.
+
+Type in **Find** to search. Searching ignores the case of the letters A–Z and
+treats any run of spaces and line breaks as one space, so a phrase is found even
+where the layout breaks it across lines. The first match is highlighted and the
+result count is shown. **Next** / **Previous** move between matches and wrap at
+the ends; use **F3** / **Shift+F3** for the same actions. **Ctrl+F** focuses and
+selects the search query. **Enter** finds the next match, and **Escape** closes
+the manual window.
 
 **Help → About GWDGUI** shows the build description and full Git commit captured
 when the executable was built. A build made from modified tracked files is

@@ -5,6 +5,27 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-28 — Formatted manual window with contents
+
+- **Help → Manual** shows the manual formatted in a read-only SynEdit instead of
+  raw Markdown in a memo: coloured headings, bold labels, highlighted names and
+  values, bulleted and numbered lists with hanging indents, tables with aligned
+  columns, and example code on a shaded background. The text is laid out again
+  when the window is resized.
+- A contents tree lists the sections and subsections; selecting one shows it at
+  the top, and scrolling marks the current section.
+- Search works on the displayed text and treats line breaks and runs of spaces
+  as one space, so wrapped phrases are found. The search box no longer starts
+  with the text "ManualSearch".
+- New `uManualDocument` (Markdown subset → styled text, no LCL) and
+  `uManualHighlighter`; `manual_document_check` (regression suite) renders a
+  sample and `MANUAL.md` at several widths; `help_menu_check` covers the
+  contents, re-rendering and search.
+- Manual: the new window (section 14), build requirements and test suites,
+  the game-neutral source structure (section 12), and caret placement after a
+  click right of a notation line (section 4).
+- Regression, lifecycle, DXP, GUI and tournament suites pass. No push.
+
 ### 2026-10-28 — Draughts-only units carry the uDraughts prefix
 
 - Renamed (files, unit names, uses clauses, `gwdgui.lpi`): `uBoardControl` →

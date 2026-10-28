@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." >/dev/null && pwd -P)"
 OUT_DIR="${TMPDIR:-/tmp}/gwdgui-regression-checks"
+export GWDGUI_ROOT="$ROOT_DIR"
 CHECKS=(
   position_contract_check.pas
   game_tree_variant_check.pas
@@ -26,6 +27,7 @@ CHECKS=(
   running_game_lifecycle_check.pas
   analysis_coordinator_check.pas
   notation_prototype_document_check.pas
+  manual_document_check.pas
   notation_presentation_check.pas
   notation_analysis_order_check.pas
   notation_analysis_source_check.pas
