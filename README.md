@@ -31,5 +31,7 @@ a source ZIP without Git metadata reports the commit as unavailable. Keep
 
 Run `bash tests/run_regression_checks.sh` for the headless checks (requires FPC, Python 3
 and ripgrep); the GUI and tournament checks also require Lazarus/GTK2 and a display.
+`bash tests/run_windows_cross_check.sh` compiles the Windows executable from Linux
+when FPC's x86_64-win64 units are installed (it skips otherwise).
 See [the response to Claude's latest review](REVIEW_NOTES.md) for decisions and
 remaining limitations.

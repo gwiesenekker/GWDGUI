@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build an isolated test project using options supported by Lazarus 3.0+."""
+import os
 import pathlib
 import subprocess
 import sys
@@ -40,7 +41,13 @@ isolated = output / project.name
 tree.write(isolated, encoding='utf-8', xml_declaration=True)
 executable = output / (project.stem + ('.exe' if widgetset == 'win32' else ''))
 executable.unlink(missing_ok=True)
-subprocess.run(['lazbuild', '--build-all', '--no-write-project', '--ws=' + widgetset,
-                '--pcp=' + str(output / 'config'), str(isolated)], check=True)
+# GWDGUI_LAZBUILD_TARGET=os:cpu cross-compiles (tests/run_windows_cross_check.sh).
+target = os.environ.get('GWDGUI_LAZBUILD_TARGET', '')
+cross = []
+if target:
+    target_os, target_cpu = target.split(':')
+    cross = ['--os=' + target_os, '--cpu=' + target_cpu]
+subprocess.run(['lazbuild', '--build-all', '--no-write-project', '--ws=' + widgetset] + cross +
+               ['--pcp=' + str(output / 'config'), str(isolated)], check=True)
 if not executable.is_file():
     raise RuntimeError('lazbuild did not produce the requested test executable')

@@ -80,3 +80,21 @@ for unit_name in "${GENERIC_UNITS[@]}"; do
     exit 1
   fi
 done
+
+# The Windows unit declares a TCriticalSection record. Where a unit uses both,
+# SyncObjs must come after Windows, or TCriticalSection names that record and
+# the Windows build fails (Linux builds cannot notice).
+python3 - "$ROOT_DIR" <<'PY'
+import pathlib, re, sys
+root = pathlib.Path(sys.argv[1])
+bad = []
+for path in sorted(root.glob('*.pas')) + sorted(root.glob('tests/*.pas')):
+    text = re.sub(r'\{[^$][^}]*\}|//[^\n]*', '', path.read_text(encoding='utf-8', errors='replace'))
+    for clause in re.findall(r'\buses\b(.*?);', text, re.S | re.I):
+        names = [n.lower() for n in re.findall(r'[A-Za-z_][\w.]*', re.sub(r'\{\$[^}]*\}', ' ', clause))]
+        if 'windows' in names and 'syncobjs' in names and names.index('syncobjs') < names.index('windows'):
+            bad.append(str(path.relative_to(root)))
+if bad:
+    print('SyncObjs must follow Windows in the uses clause of: ' + ', '.join(bad))
+    sys.exit(1)
+PY

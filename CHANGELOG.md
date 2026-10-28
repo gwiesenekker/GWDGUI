@@ -5,6 +5,20 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-28 — Windows build compiles again
+
+- `uPlatformProcess` listed `SyncObjs` before `Windows`, so on Windows
+  `TCriticalSection` named the `Windows` record instead of the `SyncObjs` class
+  and the unit did not compile (since `d09cb39`/`70481f8`, 2026-10-25). The uses
+  order is fixed; Linux builds are unaffected.
+- The source audit rejects a uses clause that lists `SyncObjs` before `Windows`.
+- New `tests/run_windows_cross_check.sh`: compiles `gwdgui.exe` (win32
+  widgetset) and the Windows build-info generator for x86_64-win64 from Linux
+  when FPC's win64 units are installed, and skips otherwise. It reproduces the
+  reported errors before the fix and passes after it. `build_lazarus_check.py`
+  accepts `GWDGUI_LAZBUILD_TARGET=os:cpu` for this.
+- Regression and GUI suites pass. No push.
+
 ### 2026-10-28 — build.bat for Windows
 
 - New `build.bat`: builds `gwdgui.exe` with Lazarus's `lazbuild` and the

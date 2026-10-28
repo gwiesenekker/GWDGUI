@@ -5,14 +5,15 @@ unit uPlatformProcess;
 interface
 
 uses
-  Classes, SysUtils, Process, SyncObjs
+  Classes, SysUtils, Process,
   {$IFDEF MSWINDOWS}
-  , Windows
+  Windows,
   {$ENDIF}
   {$IFDEF UNIX}
-  , BaseUnix
+  BaseUnix,
   {$ENDIF}
-  ;
+  // After Windows: its TCriticalSection record must not hide the SyncObjs class.
+  SyncObjs;
 
 type
   TPlatformProcessDataEvent = procedure(Sender: TObject; const AText: string) of object;
