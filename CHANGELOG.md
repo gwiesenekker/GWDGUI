@@ -5,6 +5,19 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-28 — build.bat for Windows
+
+- New `build.bat`: builds `gwdgui.exe` with Lazarus's `lazbuild` and the
+  **Windows** build mode, which embeds the manual and Git commit as before. It
+  finds `lazbuild.exe` from its argument, the `LAZBUILD` variable, PATH or a
+  standard installation folder; warns when Git or `draughts.ttf` is missing; and
+  renames a previous (possibly running) `gwdgui.exe` to `gwdgui.old.exe`,
+  restoring it if the build fails.
+- `.gitattributes` checks out `*.bat` with CRLF line endings, which `cmd.exe`
+  needs for its labels; `windows_build_info_check` checks the line endings and
+  the build-mode call. README and manual (section 12) describe it.
+- Not yet run on Windows (no Windows host here). Regression suite passes. No push.
+
 ### 2026-10-28 — Formatted manual window with contents
 
 - **Help → Manual** shows the manual formatted in a read-only SynEdit instead of

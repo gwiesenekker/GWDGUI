@@ -735,9 +735,13 @@ A typical source build is:
 bash build.sh
 ```
 
-`build.sh` embeds the current manual and Git build identity. On Windows, open
-`gwdgui.lpi` in Lazarus, select the **Windows** build mode under Project →
-Project Options → Build modes, then choose **Build**. Its pre-build step uses
+`build.sh` embeds the current manual and Git build identity. On Windows, run
+`build.bat` from the source directory; it finds `lazbuild.exe` on PATH or in a
+standard Lazarus folder (or takes its path as an argument), builds `gwdgui.exe`
+with the **Windows** build mode, and keeps the previous executable if the build
+fails. Alternatively, open `gwdgui.lpi` in Lazarus, select the **Windows** build
+mode under Project → Project Options → Build modes, then choose **Build**. Both
+use the build mode's pre-build step, which uses
 Lazarus’s configured compiler to embed the manual and Git identity; Python is
 not required. Install Git for Windows and make `git` available on PATH before
 starting Lazarus. Use a Git checkout or copy including `.git` to identify the

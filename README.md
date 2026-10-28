@@ -17,8 +17,12 @@ only after compilation succeeds. Run `./gwdgui` from this directory. This is a
 portable application: keep its directory writable for preferences, engine
 configuration and output files. Those local files are not published to GitHub.
 
-For a native Windows Lazarus build, open `gwdgui.lpi`, select the **Windows**
-build mode (Project → Project Options → Build modes), and choose **Build**.
+On Windows, run `build.bat` from this directory (or pass the path to
+`lazbuild.exe` if Lazarus is not on PATH or in `C:\lazarus`). It builds
+`gwdgui.exe` with the **Windows** build mode and keeps the previous executable
+if the build fails. Alternatively, open `gwdgui.lpi` in Lazarus, select the
+**Windows** build mode (Project → Project Options → Build modes), and choose
+**Build**.
 This embeds the manual and current Git commit without Python. Install Git for
 Windows and ensure `git` is available on PATH before starting Lazarus. Build
 from a Git checkout (or a copy including `.git`) for commit identification;

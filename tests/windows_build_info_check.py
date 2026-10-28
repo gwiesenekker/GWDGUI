@@ -92,4 +92,14 @@ assert '-dGWDGUI_EMBEDDED_HELP' in mode.find('Other/CustomOptions').get('Value')
 assert 'lib/build-info' in mode.find('SearchPaths/IncludeFiles').get('Value')
 command = mode.find('ExecuteBefore/Command').get('Value')
 assert 'build_windows.cmd' in command and '$(CompPath)' in command
+
+# build.bat drives the same build mode from the command line. cmd.exe needs CRLF
+# line endings for its labels (goto).
+batch = (ROOT / 'build.bat').read_bytes()
+assert b'\r\n' in batch and b'\n' not in batch.replace(b'\r\n', b''), 'build.bat must use CRLF'
+batch_text = batch.decode('ascii')
+assert '--build-mode=Windows' in batch_text and 'gwdgui.lpi' in batch_text
+assert '--no-write-project' in batch_text
+for label in ('failed',):
+    assert 'goto ' + label in batch_text and '\r\n:' + label + '\r\n' in batch_text
 print('Native Windows build-info generator checks passed (host execution; Windows IDE still needs validation)')
