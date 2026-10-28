@@ -39,6 +39,8 @@ begin
   ParentFont := False;
   Font.Name := DefaultNotationFontName;
   Font.Size := DefaultNotationFontSize;
+  // SynEdit defaults to fqNonAntialiased, which turns ClearType off on Windows.
+  Font.Quality := fqDefault;
   TLazSynEditLineWrapPlugin.Create(Self);
 end;
 destructor TGameNotationView.Destroy;

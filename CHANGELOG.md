@@ -5,6 +5,26 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-28 — Engine start failures are shown in a dialog
+
+- QA: with an `engines.json` copied from Linux, opening an annotator on Windows
+  did nothing and showed no error. Engines whose executable is missing are now
+  rejected before a launch (annotator, MCTS annotator, new game, replay), with
+  the reason in the log and in a dialog. A path written on another operating
+  system (`/...` on Windows, `C:\...` or `\\server` elsewhere) gets a hint to
+  re-register the engine with **Engines...**.
+- An annotator that fails to launch or stops with an error, and a game that
+  stops with an error, now report the engine's own error text (for example
+  "The system cannot find the file specified") in a dialog as well as the log.
+  Dialogs are queued, so a failure in a runner thread never blocks it.
+- The Engines dialog marks a missing executable with "(not found)".
+- TSynEdit defaults to non-antialiased fonts, which turned ClearType off for
+  the notation and manual views on Windows. Both now use the default font
+  quality.
+- New `CheckEngineStartProblems` in `main_form_boundaries_check` (foreign path
+  is rejected before launch; a failing engine reports "could not be started").
+  MANUAL sections 2.5 and 11 describe it. All suites pass. No push.
+
 ### 2026-10-28 — Windows build mode runs its pre-build step
 
 - In `gwdgui.lpi` the Windows build mode's pre-build command

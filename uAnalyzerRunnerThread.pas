@@ -38,6 +38,8 @@ type
     FOnMove: TAnalyzerRunnerMoveEvent;
     FOnSnapshot: TAnalyzerRunnerSnapshotEvent;
     FRunMode: TAnalyzerRunMode;
+    FFailureText: string;
+    FStarted: Boolean;
     FPvBasePosition: TGamePosition; // nil when the request had none
     FPvBasePly: Integer;
     FPvLock: TCriticalSection;
@@ -69,6 +71,11 @@ type
       const ASearch: TGameTreeSearchRef; ATransient: Boolean = False);
     procedure PostStopSearch;
     procedure PostShutdown;
+    // Why the engine could not be started or stopped working ('' after a
+    // normal close). Set before the finished event; read it from that event.
+    property FailureText: string read FFailureText;
+    // True once the engine was ready (a later failure stopped a working engine).
+    property Started: Boolean read FStarted;
   end;
 
 implementation
@@ -356,10 +363,14 @@ begin
           EnginePickerDisplayName(FEngineDefinition, 0));
       if not FEngine.LaunchAndInit then
       begin
+        FFailureText := Trim(FEngine.LastError);
+        if FFailureText = '' then
+          FFailureText := 'the engine did not start or did not answer the Hub handshake';
         if Assigned(FOnLog) then
-          FOnLog(Self, DisplayName + ' launch failed');
+          FOnLog(Self, DisplayName + ' launch failed: ' + FFailureText);
         Exit;
       end;
+      FStarted := True;
       if Assigned(FOnLog) then
         FOnLog(Self, DisplayName + ' ready');
 
@@ -387,8 +398,12 @@ begin
       end;
     except
       on E: Exception do
-        if not Terminated and Assigned(FOnLog) then
-          FOnLog(Self, DisplayName + ' failed: ' + E.ClassName + ': ' + E.Message);
+        if not Terminated then
+        begin
+          FFailureText := E.Message;
+          if Assigned(FOnLog) then
+            FOnLog(Self, DisplayName + ' failed: ' + E.ClassName + ': ' + E.Message);
+        end;
     end;
   finally
     if FCommandQueue <> nil then

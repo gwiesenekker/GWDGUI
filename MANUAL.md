@@ -157,6 +157,8 @@ the engine executable name with the extension `.params.json`.
 
 Keep copies of these files when moving an installation or maintaining several
 engine configurations.
+Engine paths in `engines.json` belong to one operating system; a copy from
+another system has to be re-registered (see section 11).
 
 ## 3. Starting and playing a game
 
@@ -687,6 +689,18 @@ in `prefs.json` beside the GWDGUI executable.
 The engine may already be reserved by another game or loaded as an annotator.
 Stop the other use or register a separate engine instance. Also check that the
 engine test was completed with **Launched correctly**.
+
+### An engine does not start
+
+When an engine or annotator cannot be started, GWDGUI writes the reason to the
+log and also shows it in a dialog. If the executable is missing, nothing is
+launched; the Engines dialog marks such an engine with **(not found)** in the
+executable column.
+
+A message that the path "was written on another operating system" means that
+`engines.json` was copied from, for example, a Linux installation to Windows.
+Engine paths are not portable: register the engines again on this computer
+with **Engines...**.
 
 ### A DXP engine cannot connect
 

@@ -126,6 +126,9 @@ type
     FPopoutBoardControl: TDraughtsBoardControl;
     FPositionSetupForm: TPositionSetupForm;
     FManualForm: TManualForm;
+    FPendingEngineProblems: TStringList; // caption #1 text
+    FEngineProblemsQueued: Boolean;
+    FTestEngineProblems: TStringList;
     FPreferences: TGuiPreferences;
     FPreferencesForm: TPreferencesForm;
     FPvInfoLabel: TLabel;
@@ -161,6 +164,14 @@ type
     procedure ApplyGameBrowsePly(APly: Integer);
     procedure AnalyzerLog(Sender: TObject; const AMessage: string);
     procedure AnalyzerFinished(Sender: TObject);
+    // Engine start/failure reports: shown as a dialog after the current GUI
+    // event batch (never from inside the event drain).
+    procedure ReportEngineProblem(const ACaption, AText: string);
+    procedure ShowPendingEngineProblems(Data: PtrInt);
+    function CheckEngineCanStart(AEngine: TExternalEngineDefinition;
+      const ACaption: string): Boolean;
+    function CheckSetupEnginesCanStart(const ASetup: TGameSetup;
+      const ACaption: string): Boolean;
     procedure AnalyzerMiniBoardDblClick(Sender: TObject);
     procedure AnalyzerMiniBoardFormClose(Sender: TObject;
       var CloseAction: TCloseAction);
@@ -453,6 +464,9 @@ type
     property TestAnalysis: TAnalysisCoordinator read FAnalysis;
     property TestAnalyzerRunner: TAnalyzerRunnerThread read FAnalyzerRunner;
     property TestMctsRunner: TAnalyzerRunnerThread read FMctsRunner;
+    // Engine problems reported while no test dialog result is set
+    // (caption, #1, text per item); shown as dialogs in the application.
+    property TestEngineProblems: TStringList read FTestEngineProblems;
     function GetLastDisplayReplayCount: Integer;
     property LastDisplayReplayCount: Integer read GetLastDisplayReplayCount;
     {$ENDIF}
@@ -1256,6 +1270,8 @@ begin
   FreeAndNil(FPositionSetupForm);
   FreeAndNil(FPreferencesForm);
   FreeAndNil(FManualForm);
+  FreeAndNil(FPendingEngineProblems);
+  FreeAndNil(FTestEngineProblems);
   FreeAndNil(FScoreHistoryForm);
   FreeAndNil(FTournamentDialog);
   FreeAndNil(FPdnOpenDialog);
@@ -1904,6 +1920,64 @@ begin
   PostGuiEvent(TAnalyzerFinishedGuiMessage.Create(TAnalyzerRunnerThread(Sender)));
 end;
 
+procedure TMainForm.ReportEngineProblem(const ACaption, AText: string);
+begin
+  {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+  // Headless checks must not block on a modal dialog they did not expect.
+  if GuiTestConfirmationResult = 0 then
+  begin
+    if FTestEngineProblems = nil then
+      FTestEngineProblems := TStringList.Create;
+    FTestEngineProblems.Add(ACaption + #1 + AText);
+    Exit;
+  end;
+  {$ENDIF}
+  if FPendingEngineProblems = nil then
+    FPendingEngineProblems := TStringList.Create;
+  FPendingEngineProblems.Add(ACaption + #1 + AText);
+  if not FEngineProblemsQueued then
+  begin
+    FEngineProblemsQueued := True;
+    Application.QueueAsyncCall(@ShowPendingEngineProblems, 0);
+  end;
+end;
+
+procedure TMainForm.ShowPendingEngineProblems(Data: PtrInt);
+var
+  LItem: string;
+  P: Integer;
+begin
+  FEngineProblemsQueued := False;
+  while (FPendingEngineProblems <> nil) and (FPendingEngineProblems.Count > 0) do
+  begin
+    LItem := FPendingEngineProblems[0];
+    FPendingEngineProblems.Delete(0);
+    P := Pos(#1, LItem);
+    ShowGuiOkDialog(Self, Copy(LItem, 1, P - 1), Copy(LItem, P + 1, MaxInt));
+  end;
+end;
+
+function TMainForm.CheckEngineCanStart(AEngine: TExternalEngineDefinition;
+  const ACaption: string): Boolean;
+var
+  LProblem: string;
+begin
+  LProblem := EngineExecutableProblem(AEngine);
+  Result := LProblem = '';
+  if not Result then
+    ReportEngineProblem(ACaption, 'Cannot start the engine: ' + LProblem);
+end;
+
+function TMainForm.CheckSetupEnginesCanStart(const ASetup: TGameSetup;
+  const ACaption: string): Boolean;
+begin
+  Result := True;
+  if (ASetup.WhitePlayer = pkRegistered) and (ASetup.WhiteEngine <> nil) then
+    Result := CheckEngineCanStart(ASetup.WhiteEngine, ACaption);
+  if Result and (ASetup.BlackPlayer = pkRegistered) and (ASetup.BlackEngine <> nil) then
+    Result := CheckEngineCanStart(ASetup.BlackEngine, ACaption);
+end;
+
 procedure TMainForm.AnalyzerSnapshot(Sender: TObject; ASnapshot: TPvSnapshot);
 begin
   if ASnapshot = nil then
@@ -2415,6 +2489,11 @@ begin
       end;
     if Engine = nil then
       Exit;
+    if not CheckEngineCanStart(Engine, 'Open Annotator') then
+    begin
+      HandleAnalyzerLog('Annotator not started: ' + EngineExecutableProblem(Engine));
+      Exit;
+    end;
 
     FAnalyzerMemo.Clear;
     if FAnalyzerPvBrowser <> nil then
@@ -2529,6 +2608,11 @@ begin
       end;
     if Engine = nil then
       Exit;
+    if not CheckEngineCanStart(Engine, 'Open MCTS annotator') then
+    begin
+      HandleMctsLog('MCTS annotator not started: ' + EngineExecutableProblem(Engine));
+      Exit;
+    end;
 
     FMctsMemo.Clear;
     ClearMctsStatsGrid;
@@ -4860,6 +4944,8 @@ end;
 
 procedure TMainForm.GameSetupAccepted(Sender: TObject; const ASetup: TGameSetup);
 begin
+  if not CheckSetupEnginesCanStart(ASetup, 'New game') then
+    Exit;
   StartGameFromSetup(ASetup);
 end;
 
@@ -5190,6 +5276,13 @@ begin
             (FAnalyzerRunner = TAnalyzerFinishedGuiMessage(EventObject).Runner) then
             StopAutoPlay('annotator closed');
           CancelAnalyzerSearch;
+          if FAnalyzerRunner.FailureText <> '' then
+            if FAnalyzerRunner.Started then
+              ReportEngineProblem('Annotator', 'The annotator stopped working: ' +
+                FAnalyzerRunner.FailureText)
+            else
+              ReportEngineProblem('Open Annotator', 'The annotator could not be started: ' +
+                FAnalyzerRunner.FailureText);
           if FAnalyzerRunner = TAnalyzerFinishedGuiMessage(EventObject).Runner then
             FreeAndNil(FAnalyzerRunner);
           FAnalyzerEngineKey := '';
@@ -5200,6 +5293,13 @@ begin
           (FMctsRunner <> nil) and
           (FMctsRunner = TMctsFinishedGuiMessage(EventObject).Runner) then
         begin
+          if FMctsRunner.FailureText <> '' then
+            if FMctsRunner.Started then
+              ReportEngineProblem('MCTS annotator', 'The MCTS annotator stopped working: ' +
+                FMctsRunner.FailureText)
+            else
+              ReportEngineProblem('Open MCTS annotator',
+                'The MCTS annotator could not be started: ' + FMctsRunner.FailureText);
           if FMctsRunner = TMctsFinishedGuiMessage(EventObject).Runner then
             FreeAndNil(FMctsRunner);
           FMctsEngineKey := '';
@@ -5211,6 +5311,13 @@ begin
           if LGame <> nil then
           begin
             RemoveAfterFinish := LGame.Lifecycle = rglRemoveRequested;
+            // Tournaments record failures in their own results; an interactive
+            // game that failed (for example an engine that did not start) says so.
+            if (not RemoveAfterFinish) and (not FClosing) and
+              (not LGame.IsTournamentGame) and (LGame.State = gosError) and
+              (LGame.LastErrorText <> '') then
+              ReportEngineProblem('Game error',
+                'The game stopped with an error: ' + LGame.LastErrorText);
             LGame.MarkFinished;
             if RemoveAfterFinish then
               RemoveGame(LGame)
@@ -5324,6 +5431,8 @@ begin
         Exit;
       end;
 
+    if not CheckSetupEnginesCanStart(LSetup, 'Replay game') then
+      Exit;
     StartGameFromSetup(LSetup, 'Replay');
   finally
     LSetup.WhiteEngine.Free;

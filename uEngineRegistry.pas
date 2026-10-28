@@ -71,6 +71,11 @@ procedure WriteEngineIniFile(const AIniFileName, AIniContent: string;
 procedure AddEngineReservationKeys(AEngine: TExternalEngineDefinition;
   AKeys: TStrings);
 function EnginesJsonFileName: string;
+// Why AEngine cannot be launched on this computer ('' when its executable
+// exists): no executable configured, or the file is missing. Mentions a path
+// written for another operating system (engines.json copied between Linux and
+// Windows).
+function EngineExecutableProblem(AEngine: TExternalEngineDefinition): string;
 function EngineIdentityKey(AEngine: TExternalEngineDefinition): string;
 function FindEngineByIdentityKey(AEngines: TExternalEngineList; const Key: string): TExternalEngineDefinition;
 function EnginePickerDisplayName(AEngine: TExternalEngineDefinition;
@@ -273,6 +278,37 @@ begin
   finally
     Lines.Free;
   end;
+end;
+
+function EngineExecutableProblem(AEngine: TExternalEngineDefinition): string;
+var
+  LPath: string;
+  LForeign: Boolean;
+begin
+  Result := '';
+  if AEngine = nil then
+    Exit;
+  LPath := Trim(AEngine.ExePath);
+  if LPath = '' then
+    Exit('no executable is configured for ' + EnginePickerDisplayName(AEngine, 0));
+  if FileExists(LPath) then
+    Exit;
+  {$IFDEF MSWINDOWS}
+  LForeign := LPath[1] = '/';
+  {$ELSE}
+  LForeign := ((Length(LPath) >= 3) and (UpCase(LPath[1]) in ['A'..'Z']) and
+    (LPath[2] = ':') and (LPath[3] in ['\', '/'])) or (Copy(LPath, 1, 2) = '\\');
+  {$ENDIF}
+  Result := 'the executable of ' + EnginePickerDisplayName(AEngine, 0) +
+    ' was not found: ' + LPath;
+  if LForeign then
+    Result := Result + LineEnding + LineEnding +
+      'This path was written on another operating system. The engine list ' +
+      '(engines.json beside the GWDGUI executable) was probably copied from ' +
+      'there; register the engine for this computer with Engines....'
+  else
+    Result := Result + LineEnding + LineEnding +
+      'Check the engine''s path with Engines....';
 end;
 
 function EnginesJsonFileName: string;

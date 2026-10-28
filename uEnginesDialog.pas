@@ -242,7 +242,10 @@ begin
   begin
     Engine := FEngines[I];
     FGrid.Cells[0, I + 1] := Engine.ExePath;
-    FGrid.Cells[1, I + 1] := Engine.ExecutableName;
+    if EngineExecutableProblem(Engine) = '' then
+      FGrid.Cells[1, I + 1] := Engine.ExecutableName
+    else
+      FGrid.Cells[1, I + 1] := Engine.ExecutableName + ' (not found)';
     FGrid.Cells[2, I + 1] := Engine.HubId;
     FGrid.Cells[3, I + 1] := Engine.DxpId;
   end;

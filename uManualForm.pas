@@ -144,6 +144,8 @@ begin
   FText.ParentFont := False;
   FText.Font.Name := DefaultNotationFontName;
   FText.Font.Size := DefaultNotationFontSize;
+  // SynEdit defaults to fqNonAntialiased, which turns ClearType off on Windows.
+  FText.Font.Quality := fqDefault;
   FText.OnResize := @TextResized;
   FText.OnStatusChange := @TextStatusChanged;
   RenderForColumns(100);

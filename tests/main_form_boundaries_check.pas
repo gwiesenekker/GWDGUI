@@ -8,7 +8,8 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF}
   LCLType, Types, Graphics, uMainForm, uRunningGame, uDraughtsBoardControl, uDraughtsBoard, uDraughtsPdn,
   uGameTree, uGameTreePdn, uGameTreeBuilder, uGameSetupTypes, uGameOrchestrator, uGuiDialogs,
   uDraughtsPositionSetupForm, uEngineRegistry, uEngineParamsJson, uAnalyzerRunnerThread,
-  uGameGuiMessages, uGameTreeSearchRef, uEngineEditForm, uGameTreeActor, uDisplayedPosition, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine;
+  uGameGuiMessages, uGameTreeSearchRef, uEngineEditForm, uGameTreeActor, uDisplayedPosition, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine
+  {$IFDEF UNIX}, BaseUnix{$ENDIF};
 
 type
   TBoardPaintAccess = class(TDraughtsBoardControl)
@@ -587,6 +588,83 @@ begin
   finally Form.Free; Definition.Free; Lines.Free; DeleteFile(ExeName); DeleteFile(ParamName); end;
 end;
 
+{ An annotator whose executable is missing (for example an engine list copied
+  from another operating system) is not started and is reported; an engine
+  that starts but fails the handshake is reported when its runner ends. }
+procedure CheckEngineStartProblems;
+var Form: TMainForm; Engines: TExternalEngineList; Definition: TExternalEngineDefinition;
+  Params: TEngineParamArray; Item: TMenuItem; Popup: TPopupMenu; Tick: QWord;
+  Config, Dir, FailingExe: string; HadConfig: Boolean; SavedConfig, Script: TStringList;
+  Problems: string;
+
+  function ProblemText: string;
+  begin
+    if Form.TestEngineProblems = nil then Result := ''
+    else Result := Form.TestEngineProblems.Text;
+  end;
+
+  procedure OpenAnnotator(const AHubId: string);
+  var J: Integer;
+  begin
+    Item := Menu(Form, 'Open Annotator'); Popup := TPopupMenu(Item.GetParentMenu); Popup.OnPopup(Popup);
+    for J := 0 to Item.Count - 1 do
+      if Pos(AHubId, Item.Items[J].Caption) > 0 then begin Item.Items[J].Click; Exit; end;
+    raise Exception.Create('annotator not offered: ' + AHubId);
+  end;
+
+begin
+  Config := EnginesJsonFileName;
+  HadConfig := FileExists(Config);
+  SavedConfig := TStringList.Create; Script := TStringList.Create;
+  Engines := TExternalEngineList.Create; Form := nil;
+  Dir := IncludeTrailingPathDelimiter(GetTempDir(False)) + 'gwdgui-start-problem-' + IntToStr(GetProcessID);
+  ForceDirectories(Dir);
+  FailingExe := IncludeTrailingPathDelimiter(Dir) + 'failing-engine';
+  try
+    if HadConfig then SavedConfig.LoadFromFile(Config);
+    Definition := TExternalEngineDefinition.Create; Definition.Kind := eekHub;
+    {$IFDEF MSWINDOWS}
+    Definition.ExePath := '/home/user/engines/gwd';
+    {$ELSE}
+    Definition.ExePath := 'C:\Engines\gwd\gwd.exe';
+    {$ENDIF}
+    Definition.HubId := 'ForeignHub'; Engines.Add(Definition);
+    Script.Text := '#!/bin/sh' + LineEnding + 'exit 3';
+    Script.SaveToFile(FailingExe);
+    {$IFDEF UNIX}FpChmod(FailingExe, &755);{$ENDIF}
+    Params := nil; AddOrUpdateParam(Params, 'gui-startup-timeout-ms', 'int', '1000', False);
+    SaveEngineParamsToJson(EngineParamsFileName(FailingExe), 'hub', Params);
+    Definition := TExternalEngineDefinition.Create; Definition.Kind := eekHub;
+    Definition.ExePath := FailingExe; Definition.HubId := 'FailingHub'; Engines.Add(Definition);
+    SaveExternalEngines(Config, Engines);
+    Check(Pos('another operating system', EngineExecutableProblem(Engines[0])) > 0,
+      'a path written on the other operating system is recognised');
+    Check(EngineExecutableProblem(Engines[1]) = '', 'an existing executable has no problem');
+
+    Form := TMainForm.Create(nil);
+    OpenAnnotator('ForeignHub');
+    Check(Form.TestAnalyzerRunner = nil, 'a missing executable starts no annotator');
+    Problems := ProblemText;
+    Check((Pos('Open Annotator', Problems) = 1) and (Pos('was not found', Problems) > 0) and
+      (Pos('another operating system', Problems) > 0), 'missing executable is reported: ' + Problems);
+    Form.TestEngineProblems.Clear;
+
+    OpenAnnotator('FailingHub');
+    Check(Form.TestAnalyzerRunner <> nil, 'an existing executable is started');
+    Tick := GetTickCount64;
+    repeat Pump(Form); Sleep(10); until (Form.TestAnalyzerRunner = nil) or (GetTickCount64 - Tick > 15000);
+    Check(Form.TestAnalyzerRunner = nil, 'the failing annotator finishes');
+    Problems := ProblemText;
+    Check((Pos('Open Annotator', Problems) = 1) and (Pos('could not be started', Problems) > 0),
+      'a failed handshake is reported: ' + Problems);
+  finally
+    Form.Free; Engines.Free; Script.Free;
+    if HadConfig then SavedConfig.SaveToFile(Config) else DeleteFile(Config);
+    SavedConfig.Free;
+    DeleteFile(EngineParamsFileName(FailingExe)); DeleteFile(FailingExe); RemoveDir(Dir);
+  end;
+end;
+
 var Reporter: TExceptionReporter;
 begin
   if ParamStr(1) = '--boundary-hub' then begin FakeHub; Halt(0); end;
@@ -599,6 +677,7 @@ begin
     CheckReplacementPrompt;
     CheckAnalysisControls;
     CheckInvalidEngineParameters;
+    CheckEngineStartProblems;
     CheckHintModes;
     CheckAnalysisAfterPlayedMoves;
     Application.OnException := nil; Reporter.Free;
