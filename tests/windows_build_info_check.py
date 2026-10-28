@@ -90,7 +90,10 @@ mode = project.find("./ProjectOptions/BuildModes/Item2[@Name='Windows']/Compiler
 assert mode is not None
 assert '-dGWDGUI_EMBEDDED_HELP' in mode.find('Other/CustomOptions').get('Value')
 assert 'lib/build-info' in mode.find('SearchPaths/IncludeFiles').get('Value')
-command = mode.find('ExecuteBefore/Command').get('Value')
+# Lazarus reads the pre-build command from CompilerOptions/Other/ExecuteBefore;
+# elsewhere it is silently ignored (the include file is then never generated).
+assert mode.find('ExecuteBefore') is None, 'ExecuteBefore must be inside Other'
+command = mode.find('Other/ExecuteBefore/Command').get('Value')
 assert 'build_windows.cmd' in command and '$(CompPath)' in command
 
 # build.bat drives the same build mode from the command line. cmd.exe needs CRLF

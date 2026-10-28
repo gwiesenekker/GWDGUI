@@ -5,6 +5,20 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-28 — Windows build mode runs its pre-build step
+
+- In `gwdgui.lpi` the Windows build mode's pre-build command
+  (`tools/build_windows.cmd`, which writes `lib/build-info/gwdgui-build.inc`)
+  sat directly under `CompilerOptions`. Lazarus reads it only from
+  `CompilerOptions/Other/ExecuteBefore` and silently ignored it, so Windows
+  builds failed with "Cannot open include file gwdgui-build.inc". Moved it.
+- `windows_build_info_check` requires the command inside `Other`.
+  `run_windows_cross_check.sh` now also builds with the real Windows build mode
+  (`lazbuild --build-mode=Windows`, cross-compiled), with a stand-in `cmd.exe`
+  that performs the pre-build script's steps; it fails with the reported error
+  before this fix and passes after it.
+- Regression suite passes. No push.
+
 ### 2026-10-28 — Windows build compiles again
 
 - `uPlatformProcess` listed `SyncObjs` before `Windows`, so on Windows

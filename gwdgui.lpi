@@ -41,10 +41,10 @@
           </Linking>
           <Other>
             <CustomOptions Value="-dGWDGUI_EMBEDDED_HELP"/>
+            <ExecuteBefore>
+              <Command Value="cmd.exe /C &quot;&quot;$(ProjPath)tools\build_windows.cmd&quot; &quot;$(CompPath)&quot;&quot;"/>
+            </ExecuteBefore>
           </Other>
-          <ExecuteBefore>
-            <Command Value="cmd.exe /C &quot;&quot;$(ProjPath)tools\build_windows.cmd&quot; &quot;$(CompPath)&quot;&quot;"/>
-          </ExecuteBefore>
         </CompilerOptions>
       </Item2>
     </BuildModes>
