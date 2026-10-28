@@ -5,7 +5,7 @@ unit uPdnText;
 { Game-neutral text helpers for PDN-style records: comment escaping, result
   spellings and "name: value" annotation items. No board or move knowledge;
   the game tree and the notation walker use these instead of the draughts PDN
-  parser (uPdn). Moved unchanged from uPdn. }
+  parser. Moved unchanged from the parser's unit. }
 
 interface
 

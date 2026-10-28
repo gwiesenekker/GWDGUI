@@ -1,7 +1,7 @@
 program pdn_batch_import_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, Math,
-  uPdn, uDraughtsBoard, uGameTree, uGameTreeActor, uGameTreePdn, uDraughtsPosition;
+  uDraughtsPdn, uDraughtsBoard, uGameTree, uGameTreeActor, uGameTreePdn, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 procedure LegacyImport(Actor: TGameTreeActor; Source: TPdnMoveNode; Id: Int64;

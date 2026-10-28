@@ -1,4 +1,4 @@
-unit uDxpTestConnection;
+unit uDraughtsDxpTestConnection;
 
 {$mode objfpc}{$H+}
 

@@ -68,7 +68,7 @@
         <IsPartOfProject Value="True"/>
       </Unit2>
       <Unit3>
-        <Filename Value="uBoardControl.pas"/>
+        <Filename Value="uDraughtsBoardControl.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit3>
       <Unit4>
@@ -104,7 +104,7 @@
         <IsPartOfProject Value="True"/>
       </Unit12>
       <Unit13>
-        <Filename Value="uDxpTestConnection.pas"/>
+        <Filename Value="uDraughtsDxpTestConnection.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit13>
       <Unit14>
@@ -112,7 +112,7 @@
         <IsPartOfProject Value="True"/>
       </Unit14>
       <Unit15>
-        <Filename Value="uHubEngine.pas"/>
+        <Filename Value="uDraughtsHubEngine.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit15>
       <Unit16>
@@ -120,11 +120,11 @@
         <IsPartOfProject Value="True"/>
       </Unit16>
       <Unit17>
-        <Filename Value="uDxpEngine.pas"/>
+        <Filename Value="uDraughtsDxpEngine.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit17>
       <Unit18>
-        <Filename Value="uDxpProtocol.pas"/>
+        <Filename Value="uDraughtsDxpProtocol.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit18>
       <Unit19>
@@ -156,7 +156,7 @@
         <IsPartOfProject Value="True"/>
       </Unit25>
       <Unit26>
-        <Filename Value="uPdn.pas"/>
+        <Filename Value="uDraughtsPdn.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit26>
       <Unit27>
@@ -188,7 +188,7 @@
         <IsPartOfProject Value="True"/>
       </Unit33>
       <Unit34>
-        <Filename Value="uPositionSetupForm.pas"/>
+        <Filename Value="uDraughtsPositionSetupForm.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit34>
       <Unit35>

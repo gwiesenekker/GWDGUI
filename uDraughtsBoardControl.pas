@@ -1,4 +1,4 @@
-unit uBoardControl;
+unit uDraughtsBoardControl;
 
 {$mode objfpc}{$H+}
 

@@ -5,7 +5,7 @@ program game_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, StrUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameOrchestrator, uPdn, uPdnText, uDraughtsBoard, uTreeTestUtils, uDraughtsPosition;
+  uGameTreePdn, uGameOrchestrator, uDraughtsPdn, uPdnText, uDraughtsBoard, uTreeTestUtils, uDraughtsPosition;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin

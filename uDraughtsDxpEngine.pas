@@ -1,4 +1,4 @@
-unit uDxpEngine;
+unit uDraughtsDxpEngine;
 
 {$mode objfpc}{$H+}
 
@@ -13,7 +13,7 @@ uses
   {$IFDEF UNIX}
   BaseUnix,
   {$ENDIF}
-  uDraughtsBoard, uDraughtsEngine, uDraughtsPosition, uGamePosition, uDxpProtocol, uEngineBase, uEngineParamsJson,
+  uDraughtsBoard, uDraughtsEngine, uDraughtsPosition, uGamePosition, uDraughtsDxpProtocol, uEngineBase, uEngineParamsJson,
   uEngineRegistry, uPlatformProcess, uThreadMessageQueue;
 
 type

@@ -65,9 +65,17 @@ GENERIC_UNITS=(
   uGameRunnerThread
   uRunningGame
 )
+# Draughts-only units carry the uDraughts prefix, so one pattern covers them.
+DRAUGHTS_PATTERN='\buDraughts\w*|\bTDraughtsBoard\b|\bTDraughtsSide\b|\bNormalizeMoveNotation\b|\bSameMoveIgnoringCaptureOrder\b|\bMoveSquareAt\b|\bExtractMoveSquares\b|\bTEndgameDrawCounter\b|\bTHubEngine\b|\bTDxpEngine\b'
 for unit_name in "${GENERIC_UNITS[@]}"; do
   unit_file="$ROOT_DIR/$unit_name.pas"
-  if rg -n '\buDraughtsBoard\b|\buDraughtsPosition\b|\bTDraughtsBoard\b|\bTDraughtsSide\b|\bNormalizeMoveNotation\b|\bSameMoveIgnoringCaptureOrder\b|\bMoveSquareAt\b|\bExtractMoveSquares\b|\buDraughtsDrawRules\b|\bTEndgameDrawCounter\b|\buDraughtsEngine\b|\buHubEngine\b|\buDxpEngine\b|\bTHubEngine\b|\bTDxpEngine\b' "$unit_file"; then
+  unit_text="$(cat "$unit_file")"
+  # Known chess replacement point (REFACTORING.md): the actor imports the PDN
+  # parser's move tree (TPdnMoveNode) until that type moves to a neutral unit.
+  if [[ "$unit_name" == uGameTreeActor ]]; then
+    unit_text="$(sed -E 's/\buDraughtsPdn\b//g' <<<"$unit_text")"
+  fi
+  if rg -n "$DRAUGHTS_PATTERN" <<<"$unit_text"; then
     echo "$unit_name is game-neutral and must use uGamePosition only."
     exit 1
   fi

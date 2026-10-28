@@ -2,7 +2,7 @@ program notation_controls_compare;
 {$mode objfpc}{$H+}{$codepage utf8}
 uses {$IFDEF UNIX}cthreads, cwstring,{$ENDIF} Interfaces, Forms, Controls,
   StdCtrls, ExtCtrls, Classes, SysUtils, Math, Types, Graphics, LCLType, LCLIntf,
-  LazUTF8, LCLVersion, SynEdit, uDraughtsBoard, uGameTreeBuilder, RichMemo, uPdn, uGameTree, uGameTreeActor,
+  LazUTF8, LCLVersion, SynEdit, uDraughtsBoard, uGameTreeBuilder, RichMemo, uDraughtsPdn, uGameTree, uGameTreeActor,
   uGameTreePdn, uGameTreeCursor, uGameTreeNodeData, uGameOrchestrator, uNotationPresentation,
   uNotationDocument, uNotationStyles, uNotationControlPrototype, uTreeTestUtils, uDraughtsPosition;
 type

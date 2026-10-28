@@ -1,6 +1,6 @@
 program tournament_record_check;
 {$mode objfpc}{$H+}
-uses Classes, SysUtils, FPJSON, JSONParser, uTournamentStorage, uTournamentGameRecord, uPdn, uDraughtsPosition;
+uses Classes, SysUtils, FPJSON, JSONParser, uTournamentStorage, uTournamentGameRecord, uDraughtsPdn, uDraughtsPosition;
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
   if not Condition then

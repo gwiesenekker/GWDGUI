@@ -7,7 +7,7 @@ uses
   cthreads,
   {$ENDIF}
   Classes, SysUtils, SyncObjs, uThreadMessageQueue, uPvSnapshot, uAnalyzerRunnerThread, uGameTreeSearchRef, uRunningGame, uGameGuiMessages, uGameRunnerThread,
-  uEngineRegistry, uDraughtsBoard, uGameSetupTypes, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uDraughtsPosition, uHubEngine, uDxpEngine;
+  uEngineRegistry, uDraughtsBoard, uGameSetupTypes, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine;
 
 type
   TLogRunner = class(TGameRunnerThread)

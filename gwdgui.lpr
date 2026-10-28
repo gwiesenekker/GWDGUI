@@ -10,7 +10,7 @@ uses
   Forms,
   uMainForm,
   // The game and its engine protocols register themselves when linked.
-  uDraughtsPosition, uHubEngine, uDxpEngine;
+  uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine;
 
 begin
   RequireDerivedFormResource := False;

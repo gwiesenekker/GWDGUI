@@ -6,8 +6,8 @@ interface
 
 uses
   Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
-  Grids, Math, Menus, StdCtrls, SysUtils, uBoardControl, uDraughtsBoard,
-  uGameDatabase, uDatabaseImportWorker, uGuiDialogs, uPdn, uPositionSetupForm, uPreferences;
+  Grids, Math, Menus, StdCtrls, SysUtils, uDraughtsBoardControl, uDraughtsBoard,
+  uGameDatabase, uDatabaseImportWorker, uGuiDialogs, uDraughtsPdn, uDraughtsPositionSetupForm, uPreferences;
 
 type
   TDatabaseGameSelectedEvent = procedure(Sender: TObject; AGame: TPdnGame) of object;

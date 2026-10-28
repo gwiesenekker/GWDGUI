@@ -1,6 +1,6 @@
 program pdn_comment_preservation_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uPdn, uGameTreeNodeData,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uDraughtsPdn, uGameTreeNodeData,
   uGameTreeActor, uGameTree, uGameTreePdn, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;

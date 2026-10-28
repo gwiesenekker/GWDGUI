@@ -3,7 +3,7 @@ program dxp_engine_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, sockets, ssockets, uSocketSafety,
-  uDraughtsBoard, uDxpEngine, uDxpTestConnection, uEngineRegistry, uGameOrchestrator, uDraughtsPosition, uGamePosition;
+  uDraughtsBoard, uDraughtsDxpEngine, uDraughtsDxpTestConnection, uEngineRegistry, uGameOrchestrator, uDraughtsPosition, uGamePosition;
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin

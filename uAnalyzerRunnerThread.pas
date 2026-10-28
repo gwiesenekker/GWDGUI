@@ -7,7 +7,7 @@ interface
 uses
   Classes, SyncObjs, SysUtils,
   uCancellationToken, uEngineBase, uGamePosition, uEngineRegistry, uGameTreeSearchRef,
-  uHubEngine, uPvSnapshot, uThreadMessageQueue;
+  uDraughtsHubEngine, uPvSnapshot, uThreadMessageQueue;
 
 type
   TAnalyzerRunMode = (

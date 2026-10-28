@@ -34,7 +34,7 @@ type
     property PlayedResult: string read FPlayedResult;
   end;
 implementation
-uses Classes, SysUtils, StrUtils, uPdn, uPdnText, uTournamentStorage;
+uses Classes, SysUtils, StrUtils, uDraughtsPdn, uPdnText, uTournamentStorage;
 
 constructor TTournamentGameRecord.Create;
 begin

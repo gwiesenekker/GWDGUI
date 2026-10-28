@@ -4,7 +4,7 @@ program gui_delivery_check;
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces, Forms, Classes, SysUtils, SyncObjs,
   uMainForm, uGameGuiMessages, uGameRunnerThread, uRunningGame, uDraughtsBoard,
   uGameSetupTypes, uGameOrchestrator, uGameTree, uThreadMessageQueue,
-  uPvSnapshot, uAnalysisCoordinator, uGameTreeSearchRef, uDraughtsPosition, uHubEngine, uDxpEngine;
+  uPvSnapshot, uAnalysisCoordinator, uGameTreeSearchRef, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine;
 type
   TCollector = class
     Lock: TCriticalSection;

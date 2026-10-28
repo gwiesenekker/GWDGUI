@@ -8,7 +8,7 @@ function TournamentPdnTag(const AName, AValue: string): string;
 function UnusedTournamentPdnPath(const ACandidate: string): string;
 function TournamentPdnMatchesId(const AFileName, AId: string): Boolean;
 implementation
-uses Classes, SysUtils, JSONParser, uTournamentTypes, uTournamentResults, uPdn;
+uses Classes, SysUtils, JSONParser, uTournamentTypes, uTournamentResults, uDraughtsPdn;
 
 function TournamentDocumentText(AData: TJSONData): string;
 var

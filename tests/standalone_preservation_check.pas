@@ -8,8 +8,8 @@ program standalone_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, uGameNotationView, Classes, SysUtils, StdCtrls, ExtCtrls, Grids, LCLType, Controls, ComCtrls, Menus,
-  uDatabaseForm, uGameDatabase, uEngineRegistry, uBoardControl, uDraughtsBoard, uMainForm, uMoveInteraction, uRunningGame, uPdn, uPdnOpenDialog, uPvBrowser, uScoreHistoryControl, uGuiDialogs,
-  uGameTreeNodeData, uGameTreeView, uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uTreeTestUtils, uDraughtsPosition, uHubEngine, uDxpEngine;
+  uDatabaseForm, uGameDatabase, uEngineRegistry, uDraughtsBoardControl, uDraughtsBoard, uMainForm, uMoveInteraction, uRunningGame, uDraughtsPdn, uPdnOpenDialog, uPvBrowser, uScoreHistoryControl, uGuiDialogs,
+  uGameTreeNodeData, uGameTreeView, uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uTreeTestUtils, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine;
 
 type
   TDatabaseModalProbe = class

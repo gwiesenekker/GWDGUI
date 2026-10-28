@@ -1,4 +1,4 @@
-unit uPdn;
+unit uDraughtsPdn;
 
 {$mode objfpc}{$H+}
 

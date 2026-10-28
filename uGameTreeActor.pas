@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Contnrs, SysUtils,
-  uGameTree, uGameTreeBuilder, uGameTreeSearchRef, uThreadMessageQueue, uGameMoveHistory, uGameTreeNodeData, uPdn;
+  uGameTree, uGameTreeBuilder, uGameTreeSearchRef, uThreadMessageQueue, uGameMoveHistory, uGameTreeNodeData, uDraughtsPdn;
 
 type
   TGameTreeMoveSource = (

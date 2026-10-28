@@ -141,7 +141,7 @@ uses
   Dialogs, SHA1, FPJSON, Graphics, JSONParser, Math, LazFileUtils, uGameOrchestrator,
   uGuiDialogs, uMainForm, uRunningGame, uTournamentGridModel, uTournamentModel,
   uTournamentPairing, uTournamentResults, uTournamentTypes, uTournamentStorage,
-  uAtomicFile, uGameTreePdn, uPdn;
+  uAtomicFile, uGameTreePdn, uDraughtsPdn;
 
 procedure DrawGridText(AGrid: TStringGrid; ACol, ARow: Integer;
   const ARect: TRect);

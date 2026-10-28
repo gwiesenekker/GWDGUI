@@ -5,7 +5,7 @@ unit uPvBrowser;
 interface
 
 uses
-  Classes, LCLType, StdCtrls, SysUtils, uBoardControl, uDraughtsBoard,
+  Classes, LCLType, StdCtrls, SysUtils, uDraughtsBoardControl, uDraughtsBoard,
   uGamePosition, uGameTreeBuilder, uPvSnapshot;
 
 type

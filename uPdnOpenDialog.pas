@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Controls, Forms, Graphics, Grids, StdCtrls, SysUtils, uGuiDialogs,
-  uPdn;
+  uDraughtsPdn;
 
 type
   TPdnGameSelectedEvent = procedure(Sender: TObject; AGame: TPdnGame) of object;

@@ -5,6 +5,19 @@ Entries are newest first. Review IDs refer to the code reviews of commits
 
 ## Unreleased
 
+### 2026-10-28 — Draughts-only units carry the uDraughts prefix
+
+- Renamed (files, unit names, uses clauses, `gwdgui.lpi`): `uBoardControl` →
+  `uDraughtsBoardControl`, `uPositionSetupForm` → `uDraughtsPositionSetupForm`,
+  `uPdn` → `uDraughtsPdn`, `uHubEngine` → `uDraughtsHubEngine`, `uDxpEngine` →
+  `uDraughtsDxpEngine`, `uDxpProtocol` → `uDraughtsDxpProtocol`,
+  `uDxpTestConnection` → `uDraughtsDxpTestConnection`. No code changes.
+- The source audit now rejects any `uDraughts*` unit in a game-neutral unit, with
+  one documented exception (`uGameTreeActor` imports the PDN move tree).
+- Game-neutral units keep their names (`uPdnText`, `uGameTreePdn`), as do units
+  the chess port is to make game-neutral (`uPvBrowser`, `uEngineRegistry`).
+- Regression, lifecycle, DXP, GUI and tournament suites pass. No push.
+
 ### 2026-10-27 — Main form on the position boundary (position interface, step 8)
 
 - The main form uses game positions for everything except its draughts board

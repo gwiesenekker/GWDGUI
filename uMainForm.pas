@@ -6,13 +6,13 @@ interface
 
 uses
   Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
-  LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uBoardControl,
+  LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uDraughtsBoardControl,
   uDraughtsBoard, uGamePosition, uDraughtsPosition, uMoveInteraction, uEnginesDialog,
   uGameOrchestrator, uGameRunnerThread, uRunningGame, uGameSetupForm, uGameSetupTypes,
-  uEngineParamsJson, uEngineRegistry, uPdn, uPdnOpenDialog, uThreadMessageQueue, uGameGuiMessages, uAnalysisCoordinator,
+  uEngineParamsJson, uEngineRegistry, uDraughtsPdn, uPdnOpenDialog, uThreadMessageQueue, uGameGuiMessages, uAnalysisCoordinator,
   uTournamentDialog, uPvBrowser, uPvSnapshot, uAnalyzerRunnerThread,
   uGuiDialogs, uManualForm, uAppInfo, uDatabaseForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uNotationPresentation, uGameNotationView, uDisplayedPosition, uGameTreeSearchRef, uGameTreeView, uPositionSetupForm,
+  uGameTreePdn, uNotationPresentation, uGameNotationView, uDisplayedPosition, uGameTreeSearchRef, uGameTreeView, uDraughtsPositionSetupForm,
   uPreferences, uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm, uGameMoveHistory;
 
 type

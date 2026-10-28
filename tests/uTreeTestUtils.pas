@@ -7,7 +7,7 @@ function ImportBranch(Actor: TGameTreeActor; BasePly: Integer;
 procedure AddFixtureBranch(Tree: TGameTree; BasePly: Integer;
   const MovesText, Annotation: string);
 implementation
-uses uGameTreeBuilder, uPdn;
+uses uGameTreeBuilder, uDraughtsPdn;
 function ImportBranch(Actor: TGameTreeActor; BasePly: Integer;
   const Moves, Annotation: string; Source: TGameTreeMoveSource): TGameTreeCommand;
 var

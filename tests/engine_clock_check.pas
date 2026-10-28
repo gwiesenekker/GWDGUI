@@ -2,7 +2,7 @@ program engine_clock_check;
 {$mode objfpc}{$H+}
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Classes, SysUtils, uEngineBase, uEngineParamsJson, uHubEngine, uEngineRegistry,
+  Classes, SysUtils, uEngineBase, uEngineParamsJson, uDraughtsHubEngine, uEngineRegistry,
   uPlatformProcess, uDraughtsBoard, uGameMoveHistory, uGameOrchestrator, uDraughtsPosition, uGamePosition;
 
 type

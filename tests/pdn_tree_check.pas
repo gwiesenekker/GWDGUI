@@ -1,6 +1,6 @@
 program pdn_tree_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uPdn, uDraughtsBoard, uDraughtsPosition;
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uDraughtsPdn, uDraughtsBoard, uDraughtsPosition;
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
   if not Condition then raise Exception.Create(MessageText);

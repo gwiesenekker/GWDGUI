@@ -5,10 +5,10 @@ program main_form_boundaries_check;
 {$ENDIF}
 uses {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, uGameNotationView, Classes, SysUtils, Controls, StdCtrls, Menus, ExtCtrls, Grids,
-  LCLType, Types, Graphics, uMainForm, uRunningGame, uBoardControl, uDraughtsBoard, uPdn,
+  LCLType, Types, Graphics, uMainForm, uRunningGame, uDraughtsBoardControl, uDraughtsBoard, uDraughtsPdn,
   uGameTree, uGameTreePdn, uGameTreeBuilder, uGameSetupTypes, uGameOrchestrator, uGuiDialogs,
-  uPositionSetupForm, uEngineRegistry, uEngineParamsJson, uAnalyzerRunnerThread,
-  uGameGuiMessages, uGameTreeSearchRef, uEngineEditForm, uGameTreeActor, uDisplayedPosition, uDraughtsPosition, uHubEngine, uDxpEngine;
+  uDraughtsPositionSetupForm, uEngineRegistry, uEngineParamsJson, uAnalyzerRunnerThread,
+  uGameGuiMessages, uGameTreeSearchRef, uEngineEditForm, uGameTreeActor, uDisplayedPosition, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine;
 
 type
   TBoardPaintAccess = class(TDraughtsBoardControl)

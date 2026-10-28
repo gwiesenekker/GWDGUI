@@ -1,4 +1,4 @@
-unit uPositionSetupForm;
+unit uDraughtsPositionSetupForm;
 
 {$mode objfpc}{$H+}
 
@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Controls, ExtCtrls, Forms, Graphics, StdCtrls, SysUtils,
-  uBoardControl, uDraughtsBoard, uGuiDialogs, uPreferences;
+  uDraughtsBoardControl, uDraughtsBoard, uGuiDialogs, uPreferences;
 
 type
   TPositionSetupAcceptedEvent = procedure(Sender: TObject;

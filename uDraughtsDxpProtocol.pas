@@ -1,4 +1,4 @@
-unit uDxpProtocol;
+unit uDraughtsDxpProtocol;
 
 {$mode objfpc}{$H+}
 {$modeswitch advancedrecords}

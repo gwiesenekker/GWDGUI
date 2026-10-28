@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Controls, Dialogs, ExtCtrls, Forms, Graphics, Grids, StdCtrls,
-  SysUtils, uDxpTestConnection, uEngineParamsJson, uEngineRegistry,
+  SysUtils, uDraughtsDxpTestConnection, uEngineParamsJson, uEngineRegistry,
   uPlatformProcess;
 
 type

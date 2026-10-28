@@ -327,20 +327,25 @@ Step 8 notes:
 
 ### Chess replacement points
 
-What still names draughts after step 8. Units outside the source audit's list are
+What still names draughts after step 8. Since the rename after step 8, every
+draughts-only unit carries the `uDraughts` prefix (`uDraughtsBoardControl`,
+`uDraughtsPositionSetupForm`, `uDraughtsPdn`, `uDraughtsHubEngine`,
+`uDraughtsDxpEngine`, `uDraughtsDxpProtocol`, `uDraughtsDxpTestConnection`), and
+the source audit rejects any `uDraughts*` unit in a generic unit. The one
+exception is `uGameTreeActor`'s use of `uDraughtsPdn` (record move tree, below). Units outside the source audit's list are
 per game by design (proposal, section 4); a chess build supplies its own version or
 a per-game strategy. Counts are of code references at step 8.
 
 | Area | Where | What a chess port replaces |
 |---|---|---|
 | Rules, moves, notation | `uDraughtsBoard`, `uDraughtsDrawRules`, `uDraughtsPosition` (`TDraughtsPosition`, `TDraughtsVariant`, `TDraughtsRules`) | `uChessPosition`: position, variant (FEN, SAN, result texts), rules (mate, stalemate, 50 moves, repetition, material) |
-| Program wiring | `gwdgui.lpr` links `uDraughtsPosition`, `uHubEngine`, `uDxpEngine` | Link the chess game and engine units instead |
+| Program wiring | `gwdgui.lpr` links `uDraughtsPosition`, `uDraughtsHubEngine`, `uDraughtsDxpEngine` | Link the chess game and engine units instead |
 | Main form, board controls | `uMainForm`: 5 `TDraughtsBoard`s with their `TDraughtsBoardControl`s (main board, PV and annotator mini boards, two pop-outs), `TryBuildDisplayedBoard` with `FDraughtsScratch` (draughts helper `TryBuildDraughtsDisplayedBoard`), `ApplyBoardTheme`; 12 `TDraughtsBoard` and 12 `TDraughtsBoardControl` references | A chess board control behind the same events (square clicked, targets, highlights); the form keeps one control-facing helper per game |
 | Main form, other | `FPositionSetupForm` (`TPositionSetupForm`); window caption "International Polish Draughts" (2 places) | Chess setup form; caption from the variant name |
 | PV view | `uPvBrowser` (mini board, move numbering from the FEN's side letter) | Chess PV browser or a game-neutral one over a chess board control |
-| Board widgets | `uBoardControl`, `uPositionSetupForm` | Chess board control and setup form |
-| Engines | `uDraughtsEngine`, `uHubEngine`, `uDxpEngine`, `uDxpProtocol`; `uAnalyzerRunnerThread` creates `THubEngine` directly (annotator, MCTS); `uEngineRegistry` kinds `eekHub`/`eekDxp`; `uEnginesDialog`, `uEngineEditForm` (Hub/DXP fields) | UCI engine unit registered through `RegisterGameEngineFactory`; the annotator runner should use `CreateGameEngine`; a UCI engine kind and its settings |
-| Game records | `uPdn` (PDN reader/writer, `TPdnMoveNode`), the PDN-syntax part of `uGameTreePdn` (tags, `PdnExportResult`), `uPdnText` (2-0/1-1/0-2 result normalization), `uPdnOpenDialog` | PGN reader/writer reusing the line walker; `uGameTreeActor` imports `TPdnMoveNode` (move this record-tree type to a neutral unit); `uScoreHistoryControl` and `uTournamentGameRecord` use `uPdn` |
+| Board widgets | `uDraughtsBoardControl`, `uDraughtsPositionSetupForm` | Chess board control and setup form |
+| Engines | `uDraughtsEngine`, `uDraughtsHubEngine`, `uDraughtsDxpEngine`, `uDraughtsDxpProtocol`; `uAnalyzerRunnerThread` creates `THubEngine` directly (annotator, MCTS); `uEngineRegistry` kinds `eekHub`/`eekDxp`; `uEnginesDialog`, `uEngineEditForm` (Hub/DXP fields) | UCI engine unit registered through `RegisterGameEngineFactory`; the annotator runner should use `CreateGameEngine`; a UCI engine kind and its settings |
+| Game records | `uDraughtsPdn` (PDN reader/writer, `TPdnMoveNode`), the PDN-syntax part of `uGameTreePdn` (tags, `PdnExportResult`), `uPdnText` (2-0/1-1/0-2 result normalization), `uPdnOpenDialog` | PGN reader/writer reusing the line walker; `uGameTreeActor` imports `TPdnMoveNode` (move this record-tree type to a neutral unit); `uScoreHistoryControl` and `uTournamentGameRecord` use `uDraughtsPdn` |
 | Database | `uGameDatabase` (draughts board replay, `TDraughtsSide` in position search), `uDatabaseForm` (board control) | Replay and position keys through `TGamePosition`; side through `TGameSide`; chess board control |
 | Tournaments | `uTournamentResults`, `uTournamentDialog`, `uTournamentGridModel` (2-0/1-1/0-2 scoring and menus), `uTournamentStorage`/`uTournamentGameRecord` (PDN) | A per-game scoring strategy (1-0/½-½/0-1) and the record format |
 - `uAnalysisCoordinator` still uses `uGameOrchestrator` for `TGameOrchestratorState`

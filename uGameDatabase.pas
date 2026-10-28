@@ -5,7 +5,7 @@ unit uGameDatabase;
 interface
 
 uses
-  Classes, SQLite3Conn, SQLDB, SysUtils, uDraughtsBoard, uPdn;
+  Classes, SQLite3Conn, SQLDB, SysUtils, uDraughtsBoard, uDraughtsPdn;
 
 type
   TDatabaseGameSortColumn = (dgscId, dgscWhite, dgscBlack, dgscEvent);
