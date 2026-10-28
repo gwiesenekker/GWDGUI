@@ -782,8 +782,6 @@ The source separates the game from the rest of the program. Game-neutral units
 (game tree, notation walker, analysis state, orchestrator and game runner) reach
 the game only through `uGamePosition`; international draughts is implemented in
 units named `uDraughts*`. `tests/source_audit_check.sh` enforces the separation.
-`REFACTORING.md` (section "Game-position boundary") describes the design and lists
-what a port to another game, such as chess, has to replace.
 
 For protocol details, see [DXP Protocol.md](DXP%20Protocol.md) and
 [`protocol.txt`](protocol.txt) in the source tree.

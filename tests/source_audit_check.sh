@@ -70,7 +70,7 @@ DRAUGHTS_PATTERN='\buDraughts\w*|\bTDraughtsBoard\b|\bTDraughtsSide\b|\bNormaliz
 for unit_name in "${GENERIC_UNITS[@]}"; do
   unit_file="$ROOT_DIR/$unit_name.pas"
   unit_text="$(cat "$unit_file")"
-  # Known chess replacement point (REFACTORING.md): the actor imports the PDN
+  # Known chess replacement point: the actor imports the PDN
   # parser's move tree (TPdnMoveNode) until that type moves to a neutral unit.
   if [[ "$unit_name" == uGameTreeActor ]]; then
     unit_text="$(sed -E 's/\buDraughtsPdn\b//g' <<<"$unit_text")"

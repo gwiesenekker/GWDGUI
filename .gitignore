@@ -41,3 +41,9 @@ engines.json
 
 # Python build/test helper cache
 __pycache__/
+
+# Local review and refactoring notes
+/REFACTORING.md
+/REVIEW_NOTES.md
+/claude/
+/chatgpt/
